@@ -417,6 +417,7 @@ API reference
    NaNDetectorHook
    MaxForceClampHook
    FreezeAtomsHook
+   PairSwapHook
 
 The general-purpose profiling hooks
 :class:`~nvalchemi.hooks.StageTimingHook` and

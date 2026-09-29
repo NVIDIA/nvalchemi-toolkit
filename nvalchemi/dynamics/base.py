@@ -1782,36 +1782,47 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             if isinstance(value, torch.Tensor) and value.shape[0] == index.numel():
                 internal[key] = value[index.to(value.device)].contiguous()
 
-    def apply_thermodynamic_state(
-        self, state_ids: torch.Tensor, temperatures: torch.Tensor
+    def apply_per_system_params(
+        self, params: Mapping[str, torch.Tensor], batch: Batch
     ) -> None:
-        """Rebind each walker to a new thermodynamic state.
+        """Rebind per-system parameters — temperature, timestep, and so on.
 
-        Used by replica exchange after an accepted swap: the walker stays on
-        its execution slot while its assigned temperature changes.  The
-        change must be indivisible — target temperature, velocity scaling,
-        and any thermostat private state have to move together, or detailed
-        balance is broken.
+        The reusable half of any method that permutes per-system state across
+        walkers: replica exchange over a temperature ladder, basin hopping
+        with swaps, a population or evolutionary structure search, any
+        annealing schedule.  What they share is "walker *b* is now running
+        under these parameters"; what differs is the rule that decided it.
+
+        Implementations must transform dependent private state — thermostat
+        chain masses, velocity scaling — as **one indivisible change**.  An
+        integrator that accepted the new target while leaving its velocities
+        and thermostat at the old one would keep sampling the ensemble the
+        walker just left, with no symptom the run would show.  That is why
+        *batch* is a parameter rather than a follow-up call: the velocity
+        rescale needs the live batch, and a caller who forgot the second call
+        would get exactly the silent failure this method exists to prevent.
 
         Parameters
         ----------
-        state_ids : torch.Tensor
-            New state id per graph, shape ``[B]``.
-        temperatures : torch.Tensor
-            Temperature in Kelvin per state, shape ``[S]``.
+        params : Mapping[str, torch.Tensor]
+            Parameter name to its new per-graph value, shape ``[B]``.
+            ``"temperature"`` is in Kelvin.
+        batch : Batch
+            The live batch, so dependent fields — velocities — move with the
+            parameters.
 
         Raises
         ------
         NotImplementedError
-            Always, on the base class.  An integrator that cannot rebind
-            must fail rather than silently accept a label-only swap that
-            leaves its velocities and thermostat at the old temperature.
+            Always, on the base class.  An integrator that cannot rebind must
+            fail rather than silently accept a label-only change.
         """
         raise NotImplementedError(
-            f"{type(self).__name__} does not support thermodynamic-state "
-            "rebinding. Temperature replica exchange requires an integrator "
-            "that can rescale velocities and transform its thermostat state; "
-            "NVTLangevin and NVTNoseHoover implement this."
+            f"{type(self).__name__} does not support per-system parameter "
+            "rebinding. Methods that permute per-system state across walkers "
+            "require an integrator that can rescale velocities and transform "
+            "its thermostat state; NVTLangevin and NVTNoseHoover implement "
+            "this."
         )
 
     def _rescale_velocities(self, scale_per_graph: torch.Tensor, batch: Batch) -> None:

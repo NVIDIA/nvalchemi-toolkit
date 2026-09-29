@@ -33,9 +33,16 @@ import torch
 from pydantic import BaseModel, ConfigDict, Field
 
 from nvalchemi.dynamics.hooks._utils import KB_EV
+from nvalchemi.dynamics.hooks.swap import (
+    PairSwapHook,
+    apply_pair_swaps,
+    even_odd_pairs,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Mapping, Sequence
+
+    from nvalchemi.data import Batch
 
 __all__ = ["ReplicaExchange", "ThermodynamicState"]
 
@@ -348,8 +355,7 @@ class ReplicaExchange:
         list[tuple[int, int]]
             Neighbouring ``(state_id, state_id + 1)`` pairs.
         """
-        offset = segment % 2
-        return [(index, index + 1) for index in range(offset, len(self.states) - 1, 2)]
+        return even_odd_pairs(segment, len(self.states))
 
     def _uniforms(self, count: int, device: torch.device) -> torch.Tensor:
         """Draw acceptance uniforms for one attempt, reproducibly.
@@ -381,77 +387,6 @@ class ReplicaExchange:
     # ------------------------------------------------------------------
     # Acceptance
     # ------------------------------------------------------------------
-
-    def _log_acceptance_temperature(
-        self,
-        pairs: list[tuple[int, int]],
-        walker_of_state: dict[int, int],
-        energies: torch.Tensor,
-    ) -> torch.Tensor:
-        """Return ``log a`` per pair for temperature exchange.
-
-        Parameters
-        ----------
-        pairs:
-            Neighbouring state pairs.
-        walker_of_state:
-            State id to the walker row currently holding it.
-        energies:
-            Per-walker potential energy ``U``, shape ``[B]``.
-
-        Returns
-        -------
-        torch.Tensor
-            ``log a`` per pair, shape ``[len(pairs)]``, capped at zero.
-        """
-        temperatures = self.temperatures.to(energies.device, energies.dtype)
-        beta = 1.0 / (KB_EV * temperatures)  # [S]
-
-        values = []
-        for state_i, state_j in pairs:
-            walker_i = walker_of_state[state_i]
-            walker_j = walker_of_state[state_j]
-            delta = (beta[state_i] - beta[state_j]) * (
-                energies[walker_i] - energies[walker_j]
-            )
-            values.append(delta)
-        return torch.clamp(torch.stack(values), max=0.0)
-
-    def _log_acceptance_umbrella(
-        self,
-        pairs: list[tuple[int, int]],
-        walker_of_state: dict[int, int],
-        bias_current: torch.Tensor,
-        bias_swapped: torch.Tensor,
-    ) -> torch.Tensor:
-        """Return ``log a`` per pair for umbrella exchange.
-
-        Parameters
-        ----------
-        pairs:
-            Neighbouring state pairs.
-        walker_of_state:
-            State id to the walker row currently holding it.
-        bias_current:
-            Reduced bias potential per walker under its current state,
-            shape ``[B]``.
-        bias_swapped:
-            Reduced bias potential per walker under the proposed state,
-            shape ``[B]``.
-
-        Returns
-        -------
-        torch.Tensor
-            ``log a`` per pair, shape ``[len(pairs)]``, capped at zero.
-        """
-        values = []
-        for state_i, state_j in pairs:
-            walker_i = walker_of_state[state_i]
-            walker_j = walker_of_state[state_j]
-            before = bias_current[walker_i] + bias_current[walker_j]
-            after = bias_swapped[walker_i] + bias_swapped[walker_j]
-            values.append(before - after)
-        return torch.clamp(torch.stack(values), max=0.0)
 
     def decide(
         self,
@@ -508,9 +443,72 @@ class ReplicaExchange:
             empty = torch.zeros(0, dtype=torch.bool, device=ids.device)
             return ids.clone(), pairs, empty
 
+        rows_i = torch.tensor(
+            [walker_of_state[i] for i, _ in pairs], device=ids.device, dtype=torch.long
+        )
+        rows_j = torch.tensor(
+            [walker_of_state[j] for _, j in pairs], device=ids.device, dtype=torch.long
+        )
+        accepted = self._decide_rows(
+            ids,
+            rows_i,
+            rows_j,
+            energies=energies,
+            bias_current=bias_current,
+            bias_swapped=bias_swapped,
+        )
+        new_ids = apply_pair_swaps(ids, pairs, accepted, walker_of_state)
+        return new_ids, pairs, accepted
+
+    def _decide_rows(
+        self,
+        slots: torch.Tensor,
+        rows_i: torch.Tensor,
+        rows_j: torch.Tensor,
+        *,
+        energies: torch.Tensor | None = None,
+        bias_current: torch.Tensor | None = None,
+        bias_swapped: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Apply the acceptance rule to one round of proposed pairs.
+
+        The single implementation of the rule.  Both callers reach it — the
+        :class:`~nvalchemi.dynamics.hooks.PairSwapHook` that runs a live
+        ladder, and :meth:`decide`, which exposes the same decision without a
+        batch so the formula can be checked against hand-computed numbers.
+        Two implementations would drift, and a drifted acceptance rule breaks
+        detailed balance with nothing to show for it.
+
+        Parameters
+        ----------
+        slots:
+            Current assignment, shape ``[B]``.
+        rows_i, rows_j:
+            Graph rows holding each proposed pair's two slots, shape ``[P]``.
+        energies:
+            Per-walker potential energy ``U``.  Temperature acceptance only.
+        bias_current, bias_swapped:
+            Reduced bias potential under the current and proposed assignment.
+            Umbrella acceptance only.
+
+        Returns
+        -------
+        torch.Tensor
+            One boolean per pair.
+
+        Raises
+        ------
+        ValueError
+            If the inputs the rule in force needs were not supplied.
+        """
         if self._acceptance == "temperature":
-            log_alpha = self._log_acceptance_temperature(
-                pairs, walker_of_state, energies.reshape(-1)
+            if energies is None:
+                raise ValueError(
+                    "ReplicaExchange: temperature acceptance needs the "
+                    "per-walker potential energy, but none was supplied."
+                )
+            log_alpha = self._log_acceptance_temperature_rows(
+                slots, rows_i, rows_j, energies.reshape(-1)
             )
         else:
             if bias_current is None or bias_swapped is None:
@@ -519,32 +517,40 @@ class ReplicaExchange:
                     "energy under both the current and the proposed state "
                     "assignment, but one was not supplied."
                 )
-            log_alpha = self._log_acceptance_umbrella(
-                pairs,
-                walker_of_state,
-                bias_current.reshape(-1),
-                bias_swapped.reshape(-1),
+            log_alpha = self._log_acceptance_umbrella_rows(
+                rows_i, rows_j, bias_current.reshape(-1), bias_swapped.reshape(-1)
             )
 
-        uniforms = self._uniforms(len(pairs), log_alpha.device)
+        uniforms = self._uniforms(rows_i.numel(), log_alpha.device)
         accepted = log_acceptance_is_accepted(log_alpha, uniforms)
+        self._tally(
+            [
+                (int(a), int(b))
+                for a, b in zip(
+                    slots[rows_i].tolist(), slots[rows_j].tolist(), strict=True
+                )
+            ],
+            accepted,
+        )
+        return accepted
 
-        new_ids = ids.clone()
-        for index, ((state_i, state_j), take) in enumerate(
-            zip(pairs, accepted.tolist(), strict=True)
-        ):
+    def _tally(self, pairs: list[tuple[int, int]], accepted: torch.Tensor) -> None:
+        """Record one round of attempts, and advance the acceptance RNG.
+
+        Parameters
+        ----------
+        pairs:
+            The pairs that were decided.
+        accepted:
+            One boolean per pair.
+        """
+        for (state_i, _state_j), take in zip(pairs, accepted.tolist(), strict=True):
             self.attempts += 1
             self.pair_attempts[state_i] += 1
             if take:
-                walker_i = walker_of_state[state_i]
-                walker_j = walker_of_state[state_j]
-                new_ids[walker_i] = state_j
-                new_ids[walker_j] = state_i
                 self.accepted += 1
                 self.pair_accepted[state_i] += 1
-            del index
         self.exchange_id += 1
-        return new_ids, pairs, accepted
 
     def proposed_assignment(
         self, segment: int, state_ids: torch.Tensor
@@ -574,13 +580,217 @@ class ReplicaExchange:
         """
         ids = self.validate_assignment(state_ids, source="state_ids")
         walker_of_state = {int(state): row for row, state in enumerate(ids.tolist())}
-        proposed = ids.clone()
-        for state_i, state_j in self.pair_schedule(segment):
-            walker_i = walker_of_state[state_i]
-            walker_j = walker_of_state[state_j]
-            proposed[walker_i] = state_j
-            proposed[walker_j] = state_i
-        return proposed
+        pairs = self.pair_schedule(segment)
+        every = torch.ones(len(pairs), dtype=torch.bool, device=ids.device)
+        return apply_pair_swaps(ids, pairs, every, walker_of_state)
+
+    # ------------------------------------------------------------------
+    # The PairSwapHook surface
+    # ------------------------------------------------------------------
+
+    def swap_hook(
+        self,
+        *,
+        bias_energy_fn: Callable[[Batch, torch.Tensor], torch.Tensor] | None = None,
+        on_swap: Callable[[Batch], None] | None = None,
+        slot_field: str = "thermodynamic_state_id",
+    ) -> PairSwapHook:
+        """Return the generic swap hook that runs this ladder.
+
+        Everything mechanical — the pair schedule, the permutation, the
+        cadence, the parameter rebinding — belongs to
+        :class:`~nvalchemi.dynamics.hooks.PairSwapHook`.  This supplies the
+        two pieces that are enhanced-sampling physics: the Sugita-Okamoto
+        acceptance rule and the temperature table it rebinds from.
+
+        Parameters
+        ----------
+        bias_energy_fn:
+            ``(batch, state_ids) -> Tensor[B]`` giving the reduced bias
+            potential under an assignment.  Required for umbrella acceptance,
+            which evaluates the bias under both the current and the proposed
+            labels; unused by temperature acceptance.
+        on_swap:
+            Called with the batch after an accepted swap.  Forces computed
+            under the previous labels are what this is for.
+        slot_field:
+            Per-graph batch field holding the assignment.
+
+        Returns
+        -------
+        PairSwapHook
+            Configured for this ladder's interval and rung count.
+        """
+        return PairSwapHook(
+            self._make_accept_fn(bias_energy_fn, slot_field),
+            self.per_system_params,
+            slot_field=slot_field,
+            n_slots=len(self.states),
+            frequency=self.attempt_interval,
+            on_swap=on_swap,
+        )
+
+    def per_system_params(self, state_ids: torch.Tensor) -> dict[str, torch.Tensor]:
+        """Return the integrator parameters implied by an assignment.
+
+        The ``params_fn`` half of the swap: a state id is an index into the
+        ladder, and what the integrator needs is the temperature it points at.
+
+        Parameters
+        ----------
+        state_ids:
+            Assignment, shape ``[B]``.
+
+        Returns
+        -------
+        dict[str, torch.Tensor]
+            ``{"temperature": T}`` in Kelvin per graph, shape ``[B]``.
+        """
+        table = self.temperatures.to(state_ids.device)
+        return {"temperature": table[state_ids.reshape(-1).to(torch.long)]}
+
+    def _make_accept_fn(
+        self,
+        bias_energy_fn: Callable[[Batch, torch.Tensor], torch.Tensor] | None,
+        slot_field: str,
+    ) -> Callable[[Batch, torch.Tensor, torch.Tensor], torch.Tensor]:
+        """Return the ``accept_fn`` a :class:`PairSwapHook` calls.
+
+        The rule is read off the pairs rather than off a segment index, which
+        is what lets it match the generic ``accept_fn(batch, i, j)``
+        signature: the proposal is "swap the slots these rows hold", and both
+        acceptance formulas need only that.
+
+        Parameters
+        ----------
+        bias_energy_fn:
+            Reduced bias potential under a given assignment, or ``None``.
+        slot_field:
+            Per-graph batch field holding the assignment.
+
+        Returns
+        -------
+        Callable
+            ``(batch, rows_i, rows_j) -> Bool[Tensor, "P"]``.
+        """
+
+        def accept(
+            batch: Batch, rows_i: torch.Tensor, rows_j: torch.Tensor
+        ) -> torch.Tensor:
+            slots = batch[slot_field].reshape(-1).to(torch.long)
+            if self._acceptance == "temperature":
+                energies = getattr(batch, "energy", None)
+                if energies is None:
+                    energies = torch.zeros(
+                        batch.num_graphs, device=batch.positions.device
+                    )
+                return self._decide_rows(slots, rows_i, rows_j, energies=energies)
+
+            if bias_energy_fn is None:
+                raise ValueError(
+                    "ReplicaExchange: umbrella acceptance needs the bias "
+                    "energy under both the current and the proposed state "
+                    "assignment, but no bias_energy_fn was supplied."
+                )
+            proposed = slots.clone()
+            proposed[rows_i] = slots[rows_j]
+            proposed[rows_j] = slots[rows_i]
+            return self._decide_rows(
+                slots,
+                rows_i,
+                rows_j,
+                bias_current=self._reduced_bias_energy(batch, slots, bias_energy_fn),
+                bias_swapped=self._reduced_bias_energy(batch, proposed, bias_energy_fn),
+            )
+
+        return accept
+
+    def _reduced_bias_energy(
+        self,
+        batch: Batch,
+        state_ids: torch.Tensor,
+        bias_energy_fn: Callable[[Batch, torch.Tensor], torch.Tensor],
+    ) -> torch.Tensor:
+        """Return ``beta * E_bias`` per walker under *state_ids*.
+
+        The reduction is the ladder's, not the bias's: ``beta`` comes from the
+        temperature a state id points at, and the bias knows nothing about
+        temperatures.
+
+        Parameters
+        ----------
+        batch:
+            The live batch.
+        state_ids:
+            Assignment to evaluate under, shape ``[B]``.
+        bias_energy_fn:
+            Total bias energy per walker under a given assignment.
+
+        Returns
+        -------
+        torch.Tensor
+            ``beta * E_bias`` per walker, shape ``[B]``.
+        """
+        total = bias_energy_fn(batch, state_ids).reshape(-1)
+        temperatures = self.temperatures.to(total.device, total.dtype)
+        beta = 1.0 / (KB_EV * temperatures[state_ids.reshape(-1).to(torch.long)])
+        return beta * total
+
+    def _log_acceptance_temperature_rows(
+        self,
+        slots: torch.Tensor,
+        rows_i: torch.Tensor,
+        rows_j: torch.Tensor,
+        energies: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return ``log a`` per pair for temperature exchange, by row.
+
+        Parameters
+        ----------
+        slots:
+            Current assignment, shape ``[B]``.
+        rows_i, rows_j:
+            Graph rows holding each pair's two slots, shape ``[P]``.
+        energies:
+            Per-walker potential energy ``U``, shape ``[B]``.
+
+        Returns
+        -------
+        torch.Tensor
+            ``log a`` per pair, capped at zero.
+        """
+        beta = 1.0 / (KB_EV * self.temperatures.to(energies.device, energies.dtype))
+        delta = (beta[slots[rows_i]] - beta[slots[rows_j]]) * (
+            energies[rows_i] - energies[rows_j]
+        )
+        return torch.clamp(delta, max=0.0)
+
+    @staticmethod
+    def _log_acceptance_umbrella_rows(
+        rows_i: torch.Tensor,
+        rows_j: torch.Tensor,
+        bias_current: torch.Tensor,
+        bias_swapped: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return ``log a`` per pair for umbrella exchange, by row.
+
+        Parameters
+        ----------
+        rows_i, rows_j:
+            Graph rows holding each pair's two slots, shape ``[P]``.
+        bias_current:
+            Reduced bias potential under the current assignment, shape ``[B]``.
+        bias_swapped:
+            Reduced bias potential under the proposed one, shape ``[B]``.
+
+        Returns
+        -------
+        torch.Tensor
+            ``log a`` per pair, capped at zero.
+        """
+        before = bias_current[rows_i] + bias_current[rows_j]
+        after = bias_swapped[rows_i] + bias_swapped[rows_j]
+        return torch.clamp(before - after, max=0.0)
 
     # ------------------------------------------------------------------
     # State

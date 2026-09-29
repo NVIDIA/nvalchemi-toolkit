@@ -611,8 +611,15 @@ pass:
 |------|-------|---------|------|
 | `WalkerIdentityHook` | `BEFORE_STEP` | every step | stamps the five identity fields |
 | `BiasHook` | `AFTER_COMPUTE`, `AFTER_STEP` | every step | evaluates and applies biases, delivers `update()` |
-| `ReplicaExchangeHook` | `BEFORE_STEP` | `attempt_interval` | attempts the completed segment's swaps |
+| `PairSwapHook` | `BEFORE_STEP` | `attempt_interval` | attempts the completed segment's swaps |
 | `EpochCommitHook` | `BEFORE_STEP` | `steps_per_epoch` | fires `commit()` on the completed epoch |
+
+`PairSwapHook` is not an enhanced-sampling class. Propose pairs, evaluate an
+acceptance rule, permute per-system parameters for the pairs that pass — that
+is also basin hopping with swaps, population search, and any annealing ladder,
+so it lives in {mod}`nvalchemi.dynamics.hooks` and
+`ReplicaExchange.swap_hook()` supplies the two pieces that are physics: the
+Sugita-Okamoto acceptance rule and the temperature table.
 
 The last two carry their cadence as `Hook.frequency`, so the hook registry
 gates them: dispatched at step *kN*, each acts on boundary `step // N - 1`,
@@ -915,9 +922,14 @@ cannot rebind:
 
 ```text
 TypeError: replica exchange needs NVE to implement
-apply_thermodynamic_state(), so an accepted swap can rebind temperature,
+apply_per_system_params(), so an accepted swap can rebind temperature,
 velocities, and thermostat state together.
 ```
+
+`apply_per_system_params(params, batch)` is the generic adapter — the batch is
+a parameter rather than a follow-up call precisely so the velocity rescale
+cannot be forgotten. An integrator that rebinds a parameter it does not
+understand raises rather than ignoring it.
 
 `NVTLangevin` rescales velocities by `sqrt(T_new / T_old)`. `NVTNoseHoover`
 additionally transforms its chain: `Q` scales with `kT` and `eta_dot` with

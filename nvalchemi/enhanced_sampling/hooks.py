@@ -18,14 +18,20 @@
 ``frequency`` and ``stage``, so the work an enhanced-sampling run adds is
 expressed as hooks on that loop rather than as a second runner around it:
 
-==============================  =======================  ====================
-Concern                         Hook                     Cadence
-==============================  =======================  ====================
-Walker identity and counters    ``WalkerIdentityHook``   every step
-Bias forces and updates         ``BiasHook``             every step
-Shared-history synchronisation  ``EpochCommitHook``      ``steps_per_epoch``
-Replica-exchange attempts       ``ReplicaExchangeHook``  ``attempt_interval``
-==============================  =======================  ====================
+==============================  ======================  =====================
+Concern                         Hook                    Cadence
+==============================  ======================  =====================
+Walker identity and counters    ``WalkerIdentityHook``  every step
+Bias forces and updates         ``BiasHook``            every step
+Shared-history synchronisation  ``EpochCommitHook``     ``steps_per_epoch``
+Replica-exchange attempts       ``PairSwapHook``        ``attempt_interval``
+==============================  ======================  =====================
+
+The last of those is not defined here: proposing pairs, accepting them and
+permuting per-system parameters is the mechanism behind basin hopping with
+swaps and population search too, so it lives in
+:class:`~nvalchemi.dynamics.hooks.PairSwapHook` and
+:meth:`ReplicaExchange.swap_hook` supplies the physics.
 
 The last two carry their cadence as ``Hook.frequency``, so the registry gates
 them and nothing here re-implements "has the boundary been crossed".  A hook
@@ -61,7 +67,6 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.dynamics.hooks._utils import KB_EV
 from nvalchemi.hooks._context import BiasContext
 from nvalchemi.models._utils import (
     DIAGNOSTIC_PREFIX,
@@ -82,7 +87,6 @@ if TYPE_CHECKING:
 __all__ = [
     "BiasHook",
     "EpochCommitHook",
-    "ReplicaExchangeHook",
     "WalkerIdentityHook",
 ]
 
@@ -108,7 +112,7 @@ class WalkerIdentityHook:
     exchange:
         Ladder, when replica exchange is configured.  Read for the initial
         assignment and the segment divisor only; attempts are
-        :class:`ReplicaExchangeHook`'s job.
+        the swap hook's job.
 
     Attributes
     ----------
@@ -919,14 +923,16 @@ class BiasHook:
     # Services for the replica-exchange hook
     # ------------------------------------------------------------------
 
-    def reduced_bias_energy(
-        self, batch: Batch, state_ids: torch.Tensor, exchange: ReplicaExchange
-    ) -> torch.Tensor:
-        """Return the reduced bias potential per walker under *state_ids*.
+    def bias_energy(self, batch: Batch, state_ids: torch.Tensor) -> torch.Tensor:
+        """Return the total bias energy per walker under *state_ids*.
 
         Umbrella acceptance needs the bias evaluated under both the current
         and the proposed labels, so the assignment is swapped in, the biases
         re-evaluated, and the original restored in a ``finally``.
+
+        Raw energy, not reduced: multiplying by ``beta`` is thermodynamics and
+        belongs to whatever ladder is asking, which is also what keeps this
+        hook free of any temperature table.
 
         Parameters
         ----------
@@ -934,13 +940,11 @@ class BiasHook:
             The live batch.
         state_ids:
             Assignment to evaluate under, shape ``[B]``.
-        exchange:
-            The ladder, which supplies the per-state temperatures.
 
         Returns
         -------
         torch.Tensor
-            ``beta * E_bias`` per walker, shape ``[B]``.
+            ``E_bias`` per walker in eV, shape ``[B]``.
         """
         original = batch.thermodynamic_state_id
         try:
@@ -956,10 +960,7 @@ class BiasHook:
                     total = total + energy.reshape(-1)
         finally:
             batch["thermodynamic_state_id"] = original
-
-        temperatures = exchange.temperatures.to(total.device, total.dtype)
-        beta = 1.0 / (KB_EV * temperatures[state_ids.reshape(-1).to(torch.long)])
-        return beta * total
+        return total
 
     def reprime_from_scratch(self, batch: Batch) -> None:
         """Recompute the model and reapply the bias at fixed coordinates.
@@ -1067,137 +1068,3 @@ class EpochCommitHook:
             if callable(commit):
                 commit()
         self.committed_epoch = epoch
-
-
-class ReplicaExchangeHook:
-    """Attempt replica-exchange swaps on a segment cadence.
-
-    The cadence is :attr:`frequency` — the ladder's ``attempt_interval`` —
-    so the registry gates it.  Attempts stay idempotent by segment index,
-    because a checkpoint also drains the segment that has just completed and
-    neither pass may decide the same segment twice.
-
-    Parameters
-    ----------
-    exchange:
-        The ladder.
-    bias_hook:
-        Consulted for the bias energy an umbrella acceptance rule needs, and
-        asked to re-prime forces after an accepted swap.
-    """
-
-    def __init__(self, exchange: ReplicaExchange, bias_hook: BiasHook) -> None:
-        self.stage: Enum | None = DynamicsStage.BEFORE_STEP
-        self.frequency = int(exchange.attempt_interval)
-        self.exchange = exchange
-        self.bias_hook = bias_hook
-        self.attempted_segment = -1
-        self.dynamics: Any = None
-
-    def on_register(self, workflow: Any) -> None:
-        """Remember the engine whose thermodynamic state a swap rebinds.
-
-        Parameters
-        ----------
-        workflow:
-            The ``BaseDynamics`` doing the registering.
-        """
-        self.dynamics = workflow
-
-    def __call__(self, ctx: HookContext, stage: Enum) -> None:
-        """Attempt the segment that has just completed.
-
-        Parameters
-        ----------
-        ctx:
-            The dynamics hook context.
-        stage:
-            The stage being dispatched.
-        """
-        step = getattr(ctx, "step_count", 0)
-        self.attempt_segment(ctx.batch, step // self.frequency - 1)
-
-    def state_dict(self) -> Mapping[str, Any]:
-        """Return the segment cursor that must survive a restart.
-
-        Returns
-        -------
-        Mapping[str, Any]
-            The last segment attempted.  A resumed run that lost it would
-            re-decide a segment the checkpoint had already decided, against a
-            ladder whose acceptance RNG has moved on.
-        """
-        return {"attempted_segment": int(self.attempted_segment)}
-
-    def load_state_dict(self, state: Mapping[str, Any]) -> None:
-        """Restore the segment cursor.
-
-        Parameters
-        ----------
-        state:
-            A mapping produced by :meth:`state_dict`.
-        """
-        self.attempted_segment = int(state.get("attempted_segment", -1))
-
-    def attempt_segment(self, batch: Batch, segment: int) -> None:
-        """Attempt *segment*'s pairs, at most once.
-
-        Parameters
-        ----------
-        batch:
-            The live batch.
-        segment:
-            The completed segment.  Negative, or already attempted, is a
-            no-op.
-        """
-        if segment < 0 or segment <= self.attempted_segment:
-            return
-        self.attempted_segment = segment
-        self._attempt(batch, segment)
-
-    def _attempt(self, batch: Batch, segment: int) -> None:
-        """Decide one round of swaps and apply the accepted ones.
-
-        Applying is the indivisible half: the batch labels, the integrator's
-        target temperature, the velocity rescaling, and the forces all move
-        together.  Leaving any of them behind would sample a state the
-        assignment says the walker is no longer in.
-
-        Parameters
-        ----------
-        batch:
-            The live batch.
-        segment:
-            Exchange segment index, which selects the even/odd pairing.
-        """
-        exchange = self.exchange
-        current = batch.thermodynamic_state_id.reshape(-1).to(torch.long)
-
-        bias_current = bias_swapped = None
-        if exchange.acceptance == "umbrella":
-            proposed = exchange.proposed_assignment(segment, current)
-            bias_current = self.bias_hook.reduced_bias_energy(batch, current, exchange)
-            bias_swapped = self.bias_hook.reduced_bias_energy(batch, proposed, exchange)
-
-        energies = getattr(batch, "energy", None)
-        if energies is None:
-            energies = torch.zeros(batch.num_graphs, device=batch.positions.device)
-
-        new_ids, _pairs, accepted = exchange.decide(
-            segment,
-            current,
-            energies.reshape(-1),
-            bias_current=bias_current,
-            bias_swapped=bias_swapped,
-        )
-        if not bool(accepted.any()):
-            return
-
-        batch["thermodynamic_state_id"] = new_ids
-        self.dynamics.apply_thermodynamic_state(new_ids, exchange.temperatures)
-        self.dynamics.rescale_velocities_for_state(batch)
-        # Forces in the batch were produced under the previous labels. The
-        # integrator reads them in its next half-step before any model call,
-        # so without re-priming the first step after a swap would integrate
-        # the state the walker just left.
-        self.bias_hook.reprime_from_scratch(batch)

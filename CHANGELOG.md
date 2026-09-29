@@ -4,6 +4,35 @@
 
 ### Added
 
+- `PairSwapHook` and `BaseDynamics.apply_per_system_params()` — pairwise swaps
+  of per-system state, with the physics taken out. Strip the thermodynamics
+  from replica exchange and the mechanism is: propose pairs, evaluate an
+  acceptance rule, and permute per-system parameters for the pairs that pass,
+  rebinding whatever integrator state travels with them. That is also basin
+  hopping with swaps, population or evolutionary structure search, and any
+  annealing ladder, so it lives in `nvalchemi/dynamics/hooks/swap.py` with the
+  rule supplied as `accept_fn(batch, i, j) -> Bool[P]` and the parameter
+  mapping as `params_fn(slots)`. `even_odd_pairs` and `apply_pair_swaps` are
+  exposed alongside it.
+
+  `apply_thermodynamic_state(state_ids, temperatures)` and
+  `rescale_velocities_for_state(batch)` are replaced by one
+  `apply_per_system_params(params, batch)`. Generalising the name is what makes
+  the adapter available to methods that are not replica exchange; merging the
+  two calls is what makes the change indivisible, since the velocity rescale
+  needs the batch and a caller who forgot the second call got exactly the
+  silent failure the adapter exists to prevent. An integrator now raises on a
+  parameter it cannot rebind rather than ignoring it.
+
+  `ReplicaExchange` keeps what is genuinely enhanced-sampling physics — the
+  Sugita-Okamoto acceptance rules, the ladder, the bijection check, the
+  counter-based acceptance RNG and the per-pair tallies — and gains
+  `swap_hook()`, which configures the generic hook with them.
+  `ReplicaExchangeHook` is gone from `enhanced_sampling/`. The acceptance rule
+  now has one implementation reached by both callers: the live hook and
+  `decide()`, which still exposes the same decision without a batch so the
+  formula can be checked against hand-computed numbers.
+
 - `nvalchemi/_checkpoint.py` — transactional, pickle-free Zarr checkpoints for
   any set of stateful objects. `save_checkpoint(path, components, batch=...)`
   and `load_checkpoint(path, components, ...)` take a mapping of name to
@@ -302,7 +331,7 @@
   shared-history bias is saved merged rather than mid-merge. The drain is
   tracked per epoch index and cannot double-count.
   `BaseDynamics` gains `state_dict()`, `load_state_dict()`,
-  `redistribute_state()`, and `apply_thermodynamic_state()`, the last
+  `redistribute_state()`, and `apply_per_system_params()`, the last
   implemented for `NVTLangevin` (velocity rescaling) and `NVTNoseHoover`
   (chain masses and velocities transformed with kT, leaving the chain kinetic
   energy invariant). Model weights are never restored from a checkpoint; the

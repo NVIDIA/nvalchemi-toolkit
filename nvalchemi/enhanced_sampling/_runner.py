@@ -38,12 +38,12 @@ from nvalchemi._checkpoint import (
     save_checkpoint,
 )
 from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.dynamics.hooks.swap import PairSwapHook
 from nvalchemi.dynamics.strategy import DynamicsStrategy
 from nvalchemi.enhanced_sampling._exchange import ReplicaExchange
 from nvalchemi.enhanced_sampling.hooks import (
     BiasHook,
     EpochCommitHook,
-    ReplicaExchangeHook,
     WalkerIdentityHook,
 )
 from nvalchemi.models.base import BaseModelMixin
@@ -208,7 +208,7 @@ class EnhancedSampling(DynamicsStrategy):
     _bias_hook: BiasHook = PrivateAttr()
     _identity_hook: WalkerIdentityHook = PrivateAttr()
     _epoch_hook: EpochCommitHook = PrivateAttr()
-    _exchange_hook: ReplicaExchangeHook | None = PrivateAttr(default=None)
+    _exchange_hook: PairSwapHook | None = PrivateAttr(default=None)
     # One-shot: the empirical state-dependence probe runs at prime time.
     _probed_state_dependence: bool = PrivateAttr(default=False)
     _restored: bool = PrivateAttr(default=False)
@@ -272,8 +272,14 @@ class EnhancedSampling(DynamicsStrategy):
         self._epoch_hook = EpochCommitHook(
             [self._bias_hook], frequency=self.steps_per_epoch
         )
+        # The swap itself is generic — propose pairs, accept, permute
+        # per-system parameters — so it is a PairSwapHook that the ladder
+        # configures with the acceptance rule and the temperature table.
         self._exchange_hook = (
-            ReplicaExchangeHook(self.replica_exchange, self._bias_hook)
+            self.replica_exchange.swap_hook(
+                bias_energy_fn=self._bias_hook.bias_energy,
+                on_swap=self._bias_hook.reprime_from_scratch,
+            )
             if self.replica_exchange is not None
             else None
         )
@@ -290,32 +296,23 @@ class EnhancedSampling(DynamicsStrategy):
         than producing a plausible-looking wrong trajectory.
 
         Checked against the engine *class*, since a strategy holds a recipe
-        rather than a live engine.  That is also the stricter test:
-        ``BaseDynamics`` defines ``apply_thermodynamic_state`` only to raise,
-        so presence is not enough and the subclass must override it.
+        rather than a live engine.  ``BaseDynamics`` defines
+        ``apply_per_system_params`` only to raise, so presence is not enough
+        and the subclass must override it.
 
         Raises
         ------
         TypeError
-            If the engine does not implement the rebinding adapters.
+            If the engine does not implement the rebinding adapter.
         """
-        for method in ("apply_thermodynamic_state", "rescale_velocities_for_state"):
-            if not callable(getattr(self.engine, method, None)):
-                raise TypeError(
-                    f"EnhancedSampling: replica exchange needs "
-                    f"{self.engine.__name__} to implement {method}(), "
-                    "so an accepted swap can rebind temperature, velocities, "
-                    "and thermostat state together. NVTLangevin and "
-                    "NVTNoseHoover implement this; other integrators can run "
-                    "biased dynamics without exchange."
-                )
-        if self.engine.apply_thermodynamic_state is (
-            BaseDynamics.apply_thermodynamic_state
-        ):
+        if self.engine.apply_per_system_params is BaseDynamics.apply_per_system_params:
             raise TypeError(
-                f"EnhancedSampling: {self.engine.__name__} does not "
-                "support thermodynamic-state rebinding, so it cannot take part "
-                "in replica exchange."
+                f"EnhancedSampling: replica exchange needs "
+                f"{self.engine.__name__} to implement "
+                "apply_per_system_params(), so an accepted swap can rebind "
+                "temperature, velocities, and thermostat state together. "
+                "NVTLangevin and NVTNoseHoover implement this; other "
+                "integrators can run biased dynamics without exchange."
             )
 
     def build_hooks(self) -> list[Hook]:

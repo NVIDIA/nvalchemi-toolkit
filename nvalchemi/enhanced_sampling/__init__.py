@@ -42,11 +42,15 @@ Public surface
 * :class:`EnhancedSampling` — the
   :class:`~nvalchemi.dynamics.DynamicsStrategy` that configures an
   engine to run biases, and owns restart: checkpoint, restore, warm start.
-* :class:`WalkerIdentityHook`, :class:`BiasHook`, :class:`EpochCommitHook`,
-  :class:`ReplicaExchangeHook` — what it installs on that engine.  Walker
-  identity, the force-step ordering, exactly-once ``update()``, force
-  priming, shared-history commits and exchange attempts are each a hook on
-  ``BaseDynamics``'s own stepping loop rather than a second loop around it.
+* :class:`WalkerIdentityHook`, :class:`BiasHook`, :class:`EpochCommitHook` —
+  what it installs on that engine, alongside a
+  :class:`~nvalchemi.dynamics.hooks.PairSwapHook` when a ladder is
+  configured.  Walker identity, the force-step ordering, exactly-once
+  ``update()``, force priming, shared-history commits and exchange attempts
+  are each a hook on ``BaseDynamics``'s own stepping loop rather than a
+  second loop around it.  The swap mechanism itself is generic and lives in
+  ``dynamics/hooks/swap.py``; :meth:`ReplicaExchange.swap_hook` supplies the
+  acceptance rule and the temperature table, which are the physics.
 * :class:`ThermodynamicState`, :class:`ReplicaExchange` — synchronous
   replica exchange; swaps state labels, not coordinates.
 * Built-in static biases: :class:`HarmonicUmbrellaBias`,
@@ -139,7 +143,6 @@ from nvalchemi.enhanced_sampling.cv import (
 from nvalchemi.enhanced_sampling.hooks import (
     BiasHook,
     EpochCommitHook,
-    ReplicaExchangeHook,
     WalkerIdentityHook,
 )
 
@@ -152,7 +155,6 @@ __all__ = [
     "WalkerIdentityHook",
     "BiasHook",
     "EpochCommitHook",
-    "ReplicaExchangeHook",
     # Replica exchange
     "ThermodynamicState",
     "ReplicaExchange",

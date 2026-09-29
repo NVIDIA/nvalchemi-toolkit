@@ -460,9 +460,11 @@ class TestAcceptanceArithmetic:
             ],
             torch.tensor([0, 1]),
         )
-        pairs = exchange.pair_schedule(0)
-        log_alpha = exchange._log_acceptance_temperature(
-            pairs, {0: 0, 1: 1}, torch.tensor([u_cold, u_hot])
+        log_alpha = exchange._log_acceptance_temperature_rows(
+            torch.tensor([0, 1]),
+            torch.tensor([0]),
+            torch.tensor([1]),
+            torch.tensor([u_cold, u_hot]),
         )
         beta_cold = 1.0 / (KB_EV * t_cold)
         beta_hot = 1.0 / (KB_EV * t_hot)
@@ -473,16 +475,19 @@ class TestAcceptanceArithmetic:
         exchange = ReplicaExchange(_flat_ladder(2), torch.tensor([0, 1]))
         current = torch.tensor([0.5, 0.2])
         swapped = torch.tensor([1.5, 0.9])
-        log_alpha = exchange._log_acceptance_umbrella(
-            [(0, 1)], {0: 0, 1: 1}, current, swapped
+        log_alpha = exchange._log_acceptance_umbrella_rows(
+            torch.tensor([0]), torch.tensor([1]), current, swapped
         )
         expected = min(0.0, (0.5 + 0.2) - (1.5 + 0.9))
         assert abs(float(log_alpha[0]) - expected) < 1e-6
 
     def test_log_alpha_never_positive(self) -> None:
         exchange = ReplicaExchange(_ladder(2, 300.0, 2.0), torch.tensor([0, 1]))
-        log_alpha = exchange._log_acceptance_temperature(
-            [(0, 1)], {0: 0, 1: 1}, torch.tensor([100.0, 0.0])
+        log_alpha = exchange._log_acceptance_temperature_rows(
+            torch.tensor([0, 1]),
+            torch.tensor([0]),
+            torch.tensor([1]),
+            torch.tensor([100.0, 0.0]),
         )
         assert float(log_alpha[0]) <= 0.0
 
@@ -730,16 +735,17 @@ class TestRunnerIntegration:
         assert exchange.attempts == 0
 
     @staticmethod
-    def _record_segments(exchange: ReplicaExchange) -> list[int]:
-        """Patch ``decide`` to record which segment index each attempt uses."""
+    def _record_segments(runner: EnhancedSampling) -> list[int]:
+        """Record which segment index each swap attempt uses."""
         seen: list[int] = []
-        original = exchange.decide
+        hook = runner._exchange_hook
+        original = hook._attempt
 
-        def _spy(segment, *args, **kwargs):
+        def _spy(batch, segment):
             seen.append(segment)
-            return original(segment, *args, **kwargs)
+            return original(batch, segment)
 
-        exchange.decide = _spy  # type: ignore[method-assign]
+        hook._attempt = _spy  # type: ignore[method-assign]
         return seen
 
     def test_first_attempt_uses_segment_zero(self, device: str) -> None:
@@ -750,7 +756,7 @@ class TestRunnerIntegration:
         """
         batch = _make_batch(device=device)
         runner, model, exchange = self._runner(device, interval=2)
-        seen = self._record_segments(exchange)
+        seen = self._record_segments(runner)
         runner.run(batch, model, n_steps=6)
         assert seen[:2] == [0, 1], f"segments attempted: {seen}"
 
@@ -781,7 +787,7 @@ class TestRunnerIntegration:
     def test_segments_attempted_in_order_without_gaps(self, device: str) -> None:
         batch = _make_batch(device=device)
         runner, model, exchange = self._runner(device, interval=2)
-        seen = self._record_segments(exchange)
+        seen = self._record_segments(runner)
         runner.run(batch, model, n_steps=12)
         assert seen == list(range(len(seen))), f"out of order or gapped: {seen}"
 
@@ -789,7 +795,7 @@ class TestRunnerIntegration:
         """An accepted swap re-primes, which re-enters the stamp."""
         batch = _make_batch(device=device)
         runner, model, exchange = self._runner(device, interval=1)
-        seen = self._record_segments(exchange)
+        seen = self._record_segments(runner)
         runner.run(batch, model, n_steps=8)
         assert len(seen) == len(set(seen)), f"repeated segment: {seen}"
 
@@ -1125,13 +1131,14 @@ class TestExchangeCheckpoint:
         runner, model = _sampling(
             device, {"rec": _Recording()}, steps_per_epoch=4, replica_exchange=exchange
         )
-        original = exchange.decide
+        hook = runner._exchange_hook
+        original = hook._attempt
 
-        def _spy(*args, **kwargs):
+        def _spy(batch, segment):
             order.append("exchange")
-            return original(*args, **kwargs)
+            return original(batch, segment)
 
-        exchange.decide = _spy  # type: ignore[method-assign]
+        hook._attempt = _spy  # type: ignore[method-assign]
 
         runner.run(_make_batch(device=device), model, n_steps=4)
         order.clear()

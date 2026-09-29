@@ -30,13 +30,13 @@ import torch
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVE, NVTLangevin
 from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.hooks import PairSwapHook
 from nvalchemi.enhanced_sampling import (
     BiasHook,
     ConservativeBias,
     EnhancedSampling,
     EpochCommitHook,
     ReplicaExchange,
-    ReplicaExchangeHook,
     ThermodynamicState,
     WalkerIdentityHook,
 )
@@ -138,14 +138,14 @@ class TestBuildHooks:
         assert kinds == [
             WalkerIdentityHook,
             BiasHook,
-            ReplicaExchangeHook,
+            PairSwapHook,
             EpochCommitHook,
         ]
 
     def test_exchange_hook_absent_without_a_ladder(self) -> None:
         sampling = EnhancedSampling(engine=NVTLangevin, engine_kwargs=_ENGINE_KWARGS)
         kinds = [type(hook) for hook in sampling.build_hooks()]
-        assert ReplicaExchangeHook not in kinds
+        assert PairSwapHook not in kinds
         assert kinds == [WalkerIdentityHook, BiasHook, EpochCommitHook]
 
     def test_extra_hooks_come_last(self) -> None:
@@ -257,7 +257,7 @@ class TestIdempotence:
 
     def test_segment_is_attempted_at_most_once(self) -> None:
         exchange = ReplicaExchange(_ladder(2), torch.arange(2), attempt_interval=2)
-        hook = ReplicaExchangeHook(exchange, BiasHook({}))
+        hook = exchange.swap_hook()
         decided: list[int] = []
         hook._attempt = lambda batch, segment: decided.append(segment)  # type: ignore[method-assign]
         hook.attempt_segment(None, -1)

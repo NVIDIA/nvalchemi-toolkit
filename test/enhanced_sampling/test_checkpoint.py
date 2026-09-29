@@ -21,7 +21,6 @@ trajectory reproduction across a checkpoint/restore boundary.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 
 import pytest
@@ -31,7 +30,7 @@ from torch import Tensor
 
 from nvalchemi._checkpoint import CHECKPOINT_FORMAT_VERSION, load_checkpoint
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics import NVTLangevin, NVTNoseHoover
+from nvalchemi.dynamics import NVTLangevin
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.enhanced_sampling import (
     AdaptivePotentialMixin,
@@ -252,110 +251,6 @@ class TestDynamicsState:
             )
         dynamics.redistribute_state(torch.tensor([2, 0, 1], device=device))
         assert dynamics._state.temperature.reshape(-1).tolist() == [3.0, 1.0, 2.0]
-
-
-# ===========================================================================
-# 3. Thermodynamic-state rebinding
-# ===========================================================================
-
-
-class TestThermodynamicStateRebinding:
-    """The adapters replica exchange will need in PR 5."""
-
-    def test_base_dynamics_refuses(self, device: str) -> None:
-        """An integrator that cannot rebind must fail, not accept silently."""
-        from nvalchemi.dynamics.base import BaseDynamics
-
-        dynamics = BaseDynamics(DemoModelWrapper(DemoModel()).to(device))
-        with pytest.raises(NotImplementedError, match="does not support"):
-            dynamics.apply_thermodynamic_state(torch.tensor([0]), torch.tensor([300.0]))
-
-    def test_langevin_rebinds_temperature(self, device: str) -> None:
-        batch = _make_batch(device=device)
-        dynamics = _make_dynamics(device)
-        dynamics._ensure_state_initialized(batch)
-        before = dynamics._state.temperature.reshape(-1).clone()
-
-        dynamics.apply_thermodynamic_state(
-            torch.tensor([1, 0], device=device),
-            torch.tensor([300.0, 600.0], device=device),
-        )
-        after = dynamics._state.temperature.reshape(-1)
-        assert abs(float(after[0] / before[0]) - 2.0) < 1e-5
-        assert abs(float(after[1] / before[1]) - 1.0) < 1e-5
-
-    def test_langevin_velocity_scaling_follows_temperature(self, device: str) -> None:
-        """The swap is indivisible: target and velocities move together."""
-        batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
-        batch.velocities.fill_(1.0)
-        dynamics = _make_dynamics(device)
-        dynamics._ensure_state_initialized(batch)
-        dynamics.apply_thermodynamic_state(
-            torch.tensor([0], device=device), torch.tensor([1200.0], device=device)
-        )
-        dynamics.rescale_velocities_for_state(batch)
-        # T: 300 -> 1200, so v scales by sqrt(4) = 2.
-        assert torch.allclose(
-            batch.velocities, torch.full_like(batch.velocities, 2.0), atol=1e-5
-        )
-
-    def test_out_of_range_state_id_raises(self, device: str) -> None:
-        batch = _make_batch(device=device)
-        dynamics = _make_dynamics(device)
-        dynamics._ensure_state_initialized(batch)
-        with pytest.raises(IndexError, match="out of range"):
-            dynamics.apply_thermodynamic_state(
-                torch.tensor([0, 5], device=device),
-                torch.tensor([300.0], device=device),
-            )
-
-    def test_nose_hoover_transforms_chain_state(self, device: str) -> None:
-        """Q and eta_dot must move with kT or detailed balance breaks."""
-        batch = _make_batch(device=device)
-        model = DemoModelWrapper(DemoModel()).to(device)
-        dynamics = NVTNoseHoover(
-            model=model, dt=0.1, temperature=300.0, thermostat_time=10.0
-        )
-        dynamics._ensure_state_initialized(batch)
-        with torch.no_grad():
-            dynamics._state.nhc_eta_dot.fill_(2.0)
-        q_before = dynamics._state.nhc_Q.clone()
-        eta_dot_before = dynamics._state.nhc_eta_dot.clone()
-
-        dynamics.apply_thermodynamic_state(
-            torch.tensor([0, 0], device=device),
-            torch.tensor([1200.0], device=device),
-        )
-        ratio = 4.0  # 300 -> 1200
-        assert torch.allclose(dynamics._state.nhc_Q, q_before * ratio, rtol=1e-5), (
-            "chain masses must scale with kT"
-        )
-        assert torch.allclose(
-            dynamics._state.nhc_eta_dot,
-            eta_dot_before / math.sqrt(ratio),
-            rtol=1e-5,
-        ), "chain velocities must scale as 1/sqrt(kT)"
-
-    def test_nose_hoover_chain_kinetic_energy_invariant(self, device: str) -> None:
-        """Q eta_dot^2 must not change: rebinding injects no thermostat energy."""
-        batch = _make_batch(device=device)
-        dynamics = NVTNoseHoover(
-            model=DemoModelWrapper(DemoModel()).to(device),
-            dt=0.1,
-            temperature=300.0,
-            thermostat_time=10.0,
-        )
-        dynamics._ensure_state_initialized(batch)
-        with torch.no_grad():
-            dynamics._state.nhc_eta_dot.fill_(1.5)
-        before = (dynamics._state.nhc_Q * dynamics._state.nhc_eta_dot**2).sum()
-
-        dynamics.apply_thermodynamic_state(
-            torch.tensor([0, 0], device=device),
-            torch.tensor([900.0], device=device),
-        )
-        after = (dynamics._state.nhc_Q * dynamics._state.nhc_eta_dot**2).sum()
-        assert torch.allclose(before, after, rtol=1e-5)
 
 
 # ===========================================================================
