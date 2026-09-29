@@ -378,11 +378,20 @@ class NEB(DynamicsStrategy):
     @field_validator("spring", mode="before")
     @classmethod
     def _validate_spring(cls, value: Any) -> Any:
-        """Validate spring policies and restore built-in constant recipes."""
+        """Validate spring policies and restore serialized recipes."""
         if isinstance(value, dict) and value.get("type") == "constant":
             if set(value) != {"type", "value"}:
                 raise ValueError("constant spring spec must contain type and value")
             value = ConstantSpringConfig(value["value"])
+        elif isinstance(value, dict) and value.get("type") == "custom":
+            if set(value) != {"type", "spec"}:
+                raise ValueError("custom spring spec must contain type and spec")
+            value = _build_spec_component(value["spec"], label="custom spring")
+            if not isinstance(value, SpringConfig):
+                raise TypeError(
+                    "custom spring spec must build a SpringConfig; got "
+                    f"{type(value).__name__}"
+                )
         if isinstance(value, bool):
             raise TypeError("spring must be a number or implement SpringConfig")
         if isinstance(value, (int, float)):
@@ -394,15 +403,15 @@ class NEB(DynamicsStrategy):
 
     @field_serializer("spring", when_used="json")
     def _serialize_spring(self, spring: float | SpringConfig) -> float | dict[str, Any]:
-        """Serialize numeric and built-in constant spring configurations."""
+        """Serialize numeric, constant, and custom spring configurations."""
         if isinstance(spring, (int, float)):
             return float(spring)
         if isinstance(spring, ConstantSpringConfig):
             return {"type": "constant", "value": spring.value}
-        raise ValueError(
-            f"Spring policy {type(spring).__name__} is runtime-only and cannot be "
-            "serialized by NEB.to_spec_dict()"
-        )
+        return {
+            "type": "custom",
+            "spec": _component_spec_dict(spring, label="custom spring"),
+        }
 
     @field_validator("method", mode="before")
     @classmethod

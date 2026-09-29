@@ -210,10 +210,12 @@ constructor arguments are stored as attributes also round-trip through
 `spring` follows the same pattern: pass a plain `float` for a constant spring
 constant, or a custom {py:class}`~nvalchemi.dynamics.mep.SpringConfig`
 (`resolve(context)` returning one spring constant per link) for e.g.
-energy-dependent springs. Custom spring policies are runtime-only and cannot
-round-trip through `NEB.to_spec_dict()`. Only numeric springs and
-{py:class}`~nvalchemi.dynamics.mep.ConstantSpringConfig` have a persistent
-spec representation.
+energy-dependent springs. Custom spring policies round-trip through
+`NEB.to_spec_dict()` when their class is importable and their constructor
+arguments are stored as attributes (or they provide a `checkpoint_spec()`
+constructor spec). Other custom spring policies can be used at runtime.
+Numeric springs and {py:class}`~nvalchemi.dynamics.mep.ConstantSpringConfig`
+retain their existing spec representation.
 
 ## Building NEB manually with hooks
 

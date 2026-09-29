@@ -40,6 +40,8 @@ from nvalchemi.dynamics.mep import (
     ConstantSpringConfig,
     IDPPModel,
     NEBMethod,
+    SpringConfig,
+    SpringContext,
     TorchNEBMethod,
     interpolate_paths,
     prepare_idpp_targets,
@@ -160,6 +162,28 @@ class _ScaleTorchMethod:
         return self.factor * batch.physical_forces, torch.ones_like(spring_constants)
 
 
+class _EnergyScaledSpring:
+    """Importable spring with reconstructible energy-dependent parameters."""
+
+    refresh = DynamicsStage.AFTER_COMPUTE
+
+    def __init__(self, base: float, scale: float) -> None:
+        self.base = base
+        self.scale = scale
+
+    def resolve(self, context: SpringContext) -> torch.Tensor:
+        """Return a spring constant for each link from the current energies."""
+        energy_scale = (
+            0.0 if context.energies is None else float(context.energies.max())
+        )
+        return torch.full(
+            (context.num_links,),
+            self.base + self.scale * energy_scale,
+            dtype=context.positions.dtype,
+            device=context.positions.device,
+        )
+
+
 def _freeze_hook(engine: FusedStage) -> FreezeAtomsHook:
     """Return the NEB-owned fixed-node constraint hook."""
     return next(
@@ -176,6 +200,58 @@ def _freeze_hook(engine: FusedStage) -> FreezeAtomsHook:
 
 class TestNEBConfiguration:
     """Validate strategy configuration and optimizer construction."""
+
+    def test_custom_spring_round_trips_constructor_spec(self) -> None:
+        """A custom spring keeps its constructor state and refresh policy."""
+        spring = _EnergyScaledSpring(base=0.2, scale=0.05)
+        strategy = NEB(model=_model(), spring=spring)
+
+        assert isinstance(strategy.spring, SpringConfig)
+        assert _force_hook(strategy.build_engine()).spring is spring
+
+        spec = json.loads(json.dumps(strategy.to_spec_dict()))
+        restored = NEB.from_spec_dict(spec, model=strategy.model)
+
+        assert spec["spring"]["type"] == "custom"
+        assert isinstance(restored.spring, _EnergyScaledSpring)
+        assert restored.spring.base == 0.2
+        assert restored.spring.scale == 0.05
+        assert restored.spring.refresh is DynamicsStage.AFTER_COMPUTE
+        assert _force_hook(restored.build_engine()).spring is restored.spring
+
+    def test_rejects_invalid_custom_spring_specs(self) -> None:
+        """Malformed recipes and components outside the protocol fail clearly."""
+        strategy = NEB(model=_model())
+        spec = strategy.to_spec_dict()
+
+        spec["spring"] = {"type": "custom"}
+        with pytest.raises(ValueError, match="custom spring spec must contain"):
+            NEB.from_spec_dict(spec, model=strategy.model)
+
+        spec["spring"] = {"type": "custom", "spec": None}
+        with pytest.raises(ValueError, match="constructor-spec mapping"):
+            NEB.from_spec_dict(spec, model=strategy.model)
+
+        method_spec = NEB(
+            model=strategy.model, method=_ScaleTorchMethod()
+        ).to_spec_dict()
+        spec["spring"] = {"type": "custom", "spec": method_spec["method"]["spec"]}
+        with pytest.raises(TypeError, match="must build a SpringConfig"):
+            NEB.from_spec_dict(spec, model=strategy.model)
+
+    def test_runtime_only_spring_rejects_serialization(self) -> None:
+        """A local spring can run but cannot produce an importable recipe."""
+
+        class LocalSpring:
+            refresh = DynamicsStage.ON_ADMISSION
+
+            def resolve(self, context: SpringContext) -> torch.Tensor:
+                return torch.ones(context.num_links, device=context.positions.device)
+
+        strategy = NEB(model=_model(), spring=LocalSpring())
+
+        with pytest.raises(ValueError, match="Cannot serialize custom spring"):
+            strategy.to_spec_dict()
 
     def test_torch_method_round_trips_constructor_spec(self) -> None:
         """The API accepts a Torch method and restores its constructor state."""
