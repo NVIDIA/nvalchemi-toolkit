@@ -23,6 +23,8 @@ from torch.utils.data import SequentialSampler
 
 from nvalchemi.training.runtime import (
     configure_dataloader,
+    eval_configured_models,
+    evaluating,
     freeze_unconfigured_models,
     move_to_devices,
     rehome_optimizer_state,
@@ -111,6 +113,62 @@ class TestRuntimeHelpers:
             assert [param.requires_grad for param in params] == [False] * len(params)
         assert omitted.training is True
         assert [param.requires_grad for param in params] == [True] * len(params)
+
+
+class TestEvaluating:
+    """Tests for :func:`evaluating`."""
+
+    def test_whole_tree_is_evaluated_inside_the_context(self) -> None:
+        """Every submodule reports evaluation mode while the context is active."""
+        model = nn.Sequential(nn.Linear(2, 2), nn.Dropout(0.5))
+        with evaluating(model):
+            assert all(not module.training for module in model.modules())
+        assert all(module.training for module in model.modules())
+
+    def test_mixed_mode_tree_is_restored_per_submodule(self) -> None:
+        """A child left in training mode under an eval root comes back that way."""
+        model = nn.Sequential(nn.Linear(2, 2), nn.Dropout(0.5))
+        model.eval()
+        model[1].training = True
+        with evaluating(model):
+            assert not model.training
+            assert not model[1].training
+        assert not model.training
+        assert not model[0].training
+        assert model[1].training
+
+    def test_exception_inside_the_context_still_restores(self) -> None:
+        """The training flags are restored when the body raises."""
+        model = nn.Linear(2, 2)
+        with pytest.raises(RuntimeError, match="boom"), evaluating(model):
+            raise RuntimeError("boom")
+        assert model.training
+
+
+class TestEvalConfiguredModels:
+    """Tests for :func:`eval_configured_models`."""
+
+    def test_configured_models_are_evaluated_and_restored(self) -> None:
+        """Configured models switch to eval mode and return to their own flag."""
+        configured = nn.Linear(2, 1)
+        evaluated = nn.Linear(2, 1)
+        evaluated.eval()
+        models = {"configured": configured, "evaluated": evaluated}
+        configs = {"configured": object(), "evaluated": object()}
+        with eval_configured_models(models, configs):
+            assert not configured.training
+            assert not evaluated.training
+        assert configured.training
+        assert not evaluated.training
+
+    def test_unconfigured_models_are_left_alone(self) -> None:
+        """A model absent from the optimizer configs keeps its training mode."""
+        models = nn.ModuleDict({"trained": nn.Linear(2, 1), "omitted": nn.Linear(2, 1)})
+        with eval_configured_models(models, {"trained": object()}):
+            assert not models["trained"].training
+            assert models["omitted"].training
+        assert models["trained"].training
+        assert models["omitted"].training
 
 
 class TestRehomeOptimizerState:

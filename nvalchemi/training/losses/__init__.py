@@ -42,6 +42,7 @@ from nvalchemi.training.losses.composition import (
 )
 from nvalchemi.training.losses.reductions import (
     frobenius_mse,
+    graph_balanced_mean,
     per_graph_mean,
     per_graph_sum,
 )
@@ -85,6 +86,7 @@ __all__ = [
     "assemble_loss_targets",
     "assert_same_shape",
     "frobenius_mse",
+    "graph_balanced_mean",
     "loss_component_to_spec",
     "per_graph_mean",
     "per_graph_sum",

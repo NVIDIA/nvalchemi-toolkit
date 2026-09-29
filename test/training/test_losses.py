@@ -43,6 +43,7 @@ from nvalchemi.training._spec import create_model_spec, create_model_spec_from_j
 from nvalchemi.training.losses import (
     assert_same_shape,
     frobenius_mse,
+    graph_balanced_mean,
     per_graph_mean,
     per_graph_sum,
 )
@@ -287,6 +288,97 @@ class TestReductions:
         expected.scatter_add_(0, batch_idx.long().view(-1, 1).expand_as(values), values)
         assert got.dtype == dtype
         assert torch.equal(got, expected)
+
+    def test_graph_balanced_mean_matches_manual_for_node_residuals(self) -> None:
+        """Each graph's valid-atom mean is averaged over graphs, invalid atoms excluded."""
+        residual = torch.tensor([1.0, 3.0, 2.0, 0.0, 4.0, 6.0])
+        valid = torch.tensor([True, True, True, False, True, True])
+
+        loss, per_sample = graph_balanced_mean(
+            residual, valid, self.batch_idx, 3, loss_name="toy"
+        )
+
+        torch.testing.assert_close(per_sample, torch.tensor([2.0, 3.0, 6.0]))
+        assert loss.item() == pytest.approx(11.0 / 3.0)
+
+    def test_graph_balanced_mean_sums_trailing_dims_into_the_node(self) -> None:
+        """A component mask divides by valid components, not valid atoms."""
+        residual = torch.tensor(
+            [[1.0, 1.0, 0.0], [2.0, 0.0, 0.0], [3.0, 3.0, 3.0], [0.0, 0.0, 0.0]]
+        )
+        valid = torch.tensor(
+            [[True, True, False], [True, False, False], [True] * 3, [False] * 3]
+        )
+        batch_idx = torch.tensor([0, 0, 1, 1], dtype=torch.int32)
+
+        loss, per_sample = graph_balanced_mean(
+            residual, valid, batch_idx, 2, loss_name="toy"
+        )
+
+        torch.testing.assert_close(per_sample, torch.tensor([4.0 / 3.0, 3.0]))
+        assert loss.item() == pytest.approx((4.0 / 3.0 + 3.0) / 2.0)
+
+    def test_graph_balanced_mean_zero_valid_graph_contributes_zero(self) -> None:
+        """A graph whose atoms are all masked out yields ``0.0`` rather than NaN."""
+        residual = torch.tensor([0.0, 0.0, 5.0])
+        valid = torch.tensor([False, False, True])
+        batch_idx = torch.tensor([0, 0, 1], dtype=torch.int32)
+
+        loss, per_sample = graph_balanced_mean(
+            residual, valid, batch_idx, 2, loss_name="toy"
+        )
+
+        torch.testing.assert_close(per_sample, torch.tensor([0.0, 5.0]))
+        assert loss.item() == pytest.approx(2.5)
+
+    @pytest.mark.parametrize(
+        "dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"]
+    )
+    def test_graph_balanced_mean_low_precision_accumulates_in_fp32(
+        self, device: str, dtype: torch.dtype
+    ) -> None:
+        """Three thousand half-precision ones average to one in a float32 result."""
+        num_nodes = 3000
+        residual = torch.ones(num_nodes, dtype=dtype, device=device)
+        valid = torch.ones(num_nodes, dtype=torch.bool, device=device)
+        batch_idx = torch.zeros(num_nodes, dtype=torch.int32, device=device)
+
+        loss, per_sample = graph_balanced_mean(
+            residual, valid, batch_idx, 1, loss_name="toy"
+        )
+
+        assert loss.dtype == torch.float32
+        assert per_sample.dtype == torch.float32
+        assert loss.item() == pytest.approx(1.0)
+
+    def test_graph_balanced_mean_keeps_the_gradient_path(self) -> None:
+        """The scalar differentiates back to the residual."""
+        residual = torch.randn(6, requires_grad=True)
+        loss, _ = graph_balanced_mean(
+            residual,
+            torch.ones(6, dtype=torch.bool),
+            self.batch_idx,
+            3,
+            loss_name="toy",
+        )
+        loss.backward()
+        assert residual.grad is not None
+
+    @pytest.mark.parametrize(
+        ("batch_idx", "num_graphs", "missing"),
+        [(None, 3, "batch_idx"), ("self", None, "num_graphs")],
+        ids=["batch_idx", "num_graphs"],
+    )
+    def test_graph_balanced_mean_missing_metadata_raises(
+        self, batch_idx: Any, num_graphs: int | None, missing: str
+    ) -> None:
+        """The metadata error names the calling loss and the missing keyword."""
+        if batch_idx == "self":
+            batch_idx = self.batch_idx
+        with pytest.raises(ValueError, match=f"toy requires {missing}=... metadata"):
+            graph_balanced_mean(
+                torch.zeros(6), torch.ones(6), batch_idx, num_graphs, loss_name="toy"
+            )
 
     @pytest.mark.parametrize(
         "dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"]

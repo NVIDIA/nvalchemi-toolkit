@@ -61,3 +61,19 @@ Serialization and checkpoints
    CheckpointManifest
    save_checkpoint
    load_checkpoint
+
+
+Runtime helpers
+---------------
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   configure_dataloader
+   configure_parallelism
+   move_to_devices
+   rehome_optimizer_state
+   freeze_unconfigured_models
+   eval_configured_models
+   evaluating

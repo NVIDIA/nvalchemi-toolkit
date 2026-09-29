@@ -111,11 +111,14 @@ def _write_neighbor_data_to_batch(
         if nl_shifts is not None:
             data_dict["neighbor_list_shifts"] = nl_shifts
 
-        batch._storage.groups["edges"] = SegmentedLevelStorage(
-            data=data_dict,
-            device=batch.device,
-            segment_lengths=seg_lengths,
-            validate=False,
+        batch.set_level(
+            "edges",
+            SegmentedLevelStorage(
+                data=data_dict,
+                device=batch.device,
+                segment_lengths=seg_lengths,
+                validate=False,
+            ),
         )
     else:
         atoms_group = batch._atoms_group

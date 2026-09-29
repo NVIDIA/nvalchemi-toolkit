@@ -72,6 +72,7 @@ from nvalchemi.data.datapipes.backends.base import Reader
 from nvalchemi.data.datapipes.backends.zarr import (
     AtomicDataZarrReader,
     AtomicDataZarrWriter,
+    FieldSchema,
     ZarrArrayConfig,
     ZarrWriteConfig,
 )
@@ -90,6 +91,7 @@ __all__ = [
     "Reader",
     "AtomicDataZarrReader",
     "AtomicDataZarrWriter",
+    "FieldSchema",
     "ZarrArrayConfig",
     "ZarrWriteConfig",
     # Pipeline

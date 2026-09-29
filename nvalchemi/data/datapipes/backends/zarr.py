@@ -30,6 +30,7 @@ To understand usage, users should refer to ``examples/data/datapipes/read_zarr_s
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -54,6 +55,39 @@ _BUILTIN_LEVELS = frozenset({"atoms", "edges", "system"})
 
 # Type alias for zarr store-like objects
 StoreLike: TypeAlias = Store | StorePath | Path | str | dict[str, Any]
+
+_REPORTED_MISMATCHES = 4
+"""Number of disagreeing store arrays named before an integrity error truncates."""
+
+
+@dataclasses.dataclass(frozen=True)
+class FieldSchema:
+    """Store level, dtype, and row shape of one field an ALCHEMI Zarr store holds.
+
+    Parameters
+    ----------
+    level : str
+        Built-in level alias (``"atom"``, ``"edge"``, or ``"system"``) or
+        registered custom level name the field is stored at.
+    dtype : torch.dtype
+        Dtype the field's array reads back as.
+    row_shape : tuple[int, ...]
+        Shape of one stored row: the array's shape without the axis samples
+        are concatenated along.
+    """
+
+    level: str
+    dtype: torch.dtype
+    row_shape: tuple[int, ...]
+
+
+def _torn_store_error(detail: str) -> ValueError:
+    """Return the error raised for a store an interrupted append left inconsistent."""
+    return ValueError(
+        f"Zarr store is inconsistent: {detail}. This is what an append interrupted "
+        "mid-write leaves behind; truncate the store back to its committed samples "
+        "or write a fresh one."
+    )
 
 
 class ZarrArrayConfig(BaseModel):
@@ -2289,6 +2323,200 @@ class AtomicDataZarrReader(Reader):
         """
         return self._level_schema.clone() if self._level_schema is not None else None
 
+    @property
+    def num_samples(self) -> int:
+        """Number of samples the store holds, soft-deleted ones included.
+
+        Returns
+        -------
+        int
+            Length of ``meta/samples_mask``; ``len(reader)`` counts only the
+            active samples.
+        """
+        return int(self._samples_mask.numel())
+
+    def field_array(self, field: str) -> zarr.Array:
+        """Return the Zarr array backing *field*.
+
+        Parameters
+        ----------
+        field : str
+            Name of a field the store holds, at any level.
+
+        Returns
+        -------
+        zarr.Array
+            The array under ``core/``, ``custom/``, or ``levels/<level>/``.
+
+        Raises
+        ------
+        KeyError
+            If the store holds no array named *field*.
+        RuntimeError
+            If the reader has been closed.
+        """
+        for key, _, array in self._field_entries():
+            if key == field:
+                return array
+        raise KeyError(
+            f"Field {field!r} is not in the store; stored fields are "
+            f"{sorted(key for key, _, _ in self._field_entries())!r}."
+        )
+
+    def schema(self) -> dict[str, FieldSchema]:
+        """Return the level, dtype, and row shape of every field the store holds.
+
+        Dtypes come from the array metadata, so no chunk is read.
+
+        Returns
+        -------
+        dict[str, FieldSchema]
+            One :class:`FieldSchema` per stored field, keyed by field name.
+
+        Raises
+        ------
+        RuntimeError
+            If the reader has been closed.
+        """
+        schema: dict[str, FieldSchema] = {}
+        for key, level, array in self._field_entries():
+            dtype = torch.from_numpy(np.empty(0, dtype=array.dtype)).dtype
+            cat_dim = _get_cat_dim(key) % len(array.shape)
+            row_shape = tuple(
+                size for axis, size in enumerate(array.shape) if axis != cat_dim
+            )
+            schema[key] = FieldSchema(level, dtype, row_shape)
+        return schema
+
+    def level_sizes(self) -> dict[str, int]:
+        """Return the number of rows every level of the store holds.
+
+        Returns
+        -------
+        dict[str, int]
+            ``"atom"`` and ``"edge"`` follow the atom and edge pointers,
+            ``"system"`` has one row per stored sample, and each registered
+            custom level follows its own pointer, or has one row per sample
+            when it is uniform. A segmented custom level whose pointer was
+            never written, because no field materialized it, is left out.
+        """
+        return self._level_sizes(self.num_samples)
+
+    def check_integrity(self) -> None:
+        """Raise when the store's arrays disagree about how many samples it holds.
+
+        An append interrupted between extending the pointers, masks, and
+        field arrays and committing ``num_samples`` leaves them at different
+        lengths, after which every sample past the torn one reads misaligned.
+        Only array metadata is inspected, so no chunk is read.
+
+        Raises
+        ------
+        ValueError
+            If the store records no committed sample count, the atom or edge
+            pointer is not non-decreasing from zero, the store declares a
+            field it holds no array for, or a pointer, mask, or field array
+            holds a number of rows other than the committed samples account
+            for.
+        RuntimeError
+            If the reader has been closed.
+        """
+        if self._root is None:
+            raise RuntimeError("Cannot read from a closed reader.")
+        committed = self._root.attrs.get("num_samples")
+        if committed is None:
+            raise _torn_store_error("the store records no committed sample count")
+        num_samples = int(committed)
+        meta = self._root["meta"]
+        pointers = {"atoms_ptr": self._atoms_ptr, "edges_ptr": self._edges_ptr}
+        for name, pointer in pointers.items():
+            if int(pointer[0].item()) != 0 or bool((pointer[1:] < pointer[:-1]).any()):
+                raise _torn_store_error(
+                    f"meta/{name} is not a non-decreasing pointer array starting at "
+                    f"zero; got {pointer.tolist()!r}"
+                )
+        entries = self._field_entries()
+        held = {key for key, _, _ in entries}
+        for field in self.field_levels:
+            if field not in held:
+                raise _torn_store_error(
+                    f"the store declares field {field!r} but holds no array for it"
+                )
+        totals = self._level_sizes(num_samples)
+        lengths = {
+            "meta/atoms_ptr": (int(self._atoms_ptr.numel()), num_samples + 1),
+            "meta/edges_ptr": (int(self._edges_ptr.numel()), num_samples + 1),
+            "meta/samples_mask": (self.num_samples, num_samples),
+        }
+        for name, level in (("atoms_mask", "atom"), ("edges_mask", "edge")):
+            if name in meta:
+                lengths[f"meta/{name}"] = (int(meta[name].shape[0]), totals[level])
+        for key, level, array in entries:
+            cat_dim = _get_cat_dim(key) % len(array.shape)
+            lengths[key] = (int(array.shape[cat_dim]), totals[level])
+        mismatched = [
+            f"{name} holds {found!r} rows where {expected!r} are committed"
+            for name, (found, expected) in lengths.items()
+            if found != expected
+        ]
+        if mismatched:
+            reported = ", ".join(mismatched[:_REPORTED_MISMATCHES])
+            remaining = len(mismatched) - _REPORTED_MISMATCHES
+            raise _torn_store_error(
+                f"{num_samples!r} samples are committed but {reported}"
+                + (
+                    f", and {remaining!r} further arrays disagree"
+                    if remaining > 0
+                    else ""
+                )
+            )
+
+    def _level_sizes(self, num_samples: int) -> dict[str, int]:
+        """Return the rows per level when *num_samples* samples are stored."""
+        sizes = {
+            "atom": int(self._atoms_ptr[-1].item()),
+            "edge": int(self._edges_ptr[-1].item()),
+            "system": num_samples,
+        }
+        if self._level_schema is not None:
+            for name in AtomicDataZarrWriter._custom_level_names(self._level_schema):
+                pointer = self._level_ptrs.get(name)
+                if pointer is not None:
+                    sizes[name] = int(pointer[-1].item())
+                elif self._level_schema.level_kind(name) == "uniform":
+                    sizes[name] = num_samples
+        return sizes
+
+    def _field_entries(self) -> list[tuple[str, str, Any]]:
+        """Return ``(field, level, array)`` for every array the store holds.
+
+        Levels come from the store's field metadata, falling back to the
+        core-field defaults for a legacy store that recorded none.
+        """
+        if self._root is None:
+            raise RuntimeError("Cannot read from a closed reader.")
+        fields: list[tuple[str, str, Any]] = []
+        core_group = self._root["core"]
+        for key in core_group.array_keys():
+            level = self._fields_metadata.get("core", {}).get(
+                key, _get_field_level(key)
+            )
+            fields.append((key, level, core_group[key]))
+        if "custom" in self._root:
+            custom_group = self._root["custom"]
+            for key in custom_group.array_keys():
+                level = self._fields_metadata.get("custom", {}).get(key, "system")
+                fields.append((key, level, custom_group[key]))
+        if self._level_schema is not None:
+            levels_group = self._root["levels"]
+            for level_name in levels_group.group_keys():
+                level_group = levels_group[level_name]
+                fields.extend(
+                    (key, level_name, level_group[key])
+                    for key in level_group.array_keys()
+                )
+        return fields
+
     def _resolve_logical_index(self, index: int) -> int:
         """Resolve a logical index according to this store's active sample mask."""
         if index < 0:
@@ -2426,26 +2654,7 @@ class AtomicDataZarrReader(Reader):
         if not normalized_indices:
             return []
 
-        fields: list[tuple[str, str, Any]] = []
-        core_group = self._root["core"]
-        for key in core_group.array_keys():
-            level = self._fields_metadata.get("core", {}).get(
-                key, _get_field_level(key)
-            )
-            fields.append((key, level, core_group[key]))
-        if "custom" in self._root:
-            custom_group = self._root["custom"]
-            for key in custom_group.array_keys():
-                level = self._fields_metadata.get("custom", {}).get(key, "system")
-                fields.append((key, level, custom_group[key]))
-        if self._level_schema is not None:
-            levels_group = self._root["levels"]
-            for level_name in levels_group.group_keys():
-                level_group = levels_group[level_name]
-                fields.extend(
-                    (key, level_name, level_group[key])
-                    for key in level_group.array_keys()
-                )
+        fields = self._field_entries()
 
         level_ptrs = {
             "atom": self._atoms_ptr,

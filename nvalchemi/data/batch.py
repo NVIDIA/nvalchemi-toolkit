@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
-from typing import Any
+from typing import Any, TypeAlias
 
 import numpy as np
 import torch
@@ -71,6 +71,8 @@ _LEVEL_ALIASES = {
     "edges": "edges",
     "system": "system",
 }
+_UNDETACHABLE_LEVELS = frozenset({"atoms", "system"})
+"""Levels whose storage the batch needs for its atom and graph counts."""
 _INT32_MAX = torch.iinfo(torch.int32).max
 _UNIFORM_BUFFER_DTYPES = frozenset(
     {torch.bool, torch.float32, torch.float64, torch.int32, torch.int64}
@@ -78,6 +80,8 @@ _UNIFORM_BUFFER_DTYPES = frozenset(
 
 
 _OWN_ATTRS = frozenset({"device", "keys", "_storage", "_data_class"})
+
+LevelStorage: TypeAlias = UniformLevelStorage | SegmentedLevelStorage
 
 
 def _canonical_schema_dtype(schema: LevelSchema, key: str) -> torch.dtype | str | None:
@@ -2402,7 +2406,10 @@ class Batch(DataMixin):
 
         Registered custom level names are accepted in addition to the
         built-in aliases. An unrecognized level retains the legacy behavior
-        of assigning the key to the atom level.
+        of assigning the key to the atom level. A batch carrying no
+        system-level field gains its system group when *level* is
+        ``"system"``, since one row per graph needs no cardinality beyond the
+        batch's own.
 
         Parameters
         ----------
@@ -2418,9 +2425,10 @@ class Batch(DataMixin):
         Raises
         ------
         ValueError
-            If key exists and *overwrite* is ``False``, or if the number
+            If key exists and *overwrite* is ``False``, if the number
             of values does not match the batch size, shape, or level
-            cardinality.
+            cardinality, or if the batch has no atom or edge group to add
+            a field at that level to.
         TypeError
             If *level* is not a string or a value is not a tensor.
         """
@@ -2509,7 +2517,7 @@ class Batch(DataMixin):
             is_segmented=kind != "uniform",
         )
         group = self._storage.groups.get(group_name)
-        if group is None and group_name in _BUILTIN_LEVELS:
+        if group is None and group_name in ("atoms", "edges"):
             raise ValueError(f"Group '{group_name}' not found in batch")
 
         if kind == "uniform":
@@ -2687,6 +2695,158 @@ class Batch(DataMixin):
             }.get(group_name)
             if legacy_level is not None:
                 self.keys[legacy_level].add(key)
+
+    def drop_level(self, name: str) -> None:
+        """Remove a registered level's storage group and every field it holds.
+
+        The level itself stays registered in the batch's
+        :class:`~nvalchemi.data.level_storage.LevelSchema`; only its
+        materialized storage goes away, which is the state a batch built
+        without that level's data is already in. Dropping a level that holds
+        no storage is a no-op.
+
+        Parameters
+        ----------
+        name : str
+            Registered level name, for instance ``"edges"``.
+
+        Raises
+        ------
+        KeyError
+            If *name* is not a registered level.
+        ValueError
+            If *name* is ``"atoms"`` or ``"system"``, the two levels the
+            batch derives its atom and graph counts from.
+
+        See Also
+        --------
+        pop_level : Detach a level and return its storage.
+        set_level : Attach a level's storage.
+        """
+        self.pop_level(name)
+
+    def pop_level(self, name: str) -> LevelStorage | None:
+        """Detach a registered level's storage group and return it.
+
+        The returned group is the live object, not a copy, so the fields it
+        holds leave the batch with it and come back unchanged through
+        :meth:`set_level`.
+
+        Parameters
+        ----------
+        name : str
+            Registered level name, for instance ``"edges"``.
+
+        Returns
+        -------
+        UniformLevelStorage or SegmentedLevelStorage or None
+            The detached group, or ``None`` if the level held no storage.
+
+        Raises
+        ------
+        KeyError
+            If *name* is not a registered level.
+        ValueError
+            If *name* is ``"atoms"`` or ``"system"``, the two levels the
+            batch derives its atom and graph counts from.
+
+        Examples
+        --------
+        >>> saved = batch.pop_level("edges")  # doctest: +SKIP
+        >>> batch.set_level("edges", saved)  # doctest: +SKIP
+        """
+        if name not in self._storage.attr_map.level_kinds:
+            raise KeyError(
+                f"Level '{name}' is not registered; known levels are "
+                f"{list(self._storage.attr_map.level_names)}"
+            )
+        if name in _UNDETACHABLE_LEVELS:
+            raise ValueError(
+                f"Level '{name}' holds the batch's atom or graph count and "
+                "cannot be detached"
+            )
+        return self._storage.groups.pop(name, None)
+
+    def set_level(self, name: str, storage: LevelStorage) -> None:
+        """Attach *storage* as the batch's group for a registered level.
+
+        The group's fields are registered against the batch's schema, which
+        every group then shares, and the group takes its schema-defined
+        position in the batch's level order. Any group already materialized
+        for *name* is replaced.
+
+        Parameters
+        ----------
+        name : str
+            Registered level name, for instance ``"edges"``.
+        storage : UniformLevelStorage or SegmentedLevelStorage
+            Group to attach. Its length must be the batch's graph count and
+            its device the batch's device.
+
+        Raises
+        ------
+        KeyError
+            If *name* is not a registered level.
+        TypeError
+            If *storage* is not the storage class the level's kind calls for.
+        ValueError
+            If *storage* spans a different number of graphs, lives on another
+            device, or carries a field another level already owns.
+
+        See Also
+        --------
+        pop_level : Detach a level and return its storage.
+        """
+        schema = self._storage.attr_map
+        if name not in schema.level_kinds:
+            raise KeyError(
+                f"Level '{name}' is not registered; known levels are "
+                f"{list(schema.level_names)}"
+            )
+        expected_class = (
+            UniformLevelStorage
+            if schema.level_kind(name) == "uniform"
+            else SegmentedLevelStorage
+        )
+        if not isinstance(storage, expected_class):
+            raise TypeError(
+                f"Level '{name}' is {schema.level_kind(name)} and needs a "
+                f"{expected_class.__name__}, got {type(storage).__name__}"
+            )
+        if len(storage) != self.num_graphs:
+            raise ValueError(
+                f"Level '{name}' storage spans {len(storage)} graphs, expected "
+                f"{self.num_graphs}"
+            )
+        if storage.device != self.device:
+            raise ValueError(
+                f"Level '{name}' storage is on device {storage.device}, expected "
+                f"{self.device}"
+            )
+        fields = list(storage.keys())
+        for field in fields:
+            owner = self._storage._group_name_from_attr(field)
+            if owner is not None and owner != name:
+                raise ValueError(
+                    f"Field '{field}' already belongs to level '{owner}' and "
+                    f"cannot be attached with level '{name}'"
+                )
+
+        schema = schema.clone()
+        is_segmented = schema.level_kind(name) != "uniform"
+        for field in fields:
+            schema.set(
+                field, name, dtype=storage[field].dtype, is_segmented=is_segmented
+            )
+        self._storage.groups[name] = storage
+        self._storage.attr_map = schema
+        self._storage.groups = {
+            level: self._storage.groups[level]
+            for level in schema.level_names
+            if level in self._storage.groups
+        }
+        for group in self._storage.groups.values():
+            group.attr_map = schema
 
     # ------------------------------------------------------------------
     # DataMixin overrides (performance-critical)

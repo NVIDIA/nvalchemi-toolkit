@@ -12,18 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Backend implementations for datapipe storage."""
+"""Loss terms that compare a student against teacher signals.
+
+The built-in terms in :mod:`nvalchemi.training.losses` already cover every
+teacher signal that has a total-energy, force, or stress shape — point their
+``target_key`` at the matching ``teacher_*`` field. This subpackage adds the
+terms that have no supervised counterpart.
+"""
 
 from __future__ import annotations
 
-from nvalchemi.data.datapipes.backends.zarr import (
-    AtomicDataZarrReader,
-    AtomicDataZarrWriter,
-    FieldSchema,
+from nvalchemi.training.distillation.losses.atomic_energy import (
+    AtomicEnergyMatchingLoss,
 )
 
-__all__ = [
-    "AtomicDataZarrReader",
-    "AtomicDataZarrWriter",
-    "FieldSchema",
-]
+__all__ = ["AtomicEnergyMatchingLoss"]

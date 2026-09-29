@@ -26,6 +26,8 @@ from torch.utils.data import DataLoader
 __all__ = [
     "configure_dataloader",
     "configure_parallelism",
+    "eval_configured_models",
+    "evaluating",
     "freeze_unconfigured_models",
     "move_to_devices",
     "rehome_optimizer_state",
@@ -103,6 +105,71 @@ def train_configured_models(
     finally:
         for key, training in state.items():
             models[key].train(training)
+
+
+@contextmanager
+def eval_configured_models(
+    models: dict[str, torch.nn.Module] | torch.nn.ModuleDict,
+    optimizer_configs: Mapping[str, object],
+) -> Iterator[None]:
+    """Temporarily put optimizer-configured models in evaluation mode.
+
+    Parameters
+    ----------
+    models : dict[str, torch.nn.Module] | torch.nn.ModuleDict
+        Named models participating in a training run.
+    optimizer_configs : Mapping[str, object]
+        Optimizer configuration keyed by model name. Models present in this
+        mapping are switched to evaluation mode while the context is active;
+        models absent from it are left alone.
+
+    Yields
+    ------
+    None
+        Control while configured models are in evaluation mode.
+    """
+    state = {
+        key: model.training for key, model in models.items() if key in optimizer_configs
+    }
+    for key in state:
+        models[key].eval()
+    try:
+        yield
+    finally:
+        for key, training in state.items():
+            models[key].train(training)
+
+
+@contextmanager
+def evaluating(module: torch.nn.Module) -> Iterator[None]:
+    """Temporarily put a module tree in evaluation mode.
+
+    Parameters
+    ----------
+    module : torch.nn.Module
+        Module whose whole tree is switched to evaluation mode. Every
+        submodule's own ``training`` flag is restored on exit, so a child left
+        in training mode under an evaluation-mode root, or frozen on its own,
+        comes back exactly as it was.
+
+    Yields
+    ------
+    None
+        Control while the module tree is in evaluation mode.
+
+    Notes
+    -----
+    :meth:`torch.nn.Module.train` is recursive, so restoring the root's flag
+    alone would overwrite every child's flag with the root's. This helper
+    records and restores each submodule individually.
+    """
+    modes = {submodule: submodule.training for submodule in module.modules()}
+    module.eval()
+    try:
+        yield
+    finally:
+        for submodule, training in modes.items():
+            submodule.training = training
 
 
 def move_to_devices(

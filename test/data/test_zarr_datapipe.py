@@ -42,6 +42,7 @@ from nvalchemi.data.datapipes import (
 )
 from nvalchemi.data.datapipes.backends.base import Reader
 from nvalchemi.data.datapipes.backends.zarr import (
+    FieldSchema,
     ZarrArrayConfig,
     ZarrWriteConfig,
     _get_cat_dim,
@@ -1561,6 +1562,126 @@ class TestAtomicDataZarrReader:
 
                 assert sample["atomic_numbers"].shape == (na,)
                 assert sample["neighbor_list"].shape == (ne, 2)
+
+
+class TestAtomicDataZarrReaderIntrospection:
+    """Store description through ``schema``, ``level_sizes``, and ``check_integrity``."""
+
+    def test_schema_reports_level_dtype_and_row_shape_per_field(
+        self, tmp_path: Path
+    ) -> None:
+        """Every stored field maps to its level, dtype, and per-row shape."""
+        AtomicDataZarrWriter(tmp_path / "test.zarr").write(list(_data_generator(3)))
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            schema = reader.schema()
+        assert set(schema) == set(reader.field_levels)
+        assert schema["positions"] == FieldSchema("atom", torch.float32, (3,))
+        assert schema["atomic_numbers"] == FieldSchema("atom", torch.int64, ())
+        assert schema["neighbor_list"] == FieldSchema("edge", torch.int64, (2,))
+        assert schema["energy"] == FieldSchema("system", torch.float32, (1,))
+        assert schema["cell"] == FieldSchema("system", torch.float32, (3, 3))
+
+    def test_field_array_returns_the_backing_array_or_raises(
+        self, tmp_path: Path
+    ) -> None:
+        """A stored field resolves to its array; an unknown one names the stored set."""
+        data_list = list(_data_generator(3))
+        AtomicDataZarrWriter(tmp_path / "test.zarr").write(data_list)
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            total_atoms = sum(data.atomic_numbers.shape[0] for data in data_list)
+            assert reader.field_array("positions").shape == (total_atoms, 3)
+            with pytest.raises(KeyError, match="stored fields are"):
+                reader.field_array("charges")
+
+    def test_num_samples_counts_soft_deleted_samples(self, tmp_path: Path) -> None:
+        """``num_samples`` keeps counting a deleted sample that ``len`` drops."""
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(list(_data_generator(4)))
+        writer.delete([1])
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            assert len(reader) == 3
+            assert reader.num_samples == 4
+            assert reader.level_sizes()["system"] == 4
+
+    def test_level_sizes_follow_the_pointers_of_every_level(
+        self, tmp_path: Path
+    ) -> None:
+        """Built-in levels follow their pointers; custom levels follow theirs or the sample count."""
+        batch = _custom_zarr_batch()
+        AtomicDataZarrWriter(tmp_path / "test.zarr").write(batch)
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            sizes = reader.level_sizes()
+            schema = reader.schema()
+        assert sizes["atom"] == batch.num_nodes
+        assert sizes["edge"] == batch.num_edges
+        assert sizes["system"] == batch.num_graphs
+        assert sizes["metadata"] == batch.num_graphs
+        assert sizes["sites"] == batch.site_values.shape[0]
+        assert sizes["augmented"] == batch.num_nodes + batch.num_graphs
+        assert sizes["atom_atom"] == batch.atom_pair_values.shape[0]
+        assert sizes["site_augmented"] == batch.cross_values.shape[0]
+        assert schema["site_values"] == FieldSchema("sites", torch.float32, (2,))
+        assert schema["metadata_values"] == FieldSchema("metadata", torch.float32, (1,))
+
+    def test_check_integrity_passes_on_a_healthy_store(self, tmp_path: Path) -> None:
+        """A store the writer completed, custom levels included, is consistent."""
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(_custom_zarr_batch())
+        writer.append(_custom_zarr_batch(offset=3))
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            reader.check_integrity()
+
+    def test_check_integrity_names_arrays_extended_past_the_commit(
+        self, tmp_path: Path
+    ) -> None:
+        """Pointers and masks longer than the committed count are reported by name."""
+        AtomicDataZarrWriter(tmp_path / "test.zarr").write(list(_data_generator(3)))
+        root = zarr.open(tmp_path / "test.zarr", mode="r+")
+        atoms_ptr = root["meta"]["atoms_ptr"]
+        stored_atoms = int(atoms_ptr[-1])
+        atoms_ptr.resize((atoms_ptr.shape[0] + 2,))
+        atoms_ptr[-2:] = [stored_atoms + 5, stored_atoms + 11]
+        root["meta"]["samples_mask"].resize((5,))
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            with pytest.raises(ValueError, match="meta/samples_mask holds 5 rows"):
+                reader.check_integrity()
+
+    def test_check_integrity_names_a_short_field_array(self, tmp_path: Path) -> None:
+        """A field array shorter than its level's row count is reported by name."""
+        AtomicDataZarrWriter(tmp_path / "test.zarr").write(list(_data_generator(3)))
+        positions = zarr.open(tmp_path / "test.zarr", mode="r+")["core"]["positions"]
+        positions.resize((positions.shape[0] - 2, 3))
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            with pytest.raises(ValueError, match="positions holds"):
+                reader.check_integrity()
+
+    def test_check_integrity_rejects_a_non_monotonic_pointer(
+        self, tmp_path: Path
+    ) -> None:
+        """A pointer array a torn write left out of order is refused."""
+        AtomicDataZarrWriter(tmp_path / "test.zarr").write(list(_data_generator(3)))
+        zarr.open(tmp_path / "test.zarr", mode="r+")["meta"]["atoms_ptr"][2] = 0
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            with pytest.raises(ValueError, match="non-decreasing"):
+                reader.check_integrity()
+
+    def test_check_integrity_rejects_a_missing_commit(self, tmp_path: Path) -> None:
+        """A store without a committed sample count cannot be trusted."""
+        AtomicDataZarrWriter(tmp_path / "test.zarr").write(list(_data_generator(2)))
+        del zarr.open(tmp_path / "test.zarr", mode="r+").attrs["num_samples"]
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            with pytest.raises(ValueError, match="no committed sample count"):
+                reader.check_integrity()
+
+    def test_introspection_on_a_closed_reader_raises(self, tmp_path: Path) -> None:
+        """Every introspection method refuses a closed reader."""
+        AtomicDataZarrWriter(tmp_path / "test.zarr").write(list(_data_generator(2)))
+        reader = AtomicDataZarrReader(tmp_path / "test.zarr")
+        reader.close()
+        with pytest.raises(RuntimeError, match="closed reader"):
+            reader.schema()
+        with pytest.raises(RuntimeError, match="closed reader"):
+            reader.check_integrity()
 
 
 def test_reader_skips_deleted(tmp_path: Path) -> None:
