@@ -19,7 +19,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from nvalchemi.dynamics.paths._ops.torch_paths import path_energy_stats
+from nvalchemi.dynamics.mep.path_ops.torch_paths import path_energy_stats
 
 
 @pytest.mark.parametrize(

@@ -23,24 +23,24 @@ import pytest
 import torch
 import warp as wp
 
-from nvalchemi.dynamics.paths.neb._ops import neb_forces
-from nvalchemi.dynamics.paths.neb._ops.equations import (
+from nvalchemi.dynamics.mep.neb_ops import neb_forces
+from nvalchemi.dynamics.mep.neb_ops.equations import (
     climbing_image_effective_force,
     improved_tangent_weights,
     neb_effective_force,
     neb_effective_force_from_gram_stats,
 )
-from nvalchemi.dynamics.paths.neb._ops.launchers import (
+from nvalchemi.dynamics.mep.neb_ops.launchers import (
     _get_neb_forces_kernel_overloads,
 )
-from nvalchemi.dynamics.paths.neb._ops.methods import (
+from nvalchemi.dynamics.mep.neb_ops.methods import (
     DEFAULT_NEB_METHOD_KEY,
     _GramStatsMethod,
     _StoredTangentMethod,
     prepare_neb_method_key,
     resolve_neb_method,
 )
-from nvalchemi.dynamics.paths.neb._ops.modes import (
+from nvalchemi.dynamics.mep.neb_ops.modes import (
     CLIMBING_NEB,
     ENDPOINT,
     REGULAR_NEB,

@@ -36,6 +36,6 @@ Planned toolkit-ops locations
 
 from __future__ import annotations
 
-from nvalchemi.dynamics.paths.neb._ops.torch_ops import neb_forces
+from nvalchemi.dynamics.mep.neb_ops.torch_ops import neb_forces
 
 __all__ = ["neb_forces"]
