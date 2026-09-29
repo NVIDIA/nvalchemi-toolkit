@@ -499,6 +499,43 @@ class TestCellForceScale:
 
 
 # ---------------------------------------------------------------------------
+# maxstep / curvature_eps forwarding
+# ---------------------------------------------------------------------------
+
+
+class TestLBFGSStepKwargsForwarding:
+    """``maxstep``/``curvature_eps`` reach the ops call with non-default
+    values, so a regression that drops either kwarg can't hide behind the
+    ops-level default happening to equal the class-level default.
+    """
+
+    def test_lbfgs_forwards_maxstep_and_curvature_eps(self):
+        dynamics = LBFGS(model=_make_model(), maxstep=0.37, curvature_eps=1e-5)
+        batch = _make_batch(1, n_atoms_each=4, seed=8)
+        batch.forces = torch.zeros_like(batch.positions)
+        dynamics._init_state(batch)
+        target = "nvalchemi.dynamics._ops.lbfgs._lbfgs_coord"
+        with patch(target) as ops:
+            dynamics.pre_update(batch)
+        assert ops.call_args.kwargs["maxstep"] == 0.37
+        assert ops.call_args.kwargs["curvature_eps"] == 1e-5
+
+    def test_lbfgs_variable_cell_forwards_maxstep_and_curvature_eps(self):
+        dynamics = LBFGSVariableCell(
+            model=_make_model(needs_stress=True), maxstep=0.37, curvature_eps=1e-5
+        )
+        batch = _cell_batch([None])
+        batch.forces = torch.zeros_like(batch.positions)
+        batch.stress = torch.zeros(1, 3, 3)
+        dynamics._init_state(batch)
+        target = "nvalchemi.dynamics._ops.lbfgs._lbfgs_coord_cell"
+        with patch(target) as ops:
+            dynamics.pre_update(batch)
+        assert ops.call_args.kwargs["maxstep"] == 0.37
+        assert ops.call_args.kwargs["curvature_eps"] == 1e-5
+
+
+# ---------------------------------------------------------------------------
 # FusedStage: level-aware masked state
 # ---------------------------------------------------------------------------
 
