@@ -26,15 +26,15 @@ import torch
 from torch import Tensor
 
 from nvalchemi.dynamics.base import DynamicsStage
-from nvalchemi.dynamics.mep._ops.methods import prepare_neb_method_key
-from nvalchemi.dynamics.mep._ops.modes import ENDPOINT, REGULAR_NEB
-from nvalchemi.dynamics.mep._ops.torch_ops import neb_forces
 from nvalchemi.dynamics.mep.configs import (
     ConstantSpringConfig,
     NEBMethod,
     SpringConfig,
     SpringContext,
 )
+from nvalchemi.dynamics.mep.neb_ops.methods import prepare_neb_method_key
+from nvalchemi.dynamics.mep.neb_ops.modes import ENDPOINT, REGULAR_NEB
+from nvalchemi.dynamics.mep.neb_ops.torch_ops import neb_forces
 from nvalchemi.dynamics.paths._geometry import PreparedMIC, prepare_batch_mic
 from nvalchemi.dynamics.paths.hooks.path_energy_stats import PathEnergyStatsHook
 from nvalchemi.dynamics.paths.validate import validate_paths
