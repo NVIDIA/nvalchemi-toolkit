@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 
-from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 from nvalchemi.dynamics.hooks._utils import KB_EV
 from nvalchemi.enhanced_sampling._checkpoint import (
     CheckpointManifest,
@@ -51,10 +51,45 @@ if TYPE_CHECKING:
 
     from nvalchemi._typing import ModelOutputs
     from nvalchemi.data import Batch
-    from nvalchemi.dynamics.base import BaseDynamics
     from nvalchemi.hooks import HookContext
 
 __all__ = ["EnhancedSampling"]
+
+
+def _register_identity_bookkeeping() -> None:
+    """Make the walker identity fields survive refill and graduation.
+
+    ``BaseDynamics._bookkeeping_keys`` is the mechanism ``status`` and
+    ``system_id`` already use: ``refill_check`` rebuilds every registered key
+    after graduated graphs are dropped and replacements appended, so the field
+    keeps its per-graph meaning across a change of batch membership.
+
+    Without registration the identity fields exist only because the runner
+    rewrites them each step, which is not the same guarantee: a refill that
+    drops row 2 and appends a replacement leaves the surviving rows' history
+    attached to a ``walker_id`` the registry never restored.  Walker identity
+    is documented as "immutable identity that follows a physical
+    configuration" (§4), and that claim needs the registry behind it.
+
+    Idempotent: registration overwrites by key, so importing this module more
+    than once is harmless.
+    """
+    BaseDynamics.register_bookkeeping_key(
+        "walker_id",
+        lambda n, dev: torch.arange(n, dtype=torch.long, device=dev).reshape(n, 1),
+    )
+    for key in (
+        "thermodynamic_state_id",
+        "sampling_step",
+        "sampling_epoch",
+        "exchange_segment",
+    ):
+        BaseDynamics.register_bookkeeping_key(
+            key, lambda n, dev: torch.zeros(n, 1, dtype=torch.long, device=dev)
+        )
+
+
+_register_identity_bookkeeping()
 
 
 class _BiasCompositeHook:
