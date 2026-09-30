@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeAlias, runtime_checkable
@@ -706,6 +706,39 @@ def scorer_fields(scorer: TeacherScorer) -> tuple[str, ...] | None:
     if frozenset(scorer.signals) <= SUPPORTED_SIGNALS:
         return signal_fields(scorer.signals)
     return None
+
+
+def _as_scorer(
+    model: TeacherScorer | BaseModelMixin,
+    signals: Sequence[str],
+    dtype: torch.dtype | None = None,
+) -> Any:
+    """Return *model* as a scorer, wrapping a bare model in an in-process one.
+
+    A supplied scorer is checked against the batch fields that the requested
+    signals are read from, not against the signal names it declares, because it
+    may publish under fields of its own. A scorer whose fields cannot be
+    determined is let through. A bare model is wrapped in an
+    :class:`InProcessTeacherScorer` with the scorer's defaults, so it labels
+    with autocast disabled; *dtype* applies only to that wrapped model.
+
+    Raises
+    ------
+    ValueError
+        If a supplied scorer declares fields that omit one the *signals* are
+        read from.
+    """
+    if isinstance(model, TeacherScorer):
+        fields = scorer_fields(model)
+        required = signal_fields(signals)
+        missing = None if fields is None else sorted(set(required) - set(fields))
+        if missing:
+            raise ValueError(
+                f"Scorer must publish the fields {list(required)!r} this evaluation "
+                f"reads; got {list(fields)!r}, missing {missing!r}."
+            )
+        return model
+    return InProcessTeacherScorer(model, signals, dtype=dtype)
 
 
 class InProcessTeacherScorer:
