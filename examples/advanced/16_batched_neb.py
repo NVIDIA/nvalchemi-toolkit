@@ -54,7 +54,9 @@ Run on a single CUDA 12 GPU through ``uv``:
 
 For CUDA 13, replace ``--extra cu12`` with ``--extra cu13``.
 
-The comparison is saved as ``neb_energy_profiles.png``. Set
+The default method is improved tangent. Set ``method = "dneb"`` below to try
+the custom doubly nudged force equation. The example writes
+``neb.csv`` and ``neb_energy_profiles.png``. Set
 ``NVALCHEMI_SHOW_INITIAL_PATHS=0`` to omit the linear and post-IDPP curves and
 skip their additional model evaluations.
 
@@ -84,10 +86,16 @@ from nvalchemi.dynamics.mep import (
     NEB,
     ClimbingImageConfig,
     IDPPModel,
+    NEBMethod,
     interpolate_paths,
     prepare_idpp_targets,
 )
 from nvalchemi.models.base import BaseModelMixin, ModelConfig
+
+if __package__:
+    from ._dneb_method import dneb_effective_force
+else:
+    from _dneb_method import dneb_effective_force
 
 # %%
 # Load the reactant and product endpoints
@@ -294,6 +302,11 @@ model = AIMNet2rxnWrapper(device, compile_model=True).eval()
 #    )
 #    custom_neb = NEB(model=model, method=custom_method)
 #
+# The optional DNEB method below overrides only ``effective_force_fn`` with the
+# equation in ``_dneb_method.py``. It adds the perpendicular spring correction
+# of Trygubenko and Wales (J. Chem. Phys. 120, 2082, 2004). The tangent and
+# climbing-image equations keep their defaults.
+#
 # While ``NEBMethod`` defines the force equations,
 # :class:`~nvalchemi.dynamics.mep.ClimbingImageConfig` controls the transition
 # from regular NEB to climbing-image NEB. Each path first runs regular NEB until
@@ -332,11 +345,15 @@ neb_band: Batch = linear_band.clone()
 neb_band.positions.copy_(idpp_band.positions)
 initialize_dynamics_fields(neb_band)
 
+method = "improved_tangent"  # change to "dneb" to try the custom equation
+method_label = "DNEB" if method == "dneb" else "NEB"
+if method == "dneb":
+    method = NEBMethod(effective_force_fn=dneb_effective_force)
 NEB_LOG = Path("neb.csv")
 neb = NEB(
     model=model,
     spring=0.1,
-    method="improved_tangent",
+    method=method,
     fmax=0.05,
     n_steps=500,
     climbing=ClimbingImageConfig(regular_fmax=0.5),
@@ -496,7 +513,7 @@ try:
     profiles = [
         (
             "model",
-            "NEB (AIMNet2-rxn)",
+            f"{method_label} (AIMNet2-rxn)",
             {"color": "tab:blue", "linestyle": "--", "marker": "s"},
         ),
         (
@@ -600,7 +617,7 @@ try:
 
     # Add labels and one shared legend for the complete figure.
     handles, labels = axes.flat[0].get_legend_handles_labels()
-    fig.suptitle("NEB paths vs Transition1x DFT reference", y=0.995)
+    fig.suptitle(f"{method_label} paths vs Transition1x DFT reference", y=0.995)
     fig.legend(
         handles,
         labels,
