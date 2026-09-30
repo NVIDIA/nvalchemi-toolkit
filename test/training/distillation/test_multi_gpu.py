@@ -1756,7 +1756,9 @@ class TestRankConsistentBookkeeping:
         strategy.run()
         trained = _student_state(strategy)
 
-        resumed = _make_distributed_strategy(num_steps=_WORKER_STEPS + 2)
+        resumed = _make_distributed_strategy(
+            num_steps=_WORKER_STEPS + 2, config_overrides={"restart": "reseed"}
+        )
         resumed.restore_checkpoint(checkpoints)
         restored = _student_state(resumed)
         resumed.run()
@@ -1776,7 +1778,11 @@ class TestRankConsistentBookkeeping:
             hooks=[CheckpointHook(checkpoints, step_interval=2, async_save=False)]
         ).run()
 
-        resumed = _make_distributed_strategy(rank=1, num_steps=_WORKER_STEPS + 2)
+        resumed = _make_distributed_strategy(
+            rank=1,
+            num_steps=_WORKER_STEPS + 2,
+            config_overrides={"restart": "reseed"},
+        )
         resumed.restore_checkpoint(checkpoints)
         resumed.run()
 
@@ -1801,7 +1807,10 @@ class TestRestartDevicePlacement:
         ).run()
 
         resumed = _make_restart_strategy(
-            1, device="cuda:1", num_steps=_WORKER_STEPS + 2
+            1,
+            device="cuda:1",
+            num_steps=_WORKER_STEPS + 2,
+            config_overrides={"restart": "reseed"},
         )
         resumed.restore_checkpoint(checkpoints, map_location="cuda:1")
         resumed.run()
@@ -1822,7 +1831,12 @@ class TestRestartDevicePlacement:
             hooks=[CheckpointHook(checkpoints, step_interval=2, async_save=False)],
         ).run()
 
-        resumed = _make_restart_strategy(1, device="cuda", num_steps=_WORKER_STEPS + 2)
+        resumed = _make_restart_strategy(
+            1,
+            device="cuda",
+            num_steps=_WORKER_STEPS + 2,
+            config_overrides={"restart": "reseed"},
+        )
         resumed.restore_checkpoint(checkpoints)
         resumed.run()
 

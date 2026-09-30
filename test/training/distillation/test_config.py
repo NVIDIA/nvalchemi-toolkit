@@ -150,7 +150,7 @@ class _LoadBatchesOnly:
 
 
 class _RowsOnlySource:
-    """Stand-in with the seeding members but none of the cursor ones."""
+    """Stand-in with the seeding members but none of the position ones."""
 
     def probe(self) -> Batch:
         """Return one structure."""
@@ -216,6 +216,21 @@ class TestOnPolicySettings:
 
         assert rebuilt.require_wrapped_student is False
         assert rebuilt == settings
+
+    def test_restart_is_a_setting_a_recipe_carries(self) -> None:
+        """``restart`` defaults to refusing an unconsumable bundle and round-trips a choice."""
+        assert OnPolicySettings(**_make_settings_kwargs()).restart == "error"
+        settings = OnPolicySettings(**_make_settings_kwargs(restart="reseed"))
+
+        rebuilt = OnPolicySettings.model_validate(settings.model_dump(mode="json"))
+
+        assert rebuilt.restart == "reseed"
+        assert rebuilt == settings
+
+    def test_an_unknown_restart_policy_is_rejected(self) -> None:
+        """Only the three named policies are accepted."""
+        with pytest.raises(ValidationError):
+            OnPolicySettings(**_make_settings_kwargs(restart="merge"))
 
     def test_samples_equilibrium_is_a_setting_a_recipe_carries(self) -> None:
         """``samples_equilibrium`` defaults to inference and round-trips a declaration."""
@@ -363,7 +378,7 @@ class TestOnPolicyConfigComposition:
         with pytest.raises(ValueError, match="BatchDatasetProtocol"):
             OnPolicyConfig(**_make_config_kwargs(initial_structures=_LoadBatchesOnly()))
 
-    def test_a_source_missing_the_cursor_members_is_refused_not_wrapped(self) -> None:
+    def test_a_source_missing_the_position_members_is_refused_not_wrapped(self) -> None:
         """Seeding members alone do not make a source, and there are no rows to wrap."""
         with pytest.raises(ValueError, match="InitialStructuresSource"):
             OnPolicyConfig(**_make_config_kwargs(initial_structures=_RowsOnlySource()))
