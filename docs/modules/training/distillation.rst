@@ -270,9 +270,14 @@ reaches ``run()`` costs one teacher pass rather than two; a batch carrying only
 some of the required fields is re-scored in full, since a partial set was
 written for a different signal set than the objective reads.
 
-Checkpoints serialize every entry of ``models``, so each write duplicates the
-frozen teacher's weights; size the checkpoint interval accordingly with a large
-teacher.
+Checkpoints store the frozen teacher *once per checkpoint root* rather than at
+every index, so a periodic write costs only the student's weights. One root
+holds one copy. Saving a different teacher into a root that already holds one
+raises, rather than repointing the checkpoints already written there at
+weights they were not written against. See
+:meth:`~nvalchemi.training.distillation.DistillationStrategy.checkpoint_model_references`
+and :ref:`distillation_recipes_guide` for how the stored copy is referenced,
+fingerprinted, and read back on a restart.
 
 .. autosummary::
    :toctree: generated
@@ -372,6 +377,7 @@ outside the loop, or for a recipe check that should not pay for a forward pass.
 
    OnPolicyConfig
    OnPolicySettings
+   SpecSerializable
    InitialStructures
 
 The :class:`~nvalchemi.dynamics.ResizableSink` protocol that a capture sink
@@ -580,29 +586,34 @@ nor built-in signals writes fields that cannot be known before it scores a
 batch. The strategy then warns that the parity check is deferred to the first
 segment's loader.
 
-Because ``on_policy`` and ``reference_dataset`` hold live runtime objects,
+``on_policy`` and ``reference_dataset`` serialize as references rather than as
+the objects themselves.
 :meth:`~nvalchemi.training.distillation.DistillationStrategy.to_spec_dict`
-leaves them out and warns. A strategy rebuilt from that spec runs offline until
-they are supplied again. Every rebuild entry point takes them as keyword
-arguments:
+therefore carries the whole on-policy run, and a rebuild needs only its models
+supplied back. A run whose datasets live in memory, or whose propagator hides
+its constructor arguments, leaves the ``on_policy`` block out of the spec with
+a warning that names the piece. Either way, every rebuild entry point takes
+the live objects as keyword arguments:
 :meth:`~nvalchemi.training.distillation.DistillationStrategy.from_spec_dict`,
 :meth:`~nvalchemi.training.distillation.DistillationStrategy.from_checkpoint_dict`,
 and
 :meth:`~nvalchemi.training.distillation.DistillationStrategy.load_checkpoint`
 all accept ``on_policy`` and ``reference_dataset``. The checkpoint entry points
 pass them to ``from_spec_dict`` as *runtime overrides*: live objects that a
-spec cannot carry, which :func:`nvalchemi.training.load_checkpoint` forwards as
-extra keyword arguments. The segment loop is tied to the student it
-propagates, so pass back the ``models`` the propagator was built around as
-well, through the loader's own ``models=`` keyword. The checkpoint's weights
-are then restored into those very objects.
+spec cannot carry whole, which :func:`nvalchemi.training.load_checkpoint`
+forwards as extra keyword arguments. A live object handed over that way
+outranks the spec's own ``on_policy`` block. The segment loop is tied to the
+student it propagates, so pass back the ``models`` the propagator was built
+around as well, through the loader's own ``models=`` keyword. The checkpoint's
+weights are then restored into those very objects.
 Alternatively, calling
 :meth:`~nvalchemi.training.TrainingStrategy.restore_checkpoint` on a strategy
-already constructed with the loop reaches the same result. The
-re-supply is mandatory for a Boltzmann term, which matches the teacher's
-Boltzmann distribution over the configurations the student generated (see
-:ref:`distillation-advanced-objectives`). The term is defined only on
-generated batches, so it refuses to rebuild as an offline run.
+already constructed with the loop reaches the same result. A Boltzmann term,
+which matches the teacher's Boltzmann distribution over the configurations the
+student generated (see :ref:`distillation-advanced-objectives`), is defined
+only on generated batches. It refuses to rebuild as an offline run, so the
+loop must come back with it, either from the spec's ``on_policy`` block or by
+re-supply.
 
 Relaxation
 ----------
@@ -831,10 +842,12 @@ every rank and all-reduces its metrics, so never guard it behind a rank check.
 :class:`~nvalchemi.training.hooks.CheckpointHook` writes from global rank zero
 only.
 
-A restart resumes the optimizer state and the counters, reseeds every rank's
-trajectories from that rank's shard, and refills the replay buffer from
-scratch, so budget the first segments after a restart as cold. A restart needs
-no device bookkeeping:
+A restart resumes the optimizer state and the counters. Under
+``restart="reseed"`` it reseeds every rank's trajectories from that rank's
+shard and refills the replay buffer from scratch, so budget the first segments
+after a restart as cold. The default ``restart="error"`` refuses a multi-rank
+restart instead, because the restart bundle it would drop holds rank zero's
+state alone. A restart needs no device bookkeeping:
 :meth:`~nvalchemi.training.TrainingStrategy.restore_checkpoint` loads onto the
 live ``devices``, and ``run()`` re-homes the optimizer state after the hook has
 pinned the rank.
@@ -854,6 +867,114 @@ buffer therefore spans ``world_size`` times as many segments, and every mixed
 batch grows staler as the world grows. Raise ``generation_steps`` or the
 structure count with the world, or lower ``replay_capacity`` by the world size,
 but not both.
+
+
+Recipes and the CLI
+-------------------
+
+A whole on-policy run survives
+:meth:`~nvalchemi.training.distillation.DistillationStrategy.to_spec_dict` as
+references. :meth:`~nvalchemi.training.distillation.OnPolicyConfig.to_spec_dict`
+carries every scalar setting verbatim. It carries the propagator as the
+``cls_path`` and keyword arguments it rebuilds from, with the student rebound
+at build time. It carries the scorer as its signal set, dtype, and probe seed
+over the strategy model named ``"teacher"``. It carries ``initial_structures``
+as the store it reads under the budgets it was given, but never its position,
+which is restart state. ``reference_dataset`` serializes the same way, as the
+store it reads.
+
+A ``convergence_hook``, a propagator's hooks, convergence hook, and sinks, and
+a dataset holding its samples in memory are the runtime-only parts. The
+``convergence_hook`` and the propagator's collaborators are omitted with a
+warning that names them. The warning covers a hand-built propagator and one a
+recipe built alike, and skips the segment loop's own labeling hook. A dataset
+held in memory is refused with the fix in the message. A piece that cannot be
+described leaves the whole ``on_policy`` entry out, rather than writing a
+recipe that would rebuild into a different run.
+:meth:`~nvalchemi.training.distillation.OnPolicyConfig.from_spec_dict` and
+:meth:`~nvalchemi.training.distillation.DistillationStrategy.from_spec_dict`
+rebuild around supplied models, and both take overrides for the runtime-only
+pieces.
+
+An interrupted on-policy run also carries a *restart bundle* through the
+checkpoint: its live trajectory batch, the propagator's cumulative step count,
+the initial structures' position, its replay frames, and the settings it ran
+under. A resumed run therefore continues the same trajectory instead of
+seeding a fresh one, and backfills from the row the interrupted run reached.
+The restored frames replace the buffer's contents rather than being merged
+into them. The recorded settings are compared against the resumed loop's, so
+a run whose two halves differ says so. A run whose generation ran dry carries
+its frames and the exhaustion, and resumes training on the buffer.
+
+The restart bundle is rank-local, because the strategy checkpoint it rides in
+is written on rank zero alone. It is consumed only when a single rank wrote it
+and a single rank is restoring it. Otherwise ``OnPolicySettings.restart``
+decides. ``"error"`` (the default) refuses to start. ``"reseed"`` drops the
+bundle with a warning, and each rank reseeds with a cold replay buffer.
+``"resume"`` also refuses a restore that carries no bundle. A resumed run
+starts at a segment boundary: the interrupted segment is counted as finished,
+as above. The fresh segment the run opens begins by generating, so a
+checkpoint written part-way through a training phase costs the resumed run
+one extra generation phase.
+
+``nvalchemi.training.distillation.cli`` wraps all of that as a ``distill``
+group on the ``nvalchemi-training`` entry point. A *recipe* is one JSON file,
+validated by
+:class:`~nvalchemi.training.distillation.cli.DistillationJobSpec`, that
+describes a whole distillation run. The group writes a recipe
+(``distill init``), publishes its schema (``distill schema``), validates and
+renders it (``distill spec report``), and runs it (``distill spec run``).
+``distill spec resume`` picks an interrupted run back up, at the budget the
+checkpoint recorded or at the recipe's under ``--budget recipe``.
+``distill evaluate`` gates the result, on the EMA average or on the trained
+weights as ``--weights`` says.
+
+Pre-flight deserializes the strategy bundle with the same helpers the runtime
+uses, and checks an ``on_policy`` block against
+:class:`~nvalchemi.training.distillation.OnPolicyConfig`'s own field
+constraints. Everything the recipe settles on its own is therefore refused at
+``spec report`` rather than after a teacher has reached a GPU: a setting out
+of range, a step budget below one, a dataset format no loader builds, a model
+source the CLI could never load, a batch too small to hold a whole sample from
+each mixture source, or an ``initial_structures`` block that names no store or
+carries a budget that is not a positive count. A rule the strategy or the
+segment loop owns is not repeated: the optimizer configuration, a recycling
+source without a lifecycle, the replay device, or a replay-only mixture is
+refused once, at ``spec run``, and reported as a CLI error with the owner's
+message.
+
+``init`` scaffolds a :class:`~nvalchemi.training.hooks.CheckpointHook` into
+``student.hooks``, so the run leaves a checkpoint to resume from and to
+evaluate. :class:`~nvalchemi.training.distillation.cli.EvaluationSpec` accepts
+only the accuracy bars ``distill evaluate`` can fill, because a bar with no
+measurement behind it fails the student rather than being skipped. A *student
+tier* is a size template, never an architecture: a width, a depth, and a
+radial basis size for whatever constructor ``student.spec`` names. Each tier is a
+:class:`~nvalchemi.training.distillation.cli.StudentTier` in the registry
+:data:`~nvalchemi.training.distillation.cli.DEFAULT_STUDENT_TIERS`, which
+holds ``small``, ``base``, and ``large`` and grows through
+:func:`~nvalchemi.training.distillation.cli.register_student_tier`.
+``init --tier`` is checked against the registry when the command runs, and
+``--tier-kwargs`` overrides a template's arguments. The public alias
+:data:`~nvalchemi.training.distillation.cli.DistillationMode` names the loop a
+scaffold is written for: ``offline`` or ``on-policy``.
+:ref:`distillation_recipes_guide` walks the lifecycle end to end.
+
+.. currentmodule:: nvalchemi.training.distillation.cli
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   DistillationJobSpec
+   StudentSpec
+   EvaluationSpec
+   DistillationMode
+   StudentTier
+   DEFAULT_STUDENT_TIERS
+   register_student_tier
+
+.. currentmodule:: nvalchemi.training.distillation
 
 
 Losses

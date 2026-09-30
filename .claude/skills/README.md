@@ -17,6 +17,7 @@ copy the skill folders into your project's or home skills directory.
 | Wrap an MLIP or custom PyTorch model for use in nvalchemi | `nvalchemi-model-wrapping` |
 | Train a model from scratch, or scale it across GPUs/nodes (DDP) | `nvalchemi-training-api` |
 | Adapt a pretrained model to new reference data | `nvalchemi-fine-tuning` |
+| Distill a large teacher MLIP into a small student, offline or on-policy | `nvalchemi-distillation` |
 | Choose, weight, mask, or implement loss functions | `nvalchemi-loss-api` |
 | Run MD, relaxation, or EOS scans; compose batched pipelines | `nvalchemi-dynamics-api` |
 | Add per-step callbacks (neighbor lists, convergence, logging) | `nvalchemi-dynamics-hooks` |
@@ -32,7 +33,7 @@ when you are new to an area:
 
 ```text
 data-structures -> data-storage -> zarr-perf
-model-wrapping + loss-api -> training-api -> fine-tuning
+model-wrapping + loss-api -> training-api -> fine-tuning | distillation
 dynamics-hooks -> dynamics-api | dynamics-implementation
 reporting (orthogonal: attaches to training and dynamics)
 ```
