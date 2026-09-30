@@ -677,3 +677,22 @@ class TestDemoDynamicsNSteps:
         batch = _make_batch()
         dynamics.run(batch, 3)
         assert dynamics.step_count == 3
+
+
+class TestCompositionGuards:
+    """The dynamics ``|`` operator refuses non-dynamics operands."""
+
+    def test_dynamics_pipe_gen_refused(self) -> None:
+        """``dyn | gen`` refuses with a pointer to the right order."""
+        from nvalchemi.gen import AtomisticGenerator
+        from test.gen.conftest import batch_generate
+
+        dyn = DemoDynamics(model=DemoModelWrapper(DemoModel()), n_steps=1, dt=0.5)
+        gen = AtomisticGenerator(generator_func=batch_generate)
+
+        with pytest.raises(TypeError, match="generator | engine"):
+            dyn | gen
+
+        other = DemoDynamics(model=DemoModelWrapper(DemoModel()), n_steps=1, dt=0.5)
+        pipe = dyn | other  # the valid direction untouched
+        assert isinstance(pipe, DistributedPipeline)

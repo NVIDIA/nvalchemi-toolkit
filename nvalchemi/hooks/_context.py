@@ -144,3 +144,67 @@ class TrainContext(HookContext):
     gradients: dict[str, torch.Tensor] | None = None
     grad_scaler: torch.amp.GradScaler | None = None
     validation: dict[str, Any] | None = None
+
+
+@dataclass(kw_only=True)
+class GenerationContext(HookContext):
+    """Context object passed to generation hooks.
+
+    One context instance spans a single
+    :meth:`~nvalchemi.gen.generator.AtomisticGenerator.sample` call: the same
+    object is dispatched at every
+    :class:`~nvalchemi.gen.stages.GenerationStage` and the
+    :class:`~nvalchemi.gen.generator.AtomisticGenerator` re-reads it after each
+    dispatch, so hooks mutate generation state by *replacing* context fields
+    (``ctx.batch = ctx.batch[keep]``), not by editing in place.
+
+    Attributes
+    ----------
+    batch : Batch | None
+        The generated batch on the contract path: set when the generating
+        function returns a :class:`~nvalchemi.data.Batch` (``AFTER_GENERATE``
+        hooks see it here), ``None`` on the raw path. At call start it holds
+        ``inputs`` when they are a :class:`~nvalchemi.data.Batch` (``None``
+        otherwise). The raw sample in whatever container the generating
+        function produced lives on :attr:`sample`, not here.
+    inputs : Any
+        The input for the current call: at call start, exactly what was
+        passed to :meth:`~nvalchemi.gen.generator.AtomisticGenerator.sample`: a
+        tensor container (``Batch``, ``TensorDict``, ...) with text or other
+        raw modalities already encoded, or ``None`` for unconditional
+        generation. When a condition step is provided for the call, the
+        driver runs it between the ``BEFORE_CONDITION`` and
+        ``AFTER_CONDITION`` dispatches and stores the conditioned value back
+        here, so from ``AFTER_CONDITION`` on this is what the generating
+        function is called with; with no condition step it stays the raw
+        call input.
+    intermediates : dict[str, Any]
+        Scratch space for hook-to-hook state within one call (e.g. an
+        embedding computed at ``AFTER_CONDITION`` and consumed at
+        ``AFTER_GENERATE``).
+    step_count : int
+        Which generation call this is within a stream; ``0`` for a one-shot
+        call. Drives hook frequency gating.
+    sample : Any
+        The raw sample for this call, set when the generating function
+        returns. The driver returns it through the ``Batch`` path when it is
+        a :class:`~nvalchemi.data.Batch` (and ``AFTER_GENERATE`` hooks see it
+        as ``ctx.batch`` there), as-is otherwise. This is the hot path: the
+        sample should be GPU tensors; it may be any structure the function
+        emits.
+    accepted_mask : torch.Tensor | None
+        Boolean mask recording which of the call's candidates were accepted,
+        written by filtering hooks (a generating function signals total
+        rejection by returning a zero-graph ``Batch``). ``None`` when
+        acceptance has not been recorded for this dispatch. Mirrors the
+        :attr:`~nvalchemi.hooks.DynamicsContext.converged_mask` convention so
+        acceptance-aware reporting and resampling loops have a stable
+        channel.
+    """
+
+    batch: Batch | None = None
+    inputs: Any = None
+    intermediates: dict[str, Any] = field(default_factory=dict)
+    step_count: int = 0
+    sample: Any = None
+    accepted_mask: torch.Tensor | None = None

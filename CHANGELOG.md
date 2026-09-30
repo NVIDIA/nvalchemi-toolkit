@@ -10,6 +10,18 @@
 - Add support for PEFT fine-tuning within `FineTuningStrategy`, including
   LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
   and base-model fingerprint checks for PEFT checkpoint loading.
+- Toolkit-level generative API (`nvalchemi.gen`): an `AtomisticGenerator`
+  driver runs a user-supplied generating function (optionally conditioned)
+  and returns a `Batch` on the contract path (hooks, device and field
+  checks, pipeline and dynamics composition), or passes through any
+  other container untouched. Lifecycle hooks, streaming, session-managed
+  CUDA stream, RNG, and compile. Sequential composition via
+  `gen_a | gen_b` (`GenerationPipeline`), including dynamics engines
+  driven through their own `run()` loop, with per-call options addressed
+  per stage via `stage_kwargs`.
+- Demo generative models (`nvalchemi.models.gen.demo`): `DemoGANModel` and
+  `DemoDiffusionModel` placeholders.
+
 - Add `DynamicsStage.ON_ADMISSION` to `BaseDynamics`, enabling hooks to
   initialize per-system state once when a batch is admitted, before force
   priming and outside compiled fused steps.
