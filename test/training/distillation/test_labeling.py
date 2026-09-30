@@ -737,6 +737,53 @@ class TestLabelDatasetStoreIntegrity:
             label_dataset(small_dataset, scorer, store, batch_size=2)
 
 
+class TestLabelDatasetUnreadableStores:
+    """Destinations already holding data labeling must not clear."""
+
+    def test_an_abstract_store_holding_foreign_zarr_data_is_refused(
+        self,
+        small_dataset: InMemoryDataset,
+        direct_force_teacher: _DirectForceTeacher,
+    ) -> None:
+        """A memory store carrying someone else's arrays is not reopened in mode 'w'."""
+        store = zarr.storage.MemoryStore()
+        zarr.open(store, mode="w").create_array("kept", shape=(3,), dtype="int64")
+
+        with pytest.raises(ValueError, match="would clear it"):
+            label_dataset(
+                small_dataset, _make_scorer(direct_force_teacher), store, batch_size=2
+            )
+
+        assert "kept" in zarr.open(store, mode="r")
+
+    def test_a_mapping_store_holding_foreign_keys_is_refused(
+        self,
+        small_dataset: InMemoryDataset,
+        direct_force_teacher: _DirectForceTeacher,
+    ) -> None:
+        """A dict store is measured by its keys, since zarr finds no node in it."""
+        store = {"someone/elses.json": b"{}"}
+
+        with pytest.raises(ValueError, match="would clear it"):
+            label_dataset(
+                small_dataset, _make_scorer(direct_force_teacher), store, batch_size=2
+            )
+
+    def test_an_empty_abstract_store_is_labeled_into(
+        self,
+        small_dataset: InMemoryDataset,
+        direct_force_teacher: _DirectForceTeacher,
+    ) -> None:
+        """The refusal is about data already there, not about the store being abstract."""
+        store = zarr.storage.MemoryStore()
+
+        labeled = label_dataset(
+            small_dataset, _make_scorer(direct_force_teacher), store, batch_size=2
+        )
+
+        assert labeled == len(small_dataset)
+
+
 class TestLabelDatasetCustomLevels:
     """Stores whose source fields live at a user-registered level."""
 

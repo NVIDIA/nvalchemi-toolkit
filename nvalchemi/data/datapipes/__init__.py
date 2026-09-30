@@ -77,13 +77,19 @@ from nvalchemi.data.datapipes.backends.zarr import (
     ZarrWriteConfig,
 )
 from nvalchemi.data.datapipes.dataloader import DataLoader
-from nvalchemi.data.datapipes.dataset import BatchDatasetProtocol, Dataset
+from nvalchemi.data.datapipes.dataset import (
+    BatchDatasetProtocol,
+    Dataset,
+    dataset_device,
+    same_device,
+)
 from nvalchemi.data.datapipes.in_memory_dataset import InMemoryDataset
 from nvalchemi.data.datapipes.multidataset import MultiDataset
 from nvalchemi.data.datapipes.samplers import (
     DistributedSamplerProtocol,
     MultiDatasetBatchSampler,
     MultiDatasetSampler,
+    distributed_shard,
 )
 
 __all__ = [
@@ -102,5 +108,8 @@ __all__ = [
     "DistributedSamplerProtocol",
     "MultiDatasetSampler",
     "MultiDatasetBatchSampler",
+    "distributed_shard",
+    "dataset_device",
+    "same_device",
     "DataLoader",
 ]

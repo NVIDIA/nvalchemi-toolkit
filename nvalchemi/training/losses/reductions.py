@@ -28,6 +28,15 @@ final scalar weighting across graphs. For per-graph values :math:`x_i`,
 a graph-balanced scalar is :math:`B^{-1} \sum_i x_i`, while an
 atom-weighted scalar is :math:`(\sum_i N_i x_i) / (\sum_i N_i)`.
 
+Graph-balanced scalar (``V ... → ()``)
+--------------------------------------
+
+:func:`graph_balanced_mean` composes the scatter reduction with the
+graph-balanced weighting: it sums a per-node residual and its validity
+weights per graph, divides, and averages the per-graph means. Loss
+terms that mean over graphs rather than over atoms share it instead of
+re-deriving the per-graph numerator and denominator.
+
 Matrix reductions (``B ... m n → B ...``)
 -----------------------------------------
 
@@ -71,7 +80,7 @@ trailing dims before scattering::
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 import torch
 
@@ -80,7 +89,16 @@ from nvalchemi._typing import BatchIndices
 if TYPE_CHECKING:
     from jaxtyping import Float, Num
 
+__all__ = ["frobenius_mse", "graph_balanced_mean", "per_graph_mean", "per_graph_sum"]
+
 _NumGraphs: TypeAlias = int | torch.Tensor
+
+
+def _require_metadata(value: Any, name: str, *, loss_name: str) -> Any:
+    """Return required loss metadata or raise a focused error."""
+    if value is None:
+        raise ValueError(f"{loss_name} requires {name}=... metadata.")
+    return value
 
 
 def _resolve_batch_indices(
@@ -236,6 +254,75 @@ def per_graph_mean(
     count_shape = [1] * (totals.ndim - 1)
     counts = counts.view(-1, *count_shape)
     return totals / counts
+
+
+def graph_balanced_mean(
+    residual: Float[torch.Tensor, "V ..."],  # noqa: F722
+    valid: Num[torch.Tensor, "V ..."],  # noqa: F722
+    batch_idx: BatchIndices | None,
+    num_graphs: int | None,
+    *,
+    loss_name: str,
+) -> tuple[Float[torch.Tensor, ""], Float[torch.Tensor, "B"]]:  # noqa: F722
+    r"""Mean over graphs of each graph's mean valid residual.
+
+    For per-node residuals :math:`\rho_{ia}` and validity weights
+    :math:`w_{ia}` this returns
+
+    .. math::
+
+        L = \frac{1}{B} \sum_{i=1}^{B}
+        \frac{\sum_a \rho_{ia}}{\max\left(\sum_a w_{ia}, 1\right)},
+
+    so every graph contributes equally regardless of its size and a graph
+    with no valid node contributes ``0.0``. Trailing dims of ``residual`` and
+    ``valid`` are summed into the node before the scatter, so a ``(V, 3)``
+    squared force error with a ``(V, 3)`` component mask divides by the
+    number of valid components rather than of valid atoms. Both tensors are
+    promoted to at least float32 first and the per-graph sums stay at that
+    width (see :func:`per_graph_sum`).
+
+    Parameters
+    ----------
+    residual : Float[torch.Tensor, "V ..."]
+        Per-node residual, already zeroed where ``valid`` is false.
+    valid : Num[torch.Tensor, "V ..."]
+        Per-node validity mask or weights, same shape as ``residual``.
+    batch_idx : BatchIndices | None
+        Node-to-graph assignment; ``None`` is refused.
+    num_graphs : int | None
+        Number of graphs in the batch; ``None`` is refused.
+    loss_name : str
+        Name of the calling loss, used in the metadata error.
+
+    Returns
+    -------
+    tuple[Float[torch.Tensor, ""], Float[torch.Tensor, "B"]]
+        The scalar loss and the per-graph means it averages, the latter
+        suitable for a loss term's ``per_sample_loss``.
+
+    Raises
+    ------
+    ValueError
+        If ``batch_idx`` or ``num_graphs`` is ``None``, or if the leading dim
+        of ``residual`` does not match ``batch_idx``.
+    """
+    batch_idx = _require_metadata(batch_idx, "batch_idx", loss_name=loss_name)
+    num_graphs = _require_metadata(num_graphs, "num_graphs", loss_name=loss_name)
+    acc_dtype = torch.promote_types(residual.dtype, torch.float32)
+    trailing = tuple(range(1, residual.ndim))
+    if trailing:
+        per_node_residual = residual.sum(dim=trailing, dtype=acc_dtype)
+        per_node_valid = valid.sum(dim=trailing, dtype=acc_dtype)
+    else:
+        per_node_residual = residual.to(acc_dtype)
+        per_node_valid = valid.to(acc_dtype)
+    per_graph_residual = per_graph_sum(
+        per_node_residual, batch_idx, num_graphs=num_graphs
+    )
+    per_graph_valid = per_graph_sum(per_node_valid, batch_idx, num_graphs=num_graphs)
+    per_sample = per_graph_residual / per_graph_valid.clamp_min(1.0)
+    return per_sample.mean(), per_sample
 
 
 def frobenius_mse(

@@ -60,6 +60,7 @@ Data sinks
    :nosignatures:
 
    DataSink
+   ResizableSink
    GPUBuffer
    HostMemory
    ZarrData
@@ -74,3 +75,7 @@ Sampling
    :nosignatures:
 
    SizeAwareSampler
+   OrderedStructureSampler
+   StructureSource
+   FitPolicy
+   WithinBudget
