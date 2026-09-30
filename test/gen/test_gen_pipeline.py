@@ -625,17 +625,32 @@ class TestDuckTypedSessions:
         assert not out.positions.is_inference()
         out.positions.requires_grad_(True).sum().backward()
 
-    def test_duplicate_stage_instance_rejected_at_session_entry(self) -> None:
-        """The same generator twice in one pipeline unbalances hook lifecycles."""
-        gen = _generator()
+    def test_duplicate_stage_instance_shares_one_session(self) -> None:
+        """A repeated stage object enters/exits once; the fold still calls it twice."""
+        enters: list[bool] = []
+        exits: list[bool] = []
+        calls: list[bool] = []
+
+        class _Counter:
+            stage = GenerationStage.AFTER_GENERATE
+            frequency = 1
+
+            def __enter__(self):
+                enters.append(True)
+
+            def __exit__(self, *args: object) -> None:
+                exits.append(True)
+
+            def __call__(self, ctx, stage) -> None:
+                calls.append(True)
+
+        gen = _generator(hooks=[_Counter()])
         pipe = GenerationPipeline(stages=[gen, gen])
-        with pytest.raises(RuntimeError, match="do not nest"):
-            with pipe:
-                pass
-        # the failure unwound the first entry: the generator recovers cleanly
-        with gen:
-            out = gen(make_batch(num_graphs=1))
+        with pipe:
+            out = pipe(make_batch(num_graphs=1))
         assert out.num_graphs == 1
+        assert enters == [True] and exits == [True]
+        assert len(calls) == 2  # the hook fired at both stage positions
 
     def test_context_manager_stage_entered(self) -> None:
         """A stage with ``__enter__``/``__exit__`` is entered and exited."""

@@ -245,8 +245,9 @@ class GenerationPipeline(BaseModel):
         stream (dynamics engines and fused stages honor it) — then enters each
         stage's own session. The pipeline never enters
         :func:`torch.inference_mode` itself; generator stages manage their own.
-        Run-stages require a grad-enabled caller: a caller-managed
-        ``torch.no_grad`` region is not escaped.
+        Stages that provide a ``run`` method can require autograd. If the
+        caller wraps the pipeline in ``torch.no_grad``, the pipeline will not
+        disable that context.
         Exiting does not synchronize the session stream: enqueue a
         ``wait_stream`` or ``synchronize`` before consuming results from a
         different stream.
@@ -270,7 +271,12 @@ class GenerationPipeline(BaseModel):
                 self._stream.wait_stream(torch.cuda.current_stream(device))
                 self._stream_ctx = torch.cuda.stream(self._stream)
                 stack.enter_context(self._stream_ctx)
+            entered: set[int] = set()
             for stage in self.stages:
+                if id(stage) in entered:
+                    # the fold may call one stage object twice; its session
+                    # lifecycle enters and exits once
+                    continue
                 if isinstance(stage, AtomisticGenerator):
                     if stage.dedicated_stream and (
                         self._stream is None
@@ -281,6 +287,7 @@ class GenerationPipeline(BaseModel):
                     # stages unwind with (None, None, None): the lifecycle
                     # convention matches dynamics (no exception triple)
                     stack.callback(stage.__exit__, None, None, None)
+                    entered.add(id(stage))
                 elif hasattr(stage, "__enter__"):
                     # Offer the shared stream to any stage that follows the
                     # ``_stream`` convention (dynamics engines, fused stages),
@@ -294,6 +301,7 @@ class GenerationPipeline(BaseModel):
                             stage._stream = self._stream
                     stage.__enter__()
                     stack.callback(stage.__exit__, None, None, None)
+                    entered.add(id(stage))
         except Exception:
             stack.close()
             self._stream = None
@@ -419,11 +427,13 @@ class GenerationPipeline(BaseModel):
                     )
                 result = run(result, **pass_kwargs)
                 continue
-            # Fresh leaves for the engine, free of inference mode: cloning
-            # while inference mode is active still produces inference
-            # tensors, so disable inference mode before calling clone.
-            # Grad-attached producers are not rescued here (clone stays
-            # differentiable): functions feeding dynamics must run grad-free.
+            # The clone gives the next stage fresh tensors.
+            # A clone created under ``torch.inference_mode`` is still an
+            # inference tensor that blocks autograd. The code disables
+            # inference mode first so autograd can track the new tensors.
+            # The clone does not remove existing gradient history.
+            # A generator stage that feeds dynamics must produce tensors
+            # without gradient tracking.
             with (
                 torch.inference_mode(False)
                 if torch.is_inference_mode_enabled()
