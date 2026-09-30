@@ -318,7 +318,7 @@ class TestDeviceValidation:
         with pytest.raises(ValidationError, match="out of range"):
             AtomisticGenerator(
                 generator_func=batch_generate,
-                device=f"cuda:{torch.cuda.device_count()}",
+                device="cuda:999999",  # a fixed index beyond any real host's range
             )
 
 
