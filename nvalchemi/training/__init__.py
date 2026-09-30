@@ -19,6 +19,7 @@ from __future__ import annotations
 from nvalchemi.training._checkpoint import (
     CheckpointManifest,
     CheckpointValidator,
+    ModelReference,
     load_checkpoint,
     save_checkpoint,
 )
@@ -105,6 +106,7 @@ __all__ = [
     "FineTuningStrategy",
     "LinearWeight",
     "LossWeightSchedule",
+    "ModelReference",
     "OptimizerConfig",
     "PiecewiseWeight",
     "ReductionContext",

@@ -66,7 +66,6 @@ from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training import _spec_utils as strategy_spec
 from nvalchemi.training import _strategy_validation as strategy_validation
 from nvalchemi.training import _validation
-from nvalchemi.training._spec import BaseSpec, create_model_spec
 from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training._validation import ValidationConfig
 from nvalchemi.training.distributed import get_rank as get_distributed_rank
@@ -77,15 +76,14 @@ from nvalchemi.training.hooks.update import (
     _fold_training_update_hooks,
     _hook_claims_stage,
 )
-from nvalchemi.training.losses.base import LossWeightSchedule
 from nvalchemi.training.losses.composition import (
     ComposedLossFunction,
     ComposedLossOutput,
     LossTargetAssemblyProtocol,
+    _loss_weight_to_spec,
     as_composed_loss,
     assemble_loss_targets,
     compute_supervised_loss,
-    loss_component_to_spec,
     loss_target_keys,
 )
 from nvalchemi.training.optimizers import (
@@ -108,7 +106,7 @@ from nvalchemi.training.runtime import (
 
 if TYPE_CHECKING:
     from nvalchemi.data.batch import Batch
-    from nvalchemi.training._checkpoint import CheckpointValidator
+    from nvalchemi.training._checkpoint import CheckpointValidator, ModelReference
 
 __all__ = ["TrainingStrategy", "default_training_fn"]
 
@@ -145,23 +143,6 @@ class _RuntimeOptimizer:
     optimizer: torch.optim.Optimizer
     scheduler: LRScheduler | None
     adapter: SchedulerMetricAdapter
-
-
-def _loss_weight_to_spec(weight: Any) -> Any:
-    """Serialize a composed-loss weight schedule while leaving scalars unchanged."""
-    if not isinstance(weight, LossWeightSchedule):
-        # Plain scalar weights are already JSON-safe values.
-        return weight
-
-    # LossWeightSchedule requires a config-style serialization hook.
-    spec = weight.to_spec()
-    if not isinstance(spec, BaseSpec):
-        raise ValueError(
-            f"Loss weight schedule {type(weight).__name__}.to_spec() must "
-            "return a BaseSpec-derived spec, got "
-            f"{type(spec).__name__}."
-        )
-    return spec
 
 
 def _validate_single_do_claimants(
@@ -1004,8 +985,29 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             if callable(prepare):
                 prepare(self)
 
-    def _run_setup_hooks(self, dataloader: Any = None) -> Any:
-        """Run setup-stage hooks and return the active dataloader."""
+    def run_setup_hooks(self, dataloader: Any = None) -> Any:
+        """Dispatch :attr:`TrainingStage.SETUP` to the hooks with the strategy's own context.
+
+        :meth:`run` calls this before the first batch, and :meth:`train_batch`
+        calls it on every call. A caller that restores a strategy outside a run
+        calls it to read what a hook publishes at setup,
+        and gets the same dispatch. Every hook that claims ``SETUP``, and every
+        training-update orchestrator, sees a
+        :class:`~nvalchemi.hooks.TrainContext` carrying the strategy's
+        counters, models, rank, and ``workflow``.
+
+        Parameters
+        ----------
+        dataloader : Any, optional
+            Dataloader installed as :attr:`active_dataloader` for the hooks to
+            read or replace. Default ``None``.
+
+        Returns
+        -------
+        Any
+            :attr:`active_dataloader` after the hooks ran, which is
+            *dataloader* unless a hook replaced it.
+        """
         if not self.hooks:
             return dataloader
         self.active_dataloader = dataloader
@@ -1152,7 +1154,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             self._prepare_setup_hooks()
             self._validate_runtime_devices()
             self.models = move_to_devices(self.models, self.devices)
-            self._run_setup_hooks()
+            self.run_setup_hooks()
             self._apply_requires_grad_filter()
             try:
                 flat_opts, flat_scheds = self._setup_runtime_optimizers()
@@ -1438,7 +1440,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
             self._prepare_setup_hooks()
             self._validate_runtime_devices()
             self.models = move_to_devices(self.models, self.devices)
-            dataloader = self._run_setup_hooks(dataloader)
+            dataloader = self.run_setup_hooks(dataloader)
             batches_per_epoch = self._dataloader_length(dataloader)
             target_step_count = self._resolve_target_step_count(batches_per_epoch)
             if self.step_count >= target_step_count:
@@ -1533,16 +1535,7 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         dict[str, Any]
             JSON-ready bundle suitable for :func:`json.dumps`.
         """
-        component_specs = [
-            loss_component_to_spec(comp) for comp in self.loss_fn.components
-        ]
-        loss_fn_spec = create_model_spec(
-            type(self.loss_fn),
-            components=component_specs,
-            weights=[_loss_weight_to_spec(weight) for weight in self.loss_fn._weights],
-            normalize_weights=self.loss_fn.normalize_weights,
-            dtype_policy=self.loss_fn.dtype_policy,
-        )
+        loss_fn_spec = self.loss_fn.to_spec()
         spec = {
             "optimizer_configs": {
                 key: [cfg.to_spec().model_dump() for cfg in cfgs]
@@ -1565,6 +1558,25 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
                 stacklevel=2,
             )
         return spec
+
+    def checkpoint_model_references(self) -> dict[str, ModelReference]:
+        """Return the models a checkpoint stores once per root rather than at every index.
+
+        A model named here, such as a frozen teacher, is kept by a
+        :class:`~nvalchemi.training.ModelReference`. The first checkpoint under
+        a root writes its weights, and every later one references them through
+        a fingerprinted manifest entry. A periodic save therefore writes only
+        the weights that change. One root holds one copy: saving a different
+        copy into a root that already holds one raises. The base strategy
+        declares none.
+
+        Returns
+        -------
+        dict[str, ModelReference]
+            Model name mapped to how the root keeps that model. Empty for the
+            base strategy.
+        """
+        return {}
 
     def to_checkpoint_dict(self) -> dict[str, Any]:
         """Serialize strategy recipe and restart counters for checkpoints.

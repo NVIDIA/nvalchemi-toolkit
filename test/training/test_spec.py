@@ -18,13 +18,16 @@ from __future__ import annotations
 
 import ast
 import json
+import math
 from pathlib import Path
 from typing import Any
 
 import pytest
 import torch
 import torch.nn as nn
+from pydantic import BaseModel
 
+from nvalchemi._serialization import json_safe
 from nvalchemi.training._spec import (
     _TYPE_SERIALIZERS,
     BaseSpec,
@@ -239,6 +242,37 @@ class MyMLIP(nn.Module):
 # ---------------------------------------------------------------------------
 # Test classes
 # ---------------------------------------------------------------------------
+
+
+class TestJsonSafe:
+    """Non-finite floats spelled so a strict JSON reader accepts them, and read back."""
+
+    def test_nonfinite_floats_are_spelled_and_tuples_become_lists(self) -> None:
+        """nan, inf, and -inf become their spellings; finite values pass through."""
+        exported = json_safe(
+            {"mae": math.nan, "bounds": (-math.inf, 1.5, math.inf), "name": "nan"}
+        )
+
+        assert exported == {
+            "mae": "nan",
+            "bounds": ["-inf", 1.5, "inf"],
+            "name": "nan",
+        }
+        json.loads(json.dumps(exported), parse_constant=_reject_json_constant)
+
+    def test_a_spelled_float_parses_back_through_a_pydantic_float_field(self) -> None:
+        """The spelling is one a float field validates into the number it stood for."""
+
+        class _Record(BaseModel):
+            value: float
+
+        assert math.isnan(_Record(value=json_safe(math.nan)).value)
+        assert _Record(value=json_safe(-math.inf)).value == -math.inf
+
+
+def _reject_json_constant(token: str) -> float:
+    """Raise on the ``NaN``/``Infinity`` tokens plain JSON has no room for."""
+    raise ValueError(f"{token} is not a JSON value.")
 
 
 class TestClsPathResolution:

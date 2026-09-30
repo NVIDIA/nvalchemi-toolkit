@@ -78,6 +78,7 @@ keyword arguments are runtime overrides forwarded to the strategy class's
    create_model_spec_from_json
    register_type_serializer
    CheckpointManifest
+   ModelReference
    save_checkpoint
    load_checkpoint
 

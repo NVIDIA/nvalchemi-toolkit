@@ -21,19 +21,24 @@ import sys
 import types
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
+import click
 import pytest
 import torch
 from click.testing import CliRunner
 from pydantic import ValidationError
 
 import nvalchemi.training.cli as training_cli
+import nvalchemi.training.cli_common as cli_common
 from nvalchemi.hooks import NeighborListHook
 from nvalchemi.models.base import NeighborConfig
-from nvalchemi.training import TrainingStage, TrainingStrategy
+from nvalchemi.training import DDPHook, TrainingStage, TrainingStrategy
 from nvalchemi.training._spec import create_model_spec
 from nvalchemi.training.cli import TrainingJobSpec, _load_job_spec, _lr_series, main
+from nvalchemi.training.cli_common import SourceSpec
 from nvalchemi.training.hooks import CheckpointHook, MixedPrecisionHook
+from test.training.conftest import _FakeManager
 
 
 def _combined_output(result) -> str:
@@ -199,7 +204,7 @@ def test_mace_source_options_are_passed_to_wrapper(
     payload["source"]["mace"] = {"atomic_energies": {"1": -1.0, "8": -2.0}}
     job = TrainingJobSpec.model_validate(payload)
 
-    model = training_cli._build_supported_source_model(job.source, device="cpu")
+    model = training_cli.build_supported_source_model(job.source, device="cpu")
 
     assert model is not None
     assert calls == [
@@ -443,10 +448,11 @@ def test_run_builds_validation_config_from_validation_path(
         calls["dataloaders"].append((paths, shuffle, drop_last, loader))
         return loader
 
-    monkeypatch.setattr(training_cli, "_setup_distributed_manager", setup_distributed)
+    monkeypatch.setattr(training_cli, "setup_distributed_manager", setup_distributed)
     monkeypatch.setattr(training_cli, "_build_runtime_hooks", build_hooks)
     monkeypatch.setattr(training_cli, "_build_strategy", build_strategy)
-    monkeypatch.setattr(training_cli, "_build_dataloader", build_dataloader)
+    monkeypatch.setattr(training_cli, "build_dataloader", build_dataloader)
+    monkeypatch.setattr(cli_common, "build_dataloader", build_dataloader)
 
     run_result = CliRunner().invoke(main, ["spec", "run", str(output), "--no-report"])
 
@@ -556,10 +562,11 @@ def test_run_validation_cadence_can_be_overridden(
         calls["dataloaders"].append((paths, loader))
         return loader
 
-    monkeypatch.setattr(training_cli, "_setup_distributed_manager", setup_distributed)
+    monkeypatch.setattr(training_cli, "setup_distributed_manager", setup_distributed)
     monkeypatch.setattr(training_cli, "_build_runtime_hooks", build_hooks)
     monkeypatch.setattr(training_cli, "_build_strategy", build_strategy)
-    monkeypatch.setattr(training_cli, "_build_dataloader", build_dataloader)
+    monkeypatch.setattr(training_cli, "build_dataloader", build_dataloader)
+    monkeypatch.setattr(cli_common, "build_dataloader", build_dataloader)
 
     result = CliRunner().invoke(
         main,
@@ -662,14 +669,15 @@ def test_resume_loads_strategy_checkpoint_with_spec_runtime_components(
         calls["dataloaders"].append((device, paths, loader))
         return loader
 
-    monkeypatch.setattr(training_cli, "_setup_distributed_manager", setup_distributed)
+    monkeypatch.setattr(training_cli, "setup_distributed_manager", setup_distributed)
     monkeypatch.setattr(training_cli, "_build_runtime_hooks", build_hooks)
     monkeypatch.setattr(
         training_cli.TrainingStrategy,
         "load_checkpoint",
         classmethod(load_checkpoint),
     )
-    monkeypatch.setattr(training_cli, "_build_dataloader", build_dataloader)
+    monkeypatch.setattr(training_cli, "build_dataloader", build_dataloader)
+    monkeypatch.setattr(cli_common, "build_dataloader", build_dataloader)
 
     result = CliRunner().invoke(
         main,
@@ -1155,10 +1163,11 @@ def test_run_executes_loaded_spec_with_runtime_components(
         }
         return ["batch"]
 
-    monkeypatch.setattr(training_cli, "_setup_distributed_manager", setup_distributed)
+    monkeypatch.setattr(training_cli, "setup_distributed_manager", setup_distributed)
     monkeypatch.setattr(training_cli, "_build_runtime_hooks", build_hooks)
     monkeypatch.setattr(training_cli, "_build_strategy", build_strategy)
-    monkeypatch.setattr(training_cli, "_build_dataloader", build_dataloader)
+    monkeypatch.setattr(training_cli, "build_dataloader", build_dataloader)
+    monkeypatch.setattr(cli_common, "build_dataloader", build_dataloader)
 
     result = CliRunner().invoke(
         main,
@@ -1268,10 +1277,11 @@ def test_run_distributed_options_attach_manager_and_ddp(
         calls["dataloader_device"] = device
         return ["distributed-batch"]
 
-    monkeypatch.setattr(training_cli, "_setup_distributed_manager", setup_distributed)
+    monkeypatch.setattr(training_cli, "setup_distributed_manager", setup_distributed)
     monkeypatch.setattr(training_cli, "_build_runtime_hooks", build_hooks)
     monkeypatch.setattr(training_cli, "_build_strategy", build_strategy)
-    monkeypatch.setattr(training_cli, "_build_dataloader", build_dataloader)
+    monkeypatch.setattr(training_cli, "build_dataloader", build_dataloader)
+    monkeypatch.setattr(cli_common, "build_dataloader", build_dataloader)
 
     result = CliRunner().invoke(
         main,
@@ -1435,7 +1445,7 @@ def test_runtime_hooks_add_ddp_before_source_hooks() -> None:
 
     hooks = training_cli._build_runtime_hooks(job, enable_ddp=True, ddp_backend="gloo")
 
-    assert isinstance(hooks[0], training_cli.DDPHook)
+    assert isinstance(hooks[0], DDPHook)
     assert hooks[0].backend == "gloo"
     assert isinstance(hooks[1], CheckpointHook)
 
@@ -1478,3 +1488,136 @@ def test_lr_series_approximates_step_lr_schedule() -> None:
     assert series[0] == 1.0
     assert series[2] == 0.5
     assert series[4] == 0.25
+
+
+def test_cli_common_exports_every_shared_helper_by_name() -> None:
+    """Every name ``cli_common.__all__`` lists is importable and public."""
+    for name in cli_common.__all__:
+        assert not name.startswith("_")
+        assert getattr(cli_common, name) is not None
+    assert {
+        "DataJobSpec",
+        "ResumeBudget",
+        "apply_resume_budget",
+        "build_checked_hook",
+        "build_dataloader",
+        "build_runtime_hooks",
+        "build_supported_source_model",
+        "build_validation_config",
+        "dataset_device",
+        "hook_spec_is",
+        "path_exists",
+        "primary_strategy_device",
+        "resolve_distributed_enabled",
+        "restart_map_location",
+        "setup_distributed_manager",
+        "validate_pretrained_source",
+        "write_or_print",
+    } <= set(cli_common.__all__)
+    assert training_cli.build_dataloader is cli_common.build_dataloader
+    assert training_cli.build_validation_config is cli_common.build_validation_config
+    assert training_cli.dataset_device is cli_common.dataset_device
+    assert training_cli.primary_strategy_device is cli_common.primary_strategy_device
+
+
+def test_an_ordinary_command_resolves_without_importing_the_distillation_cli() -> None:
+    """Only the ``distill`` name pulls the recipe CLI and its dynamics stack in."""
+    group = training_cli._TrainingGroup(name="training")
+    group.add_command(training_cli.train)
+    ctx = click.Context(group)
+
+    with patch.dict(sys.modules):
+        sys.modules.pop("nvalchemi.training.distillation.cli", None)
+        assert group.get_command(ctx, "train") is training_cli.train
+        assert "nvalchemi.training.distillation.cli" not in sys.modules
+        assert group.get_command(ctx, "distill") is not None
+        assert "nvalchemi.training.distillation.cli" in sys.modules
+
+
+def test_help_lists_distill_beside_the_training_commands() -> None:
+    """The command list resolves the distillation group, so ``--help`` stays complete."""
+    result = CliRunner().invoke(main, ["--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "distill" in result.output
+    assert "train" in result.output
+
+
+def test_a_resuming_rank_defaults_the_load_device_to_its_own() -> None:
+    """An omitted map location becomes the device this rank runs on."""
+    manager = _FakeManager(rank=1)
+    manager.device = torch.device("cuda:1")
+
+    assert cli_common.restart_map_location(manager, None) == "cuda:1"
+
+
+def test_a_single_process_resume_keeps_the_map_location_it_was_given() -> None:
+    """Outside a multi-rank launch the flag is passed through untouched."""
+    solo = _FakeManager(world_size=1)
+    solo.device = torch.device("cuda:0")
+
+    assert cli_common.restart_map_location(None, "cpu") == "cpu"
+    assert cli_common.restart_map_location(solo, "cpu") == "cpu"
+
+
+def test_a_map_location_naming_another_device_is_honoured() -> None:
+    """A rank may stage its load elsewhere; the live strategy re-homes the state."""
+    manager = _FakeManager(rank=1)
+    manager.device = torch.device("cuda:1")
+
+    assert cli_common.restart_map_location(manager, "cuda:0") == "cuda:0"
+
+
+_SOURCE_REFUSALS: list[tuple[dict[str, Any], str]] = [
+    ({"model": "aimnet2", "model_id": "x", "mace": {}}, "only valid when"),
+    ({"model": "native-checkpoint"}, "require teacher.checkpoint_path"),
+    ({"model": "mace"}, "teacher.model_id or teacher.checkpoint_path"),
+]
+"""Pretrained sources that name too little, or the wrong block, for their wrapper."""
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    _SOURCE_REFUSALS,
+    ids=["foreign-mace-block", "native-without-path", "mace-without-id"],
+)
+def test_a_pretrained_source_missing_what_its_wrapper_needs_is_refused(
+    source: dict[str, Any], message: str
+) -> None:
+    """The shared source check names the field it was asked about."""
+    with pytest.raises(ValueError, match=message):
+        cli_common.validate_pretrained_source("teacher", SourceSpec(**source))
+
+
+def test_a_complete_pretrained_source_passes_the_shared_check() -> None:
+    """A MACE id or a native checkpoint path is all the wrapper asks for."""
+    cli_common.validate_pretrained_source(
+        "teacher", SourceSpec(model="mace", model_id="small-0b")
+    )
+    cli_common.validate_pretrained_source(
+        "student.source", SourceSpec(model="native-checkpoint", checkpoint_path="ckpt")
+    )
+
+
+def test_finetuning_kwargs_rebuild_module_patches_from_their_specs() -> None:
+    """A serialized module patch comes back as a spec the strategy can build."""
+    patch_spec = create_model_spec(torch.nn.Identity)
+    spec = {
+        "optimizer_configs": {"main": []},
+        "num_epochs": 1,
+        "num_steps": None,
+        "training_fn": "nvalchemi.training.strategy.default_training_fn",
+        "loss_fn_spec": create_model_spec(
+            training_cli.ComposedLossFunction,
+            components=[create_model_spec(training_cli.EnergyMSELoss)],
+            weights=[1.0],
+            normalize_weights=False,
+            dtype_policy="strict",
+        ).model_dump(),
+        "devices": ["cpu"],
+        "module_patches": {"encoder": json.loads(patch_spec.model_dump_json())},
+    }
+
+    kwargs = training_cli._finetuning_kwargs_from_spec(spec, hooks=[])
+
+    assert isinstance(kwargs["module_patches"]["encoder"].build(), torch.nn.Identity)

@@ -32,6 +32,7 @@ from nvalchemi.models.base import BaseModelMixin, ModelConfig
 from nvalchemi.training import EMAHook, EnergyMSELoss, FineTuningStrategy, TrainingStage
 from nvalchemi.training._checkpoint import (
     CheckpointManifest,
+    ModelReference,
     _filter_snapshot_to_trainable_state,
     load_checkpoint,
     save_checkpoint,
@@ -194,14 +195,16 @@ def _make_checkpoint_batch(n_atoms: int = 3, seed: int = 0) -> Batch:
 
 
 def _make_checkpoint_strategy(
-    num_steps: int = 4, device: torch.device | str = "cpu"
+    num_steps: int = 4,
+    device: torch.device | str = "cpu",
+    cls: type[TrainingStrategy] = TrainingStrategy,
 ) -> TrainingStrategy:
     """Create a serializable demo training strategy for checkpoint tests."""
     from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
     torch.manual_seed(0)
     model = DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8))
-    return TrainingStrategy(
+    return cls(
         models=model,
         optimizer_configs=OptimizerConfig(
             optimizer_cls=torch.optim.Adam,
@@ -1002,6 +1005,66 @@ class TestSecurityAST:
                     f"appears to be a raw object (self.{first.attr}), "
                     f"expected a state_dict result"
                 )
+
+
+class _StoredOnceStrategy(TrainingStrategy):
+    """Strategy declaring its one model as stored once per checkpoint root."""
+
+    def checkpoint_model_references(self) -> dict[str, ModelReference]:
+        """Declare ``main`` as a once-stored model."""
+        return {"main": ModelReference()}
+
+
+class _UntypedReferenceStrategy(TrainingStrategy):
+    """Strategy declaring a reference as a bare mapping rather than a ModelReference."""
+
+    def checkpoint_model_references(self) -> dict[str, Any]:
+        """Declare ``main`` with an untyped entry."""
+        return {"main": {"rebuild": "stored"}}
+
+
+class TestModelReferences:
+    """Typed ``ModelReference`` declarations of models stored once per root."""
+
+    def test_the_base_strategy_declares_no_reference(self, tmp_path: Path) -> None:
+        """A plain strategy stores every model at every index."""
+        strategy = _make_checkpoint_strategy()
+
+        assert strategy.checkpoint_model_references() == {}
+
+        strategy.save_checkpoint(tmp_path)
+        strategy.save_checkpoint(tmp_path)
+        manifest = json.loads((tmp_path / "manifest.json").read_text())
+        assert manifest["model_references"] == {}
+        assert (tmp_path / "models" / "main" / "checkpoints" / "1.pt").is_file()
+
+    def test_a_declared_model_is_written_once_and_referenced_after(
+        self, tmp_path: Path
+    ) -> None:
+        """Two saves write the declared weights at index 0 and point the second at it."""
+        strategy = _make_checkpoint_strategy(cls=_StoredOnceStrategy)
+
+        strategy.save_checkpoint(tmp_path)
+        strategy.save_checkpoint(tmp_path)
+
+        manifest = json.loads((tmp_path / "manifest.json").read_text())
+        reference = manifest["model_references"]["main"]
+        assert reference["rebuild"] == "stored"
+        assert reference["checkpoint_index"] == 0
+        assert set(reference["fingerprint"]) == {
+            "num_tensors",
+            "num_elements",
+            "digest",
+        }
+        assert (tmp_path / "models" / "main" / "checkpoints" / "0.pt").is_file()
+        assert not (tmp_path / "models" / "main" / "checkpoints" / "1.pt").exists()
+
+    def test_an_untyped_reference_is_rejected(self, tmp_path: Path) -> None:
+        """A declaration that is not a ModelReference is a programming error."""
+        strategy = _make_checkpoint_strategy(cls=_UntypedReferenceStrategy)
+
+        with pytest.raises(TypeError, match="must map model names to ModelReference"):
+            strategy.save_checkpoint(tmp_path)
 
 
 class TestSchemaVersion:

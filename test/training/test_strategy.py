@@ -1067,6 +1067,36 @@ def _snapshot_ctx(ctx: HookContext) -> _LossSnapshot:
     )
 
 
+class TestRunSetupHooks:
+    def test_setup_hooks_see_the_strategy_built_context(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        """A hook claiming SETUP reads the strategy's counters, rank, and workflow."""
+        seen: list[TrainContext] = []
+
+        class _SetupHook:
+            stage = TrainingStage.SETUP
+            frequency = 1
+
+            def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
+                seen.append(ctx)
+
+        strategy = TrainingStrategy(
+            **{**baseline_strategy_kwargs, "hooks": [_SetupHook()]}
+        )
+        strategy.step_count = 7
+
+        returned = strategy.run_setup_hooks("loader")
+
+        assert returned == "loader"
+        assert strategy.active_dataloader == "loader"
+        assert len(seen) == 1
+        assert seen[0].step_count == 7
+        assert seen[0].global_rank == 0
+        assert seen[0].workflow is strategy
+        assert seen[0].models is strategy.models
+
+
 class TestTrainingStrategyHookOrder:
     def test_update_hook_folding_does_not_reregister_existing_hooks(
         self, baseline_strategy_kwargs: dict[str, Any]

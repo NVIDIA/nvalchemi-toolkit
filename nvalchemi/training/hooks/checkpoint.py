@@ -42,7 +42,10 @@ class CheckpointHook(BaseModel):
     the same manifest layout as :func:`nvalchemi.training.save_checkpoint`.
     It fires either every ``step_interval`` completed optimizer steps or every
     ``epoch_interval`` completed epochs. The two cadences are mutually
-    exclusive so each hook owns one clear checkpoint policy.
+    exclusive so each hook owns one clear checkpoint policy. With
+    ``save_at_end=True`` the hook also saves when training ends, so a step
+    budget that is not a multiple of the interval still leaves its final
+    weights on disk. A run that ends on the cadence writes no second copy.
 
     With ``async_save=True`` (default), the hook first captures an immutable
     CPU snapshot of model, optimizer, scheduler, and strategy metadata on the
@@ -97,6 +100,15 @@ class CheckpointHook(BaseModel):
             ),
         ),
     ] = False
+    save_at_end: Annotated[
+        bool,
+        Field(
+            description=(
+                "Save once more when training ends, unless the newest save already "
+                "records the step it ended on."
+            ),
+        ),
+    ] = False
     last_checkpoint_index: Annotated[
         int | None,
         Field(
@@ -117,6 +129,7 @@ class CheckpointHook(BaseModel):
 
     _executor: ThreadPoolExecutor | None = PrivateAttr(default=None)
     _future: Future[int] | None = PrivateAttr(default=None)
+    _last_saved_step: int | None = PrivateAttr(default=None)
 
     def __init__(
         self, checkpoint_dir: Path | str | None = None, **data: object
@@ -144,8 +157,10 @@ class CheckpointHook(BaseModel):
     def _runs_on_stage(self, stage: TrainingStage) -> bool:
         """Return whether this hook observes a training stage."""
         return (
-            self.step_interval is not None and stage is TrainingStage.AFTER_BATCH
-        ) or (self.epoch_interval is not None and stage is TrainingStage.AFTER_EPOCH)
+            (self.step_interval is not None and stage is TrainingStage.AFTER_BATCH)
+            or (self.epoch_interval is not None and stage is TrainingStage.AFTER_EPOCH)
+            or (self.save_at_end and stage is TrainingStage.AFTER_TRAINING)
+        )
 
     def __enter__(self) -> CheckpointHook:
         """Create the background writer when async checkpointing is enabled."""
@@ -189,9 +204,11 @@ class CheckpointHook(BaseModel):
         self._future = None
 
     def _should_save(self, ctx: TrainContext, stage: TrainingStage) -> bool:
-        """Return whether ``ctx`` reaches the configured save cadence."""
+        """Return whether ``ctx`` reaches the save cadence or the end of training."""
         if self.rank_zero_only and ctx.global_rank != 0:
             return False
+        if stage is TrainingStage.AFTER_TRAINING:
+            return self.save_at_end and self._last_saved_step != ctx.step_count
         if (
             stage is TrainingStage.AFTER_BATCH
             and self.step_interval is not None
@@ -216,6 +233,7 @@ class CheckpointHook(BaseModel):
         self._finish_pending(block=False)
         if self._future is not None:
             self._finish_pending(block=True)
+        self._last_saved_step = ctx.step_count
 
         snapshot = _create_checkpoint_snapshot(
             self.checkpoint_dir,

@@ -2961,6 +2961,28 @@ class TestLossModelSpec:
         assert isinstance(rebuilt, ForceHuberLoss)
         assert rebuilt.delta == 0.5
 
+    def test_composed_loss_to_spec_rebuilds_the_composition(self) -> None:
+        """``to_spec`` carries the leaves, weights, normalization, and dtype policy."""
+        loss_fn = ComposedLossFunction(
+            [EnergyMSELoss(per_atom=True), ForceMSELoss(normalize_by_atom_count=True)],
+            weights=[1.0, ConstantWeight(value=10.0)],
+            normalize_weights=False,
+            dtype_policy="prediction_to_target",
+        )
+
+        rebuilt = self._roundtrip(loss_fn.to_spec()).build()
+
+        assert isinstance(rebuilt, ComposedLossFunction)
+        assert [type(comp) for comp in rebuilt.components] == [
+            EnergyMSELoss,
+            ForceMSELoss,
+        ]
+        assert rebuilt.components[0].per_atom is True
+        assert rebuilt.current_weight() == pytest.approx([1.0, 10.0])
+        assert isinstance(rebuilt._weights[1], ConstantWeight)
+        assert rebuilt.normalize_weights is False
+        assert rebuilt.dtype_policy == "prediction_to_target"
+
     def test_loss_component_to_spec_rejects_composed_loss(self) -> None:
         """Public loss component spec helper rejects non-leaf compositions."""
         with pytest.raises(
