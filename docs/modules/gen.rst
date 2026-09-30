@@ -6,12 +6,12 @@ Generative module (AtomisticGenerator, hooks, pipelines)
 
 The generative API drives inference for generative models of any family —
 diffusion / flow matching, GANs, VAEs, normalizing flows — through the
-abstract :class:`~nvalchemi.gen.generator.AtomisticGenerator` driver: a
-condition → generate → materialize pipeline with lifecycle hooks, streaming,
-and sequential composition. For orientation and recipes, see the
+:class:`~nvalchemi.gen.AtomisticGenerator` driver: an optional condition step
+followed by generation, with lifecycle hooks, streaming, and sequential
+composition. For orientation and recipes, see the
 :doc:`generative models user guide </userguide/generative>`.
 
-.. currentmodule:: nvalchemi.gen.generator
+.. currentmodule:: nvalchemi.gen
 
 Core classes
 ------------
@@ -22,14 +22,6 @@ Core classes
    :nosignatures:
 
    AtomisticGenerator
-
-.. currentmodule:: nvalchemi.gen
-
-.. autosummary::
-   :toctree: generated
-   :template: class.rst
-   :nosignatures:
-
    GeneratingFunction
    ConditionFunction
    GenerationStage

@@ -16,7 +16,7 @@
 
 The generative counterpart to :mod:`nvalchemi.models.demo`: minimal,
 self-contained placeholders that satisfy the
-:class:`~nvalchemi.models.gen.base.GenerativeModelMixin` contract and run
+:class:`~nvalchemi.models.gen.GenerativeModelMixin` contract and run
 through the :class:`~nvalchemi.gen.generator.AtomisticGenerator` with no external
 weights or optional dependencies. Sampling procedures that own these models
 live with the workflows that use them — see the test suite and the examples.

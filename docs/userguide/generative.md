@@ -95,8 +95,9 @@ def random_cluster_generate(
     num_atoms: int = 8,
     **kwargs,
 ) -> Batch:
-    positions = torch.randn(num_samples, num_atoms, 3, generator=rng)
-    atomic_numbers = torch.full((num_atoms,), 6, dtype=torch.long)
+    device = rng.device if rng is not None else "cpu"
+    positions = torch.randn(num_samples, num_atoms, 3, generator=rng, device=device)
+    atomic_numbers = torch.full((num_atoms,), 6, dtype=torch.long, device=device)
     return Batch.from_data_list(
         [AtomicData(positions=p, atomic_numbers=atomic_numbers) for p in positions]
     )
@@ -155,21 +156,13 @@ Entering a session with `with gen:` performs four setup actions:
    teardown on exit.
 
 You can compile the generating function with `torch.compile` via
-`gen.compile(**compile_kwargs)` or by setting `compile_generate=True`:
+`gen.compile(**compile_kwargs)` or by setting `compile_generate=True`. Compilation
+wraps the function call; hook dispatch stays eager.
 
-```python
-gen = AtomisticGenerator(
-    generator_func=random_cluster_generate,
-    compile_kwargs={"mode": "reduce-overhead"},
-)
-
-with gen.compile():
-    for batch in gen.stream(None, max_batches=5):
-        ...
-```
-
-Compilation wraps only the generating function. Hook execution and data materialization
-remain eager.
+Building a `Batch` runs Python and pydantic code that TorchDynamo cannot trace, so
+a function that constructs a `Batch` graph-breaks at construction. For end-to-end
+capture, compile the model inside your generating function
+(`torch.compile(model, ...)`) and keep the wrapper eager.
 
 ## Input conditioning
 
@@ -220,13 +213,18 @@ All hooks in a call share a single {class}`~nvalchemi.hooks.GenerationContext` i
 | `ctx.accepted_mask` | Optional boolean tensor indicating accepted candidates. |
 | `ctx.intermediates` | Scratch dictionary for passing data between hooks. |
 | `ctx.step_count` | Counter of generation calls driving frequency gating. |
+| `ctx.global_rank` | Distributed process rank for multi-GPU reporting. |
 | `ctx.workflow` | Back-reference to the driving generator. |
 
 Hooks mutate state by replacing context fields. For example, filtering at
 `AFTER_GENERATE` subsets `ctx.batch`:
 
 ```python
+import torch
+
+from nvalchemi.data import Batch
 from nvalchemi.gen import GenerationStage
+
 
 class CentroidSpreadFilter:
     def __init__(self, max_spread: float = 3.0) -> None:
@@ -249,6 +247,17 @@ class CentroidSpreadFilter:
         max_dist.scatter_reduce_(0, idx, dist, reduce="amax")
 
         keep = max_dist <= self.max_spread
+        ctx.accepted_mask = keep
+        if not keep.any():
+            # Batch does not support zero-graph selections; signal total
+            # rejection with an explicitly empty batch instead
+            ctx.batch = Batch.empty(
+                num_systems=0,
+                num_nodes=0,
+                num_edges=0,
+                device=batch.positions.device,
+            )
+            return
         ctx.batch = batch[keep]
 ```
 
@@ -291,7 +300,7 @@ class ToyDecoder(nn.Module, GenerativeModelMixin):
         self.model_config = GenerativeModelConfig(
             required_inputs=frozenset(),  # unconditional
             outputs=frozenset({"positions", "atomic_numbers"}),
-            prediction_outputs=("positions",),
+            prediction_outputs={"positions"},
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -310,6 +319,10 @@ class ToyGenerate:
         self.required_inputs = model.model_config.required_inputs
         self.outputs = model.model_config.outputs
 
+    @property
+    def device(self) -> torch.device:
+        return next(self.model.parameters()).device
+
     def __call__(
         self,
         inputs=None,
@@ -318,9 +331,13 @@ class ToyGenerate:
         rng: torch.Generator | None = None,
         **kwargs,
     ) -> Batch:
-        z = torch.randn(num_samples, self.model.latent_dim, generator=rng)
+        z = torch.randn(
+            num_samples, self.model.latent_dim, generator=rng, device=self.device
+        )
         positions = self.model(z).reshape(num_samples, self.model.num_atoms, 3)
-        numbers = torch.full((self.model.num_atoms,), 6, dtype=torch.long)
+        numbers = torch.full(
+            (self.model.num_atoms,), 6, dtype=torch.long, device=self.device
+        )
         return Batch.from_data_list(
             [AtomicData(positions=p, atomic_numbers=numbers) for p in positions]
         )
@@ -343,21 +360,23 @@ simulations <dynamics>` using the `|` operator:
 ```python
 from nvalchemi.dynamics import FIRE, ConvergenceHook
 from nvalchemi.gen import AtomisticGenerator
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # Stage 1: Generate initial candidate structures
 gen_stage = AtomisticGenerator(generator_func=ToyGenerate(ToyDecoder(num_atoms=8)))
 
 # Stage 2: Relax candidates with an ML potential optimizer
 relax_stage = FIRE(
-    model=mlip_model,
+    model=DemoModelWrapper(DemoModel()),  # swap in your own model here
     dt=0.1,
     n_steps=200,
-    hooks=[ConvergenceHook.from_fmax(0.05)],
+    convergence_hook=ConvergenceHook.from_fmax(0.05),
 )
 
-# Chain into a sequential pipeline
+# Chain into a sequential pipeline; per-stage options go through stage_kwargs
 pipeline = gen_stage | relax_stage
-relaxed_batch = pipeline(num_samples=8)
+with pipeline:  # session: shared stream, seeded RNG, stage sessions
+    relaxed_batch = pipeline(stage_kwargs=[{"num_samples": 8}, None])
 ```
 
 ### Pipeline execution rules
@@ -430,7 +449,12 @@ class EDMGenerate:
         self.model = model
         self.num_steps = num_steps
         self.scheduler = EDMNoiseScheduler(sigma_max=sigma_max)
-        self.outputs = frozenset({"positions"})
+        self.required_inputs = frozenset()
+        self.outputs = frozenset({"positions", "atomic_numbers"})
+
+    @property
+    def device(self) -> torch.device:
+        return next(self.model.parameters()).device
 
     def __call__(
         self,
@@ -443,12 +467,16 @@ class EDMGenerate:
         denoiser = self.scheduler.get_denoiser(
             x0_predictor=EDMPreconditioner(self.model)
         )
-        xN = torch.randn(num_samples, self.model.num_atoms, 3, generator=rng)
+        xN = torch.randn(
+            num_samples, self.model.num_atoms, 3, generator=rng, device=self.device
+        )
         xN = xN * self.scheduler.sigma_max
         x0 = pn_sample(
             denoiser, xN, self.scheduler, num_steps=self.num_steps, solver="heun"
         )
-        numbers = torch.full((self.model.num_atoms,), 6, dtype=torch.long)
+        numbers = torch.full(
+            (self.model.num_atoms,), 6, dtype=torch.long, device=self.device
+        )
         return Batch.from_data_list(
             [AtomicData(positions=p, atomic_numbers=numbers) for p in x0]
         )
@@ -475,6 +503,10 @@ class GANGenerate:
     def __init__(self, model) -> None:
         self.model = model
 
+    @property
+    def device(self) -> torch.device:
+        return next(self.model.parameters()).device
+
     def __call__(
         self,
         inputs=None,
@@ -483,21 +515,26 @@ class GANGenerate:
         rng: torch.Generator | None = None,
         **kwargs,
     ) -> Batch:
-        z = torch.randn(num_samples, self.model.latent_dim, generator=rng)
+        z = torch.randn(
+            num_samples, self.model.latent_dim, generator=rng, device=self.device
+        )
         positions = self.model.decode(z).reshape(num_samples, -1, 3)
-        numbers = torch.full((positions.shape[1],), 6, dtype=torch.long)
+        numbers = torch.full(
+            (positions.shape[1],), 6, dtype=torch.long, device=self.device
+        )
         return Batch.from_data_list(
             [AtomicData(positions=p, atomic_numbers=numbers) for p in positions]
         )
 
-gan = AtomisticGenerator(generator_func=GANGenerate(gan_model))
+# the demo model satisfies this sketch's interface (latent_dim + decode)
+gan = AtomisticGenerator(generator_func=GANGenerate(DemoGANModel()))
 samples = gan(num_samples=4)
 ```
 
 ### Variational Autoencoders (VAE)
 
-VAE generation samples latents from the prior distribution and decodes them to atomic
-structures:
+A VAE decodes a latent draw like a GAN, but the latent can also come from the
+encoder — which is how a VAE conditions on input structures:
 
 ```python
 class VAEGenerate:
@@ -512,7 +549,14 @@ class VAEGenerate:
         rng: torch.Generator | None = None,
         **kwargs,
     ) -> Batch:
-        z = torch.randn(num_samples, self.model.latent_dim, generator=rng)
+        if inputs is None:
+            # unconditional: sample the prior
+            z = torch.randn(num_samples, self.model.latent_dim, generator=rng)
+        else:
+            # conditional: encode the inputs, then reparametrize
+            mu, logvar = self.model.encode(inputs)
+            eps = torch.randn(num_samples, self.model.latent_dim, generator=rng)
+            z = mu + eps * torch.exp(0.5 * logvar)
         positions = self.model.decode(z).reshape(num_samples, -1, 3)
         numbers = torch.full((positions.shape[1],), 6, dtype=torch.long)
         return Batch.from_data_list(
