@@ -23,7 +23,9 @@ Where possible, these functions delegate to GPU-optimized kernels in
 ``nvalchemiops``.  The Python function signatures are preserved for
 backward compatibility.
 
-This module is **not** part of the public API.
+This module is **not** part of the public API. Two of its names are
+re-exported by :mod:`nvalchemi.dynamics.hooks` and are public there: ``KB_EV``
+and :func:`kinetic_energy_per_graph`.
 """
 
 from __future__ import annotations
@@ -43,6 +45,9 @@ from nvalchemiops.segment_ops import (
 
 # Boltzmann constant in eV/K (NIST 2018 CODATA value).
 KB_EV: float = 8.617333262e-5
+
+_FS_PER_NS = 1.0e6
+"""Femtoseconds in a nanosecond."""
 
 # Supported scatter-reduce operations.
 ScatterReduce = Literal["amax", "sum", "amin", "mean"]
