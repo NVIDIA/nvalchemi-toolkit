@@ -16,26 +16,124 @@
 
 from __future__ import annotations
 
+import math
+from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import lru_cache
 
 import torch
 from torch import Tensor
 
-from nvalchemi.csp._comparison.descriptor import build_structure_descriptor
+from nvalchemi.csp._comparison.descriptor import build_descriptor_tiles
 from nvalchemi.data import Batch
 
 _TYPE_PAD = torch.iinfo(torch.int32).min
 
 
+@lru_cache(maxsize=64)
+def _log_cutoff_fp32(cutoff: float) -> float:
+    """Return the FP32 natural logarithm of a descriptor cutoff.
+
+    Parameters
+    ----------
+    cutoff : float
+        Positive cutoff in the same length unit as the input coordinates.
+
+    Returns
+    -------
+    float
+        ``log(cutoff)`` rounded to FP32 and converted back to a Python float.
+
+    Notes
+    -----
+    The cached value is shared by tensor construction and Warp scoring so
+    cutoff padding uses the same endpoint. At most 64 values are cached.
+    """
+    return float(torch.tensor(math.log(cutoff), dtype=torch.float32))
+
+
 def workspace_reserve(memory_budget_bytes: int) -> int:
-    """Return the byte allowance kept for descriptor and scoring temporaries."""
+    """Estimate temporary-workspace headroom within a memory budget.
+
+    Parameters
+    ----------
+    memory_budget_bytes : int
+        CUDA memory budget in bytes.
+
+    Returns
+    -------
+    int
+        One eighth of the budget, bounded below by 1 MiB and above by 1 GiB.
+
+    Notes
+    -----
+    This allowance reduces the budget available to resident descriptor data;
+    it does not allocate or reserve memory with CUDA.
+    """
     return min(max(1024**2, memory_budget_bytes // 8), 1024**3)
+
+
+def available_cuda_bytes(device: torch.device | str) -> int:
+    """Estimate reusable PyTorch allocation capacity on a CUDA device.
+
+    Parameters
+    ----------
+    device : torch.device or str
+        CUDA device to query.
+
+    Returns
+    -------
+    int
+        Estimated bytes available, capped by total device memory.
+
+    Raises
+    ------
+    ValueError
+        If ``device`` is not a CUDA device.
+
+    Notes
+    -----
+    The estimate adds driver-free bytes to unused bytes in PyTorch's caching
+    allocator. It is not a measurement of exclusively driver-free memory.
+    """
+    device = torch.device(device)
+    if device.type != "cuda":
+        raise ValueError("available_cuda_bytes requires a CUDA device")
+    driver_free_bytes, total_bytes = torch.cuda.mem_get_info(device)
+    reusable_reserved_bytes = max(
+        0,
+        torch.cuda.memory_reserved(device) - torch.cuda.memory_allocated(device),
+    )
+    return min(total_bytes, driver_free_bytes + reusable_reserved_bytes)
 
 
 def _typed_summary_peak_bytes(
     neighbor_slots: int, center_count: int, type_count: int, rank_count: int
 ) -> int:
-    """Estimate per-structure GPU memory for typed-summary construction."""
+    """Estimate temporary GPU bytes for one structure's typed summary.
+
+    Parameters
+    ----------
+    neighbor_slots : int
+        Number of padded distance/type slots across all centers.
+    center_count : int
+        Number of atoms serving as centers in the structure.
+    type_count : int
+        Number of distinct type labels in the shared vocabulary.
+    rank_count : int
+        Number of neighbor ranks summarized per type pair.
+
+    Returns
+    -------
+    int
+        Estimated temporary bytes, including a fixed 1 MiB allowance.
+
+    Notes
+    -----
+    The estimate accounts for neighbor ranking buffers, per-center gathers,
+    and type-pair extrema. It is a budget preflight, not a measurement or
+    reservation of allocator memory.
+    """
     center_type_ranks = center_count * type_count * rank_count
     center_types = center_count * type_count
     type_pair_ranks = type_count * type_count * rank_count
@@ -96,12 +194,29 @@ class DescriptorStore:
 
     @property
     def num_structures(self) -> int:
-        """Number of structure rows in the descriptor store."""
+        """Return the number of structure entries in the store.
+
+        Returns
+        -------
+        int
+            Number of entries in ``atom_counts``, including empty structures.
+        """
         return int(self.atom_counts.numel())
 
     @property
     def storage_bytes(self) -> int:
-        """Bytes occupied by descriptor and summary tensors."""
+        """Return the total tensor payload size in bytes.
+
+        Returns
+        -------
+        int
+            Sum of tensor storage for descriptor values, ragged offsets, and
+            summary arrays.
+
+        Notes
+        -----
+        Python object overhead and allocator bookkeeping are excluded.
+        """
         return sum(
             value.numel() * value.element_size()
             for value in (
@@ -119,7 +234,25 @@ class DescriptorStore:
         )
 
     def bytes_for(self, structure_ids: set[int]) -> int:
-        """Estimate staged descriptor bytes for the selected structures."""
+        """Estimate descriptor payload bytes for staging selected structures.
+
+        Parameters
+        ----------
+        structure_ids : set of int
+            Original structure indices to include.
+
+        Returns
+        -------
+        int
+            Estimated bytes for FP32 log distances, int32 neighbor types, and
+            int32 center types for the selected structures.
+
+        Notes
+        -----
+        Each neighbor slot contributes eight bytes and each center contributes
+        four. Offsets, summaries, transfer workspaces, and allocator overhead
+        are excluded.
+        """
         if not structure_ids:
             return 0
         ids = sorted(structure_ids)
@@ -130,7 +263,29 @@ class DescriptorStore:
         )
 
     def block(self, structure_ids: set[int], device: torch.device) -> DescriptorBlock:
-        """Return a resident view or stage selected structures to ``device``."""
+        """Return a resident descriptor view or stage selected structures.
+
+        Parameters
+        ----------
+        structure_ids : set of int
+            Original structure indices requested for a block.
+        device : torch.device
+            Target device for the returned descriptor arrays.
+
+        Returns
+        -------
+        DescriptorBlock
+            On the store's device, contains views of the full arrays and uses
+            original structure IDs. On another device, contains packed arrays
+            for sorted ``structure_ids`` and maps local IDs through
+            ``source_ids``. An empty request returns empty arrays and zero
+            offsets.
+
+        Notes
+        -----
+        Staged tensors remain alive through references held by the returned
+        block. A same-device result references storage owned by this store.
+        """
         ids = tuple(sorted(structure_ids))
         if not ids:
             empty = torch.empty(0, dtype=torch.float32, device=device)
@@ -204,12 +359,35 @@ def _snapshot_batch(
     batch: Batch,
     atom_types: Tensor | None,
     device: torch.device,
-    chunk_nodes: int = 131_072,
 ) -> tuple[list[int], Tensor, Tensor | None, Tensor, Tensor | None]:
-    """Copy geometry through the target FP32 route, then own it on the host."""
+    """Copy batch geometry into descriptor-builder-owned tensors.
+
+    Parameters
+    ----------
+    batch : Batch
+        Batched structures whose geometry is snapshotted.
+    atom_types : Tensor or None
+        Optional type ID per atom to copy as int32.
+    device : torch.device
+        Target device for positions, optional cells, PBC flags, and types.
+
+    Returns
+    -------
+    tuple
+        ``(pointers, positions, cells, pbc, types)``. Pointers are a host list
+        of cumulative atom offsets. Positions have shape ``[num_atoms, 3]``
+        and dtype FP32; cells are optional FP32 tensors with shape
+        ``[num_structures, 3, 3]``; PBC has shape ``[num_structures, 3]`` and
+        dtype bool; types are optional int32 values with shape
+        ``[num_atoms]``.
+
+    Notes
+    -----
+    Tensor outputs are detached copies independent of the input batch. Missing
+    positions produce an empty tensor; missing PBC becomes all-false. A single
+    PBC triplet is expanded across structures before copying.
+    """
     ptr = batch.batch_ptr.detach().to(device="cpu").tolist()
-    position_parts: list[Tensor] = []
-    cell_parts: list[Tensor] | None = [] if "cell" in batch else None
     pbc_source = (
         torch.zeros((batch.num_graphs, 3), dtype=torch.bool, device=batch.device)
         if "pbc" not in batch
@@ -217,177 +395,26 @@ def _snapshot_batch(
         if batch.pbc.ndim == 1
         else batch.pbc
     )
-    pbc_parts: list[Tensor] = []
-    for graph_start in range(
-        0, batch.num_graphs, max(1, chunk_nodes // max(batch.max_num_nodes, 1))
-    ):
-        graph_stop = min(
-            batch.num_graphs,
-            graph_start + max(1, chunk_nodes // max(batch.max_num_nodes, 1)),
-        )
-        node_start, node_stop = ptr[graph_start], ptr[graph_stop]
-        positions = (
-            batch.positions[node_start:node_stop]
-            .detach()
-            .to(device=device, dtype=torch.float32, copy=True)
-        )
-        position_parts.append(positions.to(device="cpu", copy=True))
-        pbc_parts.append(
-            pbc_source[graph_start:graph_stop]
-            .detach()
-            .to(device="cpu", dtype=torch.bool, copy=True)
-        )
-        if cell_parts is not None:
-            cells = (
-                batch.cell[graph_start:graph_stop]
-                .detach()
-                .to(device=device, dtype=torch.float32, copy=True)
-            )
-            cell_parts.append(cells.to(device="cpu", copy=True))
-        del positions
-
-    positions_cpu = (
-        torch.cat(position_parts)
-        if position_parts
-        else torch.empty((0, 3), dtype=torch.float32)
+    positions_source = (
+        batch.positions
+        if "positions" in batch
+        else torch.empty((0, 3), dtype=torch.float32, device=batch.device)
     )
-    pbc_cpu = (
-        torch.cat(pbc_parts) if pbc_parts else torch.empty((0, 3), dtype=torch.bool)
+    positions = positions_source.detach().to(
+        device=device, dtype=torch.float32, copy=True
     )
-    cells_cpu = torch.cat(cell_parts) if cell_parts else None
-    atom_types_cpu = (
-        atom_types.detach().to(device="cpu", dtype=torch.int32, copy=True)
+    cells = (
+        batch.cell.detach().to(device=device, dtype=torch.float32, copy=True)
+        if "cell" in batch
+        else None
+    )
+    pbc = pbc_source.detach().to(device=device, dtype=torch.bool, copy=True)
+    types = (
+        atom_types.detach().to(device=device, dtype=torch.int32, copy=True)
         if atom_types is not None
         else None
     )
-    return ptr, positions_cpu, cells_cpu, pbc_cpu, atom_types_cpu
-
-
-def _build_graph_descriptor_parts(
-    positions: Tensor,
-    cells: Tensor | None,
-    pbc: Tensor,
-    types: Tensor | None,
-    *,
-    start: int,
-    stop: int,
-    graph_id: int,
-    cutoff: float,
-    typed_neighbors: bool,
-    device: torch.device,
-    build_budget: int | None,
-    typed_type_vocab: tuple[int, ...],
-    type_vocab_device: Tensor,
-    typed_rank_indices: tuple[int, ...],
-) -> tuple[Tensor, Tensor, Tensor, int, int, Tensor | None, Tensor | None]:
-    """Build one graph's descriptors and return only CPU-owned parts."""
-    graph_positions = positions[start:stop].to(device=device, copy=True)
-    graph_pbc = pbc[graph_id].to(device=device, copy=True)
-    graph_cell = (
-        cells[graph_id].to(device=device, copy=True)
-        if cells is not None and bool(graph_pbc.any())
-        else None
-    )
-    graph_types = (
-        types[start:stop].to(device=device, copy=True) if types is not None else None
-    )
-    if not torch.isfinite(graph_positions).all():
-        raise ValueError("positions must remain finite after FP32 conversion")
-    if graph_cell is not None:
-        if not torch.isfinite(graph_cell).all():
-            raise ValueError("periodic cell must remain finite after FP32 conversion")
-        try:
-            inverse = torch.linalg.inv(graph_cell)
-        except RuntimeError as exc:
-            raise ValueError("periodic cell must be invertible in FP32") from exc
-        if not torch.isfinite(inverse).all():
-            raise ValueError("periodic cell must have a finite FP32 inverse")
-
-    rows, neighbors = build_structure_descriptor(
-        graph_positions,
-        graph_cell,
-        graph_pbc,
-        cutoff,
-        graph_types,
-        typed_neighbors,
-        memory_budget_bytes=build_budget,
-    )
-    log_rows = torch.log(rows)
-    if neighbors is None:
-        log_cutoff = torch.log(
-            torch.as_tensor(cutoff, dtype=torch.float32, device=device)
-        )
-        active = log_rows < log_cutoff
-        width = int(active.sum(dim=1).max()) if active.numel() else 0
-        compact_rows = log_rows[:, :width]
-        compact_neighbors = torch.full(
-            compact_rows.shape, _TYPE_PAD, dtype=torch.int32, device=device
-        )
-    else:
-        valid = neighbors != _TYPE_PAD
-        width = int(valid.sum(dim=1).max()) if valid.numel() else 0
-        if width:
-            order = torch.argsort(
-                valid.to(torch.int8), dim=1, descending=True, stable=True
-            )
-            order = order[:, :width].to(torch.int32)
-            compact_rows = log_rows.gather(1, order)
-            compact_neighbors = neighbors.gather(1, order)
-        else:
-            compact_rows = log_rows[:, :0]
-            compact_neighbors = neighbors[:, :0]
-    if typed_type_vocab and device.type == "cuda" and build_budget is not None:
-        summary_peak = _typed_summary_peak_bytes(
-            rows.numel(),
-            stop - start,
-            len(typed_type_vocab),
-            len(typed_rank_indices),
-        )
-        if summary_peak > build_budget:
-            raise MemoryError(
-                f"typed summary for structure {graph_id} needs an estimated "
-                f"{summary_peak} CUDA bytes, above the configured "
-                f"{build_budget}-byte build budget"
-            )
-
-    compact_rows_cpu = compact_rows.detach().to(device="cpu", copy=True).reshape(-1)
-    compact_neighbors_cpu = (
-        compact_neighbors.detach().to(device="cpu", copy=True).reshape(-1)
-    )
-    center_types_cpu = (
-        (
-            graph_types
-            if graph_types is not None
-            else torch.full(
-                (stop - start,), _TYPE_PAD, dtype=torch.int32, device=device
-            )
-        )
-        .detach()
-        .to(device="cpu", copy=True)
-    )
-    if typed_type_vocab:
-        typed_summary, center_presence = _build_typed_summaries_for_structure(
-            compact_rows,
-            compact_neighbors,
-            graph_types,
-            type_vocab_device,
-            typed_rank_indices,
-            float(torch.log(torch.tensor(cutoff, dtype=torch.float32))),
-        )
-        typed_summary_cpu = typed_summary.detach().to(device="cpu", copy=True)
-        center_presence_cpu = center_presence.detach().to(device="cpu", copy=True)
-    else:
-        typed_summary_cpu = None
-        center_presence_cpu = None
-    return (
-        compact_rows_cpu,
-        compact_neighbors_cpu,
-        center_types_cpu,
-        width,
-        stop - start,
-        typed_summary_cpu,
-        center_presence_cpu,
-    )
+    return ptr, positions, cells, pbc, types
 
 
 def build_descriptor_store(
@@ -399,135 +426,488 @@ def build_descriptor_store(
     has_atom_types: bool,
     device: torch.device,
     cuda_memory_budget_bytes: int | None,
+    require_device_residency: bool = False,
 ) -> DescriptorStore:
-    """Build frozen descriptors and keep the flat store on GPU when it fits.
+    """Build one frozen descriptor layout through the shared multi-mode path.
+
+    Parameters
+    ----------
+    batch : Batch
+        Structures whose coordinates and optional cells define the geometry.
+    cutoff : float
+        Neighbor cutoff in the coordinate length unit.
+    atom_types : Tensor or None
+        Optional integer type IDs with shape ``[num_atoms]``.
+    typed_neighbors : bool
+        Whether to group neighbors by type when atom types are available.
+    has_atom_types : bool
+        Whether to construct a center-typed layout. When False, types are not
+        included in the descriptor.
+    device : torch.device
+        Device used for geometry construction.
+    cuda_memory_budget_bytes : int or None
+        Configured CUDA construction and residency budget in bytes.
+    require_device_residency : bool, default=False
+        Whether a CUDA build must retain the packed store on the build device.
+
+    Returns
+    -------
+    DescriptorStore
+        The untyped, center-typed, or fully typed layout selected by the two
+        type flags. Its tensor device follows :func:`build_descriptor_stores`.
 
     Raises
     ------
     MemoryError
         If estimated neighbor-list or typed-summary construction memory
         exceeds the CUDA budget.
-    """
-    ptr, positions, cells, pbc, types = _snapshot_batch(batch, atom_types, device)
-    row_parts: list[Tensor] = []
-    neighbor_parts: list[Tensor] = []
-    center_parts: list[Tensor] = []
-    typed_summary_parts: list[Tensor] = []
-    center_presence_parts: list[Tensor] = []
-    widths: list[int] = []
-    atom_counts: list[int] = []
+    RuntimeError
+        If neighbor capacity reaches its integer limit before a row fits.
+    ValueError
+        If the cutoff or geometry is invalid after conversion to FP32.
 
-    typed_type_vocab = (
-        tuple(sorted(set(types.tolist())))
-        if typed_neighbors and types is not None
-        else ()
+    Notes
+    -----
+    The single-layout request delegates to :func:`build_descriptor_stores` so
+    it uses the same geometry and residency policy as multi-mode builds.
+    """
+    mode = "untyped" if not has_atom_types else "center"
+    if has_atom_types and typed_neighbors:
+        mode = "full"
+    return build_descriptor_stores(
+        batch,
+        cutoff=cutoff,
+        atom_types=atom_types if has_atom_types else None,
+        modes=(mode,),
+        device=device,
+        cuda_memory_budget_bytes=cuda_memory_budget_bytes,
+        require_device_residency=require_device_residency,
+    )[mode]
+
+
+def build_descriptor_stores(
+    batch: Batch,
+    *,
+    cutoff: float,
+    atom_types: Tensor | None,
+    modes: Iterable[str],
+    device: torch.device,
+    cuda_memory_budget_bytes: int | None,
+    require_device_residency: bool = False,
+) -> dict[str, DescriptorStore]:
+    """Build requested comparison layouts from one batched geometry pass.
+
+    Parameters
+    ----------
+    batch : Batch
+        Structures whose positions, cells, and PBC flags define the geometry.
+    cutoff : float
+        Neighbor cutoff in the same length unit as the coordinates.
+    atom_types : Tensor or None
+        Optional integer type IDs with shape ``[num_atoms]`` for typed modes.
+    modes : iterable of str
+        Requested layouts: ``"untyped"``, ``"center"``, or ``"full"``.
+        Repeated names are collapsed while preserving first occurrence.
+    device : torch.device
+        Device used for the geometry pass and intermediate descriptor parts.
+    cuda_memory_budget_bytes : int or None
+        Configured limit for CUDA construction and residency estimates.
+    require_device_residency : bool, default=False
+        On CUDA, require the packed stores to remain resident on ``device``.
+        When False, the stores may be assembled on CPU if the estimate does
+        not fit the CUDA resident budget.
+
+    Returns
+    -------
+    dict of str to DescriptorStore
+        One store per unique requested mode, in request order. Untyped stores
+        omit type labels; center stores retain center labels and distance-sorted
+        neighbors; full stores group neighbors by type and include typed
+        summaries.
+
+    Raises
+    ------
+    MemoryError
+        If estimated geometry or typed-summary workspace exceeds the configured
+        CUDA construction budget, or a required CUDA-resident store exceeds the
+        estimated resident budget.
+    ValueError
+        If a mode or cutoff is invalid, or positions or periodic cells are
+        invalid after conversion to FP32.
+    RuntimeError
+        If neighbor capacity reaches its integer limit before a row fits.
+
+    Notes
+    -----
+    Geometry tiles are shared across requested modes. Distances are stored as
+    FP32 natural logarithms, and invalid neighbor slots use the FP32 log-cutoff
+    sentinel. A missing cell disables periodic geometry. Memory values are
+    estimates: on CUDA, required residency is checked against estimated
+    available and configured budget; otherwise, stores remain on CUDA when
+    the estimated peak fits, and are assembled on CPU when it does not. The
+    input snapshot and intermediate parts remain owned by this call until the
+    packed stores are complete.
+    """
+    requested_modes = tuple(dict.fromkeys(modes))
+    supported_modes = {"untyped", "center", "full"}
+    unsupported = set(requested_modes) - supported_modes
+    if unsupported:
+        raise ValueError(f"unsupported descriptor mode(s): {sorted(unsupported)}")
+    if not requested_modes:
+        return {}
+
+    device = torch.device(device)
+    if device.type == "cuda" and device.index is None:
+        device = torch.device("cuda", torch.cuda.current_device())
+    free_bytes_at_start = None
+    if device.type == "cuda":
+        free_bytes_at_start = available_cuda_bytes(device)
+    ptr, positions, cells, pbc, types = _snapshot_batch(batch, atom_types, device)
+    snapshot_bytes = sum(
+        tensor.numel() * tensor.element_size()
+        for tensor in (positions, cells, pbc, types)
+        if tensor is not None
     )
-    typed_rank_indices = (0, 1, 4, 16, 64, 256, 1024)
+    type_modes = {mode for mode in requested_modes if mode != "untyped"}
+    geometry_types = types if type_modes else None
     type_vocab_device = (
-        torch.tensor(typed_type_vocab, dtype=torch.int32, device=device)
-        if typed_type_vocab
+        torch.unique(types, sorted=True)
+        if "full" in requested_modes and types is not None
         else torch.empty(0, dtype=torch.int32, device=device)
     )
+    typed_type_vocab = tuple(type_vocab_device.detach().to(device="cpu").tolist())
+    typed_rank_indices = (0, 1, 4, 16, 64, 256, 1024)
+    log_cutoff = _log_cutoff_fp32(cutoff)
+    log_cutoff_device = torch.tensor(log_cutoff, dtype=torch.float32, device=device)
+    cutoff_value_device = torch.tensor(cutoff, dtype=torch.float32, device=device)
+    parts: dict[str, dict[str, list[Tensor] | list[int]]] = {
+        mode: {
+            "distances": [],
+            "neighbors": [],
+            "centers": [],
+            "typed_summaries": [],
+            "center_presence": [],
+            "widths": [],
+            "atom_counts": [],
+        }
+        for mode in requested_modes
+    }
 
-    build_budget = cuda_memory_budget_bytes
+    resident_budget = 0
+    if device.type == "cuda":
+        resident_budget = min(
+            free_bytes_at_start,
+            cuda_memory_budget_bytes
+            if cuda_memory_budget_bytes is not None
+            else (free_bytes_at_start if require_device_residency else 0),
+        )
 
-    for graph_id, (start, stop) in enumerate(zip(ptr[:-1], ptr[1:], strict=True)):
-        (
-            rows_cpu,
-            neighbors_cpu,
-            centers_cpu,
-            width,
-            atom_count,
-            typed_summary_cpu,
-            center_presence_cpu,
-        ) = _build_graph_descriptor_parts(
+    def estimated_store_bytes() -> int:
+        """Estimate packed descriptor payload from accumulated tile metadata.
+
+        Returns
+        -------
+        int
+            Estimated bytes for packed values across the requested modes.
+
+        Notes
+        -----
+        Per-structure widths and atom counts determine value slots, offsets,
+        and summary arrays. Full-mode typed summaries also scale with the type
+        vocabulary. This estimate excludes allocator peak behavior.
+        """
+        estimated = 0
+        for mode in requested_modes:
+            mode_parts = parts[mode]
+            widths = mode_parts["widths"]
+            atom_counts = mode_parts["atom_counts"]
+            structure_count = len(widths)
+            atom_count = sum(atom_counts)
+            slot_count = sum(
+                width * count for width, count in zip(widths, atom_counts, strict=True)
+            )
+            estimated += (
+                slot_count * 8
+                + atom_count * 4
+                + 2 * (structure_count + 1) * 8
+                + structure_count * 72
+            )
+            if mode == "full" and typed_type_vocab:
+                type_count = len(typed_type_vocab)
+                estimated += structure_count * (
+                    type_count * type_count * len(typed_rank_indices) * 8 + type_count
+                )
+        return estimated
+
+    def estimated_peak_build_bytes() -> int:
+        """Estimate the modeled CUDA build peak for current tile metadata.
+
+        Returns
+        -------
+        int
+            Estimated bytes for the current build state.
+
+        Notes
+        -----
+        The estimate combines the input snapshot, two packed-store equivalents
+        for accumulated parts and concatenated copies, the largest geometry
+        tile, and workspace headroom. It guides budget decisions only; it does
+        not reserve memory or measure allocator peak usage.
+        """
+        return (
+            snapshot_bytes
+            + 2 * estimated_store_bytes()
+            + max_tile_peak_bytes
+            + workspace_reserve(resident_budget)
+        )
+
+    max_tile_peak_bytes = 0
+    if len(ptr) > 1:
+        tile_budget = cuda_memory_budget_bytes
+        if device.type == "cuda" and require_device_residency:
+            effective_budget = min(
+                free_bytes_at_start,
+                cuda_memory_budget_bytes
+                if cuda_memory_budget_bytes is not None
+                else free_bytes_at_start,
+            )
+            # Leave estimated snapshot and temporary headroom before sizing
+            # geometry tiles against the remaining construction allowance.
+            tile_budget = max(
+                0,
+                effective_budget - snapshot_bytes - workspace_reserve(effective_budget),
+            )
+            if tile_budget == 0 and len(ptr) > 1:
+                raise MemoryError(
+                    "CUDA-resident descriptor build has no budget remaining "
+                    "for geometry construction"
+                )
+        tiles = build_descriptor_tiles(
             positions,
+            ptr,
             cells,
             pbc,
-            types,
-            start=start,
-            stop=stop,
-            graph_id=graph_id,
+            geometry_types,
             cutoff=cutoff,
-            typed_neighbors=typed_neighbors,
             device=device,
-            build_budget=build_budget,
-            typed_type_vocab=typed_type_vocab,
-            type_vocab_device=type_vocab_device,
-            typed_rank_indices=typed_rank_indices,
+            memory_budget_bytes=tile_budget,
         )
-        row_parts.append(rows_cpu)
-        neighbor_parts.append(neighbors_cpu)
-        center_parts.append(centers_cpu)
-        if typed_summary_cpu is not None and center_presence_cpu is not None:
-            typed_summary_parts.append(typed_summary_cpu)
-            center_presence_parts.append(center_presence_cpu)
-        widths.append(width)
-        atom_counts.append(atom_count)
+        for tile in tiles:
+            max_tile_peak_bytes = max(max_tile_peak_bytes, tile.estimated_peak_bytes)
+            for mode in requested_modes:
+                has_center_types = mode != "untyped" and types is not None
+                typed_neighbors = mode == "full" and has_center_types
+                rows, neighbors = tile.layout(typed_neighbors=typed_neighbors)
+                for local_graph, width in enumerate(tile.widths):
+                    atom_start = tile.atom_offsets[local_graph]
+                    atom_stop = tile.atom_offsets[local_graph + 1]
+                    graph_rows = rows[atom_start:atom_stop, :width].contiguous()
+                    if neighbors is None or not has_center_types:
+                        graph_neighbors = torch.full(
+                            graph_rows.shape,
+                            _TYPE_PAD,
+                            dtype=torch.int32,
+                            device=device,
+                        )
+                    else:
+                        graph_neighbors = neighbors[
+                            atom_start:atom_stop, :width
+                        ].contiguous()
 
-    row_offsets = [0]
-    atom_offsets = [0]
-    for width, count in zip(widths, atom_counts, strict=True):
-        row_offsets.append(row_offsets[-1] + width * count)
-        atom_offsets.append(atom_offsets[-1] + count)
+                    log_rows = torch.log(graph_rows)
+                    if has_center_types:
+                        # Typed rows use the explicit type sentinel for padding;
+                        # untyped rows have no sentinel buffer, so cutoff marks it.
+                        active = graph_neighbors != _TYPE_PAD
+                    else:
+                        active = graph_rows < cutoff_value_device
+                    log_rows = torch.where(active, log_rows, log_cutoff_device)
+                    graph_centers = (
+                        tile.center_types[atom_start:atom_stop]
+                        if has_center_types and tile.center_types is not None
+                        else torch.full(
+                            (atom_stop - atom_start,),
+                            _TYPE_PAD,
+                            dtype=torch.int32,
+                            device=device,
+                        )
+                    )
 
-    distances_cpu = (
-        torch.cat(row_parts) if row_parts else torch.empty(0, dtype=torch.float32)
-    )
-    neighbor_types_cpu = (
-        torch.cat(neighbor_parts)
-        if neighbor_parts
-        else torch.empty(0, dtype=torch.int32)
-    )
-    center_types_cpu = (
-        torch.cat(center_parts) if center_parts else torch.empty(0, dtype=torch.int32)
-    )
-    if typed_type_vocab:
-        typed_summaries_cpu = torch.stack(typed_summary_parts)
-        center_type_presence_cpu = torch.stack(center_presence_parts)
-    else:
-        typed_summaries_cpu = torch.empty((len(widths), 0, 0, 2), dtype=torch.float32)
-        center_type_presence_cpu = torch.empty((len(widths), 0), dtype=torch.bool)
-    cpu_values = (
-        distances_cpu,
-        neighbor_types_cpu,
-        center_types_cpu,
-        torch.tensor(row_offsets, dtype=torch.int64),
-        torch.tensor(atom_offsets, dtype=torch.int64),
-        torch.tensor(widths, dtype=torch.int32),
-        torch.tensor(atom_counts, dtype=torch.int32),
-        _build_summaries(
-            distances_cpu,
-            neighbor_types_cpu,
-            torch.tensor(row_offsets, dtype=torch.int64),
-            torch.tensor(widths, dtype=torch.int32),
-            torch.tensor(atom_counts, dtype=torch.int32),
-            float(torch.log(torch.tensor(cutoff, dtype=torch.float32))),
-            has_atom_types,
-        ),
-        typed_summaries_cpu,
-        center_type_presence_cpu,
-    )
+                    if typed_type_vocab and mode == "full":
+                        summary_peak = _typed_summary_peak_bytes(
+                            graph_rows.numel(),
+                            atom_stop - atom_start,
+                            len(typed_type_vocab),
+                            len(typed_rank_indices),
+                        )
+                        if (
+                            device.type == "cuda"
+                            and cuda_memory_budget_bytes is not None
+                            and summary_peak > cuda_memory_budget_bytes
+                        ):
+                            raise MemoryError(
+                                f"typed summary for structure needs an estimated "
+                                f"{summary_peak} CUDA bytes, above the configured "
+                                f"{cuda_memory_budget_bytes}-byte build budget"
+                            )
+                        typed_summary, center_presence = (
+                            _build_typed_summaries_for_structure(
+                                log_rows,
+                                graph_neighbors,
+                                graph_centers,
+                                type_vocab_device,
+                                typed_rank_indices,
+                                log_cutoff,
+                            )
+                        )
+                        parts[mode]["typed_summaries"].append(typed_summary.detach())
+                        parts[mode]["center_presence"].append(center_presence.detach())
 
+                    parts[mode]["distances"].append(log_rows.detach().reshape(-1))
+                    parts[mode]["neighbors"].append(
+                        graph_neighbors.detach().reshape(-1)
+                    )
+                    parts[mode]["centers"].append(graph_centers.detach())
+                    parts[mode]["widths"].append(width)
+                    parts[mode]["atom_counts"].append(atom_stop - atom_start)
+            if device.type == "cuda" and require_device_residency:
+                required_bytes = estimated_peak_build_bytes()
+                if required_bytes > resident_budget:
+                    raise MemoryError(
+                        f"CUDA-resident descriptor stores need an estimated "
+                        f"{required_bytes} bytes, above the configured "
+                        f"{resident_budget}-byte device budget"
+                    )
+            del tile
+
+    store_device = torch.device("cpu")
     if device.type == "cuda":
-        free_bytes, _ = torch.cuda.mem_get_info(device)
-        resident_budget = min(free_bytes, cuda_memory_budget_bytes or 0)
-        storage_bytes = sum(
-            value.numel() * value.element_size() for value in cpu_values
+        required_bytes = estimated_peak_build_bytes()
+        if require_device_residency and required_bytes > resident_budget:
+            raise MemoryError(
+                f"CUDA-resident descriptor stores need an estimated "
+                f"{required_bytes} bytes, above the configured "
+                f"{resident_budget}-byte device budget"
+            )
+        if require_device_residency or required_bytes <= resident_budget:
+            store_device = device
+
+    values_by_mode: dict[str, tuple[Tensor, ...]] = {}
+    for mode in requested_modes:
+        mode_parts = parts[mode]
+        widths = mode_parts["widths"]
+        atom_counts = mode_parts["atom_counts"]
+        row_offsets = [0]
+        atom_offsets = [0]
+        for width, count in zip(widths, atom_counts, strict=True):
+            row_offsets.append(row_offsets[-1] + width * count)
+            atom_offsets.append(atom_offsets[-1] + count)
+        row_offsets_t = torch.tensor(
+            row_offsets, dtype=torch.int64, device=store_device
         )
-        if storage_bytes + workspace_reserve(resident_budget) <= resident_budget:
-            values = tuple(value.to(device=device) for value in cpu_values)
+        atom_offsets_t = torch.tensor(
+            atom_offsets, dtype=torch.int64, device=store_device
+        )
+        widths_t = torch.tensor(widths, dtype=torch.int32, device=store_device)
+        counts_t = torch.tensor(atom_counts, dtype=torch.int32, device=store_device)
+        distances = (
+            torch.cat(
+                [value.to(device=store_device) for value in mode_parts["distances"]]
+            )
+            if mode_parts["distances"]
+            else torch.empty(0, dtype=torch.float32, device=store_device)
+        )
+        neighbor_types = (
+            torch.cat(
+                [value.to(device=store_device) for value in mode_parts["neighbors"]]
+            )
+            if mode_parts["neighbors"]
+            else torch.empty(0, dtype=torch.int32, device=store_device)
+        )
+        center_types = (
+            torch.cat(
+                [value.to(device=store_device) for value in mode_parts["centers"]]
+            )
+            if mode_parts["centers"]
+            else torch.empty(0, dtype=torch.int32, device=store_device)
+        )
+        summaries = _build_summaries(
+            distances,
+            neighbor_types,
+            row_offsets,
+            widths,
+            atom_counts,
+            log_cutoff,
+            mode != "untyped" and types is not None,
+            distance_sorted=mode != "full" or types is None,
+        )
+        mode_type_vocab = typed_type_vocab if mode == "full" else ()
+        if mode_type_vocab:
+            typed_summaries = (
+                torch.stack(
+                    [
+                        value.to(device=store_device)
+                        for value in mode_parts["typed_summaries"]
+                    ]
+                )
+                if mode_parts["typed_summaries"]
+                else torch.empty(
+                    (
+                        len(widths),
+                        len(mode_type_vocab),
+                        len(mode_type_vocab),
+                        len(typed_rank_indices),
+                        2,
+                    ),
+                    dtype=torch.float32,
+                    device=store_device,
+                )
+            )
+            center_type_presence = (
+                torch.stack(
+                    [
+                        value.to(device=store_device)
+                        for value in mode_parts["center_presence"]
+                    ]
+                )
+                if mode_parts["center_presence"]
+                else torch.empty(
+                    (len(widths), len(mode_type_vocab)),
+                    dtype=torch.bool,
+                    device=store_device,
+                )
+            )
         else:
-            values = cpu_values
-            device = torch.device("cpu")
-    else:
-        values = cpu_values
-    return DescriptorStore(
-        *values,
-        typed_type_vocab=typed_type_vocab,
-        typed_rank_indices=typed_rank_indices if typed_type_vocab else (),
-        device=device,
-    )
+            typed_summaries = torch.empty(
+                (len(widths), 0, 0, 2), dtype=torch.float32, device=store_device
+            )
+            center_type_presence = torch.empty(
+                (len(widths), 0), dtype=torch.bool, device=store_device
+            )
+        values_by_mode[mode] = (
+            distances,
+            neighbor_types,
+            center_types,
+            row_offsets_t,
+            atom_offsets_t,
+            widths_t,
+            counts_t,
+            summaries,
+            typed_summaries,
+            center_type_presence,
+        )
+
+    stores: dict[str, DescriptorStore] = {}
+    for mode, values in values_by_mode.items():
+        stores[mode] = DescriptorStore(
+            *values,
+            typed_type_vocab=typed_type_vocab if mode == "full" else (),
+            typed_rank_indices=(
+                typed_rank_indices if mode == "full" and typed_type_vocab else ()
+            ),
+            device=store_device,
+        )
+    return stores
 
 
 def _build_typed_summaries_for_structure(
@@ -538,7 +918,36 @@ def _build_typed_summaries_for_structure(
     rank_indices: tuple[int, ...],
     log_cutoff: float,
 ) -> tuple[Tensor, Tensor]:
-    """Build typed rank extrema by center type and neighbor type."""
+    """Build typed distance extrema for the requested per-type ranks.
+
+    Parameters
+    ----------
+    distances : Tensor
+        FP32 natural-log distances, grouped by neighbor type per center.
+    neighbor_types : Tensor
+        Aligned int32 labels with ``_TYPE_PAD`` in trailing padded slots.
+    center_types : Tensor
+        One int32 type label per center atom.
+    type_vocab : Tensor
+        Sorted vocabulary of type labels used to index summary axes.
+    rank_indices : tuple of int
+        Zero-based neighbor positions to summarize within each type group.
+    log_cutoff : float
+        Natural logarithm of the cutoff, used for missing ranks.
+
+    Returns
+    -------
+    summaries : Tensor
+        Minimum and maximum values for each center type, neighbor type, and
+        requested rank, with shape ``[num_types, num_types, num_ranks, 2]``.
+    group_presence : Tensor
+        Boolean vector with shape ``[num_types]`` indicating which center
+        types occur.
+
+    Notes
+    -----
+    Empty center/type/rank groups receive ``log_cutoff`` for both extrema.
+    """
     center_count = center_types.numel()
     type_count = type_vocab.numel()
     rank_count = len(rank_indices)
@@ -609,20 +1018,69 @@ def _build_typed_summaries_for_structure(
 def _build_summaries(
     distances: Tensor,
     neighbor_types: Tensor,
-    row_offsets: Tensor,
-    widths: Tensor,
-    atom_counts: Tensor,
+    row_offsets: list[int],
+    widths: list[int],
+    atom_counts: list[int],
     log_cutoff: float,
     has_atom_types: bool,
     feature_count: int = 8,
+    *,
+    distance_sorted: bool = False,
 ) -> Tensor:
-    """Summarize order statistics that are 1-Lipschitz under row mismatch."""
+    """Summarize nearest-neighbor order statistics for each structure.
+
+    Parameters
+    ----------
+    distances : Tensor
+        Flattened FP32 natural-log distances, grouped by structure and atom row.
+    neighbor_types : Tensor
+        Flattened int32 type IDs aligned with ``distances``; padded entries use
+        ``_TYPE_PAD``.
+    row_offsets : list of int
+        Start offsets into the flattened distance/type arrays, one per
+        structure plus a terminal offset.
+    widths : list of int
+        Padded neighbor width for each structure.
+    atom_counts : list of int
+        Number of center atoms in each structure.
+    log_cutoff : float
+        Natural logarithm of the cutoff, used for missing ranks.
+    has_atom_types : bool
+        If True, use the type padding sentinel to identify valid slots;
+        otherwise, identify them by comparing log distances with
+        ``log_cutoff``.
+    feature_count : int, default=8
+        Number of nearest-neighbor ranks retained per center.
+    distance_sorted : bool, default=False
+        Whether each row is already ordered by ascending distance. Typed rows
+        may contain padding between valid neighbors, so their requested ranks
+        are selected by cumulative valid counts. Untyped validity is a prefix
+        because padding is identified by ``log_cutoff``.
+
+    Returns
+    -------
+    Tensor
+        FP32 array of shape ``[num_structures, 2 * feature_count]``. Each rank
+        contributes its minimum and maximum across centers.
+
+    Notes
+    -----
+    Missing neighbor ranks use ``log_cutoff``. These extrema are order
+    statistics that are 1-Lipschitz under row mismatch and are used to filter
+    candidate pairs before detailed scoring. For typed inputs, validity comes
+    from the type sentinel; otherwise, a value equal to ``log_cutoff`` is
+    treated as padding. The distance-sorted path avoids sorting rows already
+    ordered by geometry while retaining typed validity when padding is
+    interleaved with neighbors at the cutoff.
+    """
     summaries: list[Tensor] = []
-    cutoff_value = torch.tensor(log_cutoff, dtype=torch.float32)
-    for structure_id in range(int(atom_counts.numel())):
-        count = int(atom_counts[structure_id])
-        width = int(widths[structure_id])
-        row_start = int(row_offsets[structure_id])
+    cutoff_value = torch.tensor(
+        log_cutoff, dtype=torch.float32, device=distances.device
+    )
+    for structure_id, (count, width) in enumerate(
+        zip(atom_counts, widths, strict=True)
+    ):
+        row_start = row_offsets[structure_id]
         values = distances[row_start : row_start + count * width].reshape(count, width)
         neighbors = neighbor_types[row_start : row_start + count * width].reshape(
             count, width
@@ -632,27 +1090,70 @@ def _build_summaries(
                 valid = neighbors != _TYPE_PAD
             else:
                 valid = values < cutoff_value
-            ordered = torch.sort(
-                torch.where(valid, values, torch.full_like(values, float("inf"))),
-                dim=1,
-            ).values
             features = torch.full(
-                (count, feature_count), log_cutoff, dtype=torch.float32
+                (count, feature_count),
+                log_cutoff,
+                dtype=torch.float32,
+                device=distances.device,
             )
             copied = min(width, feature_count)
-            features[:, :copied] = ordered[:, :copied]
+            if distance_sorted:
+                if has_atom_types and count:
+                    # Cutoff-valued padding can precede rounded valid neighbors;
+                    # select ranks by cumulative validity instead of slicing.
+                    cumulative_valid = valid.cumsum(dim=1, dtype=torch.int32)
+                    ranks = (
+                        torch.arange(
+                            1, copied + 1, dtype=torch.int32, device=values.device
+                        )
+                        .expand(count, -1)
+                        .contiguous()
+                    )
+                    indices = torch.searchsorted(
+                        cumulative_valid.contiguous(), ranks, out_int32=True
+                    )
+                    indices = indices.clamp_max(width - 1).to(torch.int64)
+                    selected = values.gather(1, indices)
+                    present = cumulative_valid[:, -1:] >= ranks
+                    features[:, :copied] = torch.where(
+                        present, selected, torch.full_like(selected, log_cutoff)
+                    )
+                else:
+                    # Untyped rows have a valid-by-value prefix, so this mask
+                    # preserves cutoff padding without a row sort.
+                    features[:, :copied] = torch.where(
+                        valid[:, :copied],
+                        values[:, :copied],
+                        torch.full_like(values[:, :copied], log_cutoff),
+                    )
+            else:
+                ordered = torch.sort(
+                    torch.where(valid, values, torch.full_like(values, float("inf"))),
+                    dim=1,
+                ).values
+                features[:, :copied] = ordered[:, :copied]
             features = torch.where(torch.isfinite(features), features, cutoff_value)
         else:
             features = torch.full(
-                (count, feature_count), log_cutoff, dtype=torch.float32
+                (count, feature_count),
+                log_cutoff,
+                dtype=torch.float32,
+                device=distances.device,
             )
-        summaries.append(
-            torch.stack((features.amin(dim=0), features.amax(dim=0)), dim=-1)
-            .reshape(-1)
-            .contiguous()
-        )
+        if count:
+            summary = torch.stack((features.amin(dim=0), features.amax(dim=0)), dim=-1)
+        else:
+            summary = torch.full(
+                (feature_count, 2),
+                log_cutoff,
+                dtype=torch.float32,
+                device=distances.device,
+            )
+        summaries.append(summary.reshape(-1).contiguous())
     return (
         torch.stack(summaries)
         if summaries
-        else torch.empty((0, feature_count * 2), dtype=torch.float32)
+        else torch.empty(
+            (0, feature_count * 2), dtype=torch.float32, device=distances.device
+        )
     )

@@ -1764,6 +1764,8 @@ class TestAtomicDataZarrReaderIntrospection:
             reader.schema()
         with pytest.raises(RuntimeError, match="closed reader"):
             reader.check_integrity()
+
+
 def _make_projection_data(label: int) -> AtomicData:
     """Create a small, distinguishable system for reader projection tests."""
     num_atoms = 2 + label % 2
@@ -2087,6 +2089,7 @@ class TestAtomicDataZarrReaderFieldProjection:
         reader._store = "fake-store"
         reader._selected_fields = ("positions",)
         reader._missing_selected_fields = ()
+        reader._metadata_revision = 0
 
         with pytest.raises(KeyError, match="positions"):
             reader.refresh()
@@ -2098,11 +2101,20 @@ class TestAtomicDataZarrReaderFieldProjection:
         assert reader.field_names == ["positions"]
         assert reader.read_many([]) == []
 
-    def test_core_custom_name_collision_uses_custom_array(self, tmp_path: Path) -> None:
-        """A selected duplicate name keeps custom-array precedence."""
+    def test_legacy_core_custom_name_collision_uses_custom_array(
+        self, tmp_path: Path
+    ) -> None:
+        """A legacy store with duplicate names keeps custom-array precedence."""
         writer, _data_list = _write_projection_store(tmp_path / "test.zarr", 2)
         custom_energy = torch.tensor([[100.0], [101.0]])
-        writer.add_custom("energy", custom_energy, "system")
+        root = zarr.open(tmp_path / "test.zarr", mode="r+")
+        root["custom"].create_array("energy", data=custom_energy.numpy())
+        fields_metadata = dict(root.attrs["fields"])
+        fields_metadata["custom"] = {
+            **fields_metadata.get("custom", {}),
+            "energy": "system",
+        }
+        root.attrs["fields"] = fields_metadata
 
         with AtomicDataZarrReader(tmp_path / "test.zarr", fields=["energy"]) as reader:
             samples = reader.read_many([1, 0])

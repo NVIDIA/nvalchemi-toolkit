@@ -592,14 +592,40 @@ def test_fp64_source_and_nonperiodic_singular_cell() -> None:
     ).item() == pytest.approx(0.0, abs=2e-6)
 
 
-def test_periodic_structure_requires_cell() -> None:
-    data = AtomicData(
-        positions=torch.zeros((1, 3), dtype=torch.float32),
-        atomic_numbers=torch.ones(1, dtype=torch.int64),
-        pbc=torch.ones((1, 3), dtype=torch.bool),
+@pytest.mark.parametrize("device_name", ["cpu", "cuda"])
+def test_missing_cell_treats_periodic_flags_as_nonperiodic(
+    device_name: str,
+) -> None:
+    if device_name == "cuda" and not torch.cuda.is_available():
+        pytest.skip("requires CUDA")
+    positions = [
+        torch.tensor([[0.0, 0, 0], [0.5, 0, 0]], dtype=torch.float32),
+        torch.tensor([[0.0, 0, 0], [0.75, 0, 0]], dtype=torch.float32),
+    ]
+
+    def make_batch(pbc_value: bool) -> Batch:
+        return Batch.from_data_list(
+            [
+                AtomicData(
+                    positions=structure,
+                    atomic_numbers=torch.ones(len(structure), dtype=torch.int64),
+                    pbc=torch.full((1, 3), pbc_value, dtype=torch.bool),
+                )
+                for structure in positions
+            ]
+        )
+
+    flagged_index = RadialComparisonIndex.build(
+        make_batch(True).to(device_name), cutoff=2.0, device=device_name
     )
-    with pytest.raises(ValueError, match="require a cell"):
-        RadialComparisonIndex.build(Batch.from_data_list([data]), cutoff=2.0)
+    nonperiodic_index = RadialComparisonIndex.build(
+        make_batch(False).to(device_name), cutoff=2.0, device=device_name
+    )
+    pair = torch.tensor([[0, 1]], dtype=torch.int32, device=device_name)
+    flagged_score = flagged_index.score_pairs(pair, other=nonperiodic_index)
+    nonperiodic_score = nonperiodic_index.score_pairs(pair)
+    torch.testing.assert_close(flagged_score, nonperiodic_score)
+    assert flagged_score.item() == pytest.approx(0.5, abs=2e-6)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
@@ -900,6 +926,13 @@ def test_confirmation_callback_must_return_ordered_subset() -> None:
     index = RadialComparisonIndex.build(_batch(shapes), cutoff=2.0)
     with pytest.raises(ValueError, match="ordered subset"):
         index.deduplicate(threshold=0.06, confirm=lambda pairs: pairs.flip(0))
+
+    def mutate_proposals(pairs: torch.Tensor) -> torch.Tensor:
+        pairs[0, 1] = pairs[0, 0]
+        return pairs
+
+    with pytest.raises(ValueError, match="ordered subset"):
+        index.deduplicate(threshold=0.06, confirm=mutate_proposals)
 
 
 def test_packer_produced_batch_is_accepted() -> None:

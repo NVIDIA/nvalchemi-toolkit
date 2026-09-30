@@ -166,6 +166,9 @@ before a caller's more specific confirmation step.
 
    RadialComparisonIndex
    DeduplicationResult
+   deduplicate_batch
+   deduplicate_stream
+   iter_matches_stream
 
 .. autosummary::
    :nosignatures:

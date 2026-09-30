@@ -16,8 +16,6 @@
 
 from __future__ import annotations
 
-import math
-
 import torch
 import warp as wp
 from nvalchemiops.torch._warp_op_helpers import scoped_warp_stream
@@ -26,12 +24,28 @@ from torch import Tensor
 from nvalchemi.csp._comparison.kernels import (
     _get_scoring_kernels,
 )
-from nvalchemi.csp._comparison.store import DescriptorBlock
+from nvalchemi.csp._comparison.store import DescriptorBlock, _log_cutoff_fp32
 
 
 def threshold_score(threshold: float, device: torch.device) -> Tensor:
-    """Convert a fractional threshold to FP32, then advance one representable
-    value toward positive infinity.
+    """Convert a score threshold to its FP32 comparison value.
+
+    Parameters
+    ----------
+    threshold : float
+        Fractional score threshold to convert.
+    device : torch.device
+        Device on which to create the scalar tensor.
+
+    Returns
+    -------
+    Tensor
+        Zero-dimensional FP32 threshold tensor on ``device``.
+
+    Notes
+    -----
+    The converted value is advanced by one representable FP32 step toward
+    positive infinity before threshold scoring.
     """
     raw = torch.tensor(threshold, dtype=torch.float32, device=device)
     return torch.nextafter(
@@ -47,7 +61,35 @@ def score_descriptor_pairs(
     has_center_types: bool,
     typed_neighbors: bool,
 ) -> tuple[Tensor, Tensor]:
-    """Score one indexed pair tile with a single Warp launch."""
+    """Score a tile of indexed structure pairs.
+
+    Parameters
+    ----------
+    left, right : DescriptorBlock
+        Ragged descriptors and optional type labels for each side of the
+        comparison.
+    pairs : Tensor
+        Pair indices with shape ``[num_pairs, 2]``. Each row selects one
+        structure from ``left`` and one from ``right``.
+    cutoff : float
+        Neighbor cutoff in the same length unit used to build the descriptors.
+    has_center_types : bool
+        Whether the selected scoring mode compares center type labels.
+    typed_neighbors : bool
+        Whether the selected scoring mode compares type-grouped neighbor rows.
+
+    Returns
+    -------
+    scores : Tensor
+        FP32 scores with shape ``[num_pairs]``.
+    log_scores : Tensor
+        FP32 logarithmic scores used to produce ``scores``.
+
+    Notes
+    -----
+    One specialized Warp kernel scores the tile on the descriptor device.
+    Empty input returns two empty FP32 tensors without launching the kernel.
+    """
     if pairs.numel() == 0:
         empty = torch.empty(0, dtype=torch.float32, device=left.distances.device)
         return empty, empty
@@ -75,7 +117,7 @@ def score_descriptor_pairs(
                 wp.from_torch(left.atom_counts, dtype=wp.int32),
                 wp.from_torch(right.atom_counts, dtype=wp.int32),
                 wp.from_torch(pairs, dtype=wp.int32),
-                math.log(cutoff),
+                _log_cutoff_fp32(cutoff),
                 wp.from_torch(log_scores, dtype=wp.float32),
             ],
             device=str(device),
@@ -93,11 +135,40 @@ def threshold_score_descriptor_pairs(
     has_center_types: bool,
     typed_neighbors: bool,
 ) -> tuple[Tensor, Tensor]:
-    """Return exact scores for endpoint cases and threshold outcome codes.
+    """Classify indexed pairs, scoring only cases inside the endpoint bounds.
 
-    Outcome 0 rejects and outcome 2 certifies a match; their returned scores
-    are placeholders (infinity and zero). Outcome 1 returns an exact score for
-    the caller to compare with the threshold.
+    Parameters
+    ----------
+    left, right : DescriptorBlock
+        Ragged descriptors and optional type labels for each side of the
+        comparison.
+    pairs : Tensor
+        Pair indices with shape ``[num_pairs, 2]``.
+    cutoff : float
+        Neighbor cutoff in the same length unit used to build the descriptors.
+    log_bound : float
+        Outward logarithmic threshold used for conservative rejection.
+    accept_log_bound : float
+        Inward logarithmic threshold used to certify a match.
+    has_center_types : bool
+        Whether the selected scoring mode compares center type labels.
+    typed_neighbors : bool
+        Whether the selected scoring mode compares type-grouped neighbor rows.
+
+    Returns
+    -------
+    scores : Tensor
+        FP32 scores with shape ``[num_pairs]``. Outcome 1 contains an exact
+        score; outcome 0 uses infinity and outcome 2 uses zero as placeholders.
+    outcomes : Tensor
+        Int32 outcome codes with shape ``[num_pairs]``: 0 rejects, 1 requires
+        the caller to compare the exact score with its threshold, and 2
+        certifies a match.
+
+    Notes
+    -----
+    A specialized Warp kernel classifies the pairs on the descriptor device.
+    Empty input returns empty tensors without launching the kernel.
     """
     if pairs.numel() == 0:
         empty = torch.empty(0, dtype=torch.float32, device=left.distances.device)
@@ -127,7 +198,7 @@ def threshold_score_descriptor_pairs(
                 wp.from_torch(left.atom_counts, dtype=wp.int32),
                 wp.from_torch(right.atom_counts, dtype=wp.int32),
                 wp.from_torch(pairs, dtype=wp.int32),
-                math.log(cutoff),
+                _log_cutoff_fp32(cutoff),
                 log_bound,
                 accept_log_bound,
                 wp.from_torch(log_scores, dtype=wp.float32),

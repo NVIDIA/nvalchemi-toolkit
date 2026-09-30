@@ -1671,7 +1671,30 @@ class AtomicDataZarrWriter:
             new_root.attrs["levels"] = levels_metadata
 
     def _append_batch(self, data: Batch) -> None:
-        """Append one batch after validating custom-store compatibility."""
+        """Append one batch to an existing store.
+
+        Parameters
+        ----------
+        data : Batch
+            Batch whose samples and fields are appended to the store.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the Zarr store does not exist.
+        ValueError
+            If custom levels, pointers, required fields, or field layouts do
+            not match the existing store.
+
+        Notes
+        -----
+        Custom-level and existing root-custom fields are materialized and
+        validated before any target array is resized. A zero-sample batch is a
+        no-op. For a nonempty batch, built-in atom and edge pointer tails
+        offset the incoming pointers; arrays and masks are then extended, and
+        ``num_samples`` is updated last as the store's append commit marker.
+        Built-in field conversion and assignment retain their legacy behavior.
+        """
         if not self._store_exists():
             raise FileNotFoundError(f"Zarr store does not exist at {self._store}")
         if data.num_graphs == 0:
@@ -1874,12 +1897,8 @@ class AtomicDataZarrWriter:
         # Custom level pointers below follow the same persisted-prefix rule.
         old_atoms_total = int(meta_group["atoms_ptr"][-1])
         old_edges_total = int(meta_group["edges_ptr"][-1])
-        new_atoms_ptr = (
-            data.level_ptr("atoms").to(torch.long)[1:] + old_atoms_total
-        )
-        new_edges_ptr = (
-            data.level_ptr("edges").to(torch.long)[1:] + old_edges_total
-        )
+        new_atoms_ptr = data.level_ptr("atoms").to(torch.long)[1:] + old_atoms_total
+        new_edges_ptr = data.level_ptr("edges").to(torch.long)[1:] + old_edges_total
         self._extend_array(meta_group["atoms_ptr"], self._to_numpy(new_atoms_ptr))
         self._extend_array(meta_group["edges_ptr"], self._to_numpy(new_edges_ptr))
         self._extend_array(
@@ -2743,6 +2762,9 @@ class AtomicDataZarrReader(Reader):
             Physical sample indices in the order described by ``sorted_order``.
         fields : sequence of tuple
             Selected field name, level, and open Zarr array for each read.
+        level_ptrs : mapping from str to Tensor
+            Cached prefix pointers for built-in atom and edge levels and any
+            registered segmented or product custom levels.
 
         Returns
         -------
@@ -2752,12 +2774,14 @@ class AtomicDataZarrReader(Reader):
 
         Notes
         -----
-        Atom and edge fields gather concatenated ragged ranges with one
-        orthogonal selection per field when rows are present; empty ranges use
-        an empty slice. System fields gather physical sample rows. Blocks are
-        split into samples, and ``neighbor_list`` atom indices are shifted from
-        store-global to sample-local coordinates. The field list has already
-        been restricted to the requested projection, if any.
+        Atom, edge, and segmented or product fields gather ragged ranges from
+        their level pointers with one orthogonal selection per field when rows
+        are present; empty ranges use an empty slice. Product-level segments
+        are reshaped to their parent-axis dimensions, while uniform and system
+        fields gather one physical sample row. Blocks are split into samples,
+        and stored global ``neighbor_list`` atom indices are shifted to
+        sample-local coordinates. The field list has already been restricted
+        to the requested projection, if any.
         """
         data_by_sorted: list[dict[str, torch.Tensor]] = [{} for _ in sorted_order]
         pointer_ranges: dict[str, tuple[list[int], list[int], np.ndarray]] = {}
@@ -2852,9 +2876,7 @@ class AtomicDataZarrReader(Reader):
         if self._selected_fields is not None:
             # Keep schema and integrity introspection over the full store;
             # only the arrays in the sample read plan are projected.
-            fields_by_name = {
-                key: (key, level, array) for key, level, array in fields
-            }
+            fields_by_name = {key: (key, level, array) for key, level, array in fields}
             fields = [fields_by_name[name] for name in self._selected_fields]
 
         level_ptrs = {

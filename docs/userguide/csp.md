@@ -37,6 +37,7 @@ For API signatures and parameter details, see the {doc}`CSP API reference
 {ref}`dynamics_guide` for optimization with a physical model.
 
 (csp-water-example)=
+
 ## Generate starting structures
 
 Prepare water with the optional RDKit helpers, request 200 structures on one
@@ -367,6 +368,7 @@ it to FIRE2. Returning the raw
 stage.
 
 (csp-comparison)=
+
 ## Screen similar and duplicate structures
 
 A CSP campaign can generate and optimize $10^4$ to $10^6$ trial structures,
@@ -387,11 +389,11 @@ comparison runs in both directions. Several atoms may match the same
 environment: this is not a one-to-one atom assignment.
 
 The **radial mismatch score** is the largest relative mismatch remaining
-after these matches.
-For two distances, the mismatch is `max(d1, d2) / min(d1, d2) - 1`: 2.0 Å and
-2.1 Å differ by 5%. Thus `threshold=0.05` allows about 5% mismatch. It is a
-dimensionless relative threshold, not a 0.05 Å tolerance. Lower scores mean
-closer local distance patterns.
+after these matches. For two positive distances, the mismatch is
+`max(d1, d2) / min(d1, d2) - 1`. At `threshold=0.1`, the larger distance may
+be at most 10% above the smaller one. For example, 2.0 Å and 2.1 Å have a
+score of 0.05. The threshold is dimensionless, not a tolerance in Å. Lower
+scores mean closer local distance patterns.
 
 The score ignores angles, chirality, energy, and distances beyond `cutoff`.
 Distinct crystals can therefore have low mismatch scores: **matches can be false
@@ -554,6 +556,113 @@ transitive. Build new indices after geometry or atom labels change. See the
 {py:class}`~nvalchemi.csp.comparison.RadialComparisonIndex` reference for score
 dtype and CUDA memory settings.
 
+For a single in-memory pool, use
+{py:func}`~nvalchemi.csp.comparison.deduplicate_batch`. It tiles descriptor
+construction by total atom count and uses the same greedy representative order
+as `RadialComparisonIndex.deduplicate`. Set `atom_types` only when generic
+caller-defined labels should constrain matching; atomic numbers are never
+inferred as types.
+
+For a pool loaded in pieces, use
+{py:func}`~nvalchemi.csp.comparison.deduplicate_stream`. Its loader receives
+CPU int64 logical row IDs and returns `(Batch, atom_types)`. The int32 or int64
+type vector aligns with the atoms in that Batch, or is `None` on every call
+for untyped matching. Typed loaders must use one fixed `type_vocabulary` whose
+labels keep the same meaning in every batch. Loader values must remain stable
+for repeated row IDs. `priority_order` is a permutation of logical row IDs;
+when omitted, logical order is used. The first retained representative that
+passes every requested screen in that order receives each candidate, so
+changing the priority can change the result.
+
+```python
+from nvalchemi.csp.comparison import deduplicate_stream
+
+result = deduplicate_stream(
+    count,
+    read_typed_batch,  # row IDs -> (Batch, aligned atom_types or None)
+    type_vocabulary=type_vocabulary,
+    cutoff=15.0,
+    threshold=0.05,
+    priority_order=priority_order,
+    device="cuda",
+    max_batch_atoms=200_000,
+    max_memory_fraction=0.85,
+    summary_coordinate_count=32,  # default; use 0 to disable the preliminary check
+)
+```
+
+When types are supplied, every proposed pair passes untyped, center-typed, and
+center-and-neighbor-typed screens in that order. An untyped loader uses only
+the untyped screen. In both cases, each same pair advances through the screens
+before the candidate is assigned. The result contains retained original row
+IDs in priority order, `representative_indices` indexed by original logical ID,
+and multiplicities aligned with retained IDs.
+
+Pass `confirm` to `deduplicate_batch` or `deduplicate_stream` when a stronger
+comparison must accept a radial proposal before a structure is discarded. The
+callback receives `(candidate_id, retained_representative_id)` pairs and
+returns an ordered subset on the same device. Rejecting a proposal makes the
+candidate try later retained representatives; if none is confirmed, it is
+kept. Confirmation runs only against representatives already retained by the
+greedy pass. Match enumeration remains separate: callers can consume and
+filter chunks from `iter_matches_stream` without discarding any structures.
+
+Here, `confirm_pairs` is your stronger comparison function; it returns the
+accepted input pairs in their original order. For an in-memory pool:
+
+```python
+from nvalchemi.csp.comparison import deduplicate_batch
+
+result = deduplicate_batch(
+    batch,
+    atom_types=topology_types,
+    cutoff=cutoff,
+    threshold=threshold,
+    priority_order=priority_order,
+    confirm=confirm_pairs,
+)
+deduplicated_batch = batch[result.retained_indices]
+```
+
+`input_batch_size` and `pair_block_size` default to 1024 and 256 on CUDA, and
+64 and 32 on CPU. `input_batch_size` bounds candidate chunks; `pair_block_size`
+bounds how many earlier representatives are considered together. Candidate
+tiles can therefore be larger than representative blocks, subject to
+`max_batch_atoms` and the shared CUDA memory budget. `max_batch_atoms` defaults
+to 200,000 total atoms in one descriptor tile. A single structure larger than
+this limit raises `MemoryError`. CUDA descriptor construction and scoring
+budget their estimated buffers and workspaces to 85% of the memory currently
+available to PyTorch by default, including reusable caching-allocator bytes.
+This is an estimate, not a memory reservation. A single structure or pair
+that still cannot fit raises `MemoryError`.
+
+By default, streaming deduplication uses a preliminary check selected by a
+deterministic pilot. The pilot selects up to 32 summary coordinates; it may
+select fewer. A pair that fails this conservative check is skipped. A pair
+that passes enters the radial index matcher, which may use its own conservative
+bounds before scoring full descriptors. The pilot summary never declares a
+duplicate on its own. Set `summary_coordinate_count=0` to disable the pilot
+and its preliminary check; the index matcher's built-in bounds still apply.
+The same option is available on `deduplicate_batch` and
+`iter_matches_stream`.
+
+The summaries and sorted search columns are call-local and grow linearly with
+pool size and selected coordinate count. Compact summaries and sorted search
+columns reside on the comparison device. Full descriptors exist only for
+active atom-bounded tiles. Call state is released on return; the function
+creates no disk checkpoint or resume state.
+
+To enumerate matches without supplying a pair list, use
+{py:func}`~nvalchemi.csp.comparison.iter_matches_stream`. It accepts one loader
+for self-comparison or two loaders for a cross-pool comparison. The iterator
+starts reading on the first `next()` call, then yields nonempty int32 `[K, 2]`
+chunks no larger than `pair_chunk_size`. Self-comparison emits each
+`left < right` pair once; cross-pool comparison emits `(left_row, right_row)`.
+Both orders are lexicographic. Closing the iterator releases its compact
+call-local state and leaves both caller-owned loaders open. `max_batch_atoms`
+bounds each live left or right descriptor tile independently; their combined
+CUDA descriptor residency remains within one shared memory allowance.
+
 ### Compare with an experimental structure
 
 Here, `batch` contains relaxed Packer structures from `packing_input`, and
@@ -652,6 +761,7 @@ must supply valid rotation matrices and cells compatible with the selected
 space groups.
 
 (csp-source-metadata)=
+
 ### Source metadata after geometry changes
 
 Full-cell expansion records where every atom and structure came from. These
