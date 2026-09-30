@@ -478,6 +478,17 @@ class ReplayBuffer:
         _ = frames.batch_ptr
         return frames.index_select(kept)
 
+    def clear(self) -> None:
+        """Drop every stored frame and unfreeze the key schema.
+
+        The buffer returns to the state it was constructed in, so the next
+        :meth:`extend` freezes its schema afresh. A restart uses this to
+        replace a live buffer's contents with the replay frames a restart
+        bundle carries, rather than merge the two.
+        """
+        self._dataset = None
+        self._schema = frozenset()
+
     def _check_schema(self, incoming: frozenset[str]) -> None:
         """Reject frames whose keys or levels differ from the frozen schema."""
         if incoming == self._schema:

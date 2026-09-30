@@ -176,6 +176,11 @@ class TeacherLabelHook:
         Propagator status at which a graph counts as graduated. A graduated
         graph is stored by another route, so this hook leaves it out. Default
         ``None`` labels and stores every graph.
+    labeled_step : int | None, optional
+        Step a hook this one replaces last labeled on, so the adjacency rule
+        treats the following step as covered from the first dispatch. A
+        segment loop rebuilt mid-run passes the step its interrupted
+        predecessor recorded. Default ``None`` starts with nothing labeled.
 
     Raises
     ------
@@ -220,6 +225,7 @@ class TeacherLabelHook:
         sink: DataSink | None = None,
         frequency: int = 1,
         exit_status: int | None = None,
+        labeled_step: int | None = None,
     ) -> None:
         """Resolve the fields the scorer populates, when they can be known."""
         self.teacher_scorer = teacher_scorer
@@ -230,7 +236,7 @@ class TeacherLabelHook:
         self._teacher_fields: tuple[str, ...] | None = scorer_fields(teacher_scorer)
         if self._teacher_fields is not None:
             _reject_foreign_fields(self._teacher_fields, "A scorer's label_fields")
-        self._labeled_step: int | None = None
+        self._labeled_step: int | None = labeled_step
         self._stored: tuple[int, torch.Tensor | None] | None = None
 
     @property
