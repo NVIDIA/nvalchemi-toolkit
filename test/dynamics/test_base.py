@@ -1772,6 +1772,71 @@ class TestValidateBatchKeys:
 
 
 # -----------------------------------------------------------------------------
+# required_input_keys / check_initial_batch
+# -----------------------------------------------------------------------------
+
+
+class TestCheckInitialBatch:
+    """Tests for BaseDynamics.required_input_keys and check_initial_batch."""
+
+    def setup_method(self) -> None:
+        """Build the demo model every dynamics under test wraps."""
+        self.model = DemoModelWrapper(DemoModel())
+
+    def test_a_momentum_dynamics_requires_velocities_and_masses(self) -> None:
+        """Provided velocities pull atomic_masses in; positions are never required."""
+        dynamics = DemoDynamics(model=self.model, n_steps=1)
+
+        assert dynamics.required_input_keys() == frozenset(
+            {"velocities", "atomic_masses"}
+        )
+
+    def test_a_dynamics_providing_nothing_requires_nothing(self) -> None:
+        """The bare engine updates no field in place, so any batch may start it."""
+        dynamics = BaseDynamics(model=self.model)
+
+        assert dynamics.required_input_keys() == frozenset()
+        dynamics.check_initial_batch(create_simple_batch())
+
+    def test_a_variable_cell_dynamics_requires_the_cell(self) -> None:
+        """Every provided key other than positions has to be on the initial batch."""
+
+        class _CellDynamics(BaseDynamics):
+            __provides_keys__: set[str] = {"positions", "velocities", "cell"}
+
+        dynamics = _CellDynamics(model=self.model)
+
+        assert dynamics.required_input_keys() == frozenset(
+            {"velocities", "atomic_masses", "cell"}
+        )
+
+    def test_a_complete_batch_passes(self) -> None:
+        """AtomicData fills velocities and masses in, so a plain batch starts DemoDynamics."""
+        dynamics = DemoDynamics(model=self.model, n_steps=1)
+
+        dynamics.check_initial_batch(create_simple_batch())
+
+    def test_a_batch_missing_a_provided_field_is_rejected_naming_it(self) -> None:
+        """The refusal names the missing field and the dynamics' declarations."""
+        dynamics = DemoDynamics(model=self.model, n_steps=1)
+        batch = create_simple_batch()
+        del batch["velocities"]
+
+        with pytest.raises(
+            ValueError, match=r"lacks \['velocities'\], which DemoDynamics updates"
+        ):
+            dynamics.check_initial_batch(batch)
+
+    def test_model_outputs_are_not_required_on_the_initial_batch(self) -> None:
+        """Needed keys are primed by compute(), so an absent forces field passes."""
+        dynamics = DemoDynamics(model=self.model, n_steps=1)
+        batch = create_simple_batch()
+        del batch["forces"]
+
+        dynamics.check_initial_batch(batch)
+
+
+# -----------------------------------------------------------------------------
 # step() system-level mutable field masking
 # -----------------------------------------------------------------------------
 

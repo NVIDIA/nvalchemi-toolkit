@@ -27,7 +27,13 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.sinks import DataSink, GPUBuffer, HostMemory, ZarrData
+from nvalchemi.dynamics.sinks import (
+    DataSink,
+    GPUBuffer,
+    HostMemory,
+    ResizableSink,
+    ZarrData,
+)
 
 # -----------------------------------------------------------------------------
 # Helper Functions
@@ -89,6 +95,30 @@ def create_single_atom_batch(num_graphs: int = 1, device: str = "cpu") -> Batch:
 # -----------------------------------------------------------------------------
 # Test Classes
 # -----------------------------------------------------------------------------
+
+
+class _GrowingHostMemory(HostMemory):
+    """Host-memory sink that can be grown after construction."""
+
+    def resize(self, capacity: int) -> None:
+        """Raise the capacity to *capacity*."""
+        self._capacity = capacity
+
+
+class TestResizableSink:
+    """Structural check for sinks a consumer may grow."""
+
+    def test_a_sink_with_capacity_and_resize_satisfies_the_protocol(self) -> None:
+        """Offering ``capacity`` and ``resize`` is all the protocol asks."""
+        sink = _GrowingHostMemory(capacity=1)
+
+        assert isinstance(sink, ResizableSink)
+        sink.resize(4)
+        assert sink.capacity == 4
+
+    def test_a_fixed_capacity_sink_does_not(self) -> None:
+        """A stock DataSink exposes ``capacity`` but no ``resize``."""
+        assert not isinstance(HostMemory(capacity=1), ResizableSink)
 
 
 class TestDataSinkABC:

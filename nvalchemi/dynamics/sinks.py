@@ -26,7 +26,7 @@ import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import torch
 from torch import distributed as dist
@@ -196,6 +196,30 @@ class DataSink(ABC):
         if dist.is_initialized():
             rank = dist.get_global_rank()
         return rank
+
+
+@runtime_checkable
+class ResizableSink(Protocol):
+    """Sink that a consumer can grow to the capacity it needs.
+
+    A :class:`DataSink` fixes its capacity at construction. A sink that also
+    satisfies this protocol can be grown with ``resize``. A consumer that
+    knows how many frames it is about to write, such as the on-policy
+    distillation segment loop, calls ``resize`` first instead of rejecting a
+    sink that is too small.
+
+    Examples
+    --------
+    >>> from nvalchemi.dynamics import HostMemory, ResizableSink
+    >>> isinstance(HostMemory(capacity=1), ResizableSink)
+    False
+    """
+
+    capacity: int
+
+    def resize(self, capacity: int) -> None:
+        """Grow the sink so it holds at least *capacity* frames."""
+        ...
 
 
 class GPUBuffer(DataSink):
