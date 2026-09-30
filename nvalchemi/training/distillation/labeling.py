@@ -31,7 +31,10 @@ from nvalchemi.data.datapipes.backends.zarr import (
     FieldSchema,
     _get_cat_dim,
 )
-from nvalchemi.training.distillation._attach import _attach_teacher_labels
+from nvalchemi.training.distillation._attach import (
+    _attach_teacher_labels,
+    _prune_empty_edges,
+)
 from nvalchemi.training.distillation.scoring import (
     _DENSE_NEIGHBOR_KEYS,
     _NEIGHBOR_KEYS,
@@ -199,8 +202,7 @@ def _strip_unstorable(
     for key in ephemeral | (frozenset(_batch_schema(batch)) - keep):
         if key in batch:
             del batch[key]
-    if not batch.level_keys.get("edges"):
-        batch.drop_level("edges")
+    _prune_empty_edges(batch)
 
 
 def _chunk_batches(

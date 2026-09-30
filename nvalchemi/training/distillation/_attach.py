@@ -18,7 +18,8 @@ Shared by the offline path in
 :mod:`nvalchemi.training.distillation.labeling`, which attaches labels before
 persisting a chunk, and the online path in
 :mod:`nvalchemi.training.distillation.strategy`, which attaches them to a live
-training batch.
+training batch. The storage pruning both paths do after dropping fields lives
+here for the same reason.
 """
 
 from __future__ import annotations
@@ -32,6 +33,17 @@ from nvalchemi.training.distillation.scoring import _reject_foreign_fields
 if TYPE_CHECKING:
     from nvalchemi.data import Batch
     from nvalchemi.training.distillation.scoring import SignalLevel, TeacherLabels
+
+
+def _prune_empty_edges(batch: Batch) -> None:
+    """Drop the edge group when removing the neighbor list left it with no fields.
+
+    A store or stored frame that kept the empty group would record edge
+    pointers that no array backs. A reader would then have to reconcile those
+    pointers against an edge count of zero.
+    """
+    if not batch.level_keys.get("edges"):
+        batch.drop_level("edges")
 
 
 def _split_per_graph(

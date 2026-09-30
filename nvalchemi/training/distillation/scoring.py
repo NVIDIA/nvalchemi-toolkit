@@ -24,12 +24,12 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeAlias, runtime_che
 
 import torch
 
+from nvalchemi.data.batch import Batch
 from nvalchemi.models.base import ModelConfig, NeighborConfig, NeighborListFormat
 from nvalchemi.neighbors import compute_neighbors
 from nvalchemi.training.runtime import evaluating
 
 if TYPE_CHECKING:
-    from nvalchemi.data import Batch
     from nvalchemi.models.base import BaseModelMixin
 
 __all__ = [
@@ -38,6 +38,7 @@ __all__ = [
     "NeighborListPolicy",
     "SUPPORTED_SIGNALS",
     "SignalLevel",
+    "SignalNormalizer",
     "TeacherLabels",
     "TeacherScorer",
     "TeacherSignal",
@@ -51,6 +52,11 @@ SignalLevel: TypeAlias = Literal["node", "system"]
 
 TeacherLabels: TypeAlias = dict[str, tuple[torch.Tensor, SignalLevel]]
 """Teacher signals for one batch, keyed by the batch field they populate."""
+
+SignalNormalizer: TypeAlias = Callable[
+    [torch.Tensor, Batch], torch.Tensor | Mapping[str, torch.Tensor]
+]
+"""Callable that reshapes a raw teacher output or spreads it over a signal's fields."""
 
 NeighborListPolicy: TypeAlias = Literal["rebuild", "reuse"]
 """Where :class:`InProcessTeacherScorer` takes the teacher's neighbor list from."""
@@ -89,18 +95,22 @@ class TeacherSignal:
         Batch field the label populates; must start with ``teacher_``.
     level : SignalLevel
         ``"node"`` for one row per atom, ``"system"`` for one per graph.
-    normalize : Callable[[torch.Tensor, Batch], torch.Tensor] | None, optional
+    normalize : SignalNormalizer | None, optional
         Reshapes the detached raw output to the field's canonical shape, given
-        the batch it was produced for. Default ``None`` (keep the shape).
+        the batch it was produced for. For a signal with companion fields, it
+        instead returns a mapping from every name in :attr:`fields` to its
+        tensor, all at *level*. Default ``None`` (keep the shape).
     extra_fields : tuple[str, ...], optional
         Companion fields the signal writes beside *field*, each in the
-        ``teacher_*`` namespace. Default ``()``.
+        ``teacher_*`` namespace and produced by *normalize*. Default ``()``.
 
     Raises
     ------
     ValueError
         If *field* or a companion field falls outside the ``teacher_*``
-        namespace, or *level* is neither ``"node"`` nor ``"system"``.
+        namespace, if *level* is neither ``"node"`` nor ``"system"``, or if a
+        signal read from a model output declares companion fields without a
+        *normalize* to produce them.
 
     Examples
     --------
@@ -114,7 +124,7 @@ class TeacherSignal:
     model_output: str | None
     field: str
     level: SignalLevel
-    normalize: Callable[[torch.Tensor, Batch], torch.Tensor] | None = None
+    normalize: SignalNormalizer | None = None
     extra_fields: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -134,6 +144,16 @@ class TeacherSignal:
             raise ValueError(
                 f"Teacher signal {self.name!r} must be attached at 'node' or "
                 f"'system'; got level {self.level!r}."
+            )
+        if (
+            self.extra_fields
+            and self.model_output is not None
+            and self.normalize is None
+        ):
+            raise ValueError(
+                f"Teacher signal {self.name!r} declares companion fields "
+                f"{list(self.extra_fields)!r} that nothing produces; give it a "
+                "normalize returning a mapping over its fields."
             )
 
     @property
@@ -545,8 +565,9 @@ def _isolated_fields(batch: Batch) -> Iterator[None]:
     reference — no tensor is copied, so the cost is one dictionary per level —
     and afterwards dropping what appeared and putting back what was replaced.
     A field the teacher deleted outright is re-added at the level it came
-    from. A tensor a teacher edits in place is not recovered; nothing short
-    of cloning the batch could.
+    from. A level the teacher detached wholesale, such as ``edges``, is
+    re-attached from the same snapshot first. A tensor a teacher edits in
+    place is not recovered; nothing short of cloning the batch could.
 
     Parameters
     ----------
@@ -564,10 +585,18 @@ def _isolated_fields(batch: Batch) -> Iterator[None]:
         )
         for level, fields in batch.level_keys.items()
     }
+    groups = {
+        level: batch._storage.groups.get(level)
+        for level in levels
+        if level not in _COUNT_LEVELS
+    }
     shadows = _field_shadows(batch)
     try:
         yield
     finally:
+        for level, group in groups.items():
+            if group is not None and level not in batch._storage.groups:
+                batch.set_level(level, group)
         current = batch.level_keys
         for level in current:
             if level not in levels:
@@ -906,7 +935,7 @@ class InProcessTeacherScorer:
                     f"Teacher returned no {spec.model_output!r} output for the "
                     f"{spec.name!r} signal."
                 )
-            labels[spec.field] = (self._finalize(spec, value, batch), spec.level)
+            labels.update(self._finalize(spec, value, batch))
         del outputs
         return labels
 
@@ -942,8 +971,7 @@ class InProcessTeacherScorer:
                     f"the batch; got {sorted(key for key in _EMBEDDING_KEYS if key in batch)!r}."
                 )
             spec = self.signal_specs["embeddings"]
-            value = self._finalize(spec, batch["node_embeddings"].clone(), batch)
-            return {spec.field: (value, spec.level)}
+            return self._finalize(spec, batch["node_embeddings"].clone(), batch)
         finally:
             for key in _EMBEDDING_KEYS:
                 if key in batch:
@@ -955,11 +983,38 @@ class InProcessTeacherScorer:
 
     def _finalize(
         self, spec: TeacherSignal, value: torch.Tensor, batch: Batch
-    ) -> torch.Tensor:
-        """Detach *value*, normalize it to *spec*'s canonical shape, and cast it."""
+    ) -> TeacherLabels:
+        """Detach *value*, normalize and cast it, and spread it over *spec*'s fields.
+
+        Raises
+        ------
+        RuntimeError
+            If ``normalize`` returns a mapping whose keys differ from
+            :attr:`TeacherSignal.fields`, or returns a single tensor for a
+            signal that declares companion fields.
+        """
         value = value.detach()
-        if spec.normalize is not None:
-            value = spec.normalize(value, batch)
-        if self.dtype is not None and value.is_floating_point():
-            value = value.to(self.dtype)
-        return value
+        produced = value if spec.normalize is None else spec.normalize(value, batch)
+        if isinstance(produced, Mapping):
+            if set(produced) != set(spec.fields):
+                raise RuntimeError(
+                    f"Teacher signal {spec.name!r} normalize must produce exactly "
+                    f"{list(spec.fields)!r}; got {sorted(produced)!r}."
+                )
+        elif spec.extra_fields:
+            raise RuntimeError(
+                f"Teacher signal {spec.name!r} normalize returned one tensor, but "
+                f"the signal declares companion fields {list(spec.extra_fields)!r}; "
+                "return a mapping over its fields."
+            )
+        else:
+            produced = {spec.field: produced}
+        return {
+            field: (
+                tensor.to(self.dtype)
+                if self.dtype is not None and tensor.is_floating_point()
+                else tensor,
+                spec.level,
+            )
+            for field, tensor in produced.items()
+        }

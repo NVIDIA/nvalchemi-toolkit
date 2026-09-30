@@ -1593,6 +1593,16 @@ class TestAtomicDataZarrReaderIntrospection:
             with pytest.raises(KeyError, match="stored fields are"):
                 reader.field_array("charges")
 
+    def test_store_returns_the_reference_the_reader_was_opened_with(
+        self, tmp_path: Path
+    ) -> None:
+        """``store`` hands back the constructor's store argument unchanged."""
+        AtomicDataZarrWriter(tmp_path / "test.zarr").write(list(_data_generator(2)))
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            assert reader.store == tmp_path / "test.zarr"
+        with AtomicDataZarrReader(str(tmp_path / "test.zarr")) as reader:
+            assert reader.store == str(tmp_path / "test.zarr")
+
     def test_num_samples_counts_soft_deleted_samples(self, tmp_path: Path) -> None:
         """``num_samples`` keeps counting a deleted sample that ``len`` drops."""
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")

@@ -6,8 +6,9 @@
 Distillation API
 ================
 
-Teacher scoring, offline dataset labeling, and the offline distillation
-strategy and loss terms for knowledge-distillation workflows.
+Teacher scoring, offline dataset labeling, the offline distillation strategy
+and loss terms, and the on-policy generation components for
+knowledge-distillation workflows.
 
 .. seealso::
 
@@ -55,23 +56,33 @@ found it, including neighbor tensors.
    scorer_fields
    signal_for_field
    SignalLevel
-   TeacherLabels
+   SignalNormalizer
    NeighborListPolicy
    BUILTIN_SIGNALS
    SUPPORTED_SIGNALS
 
-Scorers speak two public type aliases: ``SignalLevel``, the ``"node"`` or
-``"system"`` level a signal is attached at, and ``TeacherLabels``, the
-``{batch field: (detached tensor, level)}`` mapping
-:meth:`~nvalchemi.training.distillation.TeacherScorer.label` returns. The
-built-in specs are published as
+.. data:: TeacherLabels
+   :type: TypeAlias
+
+   Teacher signals for one batch, keyed by the batch field they populate:
+   ``dict[str, tuple[torch.Tensor, SignalLevel]]``.
+
+Scorers use three public type aliases. ``SignalLevel`` is the ``"node"`` or
+``"system"`` level a signal is attached at. ``TeacherLabels`` is the
+``{batch field: (detached tensor, level)}`` mapping that
+:meth:`~nvalchemi.training.distillation.TeacherScorer.label` returns.
+``SignalNormalizer`` is the type of the callable a spec's ``normalize`` slot
+takes. The built-in specs are published as
 :data:`~nvalchemi.training.distillation.BUILTIN_SIGNALS`, keyed by name, and
 their names as :data:`~nvalchemi.training.distillation.SUPPORTED_SIGNALS`. A
 :class:`~nvalchemi.training.distillation.TeacherSignal` names the teacher
 output it reads, the ``teacher_*`` field it writes, the level, and an optional
-``normalize`` callable shaping the raw output; the namespace and level rules are
-enforced when the spec is built, and the in-process scorer refuses a spec
-naming an output the teacher does not declare. The scorer publishes its
+``normalize`` callable shaping the raw output. When a spec declares companion
+``extra_fields``, its ``normalize`` returns a mapping over all of its
+``fields`` instead of a single tensor, and the spec is refused without a
+``normalize``. The namespace and level rules are enforced when the spec is
+built, and the in-process scorer refuses a spec naming an output the teacher
+does not declare. The scorer publishes its
 resolved specs as ``signal_specs`` and the fields they write as
 ``label_fields``. A custom scorer may publish ``label_fields``, the batch
 fields its ``label()`` populates, which consumers resolve through
@@ -241,6 +252,290 @@ teacher.
    DistillationStrategy
    default_distillation_fn
 
+
+On-policy generation
+--------------------
+
+On-policy distillation trains the student on frames it generated itself. The
+run is a loop of *segments*. Each segment has a generation phase and a training
+phase. In the generation phase, the student's own propagator advances a batch
+of structures, and the teacher labels selected frames. The labeled frames
+accumulate in a *replay buffer*. In the training phase, each training batch is
+a *mixture* of samples from the replay buffer and from a *reference dataset*, a
+teacher-labeled store, split at a fixed ratio, ``replay_ratio``.
+
+:class:`~nvalchemi.training.distillation.OnPolicyConfig` describes one segment
+loop. It sets which propagator generates, how many steps a segment runs, how
+often the teacher labels, and how much of each training batch is replayed. The
+propagator is any :class:`~nvalchemi.dynamics.base.BaseDynamics`, so a
+relaxation optimizer generates paths exactly as an integrator generates
+trajectories. The scalar settings live in
+:class:`~nvalchemi.training.distillation.OnPolicySettings`. That class validates
+on its own, so a recipe's settings can be checked before a teacher is built.
+
+The *initial structures* are the structures the generated trajectories start
+from. They come from any :class:`~nvalchemi.dynamics.StructureSource`, the
+protocol that lists the members the loop reads. The protocol is also importable
+here under its historical name, ``InitialStructuresSource``.
+:class:`~nvalchemi.training.distillation.InitialStructures` is the reference
+implementation. The sampler behind it lives in the core package:
+:class:`~nvalchemi.dynamics.OrderedStructureSampler` serves a dataset's rows in
+order, over the rows one rank owns, from a single position, ``next_row``. The
+initial batch and a restart share that position. ``InitialStructures`` adds
+only the recipe round-trip. A bare dataset is wrapped in an
+``InitialStructures``, and an object that is neither a source nor a dataset is
+refused with an error that names the protocol.
+
+:meth:`~nvalchemi.dynamics.OrderedStructureSampler.draw` serves the structures.
+It admits each candidate through one :class:`~nvalchemi.dynamics.FitPolicy`, a
+predicate over the running atom and edge totals;
+:class:`~nvalchemi.dynamics.WithinBudget` bounds those totals. At the first
+candidate that does not fit, ``draw`` either stops or skips it. Stopping is how
+an initial batch is packed. Skipping lets a backfill fill the room a graduated
+structure freed.
+
+Construction checks one row of the initial structures in two ways. First,
+:meth:`~nvalchemi.dynamics.BaseDynamics.check_initial_batch` checks the row for
+every field the propagator updates in place from its first step. Second, the
+propagator's ``compute()`` runs once on the row, with the same isolation the
+scorer uses: evaluation mode and ``requires_grad`` flags are restored
+afterwards, and the propagator's last outputs are put back. This second check
+catches declarations that no longer match the implementation, such as a
+``__needs_keys__`` output the student never produces or a field ``compute()``
+reads that nothing declared. The error names the offending key, and it is
+raised where the config is built rather than on the first step of a long run.
+The check costs one student forward pass, which front-loads the kernel and CUDA
+initialization the first step pays anyway.
+
+A graph model is probed with the neighbor list its ``neighbor_config``
+declares. The list is built on the row and rolled back afterwards, so the probe
+needs no hook. A model that plans more than one neighbor-list source is not
+probed, and a warning says so: the probe builds exactly one list, and the check
+must not refuse a propagator the loop can run. ``probe=False`` skips the
+forward pass entirely. Use it for a propagator whose ``compute()`` must not run
+outside the loop, or for a recipe check that should not pay for a forward pass.
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   OnPolicyConfig
+   OnPolicySettings
+   InitialStructures
+
+The :class:`~nvalchemi.dynamics.ResizableSink` protocol that a capture sink
+may satisfy is re-exported from this package and documented with the dynamics
+sinks.
+
+Three settings need care when sizing a run.
+
+``label_frequency`` is the throughput setting, because the teacher is the
+expensive model. It counts against the propagator's cumulative ``step_count``,
+so the labeling cadence does not restart at a segment boundary. Each segment
+also labels the frame it ends on, which is the most on-policy frame it
+produced. Both labels are keyed on the pre-increment step count: the cadence
+fires at ``AFTER_STEP`` before the counter advances, and the forced label of
+the last frame is keyed at ``step_count - 1`` once the segment has run. The
+next segment's first cadence dispatch lands one step after that forced label
+and is therefore skipped rather than paid for twice. With ``generation_steps``
+a multiple of ``label_frequency``, each trajectory is labeled
+``generation_steps // label_frequency`` times per segment, which is once per
+segment only when the two are equal. The first segment pays one more, for the
+cadence dispatch at step ``0``.
+
+``replay_capacity`` is enforced by FIFO eviction, which drops whole frames in
+arrival order. A segment contributes one frame per trajectory per labeled step.
+A capacity that is not a multiple of the trajectory count therefore cuts a
+segment's frames partway through a labeled step. The structures at the back of
+the batch are then over-represented in every mixture drawn afterwards. Size the
+capacity as a multiple of the trajectory count.
+
+``seed`` seeds every segment's mixture sampler, which adds the segment index to
+it. Runs with consecutive seeds therefore draw the same mixtures, shifted by
+one segment. Replicate runs draw independently only when their seeds are at
+least ``num_steps // training_steps_per_segment`` apart.
+
+``weight_sync_frequency`` is reserved at ``1``. The propagator shares the
+student module, so an eager run is never out of sync.
+
+The *labeling hook*, :class:`~nvalchemi.training.distillation.TeacherLabelHook`,
+labels frames inline during generation. It is an ``AFTER_STEP`` dynamics hook.
+It attaches ``teacher_*`` fields to the frame the propagator just resolved, each
+at the level its signal declares. It can also copy a stripped version of the
+frame into a :class:`~nvalchemi.dynamics.sinks.DataSink`. The hook never
+touches the ``energy`` and ``forces`` the student wrote on the live batch,
+because they drive the next step. It does strip them from the copy, together
+with the neighbor tensors and the dynamics bookkeeping. A stored frame is
+therefore a training sample rather than a propagator state, and it never
+carries the propagated model's own prediction under a reference target's name.
+Do not confuse the labeling hook with the strategy's private
+``BEFORE_FORWARD`` labeling seam, which labels batches on their way into a
+*training* step.
+
+Labeling is idempotent per propagator step. A scorer that publishes
+``label_fields``, or whose signal names are all built-in, is skipped when a
+step it already labeled is dispatched again. A scorer that publishes neither is
+skipped from its second dispatch on, once the first dispatch has revealed what
+it writes. A forced label is never skipped, so the last frame of an
+early-exiting segment and the final frame of the run are always labeled.
+
+The segment loop registers the labeling hook itself. The hook stages each
+segment's frames in a *capture sink*, which the loop drains into the replay
+buffer at the segment boundary. The capture sink is host memory by default, or
+the :class:`~nvalchemi.dynamics.sinks.DataSink` passed as
+``OnPolicyConfig.capture_sink``. A :class:`~nvalchemi.dynamics.sinks.GPUBuffer`
+keeps the staged frames on the generation device and avoids a device-to-host
+copy per labeled frame. The loop sizes the capture sink. A segment captures at
+most one frame per trajectory per labeled step, including the forced last
+frame, so the sink must hold ``(generation_steps + 1)`` frames per trajectory
+in the propagated batch. A configured sink with less capacity is grown through
+``resize(capacity)`` when it satisfies
+:class:`~nvalchemi.dynamics.ResizableSink`, and refused otherwise. A sink that
+still holds frames when a segment starts is refused rather than drained as
+generated data. Like ``dynamics`` and ``teacher_scorer``, the capture sink is
+runtime-only.
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   TeacherLabelHook
+
+Generated frames land in the replay buffer, a
+:class:`~nvalchemi.training.distillation.ReplayBuffer`: an in-memory dataset
+with a frozen key schema. The schema is frozen because appending a batch keeps
+only the keys both sides hold, so one unlabeled frame would otherwise strip
+``teacher_*`` from every frame already stored.
+:func:`~nvalchemi.training.distillation.build_mixed_loader` then draws each
+training batch with an exact reference/replay composition, resolved to whole
+samples of the batch size. Rebuild the loader after every segment, because the
+batch sampler reads the child dataset lengths once, at construction.
+
+The two sources must agree on their whole batch schema. The schemas are
+compared on a probe batch drawn from each side, not on field names, because a
+Zarr-backed store and an in-memory buffer report field names differently.
+Collation drops a field that only one side holds and zero-fills a whole level
+that only one side holds. It also casts the second part of a mixed batch to the
+dtype of the first, and either source may lead a chunk. All three kinds of
+difference are therefore rejected. The reference dataset must be
+teacher-labeled and stored in the replay-frame shape: the structure, the
+propagator state, and the ``teacher_*`` labels. A reference dataset that
+carries its own reference ``energy`` or ``forces`` is rejected, because mixing
+it in would silently lose or fabricate those labels. Supervising one batch from
+teacher labels and reference labels at once is not supported yet; it needs
+masked loss composition.
+
+The framework owns the schema freeze and the mixture. What enters the buffer
+and what leaves it are left to policy. An
+:class:`~nvalchemi.training.distillation.AdmissionPolicy` is a predicate over
+the incoming frames that returns one boolean per graph. It runs before the
+schema check, so the frames it rejects never enter. Examples are the
+NaN-labeled frames of a diverged trajectory, or frames that fail a size or
+diversity filter. An :class:`~nvalchemi.training.distillation.EvictionPolicy`
+runs after the admitted frames are appended. Given the resident batch, ordered
+oldest first with the admitted frames last, and the capacity, it returns the
+indices to drop. It must name at least as many frames as the buffer is over
+capacity. :class:`~nvalchemi.training.distillation.FIFO` is the reference
+eviction policy. The string ``"fifo"`` builds it; that string is the only value
+``ReplayEviction`` admits, and the one a recipe stores. The segment loop passes
+``OnPolicyConfig.replay_admission`` and ``replay_eviction`` to the buffer it
+owns. A policy instance on either field is runtime-only, and the declarative
+``settings`` record a custom eviction policy as ``"fifo"`` with a warning.
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   ReplayBuffer
+   AdmissionPolicy
+   EvictionPolicy
+   FIFO
+   ReplayEviction
+   build_mixed_loader
+
+Setting ``on_policy`` on the strategy combines these pieces into a run.
+:meth:`~nvalchemi.training.distillation.DistillationStrategy.run` then takes no
+dataloader. It seeds a state batch from ``initial_structures`` and repeats
+generate-label-train segments until ``num_steps`` optimizer steps are done. The
+``1 - replay_ratio`` share of every batch is drawn from ``reference_dataset``.
+A reference dataset is required unless the ratio is ``1``, and refused when the
+ratio is ``1``, because it would then be checked but never sampled.
+
+The initial batch is stamped with fresh dynamics bookkeeping on the way in.
+Structures loaded from a store that an earlier relaxation graduated therefore
+do not arrive frozen at ``exit_status``. At construction, the strategy probes
+the reference dataset once to check three things: the fields the labeling hook
+strips, the device the dataset emits on, and the teacher fields the
+propagator's scorer declares. A mismatch in any of them is a guaranteed mixture
+failure that would otherwise surface only after a whole generation segment had
+been paid for.
+
+One segment is one epoch. ``AFTER_EPOCH`` and epoch-cadence validation
+therefore run at segment boundaries, and step-cadence validation runs inside
+segments. The run's closing validation is skipped when a cadence already
+validated at the final step. The segment is also the restart granularity. A
+run resumed from a checkpoint taken mid-segment counts that segment as finished
+rather than replaying the batches it had left. The same holds for an offline
+run that continues on-policy from a partial epoch. A second call to ``run()``
+on the same strategy keeps the replay buffer the first call filled and reseeds
+only the trajectory. Installing the rank shard resets the sampler to the front
+of its rows, so the second call generates from the same structures again, not
+from whatever the first call left over.
+
+The loop is single-process. The rank shard is installed on the structure
+sampler, but each rank would build its segment loader from its own replay
+buffer and an unsharded reference dataset, so the loop refuses to start on more
+than one rank rather than train ranks on generated frames no rank shares and on
+the same reference samples. Offline distillation over a labeled store
+distributes through ``DDPHook`` as usual.
+
+Generated frames are drained to host memory and then staged on the reference
+dataset's own device, so a GPU-resident reference dataset and the replay buffer
+collate on one device. ``replay_device`` overrides that choice and is checked
+against the reference dataset at construction. The reference device is the one
+the dataset actually emits batches on, read off a batch whenever no declaration
+settles it. A :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset`
+declares no device, and a store opened without a device declares an index-less
+``cuda`` that names whichever device is current.
+
+The student is held in evaluation mode to generate and switched to training
+mode for the training phase only. Generated frames therefore cost no
+second-order graph and no moving batch-norm statistics. A propagator model that
+merely *composes* the student is held in evaluation mode for the whole loop and
+moved whole to the generation device. The training phase runs
+``models["student"]`` rather than the composition, and only the named models
+move with the strategy. The propagator must hold the very module registered as
+``models["student"]``, either on its own or composed into a larger model. That
+object identity is what makes each segment generate from the weights the
+previous segment trained, and it is checked at construction.
+
+Splitting a built-in propagator's run into segments is exact. ``run`` never
+resets ``step_count`` or the integrator state, and the Langevin thermostat
+draws from a counter-based generator keyed on the cumulative step count. Two
+segments of ``K`` steps therefore reproduce one run of ``2K`` steps. A
+dynamics hook that is sensitive to being opened and closed, such as
+:class:`~nvalchemi.dynamics.hooks.LoggingHook`, is re-entered once per
+segment. The progress of a segment that converges and
+exits early is read from ``dynamics.step_count`` rather than assumed to be
+``generation_steps``. A :class:`~nvalchemi.dynamics.FusedStage` pays its
+priming forward pass once per segment, so prefer a bare propagator.
+
+A custom ``teacher_*`` field that the propagator's scorer writes is an ordinary
+loss target, exactly as in offline distillation. Generation writes it on every
+captured frame, so ``reference_dataset`` must carry it too. The
+generation/reference parity check enforces this whenever the scorer declares
+``label_fields``. Validation data must also arrive with the field, because the
+strategy's own scorer produces built-in signals only and cannot fill it in. At
+least one built-in ``teacher_*`` target, or an explicit ``teacher_signals``, is
+still required alongside it. A scorer that declares neither ``label_fields``
+nor built-in signals writes fields that cannot be known before it scores a
+batch. The strategy then warns that the parity check is deferred to the first
+segment's loader.
+
+Because ``on_policy`` and ``reference_dataset`` hold live runtime objects,
+:meth:`~nvalchemi.training.distillation.DistillationStrategy.to_spec_dict`
+leaves them out and warns. A strategy rebuilt from that spec runs offline until
+they are supplied again.
 
 Losses
 ------

@@ -48,6 +48,24 @@ Dataset composition and sampling
    MultiDatasetSampler
    MultiDatasetBatchSampler
 
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   distributed_shard
+
+Device helpers
+--------------
+
+.. currentmodule:: nvalchemi.data.datapipes
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   dataset_device
+   same_device
+
 Write configuration
 -------------------
 
