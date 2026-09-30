@@ -24,8 +24,8 @@ labeling, on-policy configuration, losses, evaluation, and this CLI.
 ```
 
 For the concepts, such as what a teacher signal is and how the offline and
-on-policy loops differ, and for the symbols behind them, see
-{ref}`training-distillation-api`. This page assumes you already have a
+on-policy loops differ, see {ref}`distillation_guide`; the symbols behind them
+are in {ref}`training-distillation-api`. This page assumes you already have a
 teacher, a student, and a dataset.
 
 ## The recipe lifecycle
@@ -622,7 +622,7 @@ re-supplies it at construction. The table shows how each field travels:
 | Every `OnPolicySettings` field (`replay_ratio`, `training_steps_per_segment`, `batch_size`, `generation_steps`, `label_frequency`, `replay_capacity`, `replay_eviction`, `replay_device`, `seed`, `fmax`, `weight_sync_frequency`) | Verbatim |
 | `dynamics` | `{"cls_path", "kwargs"}`; the student is rebound at build time. A `torch.dtype` or `torch.device` argument travels as its name (`"float64"`, `"cuda:0"`) and is read back for a constructor annotated to take one |
 | `teacher_scorer` | Signal set (built-in names, or custom `TeacherSignal` dicts with `name`, `model_output`, `field`, `level`), `dtype`, `probe_seed`, `neighbor_list` (`"rebuild"` or `"reuse"`), `autocast` (`false`, `null`, `true`, or a floating-point dtype name such as `"bfloat16"`), and the model name `"teacher"`. Another `TeacherScorer` travels as its own `to_spec_dict()` under `scorer_cls`, the class path whose `from_spec_dict()` rebuilds it. Sources use the same {py:class}`~nvalchemi.training.distillation.SpecSerializable` protocol. A scorer with neither method is **refused**, with the remedy in the message |
-| `initial_structures` | `{"dataset": {"path", "device"}, "max_atoms", "max_edges", "max_batch_size", "recycle"}` --- the store and the *declared* budgets, never the position. A `MultiDataset` is named by the stores it concatenates, as `{"paths": [...], "device"}`, and `reference_dataset` is named the same way. Another `InitialStructuresSource` travels as its own `to_spec_dict()` under `source_cls`, the class path whose `from_spec_dict()` rebuilds it. A source with neither method is **refused**, with the remedy in the message |
+| `initial_structures` | `{"dataset": {"path", "device"}, "max_atoms", "max_edges", "max_batch_size", "recycle"}` --- the store and the *declared* budgets, never the position. A `MultiDataset` is named by the stores it concatenates, as `{"paths": [...], "device"}`, and `reference_dataset` is named the same way. Another `StructureSource` travels as its own `to_spec_dict()` under `source_cls`, the class path whose `from_spec_dict()` rebuilds it. A source with neither method is **refused**, with the remedy in the message |
 | `convergence_hook` | **Runtime-only**: omitted with a warning |
 | `capture_sink`, `replay_admission` | **Runtime-only**: omitted with a warning; a rebuilt loop stages frames in host memory and admits every frame |
 | `divergence` | **Runtime-only**: omitted with a warning; a rebuilt loop flags non-finite positions or forces, which is the default predicate |
@@ -887,7 +887,7 @@ of the comparison come from a second student pass. Representation matching
 also adds a `"projector"` model with an optimizer entry of its own. Boltzmann
 matching requires `on_policy` and refuses a relaxation propagator, because it
 reads a batch as a sample of the student's own Boltzmann distribution.
-{ref}`training-distillation-api` gives the weighting guidance each one needs.
+{ref}`distillation_guide` gives the weighting guidance each one needs.
 
 ```{note}
 **Extension point.** Adding an objective means a
@@ -899,8 +899,9 @@ change. Add a row here when you add the term.
 
 ## See also
 
-- {ref}`training-distillation-api` --- teacher signals, the two loops, and the
-  full distillation API reference
+- {ref}`distillation_guide` --- teacher signals, the two loops, the objectives,
+  and evaluation
+- {ref}`training-distillation-api` --- the full distillation API reference
 - {ref}`training_guide` --- strategies, optimizers, checkpoints
 - {ref}`losses_guide` --- composing and weighting loss terms
 - {ref}`serialization_guide` --- how specs and checkpoints work in general

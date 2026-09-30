@@ -40,6 +40,7 @@ For install options, refer to the install guide below.
   - {doc}`Training: Strategy and Runtime <training>`
   - {doc}`Losses: Composable Training Terms <losses>`
   - {doc}`Fine-Tuning Pretrained Models <finetuning>`
+  - {doc}`Distilling a Teacher Into a Student <distillation>`
 - {doc}`Serialization & Reproducibility <serialization>`
 - {doc}`Hooks: Observe & Modify <hooks>`
 - {doc}`Reporting: Summaries and Dashboards <reporting>`
@@ -104,7 +105,6 @@ distributed_design
 :hidden:
 
 distributed_training
-distillation_recipes
 zarr_compression
 agent_skills
 ```

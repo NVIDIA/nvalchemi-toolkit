@@ -354,6 +354,52 @@ The {doc}`/examples/distributed/index` gallery contains end-to-end examples,
 including multi-pipeline topologies and monitoring with persistent storage.
 ```
 
+(dynamics-structure-sources)=
+
+## Structure sources
+
+A run that graduates structures needs fresh ones to take their place, and a run
+that starts many trajectories needs them dealt out once.
+{py:class}`~nvalchemi.dynamics.OrderedStructureSampler` is that supply: a
+dataset served in row order from one position, `next_row`. The initial batch,
+every later *backfill* (the structures drawn to replace the ones that finished),
+and a restart all read from that position. A structure is therefore propagated
+once per pass over the rows, and a sampler restored from its `state_dict()`
+(`next_row`, `wraps`, `next_system_id`, `rank`, and `world_size`) picks up where
+it stopped rather than at row zero.
+
+An *unbudgeted* sampler serves every row it owns as one batch, so that batch
+*is* the set of systems the run generates from. A budget --- `max_atoms`,
+`max_batch_size`, or `max_edges` --- packs the initial batch first-fit in row
+order instead. Packing stops at the first structure that does not fit and leaves
+the remainder, in row order, for the backfill. The initial packing and each
+backfill are one {py:meth}`~nvalchemi.dynamics.OrderedStructureSampler.draw`
+call under a {py:class}`~nvalchemi.dynamics.WithinBudget` policy: the initial
+batch with `on_miss="stop"`, and a backfill with `on_miss="skip"`, which passes
+over a row that does not fit rather than stalling on it. When you drive `draw`
+yourself, `fits=` takes any {py:class}`~nvalchemi.dynamics.FitPolicy`, a
+callable over the running atom and edge totals of the batch being drawn.
+`max_edges` counts the edges a store saved, not the neighbor list a propagator's
+hook rebuilds each step, so set it only when the stored count is the one that
+matters.
+
+{py:meth}`~nvalchemi.dynamics.OrderedStructureSampler.shard` narrows the
+sampler to the rows one rank owns, dealt strided and unpadded through
+{py:func}`~nvalchemi.data.datapipes.distributed_shard`: rank `r` takes every
+`world_size`-th row from offset `r`, so the shards are disjoint and cover the
+dataset. `recycle=True` wraps the position to the front of the shard when it
+reaches the end instead of reporting the sampler exhausted; `wraps` counts how
+often that happened, and the `system_id`s keep climbing across a wrap. One
+`draw` reaches every row at most once, so a single call never serves two copies
+of one structure.
+
+Every batch the sampler hands over is stamped with the bookkeeping an in-flight
+run maintains: `status` zeros and consecutive `system_id`s. A store written by an
+earlier run, whose exit statuses a propagator would otherwise read as finished,
+can therefore be propagated again without a manual cleanup pass. Any object
+satisfying the {py:class}`~nvalchemi.dynamics.StructureSource` protocol can
+stand in for the sampler; {doc}`/modules/dynamics/api` lists its members.
+
 ## What's next
 
 ```{toctree}
