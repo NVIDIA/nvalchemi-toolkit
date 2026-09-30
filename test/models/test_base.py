@@ -413,6 +413,54 @@ class TestBaseModelMixinNarrowedOutputs:
             assert demo_model.model_config.active_outputs == {"energy"}
 
 
+class TestBaseModelMixinRequiresAutograd:
+    """Tests for BaseModelMixin.requires_autograd."""
+
+    def test_an_active_autograd_output_requires_autograd(self, demo_model):
+        """The demo wrapper differentiates forces, so its forward needs autograd."""
+        assert "forces" in demo_model.model_config.autograd_outputs
+        assert demo_model.requires_autograd is True
+
+    def test_narrowing_away_the_autograd_outputs_drops_the_requirement(
+        self, demo_model
+    ):
+        """With only direct outputs active, the forward can run under no_grad."""
+        with demo_model.narrowed_outputs({"energy"}):
+            assert demo_model.requires_autograd is False
+        assert demo_model.requires_autograd is True
+
+    def test_a_model_declaring_no_autograd_outputs_never_requires_it(self):
+        """A direct-output model reports False whatever is active."""
+
+        class _Direct(BaseModelMixin, torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energy", "forces"}),
+                    autograd_outputs=frozenset(),
+                )
+
+            @property
+            def embedding_shapes(self):
+                return {}
+
+            def compute_embeddings(self, data, **kwargs):
+                return data
+
+        assert _Direct().requires_autograd is False
+
+    def test_adapt_input_marks_grads_exactly_when_autograd_is_required(
+        self, demo_model, simple_batch
+    ):
+        """The property and adapt_input agree on whether positions need grad."""
+        fresh = simple_batch.clone()
+        demo_model.adapt_input(simple_batch)
+        assert simple_batch.positions.requires_grad is demo_model.requires_autograd
+        with demo_model.narrowed_outputs({"energy"}):
+            demo_model.adapt_input(fresh)
+            assert fresh.positions.requires_grad is False
+
+
 class TestBaseModelMixinAdaptInput:
     """Tests for BaseModelMixin.adapt_input()."""
 
