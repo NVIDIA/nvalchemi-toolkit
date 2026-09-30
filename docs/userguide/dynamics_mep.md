@@ -1,21 +1,22 @@
-
 (dynamics_mep_guide)=
 
 # Reaction Paths and NEB
 
-The `nvalchemi.dynamics.mep` subpackage includes batched Nudged Elastic Band
-(NEB) methods for simulating minimum energy paths (MEPs) between two endpoint
-structures. Many paths can be simulated together as one batch, each path being a
-sequence of images between its two endpoints. Every graph in the batch is one
-image, and the images of a path share a `group_layout` group.
+The `nvalchemi.dynamics.mep` subpackage provides tools for computing
+minimum-energy paths (MEPs), and therefore transition-state estimates, between
+reactant and product structures.
+Each path is represented as an ordered band of structures called images, and
+many paths can be optimized together: every image is one graph in a `Batch`,
+and the images of a path share a `group_layout` group.
 
-There are two ways to use it:
+The subpackage currently provides batched nudged elastic band (NEB) methods.
+There are two ways to run NEB:
 
-- The **{py:class}`~nvalchemi.dynamics.mep.NEB` strategy** --- a
+- The **{py:class}`~nvalchemi.dynamics.mep.NEB` strategy**: a
   declarative, serializable wrapper that builds a correctly-ordered engine
   for you. Use this for standard regular or climbing-image NEB runs.
-- **An optimizer (or `FusedStage`) with the NEB hooks attached directly**
-  --- for full control over hook ordering, custom convergence criteria, or
+- **An optimizer (or `FusedStage`) with the NEB hooks attached directly**:
+  for full control over hook ordering, custom convergence criteria, or
   non-standard staging.
 
 ## Building the initial path
@@ -28,6 +29,8 @@ can build this batch yourself, or use the two basic interpolation utilities
 below to go from just reactant/product endpoints:
 
 ```python
+import torch
+
 from nvalchemi.dynamics.mep import (
     IDPPModel,
     NEB,
@@ -45,6 +48,7 @@ paths = interpolate_paths(
     remove_translation_and_rotation=True,
     fit_mask=initial.atomic_numbers > 1,  # fit on corresponding heavy atoms
 )
+paths.velocities = torch.zeros_like(paths.positions)  # dropped by interpolation
 
 # optional: refine with IDPP before switching to the real model
 prepare_idpp_targets(paths)
@@ -53,7 +57,7 @@ paths = NEB(model=IDPPModel(), fmax=0.1, n_steps=200).run(paths)
 
 `interpolate_paths` linearly interpolates positions between index-matched
 endpoint graphs and drops stale fields (`forces`, `energy`, `velocities`,
-...) --- reattach `velocities` before optimizing. Set
+...), so reattach `velocities` before optimizing. Set
 `remove_translation_and_rotation=True` to align each final structure to its
 paired initial structure first. For periodic paths, this reconciles
 minimum-image positions and removes translation without rotating the cell. An
@@ -90,7 +94,7 @@ pairwise distances (IDPP,
 [Smidstrup et al. 2014](https://doi.org/10.1063/1.4878664)) to avoid poor
 linear-interpolation guesses where atoms pass through each other.
 `IDPPModel` is just a `BaseModelMixin` like any other, so running it through
-`NEB` (as above) is the normal way to do this refinement --- it is a regular
+`NEB` (as above) is the normal way to do this refinement. It is a regular
 NEB optimization whose "physical" model happens to be the analytic IDPP
 potential instead of your real MLIP. See
 ``examples/advanced/16_batched_neb.py`` for the full IDPP-then-MLIP workflow.
@@ -119,9 +123,12 @@ Key fields:
 | `spring` | `0.1` | Constant spring force, or a custom {py:class}`~nvalchemi.dynamics.mep.SpringConfig` |
 | `method` | `"improved_tangent"` | Named method, custom Warp `NEBMethod`, or callable `TorchNEBMethod` |
 | `climbing` | `None` | `None` runs regular NEB only; set a `ClimbingImageConfig` to enable climbing-image NEB |
-| `optimizer` | `FIRE2` | Optimizer driving each image |
+| `optimizer` | `FIRE2` | Optimizer driving each image; only `FIRE2` is currently supported |
 | `optimizer_kwargs` | NEB-tuned defaults for the optimizer | Overrides forwarded to each optimizer stage, taking precedence over the tuned defaults |
 | `fmax` | `0.05` | Force threshold for the final (or only) stage |
+| `n_steps` | `None` | Limit on the total number of optimization steps; `None` for no fixed limit |
+| `convergence_hook` | `None` | Custom `ConvergenceHook` for the final (or only) stage; takes precedence over `fmax` |
+| `regular_convergence_hook` | `None` | Custom `ConvergenceHook` for the regular stage of an `"after_regular"` run; takes precedence over `regular_fmax` |
 | `endpoint_mode` | `"fixed"` | `"fixed"` keeps endpoints static; `"relaxed"` lets them move |
 | `fixed_atom_indices` | `None` | Per-path, image-local atom indices held fixed in every image |
 | `diagnostics_log_path` | `None` | CSV path for per-path `fmax`, `energy_barrier`, `highest_interior_image_idx`, `path_length` |
@@ -130,9 +137,11 @@ Key fields:
 | `compile` | `False` | Compile the fused NEB step with `torch.compile` |
 | `compile_kwargs` | `{}` | Keyword arguments forwarded to `torch.compile` when compilation is enabled |
 
-`optimizer_kwargs` cannot set `model`, `hooks`, `by_group`,
-`convergence_hook`, or `n_steps`: `NEB` supplies these separately for each
-stage, so specifying them raises `ValueError`.
+`optimizer_kwargs` is forwarded to every internal optimizer stage, for
+settings such as `dt` or `maxstep`. `NEB` sets `model`, `hooks`, `by_group`,
+`convergence_hook`, and `n_steps` itself for each stage, so passing any of
+them in `optimizer_kwargs` raises `ValueError`. Use the corresponding `NEB`
+fields instead.
 
 `NEBForceHook` always publishes `neb_fixed_node_mask`, a Boolean node mask
 marking fixed endpoints and any `fixed_atom_indices`. It zeroes the physical
@@ -241,10 +250,13 @@ def central_tangent_weights(energy_prev: float, energy_curr: float, energy_next:
 neb = NEB(model=model, method=NEBMethod(tangent_weights_fn=central_tangent_weights), fmax=0.05)
 ```
 
-The full Gram-statistics contract exists so `effective_force_fn` can go
-beyond the stored-tangent projection above --- for example, to implement
-doubly-nudged elastic band (DNEB,
-[Trygubenko & Wales 2004](https://doi.org/10.1063/1.1636455)).
+Use the Gram-statistics signature when the force needs more than the tangent
+projection, for example the link vectors `d_plus` and `d_minus` and their dot
+products. The doubly nudged elastic band (DNEB,
+[Trygubenko & Wales 2004](https://doi.org/10.1063/1.1636455)) uses them to add
+a perpendicular spring correction. `examples/advanced/16_batched_neb.py` uses
+the improved-tangent method by default; set `method = "dneb"` there to run the
+`dneb_effective_force` equation from `_dneb_method.py`.
 
 Custom `NEBMethod` objects round-trip through `to_spec_dict()` and
 `from_spec_dict()`. The spec stores a stable method key with the kernel kind and
@@ -259,7 +271,9 @@ receives the current batch, link spring constants, path energy statistics, and
 prepared minimum-image geometry. It returns effective forces for every atom
 and one minimum-image length per forward image link. Importable classes whose
 constructor arguments are stored as attributes also round-trip through
-`to_spec_dict()` and `from_spec_dict()`; other callables can be used at runtime.
+`to_spec_dict()` and `from_spec_dict()`. Other callables, such as lambdas or
+locally defined functions, still work with `NEB.run()`, but `to_spec_dict()`
+raises `ValueError` for them.
 
 ```python
 from nvalchemi.dynamics.mep import NEB
@@ -296,8 +310,8 @@ retain their existing spec representation.
 control over convergence criteria, staging, or optimizer choice beyond what
 the strategy exposes. For regular (non-climbing) NEB there is only one stage,
 so any {py:class}`~nvalchemi.dynamics.base.BaseDynamics` subclass that
-accepts `by_group=True` and a `hooks` list is enough on its own --- no
-{py:class}`~nvalchemi.dynamics.FusedStage` wrapper required. `FusedStage` is
+accepts `by_group=True` and a `hooks` list is enough on its own; no
+{py:class}`~nvalchemi.dynamics.FusedStage` wrapper is required. `FusedStage` is
 only needed once you have more than one stage, e.g. climbing-image NEB (see
 below). The example uses {py:class}`~nvalchemi.dynamics.optimizers.fire2.FIRE2`.
 
@@ -350,40 +364,40 @@ optimizer = FIRE2(
 relaxed_paths = optimizer.run(paths)
 ```
 
-The NEB path hooks, in the order they must be registered:
-
 `ClimbingImageSelectionHook`, `NEBForceHook`, and `PathDiagnosticsHook` must
 receive the same `PathEnergyStatsHook` instance registered in the hooks list.
 That hook refreshes its statistics first at `AFTER_COMPUTE`, before any of the
 three consumers reads them. `NEB.build_engine()` wires this shared instance and
 order automatically.
 
-1. **{py:class}`~nvalchemi.dynamics.mep.hooks.PathEnergyStatsHook`** ---
+The NEB path hooks, in the order they must be registered:
+
+1. **{py:class}`~nvalchemi.dynamics.mep.hooks.PathEnergyStatsHook`**:
    always first. Computes per-path endpoint reference energy and the
    highest-energy interior image; the selection, force, and diagnostics hooks
    read its results via `get_stats()`.
 2. **{py:class}`~nvalchemi.dynamics.mep.hooks.ClimbingImageSelectionHook`**
-   (optional) --- flips the selected image's `force_mode` to climbing before
+   (optional): flips the selected image's `force_mode` to climbing before
    `NEBForceHook` runs. Needed only for climbing-image NEB.
-3. **{py:class}`~nvalchemi.dynamics.mep.hooks.NEBForceHook`** --- the
-   core hook: computes the local tangent and replaces `batch.forces` with the
+3. **{py:class}`~nvalchemi.dynamics.mep.hooks.NEBForceHook`**: the
+   core hook. It computes the local tangent and replaces `batch.forces` with the
    spring + perpendicular-physical-force NEB update, saving the raw model
    force to `batch.physical_forces`. When `endpoint_mode="fixed"` or
    `fixed_atom_indices` is set, it populates `neb_fixed_node_mask` (present
    on every batch) with the constrained atoms and zeroes their forces. The mask
    alone does not keep their positions fixed during optimizer updates.
 4. **{py:class}`~nvalchemi.dynamics.hooks.FreezeAtomsHook`** (optional, needed
-   whenever step 3 produces a fixed-atom mask) --- a general-purpose,
+   whenever step 3 produces a fixed-atom mask): a general-purpose,
    non-NEB-specific hook (`nvalchemi.dynamics.hooks`) that zeroes forces and
    velocities and restores positions for masked atoms across every integrator
    stage. Pass `mask_key="neb_fixed_node_mask"` to use the mask from
    `NEBForceHook` instead of the default `atom_categories`-based freezing.
 5. **{py:class}`~nvalchemi.dynamics.mep.hooks.PathDiagnosticsHook`**
-   (optional) --- exposes per-path `fmax`, `energy_barrier`, and
-   `path_length` via `get_diagnostics()`. Accepts a `frequency` to throttle
-   recomputation on long runs.
+   (optional): exposes per-path `fmax`, `energy_barrier`,
+   `highest_interior_image_idx`, and `path_length` via `get_diagnostics()`.
+   Accepts a `frequency` to throttle recomputation on long runs.
 6. **{py:class}`~nvalchemi.dynamics.hooks.LoggingHook`** (optional, pairs with
-   step 5) --- reads `diagnostics.get_diagnostics()` through `custom_scalars`
+   step 5): reads `diagnostics.get_diagnostics()` through `custom_scalars`
    callbacks and writes per-path rows to CSV. This is exactly how `NEB` wires
    `diagnostics_log_path`: both this hook and `PathDiagnosticsHook` should
    share the same `frequency`/`diagnostics_frequency` so the CSV rows line up
@@ -393,13 +407,13 @@ All of these hooks require the enclosing workflow to be constructed with
 `by_group=True` (each `group_layout` group is one path) and raise
 `ValueError` at registration otherwise. Convergence uses the standard
 {py:class}`~nvalchemi.dynamics.ConvergenceHook`, evaluated per path with
-`by_group=True` --- there is no NEB-specific convergence criterion.
+`by_group=True`; there is no NEB-specific convergence criterion.
 
 Because you assemble the `hooks` list yourself, you are not limited to the
 built-in hooks above: any of them can be replaced with a custom
 implementation (e.g. a different `PathDiagnosticsHook`-like hook that logs
 extra scalars, or your own freezing hook instead of `FreezeAtomsHook`), and
-you can insert additional hooks anywhere in the stack --- as long as you
+you can insert additional hooks anywhere in the stack, as long as you
 preserve the dependency order (`PathEnergyStatsHook` before anything that
 calls `get_stats()`, `NEBForceHook` before anything that reads
 `neb_fixed_node_mask` or the NEB force decomposition). See the
@@ -408,14 +422,16 @@ calls `get_stats()`, `NEBForceHook` before anything that reads
 Climbing-image NEB needs two stages (regular, then climbing) and is
 therefore built on `FusedStage`, not a single optimizer. Rather than
 duplicating that construction here, read `NEB.build_engine()` in
-`nvalchemi/dynamics/mep/neb.py` --- it is the reference
+`nvalchemi/dynamics/mep/neb.py`. It is the reference
 implementation for a two-substage, `status`-gated `FusedStage` with
 `ClimbingImageSelectionHook(status_code=...)` scoped to the climbing stage.
 With `mode="after_regular"` it sets `reprime_on_entry={1}`, so a path entering
 the climbing stage skips one optimizer update while the shared model evaluation
-and the climbing sub-stage's `AFTER_COMPUTE` hooks refresh its forces. In a
-hand-assembled engine, attach the stage-specific force hook to the target
-sub-stage. The flag only guarantees it runs before the first update.
+and the climbing sub-stage's `AFTER_COMPUTE` hooks refresh its forces. If you
+build the engine yourself, register the path hooks on the `FusedStage` and
+scope stage-specific ones with `status_code`, as `NEB.build_engine()` does. At
+`AFTER_COMPUTE`, sub-stage hooks run before fused-stage hooks, so a sub-stage
+hook would read stale `PathEnergyStatsHook` results.
 
 ## Periodic paths
 
@@ -435,8 +451,8 @@ whole cells. For such winding paths, provide appropriately unwrapped images.
   climbing-image NEB workflow (IDPP initialization, AIMNet2-rxn, diagnostics
   CSV, and a comparison against DFT reference paths) on eight batched
   reactions.
-- **Optimization**: [Optimization and Integrators](dynamics_simulations) ---
-  the `FIRE2` optimizer driving each NEB image.
+- **Optimization**: [Optimization and Integrators](dynamics_simulations)
+  covers the `FIRE2` optimizer driving each NEB image.
 - **Hooks**: The [Hooks guide](hooks_guide) covers the hook protocol and
   `ConvergenceHook`.
 - **Overview**: The [Dynamics overview](dynamics_guide) describes the shared

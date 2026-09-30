@@ -17,16 +17,12 @@
   graphs skip one integrator update so the shared compute and target-stage
   `AFTER_COMPUTE` hooks can refresh forces under the new stage's context
   before it advances them.
-- **Batched nudged elastic band (NEB) workflows** — the new
-  `nvalchemi.dynamics.mep` API provides grouped-path validation, endpoint
-  interpolation, and IDPP initialization, together with a GPU-first `NEB`
-  engine for regular and climbing-image optimization. It supports
-  improved-tangent and importable custom force equations with serializable
-  method specs, fixed or relaxed endpoints, per-path fixed atoms,
-  optional neighbor-list hooks, compiled fused steps, and diagnostics for
-  force maxima, barriers, path lengths, and highest-energy images. The
-  `examples/advanced/16_batched_neb.py` walkthrough demonstrates optimizing
-  multiple reaction paths concurrently.
+- **Batched minimum-energy path (MEP) workflows**: the new
+  `nvalchemi.dynamics.mep` subpackage provides endpoint interpolation with
+  optional alignment, IDPP initialization, and a GPU-first `NEB` strategy for
+  regular and climbing-image nudged elastic band. `NEB` supports custom Warp or
+  PyTorch force equations and spring policies, fixed endpoints or atoms,
+  serializable specs, and per-path diagnostics.
 
 ### Fixed
 

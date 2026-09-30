@@ -20,6 +20,7 @@ copy the skill folders into your project's or home skills directory.
 | Choose, weight, mask, or implement loss functions | `nvalchemi-loss-api` |
 | Run MD, relaxation, or EOS scans; compose batched pipelines | `nvalchemi-dynamics-api` |
 | Add per-step callbacks (neighbor lists, convergence, logging) | `nvalchemi-dynamics-hooks` |
+| Build reaction paths or run NEB for minimum-energy paths | `nvalchemi-mep` |
 | Implement a new integrator, optimizer, or sampler class | `nvalchemi-dynamics-implementation` |
 | Add progress dashboards, TensorBoard, or CSV observability | `nvalchemi-reporting` |
 
@@ -34,6 +35,7 @@ when you are new to an area:
 data-structures -> data-storage -> zarr-perf
 model-wrapping + loss-api -> training-api -> fine-tuning
 dynamics-hooks -> dynamics-api | dynamics-implementation
+dynamics-hooks + dynamics-api -> mep
 reporting (orthogonal: attaches to training and dynamics)
 ```
 

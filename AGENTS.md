@@ -231,5 +231,6 @@ chains are documented in `.claude/skills/README.md`.
 | `nvalchemi-loss-api` | Choosing, weighting, masking, or implementing loss functions |
 | `nvalchemi-dynamics-api` | Any MD/relaxation/EOS simulation script or batched GPU pipeline |
 | `nvalchemi-dynamics-hooks` | Per-step callbacks: neighbor lists, convergence, logging |
+| `nvalchemi-mep` | Reaction paths and minimum-energy paths: interpolation, IDPP, batched NEB |
 | `nvalchemi-dynamics-implementation` | Implementing a new integrator, optimizer, or sampler class |
 | `nvalchemi-reporting` | Progress dashboards, TensorBoard, or CSV observability |

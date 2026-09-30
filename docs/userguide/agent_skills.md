@@ -33,5 +33,6 @@ your project's skills directory, or your user-level one (e.g.
 | `nvalchemi-fine-tuning` | How to configure fine-tuning workflows and adapt pretrained checkpoints through the CLI or API. | {ref}`finetuning_guide` |
 | `nvalchemi-dynamics-api` | How to configure and run dynamics simulations, compose multi-stage pipelines ({py:class}`~nvalchemi.dynamics.FusedStage`, {py:class}`~nvalchemi.dynamics.DistributedPipeline`), use inflight batching, and manage data sinks. | {ref}`dynamics_guide` |
 | `nvalchemi-dynamics-implementation` | How to implement a dynamics integrator by subclassing {py:class}`~nvalchemi.dynamics.base.BaseDynamics` and overriding `pre_update()` and `post_update()`. | {ref}`dynamics_guide` |
+| `nvalchemi-mep` | How to build reaction paths (interpolation, alignment, IDPP) and compute minimum-energy paths with batched NEB via {py:class}`~nvalchemi.dynamics.mep.NEB` or by building it manually with hooks. | {ref}`dynamics_mep_guide` |
 | `nvalchemi-dynamics-hooks` | How to use and write dynamics hooks --- callbacks that observe or modify batch state at specific points during each simulation step. | {ref}`hooks_guide` |
 | `nvalchemi-reporting` | How to add observability with `ReportingOrchestrator`, `RichReporter`, `TensorBoardReporter`, and the dynamics `LoggingHook`. | {ref}`reporting_guide` |
