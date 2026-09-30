@@ -31,8 +31,8 @@ from nvalchemi.models.gen import (
     DemoGANModel,
     GenerativeModelMixin,
 )
-from test.gen.conftest import DemoDiffusionGenerate, DemoGANGenerate, make_batch
 from nvalchemi.training._spec import BaseSpec
+from test.gen.conftest import DemoDiffusionGenerate, DemoGANGenerate, make_batch
 
 
 class TestDemoGANModel:
