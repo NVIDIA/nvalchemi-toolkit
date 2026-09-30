@@ -358,7 +358,7 @@ You can chain multiple generative stages, custom transformations, and {doc}`dyna
 simulations <dynamics>` using the `|` operator:
 
 ```python
-from nvalchemi.dynamics import FIRE, ConvergenceHook
+from nvalchemi.dynamics import FIRE2, ConvergenceHook
 from nvalchemi.gen import AtomisticGenerator
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
@@ -366,7 +366,7 @@ from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 gen_stage = AtomisticGenerator(generator_func=ToyGenerate(ToyDecoder(num_atoms=8)))
 
 # Stage 2: Relax candidates with an ML potential optimizer
-relax_stage = FIRE(
+relax_stage = FIRE2(
     model=DemoModelWrapper(DemoModel()),  # swap in your own model here
     dt=0.1,
     n_steps=200,
