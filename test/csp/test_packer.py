@@ -34,7 +34,7 @@ from nvalchemi.csp.packer._contacts import (
 )
 from nvalchemi.csp.packer._state import WorkingState, relax_step
 from nvalchemi.csp.packer.result import PackingResult
-from nvalchemi.csp.symmetry import get_space_group_operations
+from nvalchemi.csp.symmetry import SpaceGroupPolicy, get_space_group_operations
 from test.csp.fixtures.contact_oracle import contact_observables
 from test.csp.fixtures.packer_stage2_cpu import SOURCE_REFERENCE
 
@@ -481,7 +481,7 @@ def test_public_cpu_packing_has_compact_z_prime_and_one_seed_draw() -> None:
         batch_size=4,
         max_candidates=4,
         cell_volume_range=(10_000.0, 10_000.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     generator = torch.Generator(device="cpu").manual_seed(147)
     expected_generator = torch.Generator(device="cpu").manual_seed(147)
@@ -536,7 +536,7 @@ def test_public_cpu_packing_preserves_explicit_run_id() -> None:
             batch_size=2,
             max_candidates=2,
             cell_volume_range=(10_000.0, 10_000.0),
-            fixed_space_group=1,
+            space_groups=SpaceGroupPolicy.fixed(1),
         ),
         device="cpu",
     ).pack(
@@ -576,7 +576,7 @@ def test_public_cpu_partial_candidate_budget_returns_compact_shortfall() -> None
         batch_size=4,
         max_candidates=2,
         cell_volume_range=(10_000.0, 10_000.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     result = CrystalPacker(config, device="cpu")(
         inputs,
@@ -602,7 +602,7 @@ def test_public_cpu_expiration_partially_refills_and_returns_empty_shortfall() -
         step_scale=0.0,
         cell_step_scale=0.0,
         cell_volume_range=(90.0, 90.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     events = []
     result = CrystalPacker(config, device="cpu")(
@@ -643,7 +643,7 @@ def test_public_cpu_default_auto_budget_bounds_unreachable_acceptance(
         cell_step_scale=0.0,
         volume_compression_scale=0.0,
         cell_volume_range=(125.0, 125.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     result = CrystalPacker(config, device="cpu")(
         _one_atom_input(contact_distance=7.0),
@@ -671,7 +671,7 @@ def test_refilled_candidate_skips_relaxation_with_stale_nonzero_force(
         overlap_tolerance=0.05,
         cell_step_scale=0.0,
         cell_volume_range=(10_000.0, 10_000.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     calls = 0
 
@@ -724,7 +724,7 @@ def test_progress_callback_reports_exact_expiration_checks(
         step_scale=0.0,
         cell_step_scale=0.0,
         cell_volume_range=(90.0, 90.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     events = []
     result = CrystalPacker(config, device="cpu")(
@@ -768,7 +768,7 @@ def test_budget_exhaustion_recomputes_expiration_for_surviving_row() -> None:
         cell_step_scale=0.0,
         volume_compression_scale=0.0,
         cell_volume_range=(150.0, 150.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     events = []
     result = CrystalPacker(config, device="cpu")(
@@ -797,7 +797,7 @@ def test_public_cpu_same_seed_repeats_and_different_seed_changes_geometry() -> N
         batch_size=4,
         max_candidates=4,
         cell_volume_range=(10_000.0, 10_000.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     packer = CrystalPacker(config, device="cpu")
     results = [
@@ -821,6 +821,40 @@ def test_public_cpu_same_seed_repeats_and_different_seed_changes_geometry() -> N
     )
 
 
+def test_call_level_space_group_policy_revalidates_without_mutating_base() -> None:
+    inputs = _one_atom_input()
+    base_policy = SpaceGroupPolicy.fixed(1)
+    config = PackingConfig(
+        z=2,
+        z_prime=2,
+        batch_size=2,
+        max_candidates=2,
+        cell_volume_range=(10_000.0, 10_000.0),
+        space_groups=base_policy,
+    )
+    packer = CrystalPacker(config, device="cpu")
+    with pytest.raises(ValueError, match=r"z / z_prime requires 2"):
+        packer(
+            inputs,
+            num_samples=1,
+            z_prime=1,
+            space_groups=base_policy,
+        )
+    result = packer(
+        inputs,
+        num_samples=1,
+        z_prime=1,
+        space_groups=SpaceGroupPolicy.fixed(2),
+        rng=torch.Generator().manual_seed(32),
+    )
+    assert len(result) == 1
+    assert torch.equal(
+        result.structures.space_groups, torch.tensor([2], dtype=torch.int32)
+    )
+    assert config.space_groups is base_policy
+    assert config.z_prime == 2
+
+
 def test_public_space_group_weights_are_scale_invariant_and_exclude_zeros() -> None:
     inputs = _one_atom_input()
 
@@ -831,7 +865,7 @@ def test_public_space_group_weights_are_scale_invariant_and_exclude_zeros() -> N
             batch_size=24,
             max_candidates=24,
             cell_volume_range=(1_000_000.0, 1_000_000.0),
-            space_group_probabilities=weights,
+            space_groups=SpaceGroupPolicy.sampled(probabilities=weights),
         )
         result = CrystalPacker(config, device="cpu")(
             inputs,
@@ -866,7 +900,7 @@ def test_public_cpu_conformer_pools_and_geometry_invariants() -> None:
         batch_size=8,
         max_candidates=8,
         cell_volume_range=(10_000.0, 10_000.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     result = CrystalPacker(config, device="cpu")(
         inputs,
@@ -907,7 +941,7 @@ def test_public_cpu_callback_exception_propagates() -> None:
         z_prime=1,
         batch_size=1,
         cell_volume_range=(10_000.0, 10_000.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
 
     def fail(_progress) -> None:
@@ -930,7 +964,7 @@ def test_raw_atomistic_generator_returns_packing_result() -> None:
         z_prime=1,
         batch_size=1,
         cell_volume_range=(10_000.0, 10_000.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     packer = CrystalPacker(config, device="cpu")
     generator = AtomisticGenerator(
@@ -956,7 +990,7 @@ def test_cuda_packer_launches_on_active_torch_stream(
         z_prime=1,
         batch_size=1,
         cell_volume_range=(10_000.0, 10_000.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     packer = CrystalPacker(config, device="cuda:0")
     observed_streams = []
@@ -1008,7 +1042,7 @@ def test_cuda_input_on_other_device_is_rejected_before_copy() -> None:
         z_prime=1,
         batch_size=1,
         cell_volume_range=(10_000.0, 10_000.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     with pytest.raises(ValueError, match=r"inputs\.conformer_positions is on cuda:1"):
         CrystalPacker(config, device="cuda:0")(
@@ -1026,7 +1060,7 @@ def test_cuda_public_packer_preserves_selected_device(device: str) -> None:
         batch_size=2,
         max_candidates=2,
         cell_volume_range=(10_000.0, 10_000.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     result = CrystalPacker(config, device=device)(
         inputs,
@@ -1038,6 +1072,29 @@ def test_cuda_public_packer_preserves_selected_device(device: str) -> None:
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_cuda_weighted_policy_packs_only_compatible_groups_on_device() -> None:
+    device = "cuda:0"
+    config = PackingConfig(
+        z=3,
+        z_prime=1,
+        batch_size=8,
+        max_candidates=8,
+        cell_volume_range=(10_000.0, 10_000.0),
+        space_groups=SpaceGroupPolicy.sampled(
+            probabilities={143: 1.0e300, 144: 0.0, 145: 3.0e300}
+        ),
+    )
+    result = CrystalPacker(config, device=device)(
+        _one_atom_input(),
+        num_samples=8,
+        rng=torch.Generator(device=device).manual_seed(925),
+    )
+    assert len(result) == 8
+    assert result.structures.space_groups.device == torch.device(device)
+    assert set(result.structures.space_groups.cpu().tolist()) <= {143, 145}
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 def test_cuda_packer_identity_survives_p1_expansion() -> None:
     config = PackingConfig(
         z=1,
@@ -1045,7 +1102,7 @@ def test_cuda_packer_identity_survives_p1_expansion() -> None:
         batch_size=2,
         max_candidates=2,
         cell_volume_range=(10_000.0, 10_000.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     result = CrystalPacker(config, device="cuda:0")(
         _one_atom_input(),
@@ -1079,7 +1136,7 @@ def test_cuda_zero_accepted_shortfall_keeps_empty_outputs_on_device(
         step_scale=0.0,
         cell_step_scale=0.0,
         cell_volume_range=(90.0, 90.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
     )
     result = CrystalPacker(config, device=device)(
         inputs,

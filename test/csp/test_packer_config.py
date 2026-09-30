@@ -29,7 +29,7 @@ from nvalchemi.csp.packer import (
     PackingResult,
     PackingStopReason,
 )
-from nvalchemi.csp.symmetry import CrystalSystem
+from nvalchemi.csp.symmetry import CrystalSystem, SpaceGroupPolicy
 
 
 def make_config(**overrides: object) -> PackingConfig:
@@ -85,6 +85,13 @@ def test_config_requires_exactly_one_cell_volume_mode() -> None:
     assert make_config(cell_volume_range=(10.0, 20.0)).cell_volume_scale_range is None
 
 
+def test_default_space_group_policy_is_sampled_with_csd_prior() -> None:
+    policy = make_config().space_groups
+    assert isinstance(policy, SpaceGroupPolicy)
+    assert policy.mode == "sampled"
+    assert policy.probabilities is None
+
+
 @pytest.mark.parametrize(
     "updates, message",
     [
@@ -98,7 +105,7 @@ def test_config_requires_exactly_one_cell_volume_mode() -> None:
         ({"cell_volume_scale_range": (2.0, 1.0)}, "ascending order"),
         ({"max_axis_ratio": 0.9}, "at least 1"),
         ({"cell_oversample_factor": 0.9}, "at least 1"),
-        ({"fixed_space_group": 2}, "operation count"),
+        ({"space_groups": SpaceGroupPolicy.fixed(2)}, "operations"),
     ],
 )
 def test_config_rejects_invalid_values(
@@ -148,16 +155,16 @@ def test_config_is_frozen_forbids_extra_keys_and_revalidates_effective() -> None
 
 def test_probability_mapping_is_copied_read_only_and_filtered() -> None:
     prior = {1: 1.0}
-    config = make_config(space_group_probabilities=prior)
+    policy = SpaceGroupPolicy.sampled(probabilities=prior)
+    config = make_config(space_groups=policy)
     prior[1] = 0.0
-    assert config.space_group_probabilities == {1: 1.0}
+    assert config.space_groups.probabilities == {1: 1.0}
     with pytest.raises(TypeError):
-        config.space_group_probabilities[1] = 0.0  # type: ignore[index]
-    with pytest.raises(ValidationError, match="positive weight"):
+        config.space_groups.probabilities[1] = 0.0  # type: ignore[index]
+    with pytest.raises(ValidationError, match="positive sampling weight"):
         make_config(
             z=2,
-            space_group_probabilities={1: 1.0},
-            crystal_system=CrystalSystem.MONOCLINIC,
+            space_groups=SpaceGroupPolicy.sampled(probabilities={1: 1.0}),
         )
 
 
@@ -176,35 +183,71 @@ def test_algorithmic_controls_allow_zero_and_reject_negative(field: str) -> None
         make_config(**{field: -0.1})
 
 
-def test_default_prior_requires_positive_surviving_mass(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "nvalchemi.csp.packer.config.csd_space_group_probabilities",
-        lambda: {230: 1.0},
-    )
-    with pytest.raises(ValidationError, match="bundled CSD.*no positive weight"):
-        make_config()
+def test_policy_requires_positive_compatible_mass() -> None:
+    with pytest.raises(ValidationError, match="positive sampling weight"):
+        make_config(
+            space_groups=SpaceGroupPolicy.sampled(
+                crystal_system=CrystalSystem.CUBIC,
+            )
+        )
 
 
 def test_effective_revalidates_probabilities_previously_filtered_by_crystal_system() -> (
     None
 ):
-    config = make_config(
-        z=2,
-        space_group_probabilities={2: 1.0, 3: 1.0},
+    policy = SpaceGroupPolicy.sampled(
+        probabilities={2: 1.0, 3: 1.0},
         crystal_system=CrystalSystem.TRICLINIC,
     )
-    monoclinic = config.effective(crystal_system=CrystalSystem.MONOCLINIC)
-    assert monoclinic.space_group_probabilities == {2: 1.0, 3: 1.0}
-    assert monoclinic.crystal_system is CrystalSystem.MONOCLINIC
+    config = make_config(
+        z=2,
+        space_groups=policy,
+    )
+    monoclinic_policy = SpaceGroupPolicy.sampled(
+        probabilities=config.space_groups.probabilities,
+        crystal_system=CrystalSystem.MONOCLINIC,
+    )
+    monoclinic = config.effective(space_groups=monoclinic_policy)
+    assert monoclinic.space_groups.probabilities == {2: 1.0, 3: 1.0}
+    assert monoclinic.space_groups.crystal_system is CrystalSystem.MONOCLINIC
+    assert config.space_groups is policy
+    assert config.space_groups.crystal_system is CrystalSystem.TRICLINIC
+    assert config.space_groups.probabilities == {2: 1.0, 3: 1.0}
+    fixed = config.effective(space_groups=SpaceGroupPolicy.fixed(2))
+    assert fixed.space_groups.group == 2
+    assert config.space_groups is policy
 
 
-def test_fixed_group_checks_operation_count_and_sample_filters_are_exclusive() -> None:
-    valid = make_config(z=2, fixed_space_group=2)
-    assert valid.fixed_space_group == 2
-    with pytest.raises(ValidationError, match="cannot be combined"):
-        make_config(fixed_space_group=1, crystal_system=CrystalSystem.CUBIC)
+def test_one_policy_can_validate_against_multiple_operation_counts() -> None:
+    policy = SpaceGroupPolicy.sampled(probabilities={2: 1.0, 3: 1.0, 14: 3.0, 19: 1.0})
+    two_operations = make_config(z=2, z_prime=1, space_groups=policy)
+    four_operations = make_config(z=4, z_prime=1, space_groups=policy)
+    assert two_operations.space_groups is policy
+    assert four_operations.space_groups is policy
+    assert two_operations.space_groups.probabilities == {
+        2: 1.0,
+        3: 1.0,
+        14: 3.0,
+        19: 1.0,
+    }
+    assert (
+        four_operations.space_groups.probabilities
+        == two_operations.space_groups.probabilities
+    )
+
+
+def test_fixed_policy_checks_operation_count_with_config_context() -> None:
+    valid = make_config(z=2, space_groups=SpaceGroupPolicy.fixed(2))
+    assert valid.space_groups.group == 2
+    with pytest.raises(
+        ValidationError, match=r"group 2 has 2 operations.*z=1, z_prime=1"
+    ):
+        make_config(space_groups=SpaceGroupPolicy.fixed(2))
+
+
+def test_space_groups_rejects_explicit_none() -> None:
+    with pytest.raises(ValidationError):
+        make_config(space_groups=None)
 
 
 def test_result_len_is_accepted_structure_count_and_records_are_frozen() -> None:

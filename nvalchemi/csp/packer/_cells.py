@@ -17,17 +17,12 @@
 
 from __future__ import annotations
 
-import math
-
 import torch
 from torch import Tensor
 
 from nvalchemi.csp._space_group_tables import SG_OPS_IDX, SG_OPS_PTR, SYMM_OPS
 from nvalchemi.csp.packer._kernels.sampling import generate_cells
-from nvalchemi.csp.symmetry import (
-    csd_space_group_probabilities,
-    get_space_group_candidates,
-)
+from nvalchemi.csp.symmetry import _resolve_space_group_distribution
 
 
 def sampling_tables(
@@ -37,33 +32,14 @@ def sampling_tables(
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
     """Prepare compatible groups, sampling weights, and standard operations."""
     operation_count = int(config.z) // int(config.z_prime)
-    if config.fixed_space_group is None:
-        groups = get_space_group_candidates(
-            operation_count,
-            crystal_system=config.crystal_system,
-            sohncke_only=config.sohncke_only,
-        )
-        prior = (
-            csd_space_group_probabilities()
-            if config.space_group_probabilities is None
-            else config.space_group_probabilities
-        )
-        raw_weights = [float(prior.get(int(group), 0.0)) for group in groups.tolist()]
-        max_weight = max(raw_weights, default=0.0)
-        if max_weight <= 0.0:
-            raise ValueError("no compatible space group has positive sampling weight")
-        scaled_weights = [weight / max_weight for weight in raw_weights]
-        scaled_total = math.fsum(scaled_weights)
-        weights = torch.tensor(
-            [scaled / scaled_total for scaled in scaled_weights],
-            dtype=torch.float32,
-        )
-        positive_float32 = weights > 0.0
-        groups = groups[positive_float32]
-        weights = weights[positive_float32]
-    else:
-        groups = torch.tensor([config.fixed_space_group], dtype=torch.int32)
-        weights = torch.ones((1,), dtype=torch.float32)
+    groups_list, relative_weights = _resolve_space_group_distribution(
+        config.space_groups, operation_count
+    )
+    groups = torch.tensor(groups_list, dtype=torch.int32)
+    weights = torch.tensor(relative_weights.tolist(), dtype=torch.float32)
+    positive_float32 = weights > 0.0
+    groups = groups[positive_float32]
+    weights = weights[positive_float32]
     groups = groups.to(device=device, dtype=torch.int32).contiguous()
     weights = weights.to(device=device, dtype=torch.float32).contiguous()
     operations = torch.as_tensor(

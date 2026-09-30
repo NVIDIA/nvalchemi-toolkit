@@ -17,18 +17,14 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
-from types import MappingProxyType
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nvalchemi.csp.symmetry import (
-    CrystalSystem,
-    csd_space_group_probabilities,
-    get_space_group_candidates,
+    SpaceGroupPolicy,
+    _resolve_space_group_distribution,
     get_space_group_operation_count,
-    is_sohncke_space_group,
 )
 
 
@@ -46,11 +42,9 @@ class PackingConfig(BaseModel):
     Exactly one cell volume mode is required. ``cell_volume_range`` gives an
     absolute conventional-cell volume interval in cubic angstroms, while
     ``cell_volume_scale_range`` scales the formula-unit estimate by ``z``.
-    Space-group settings either select a fixed group or filter sampled groups.
-    The default relative sampling weights are derived from the Cambridge
-    Structural Database (CSD). After compatible groups are filtered, the
-    remaining positive weights set their relative probabilities. A supplied
-    probability mapping replaces these default weights.
+    ``space_groups`` is a fixed or sampled :class:`SpaceGroupPolicy`. The
+    default sampled policy uses relative weights derived from the Cambridge
+    Structural Database (CSD). A custom prior replaces those weights.
 
     Parameters
     ----------
@@ -106,23 +100,16 @@ class PackingConfig(BaseModel):
     cell_volume_scale_range : tuple[float, float], optional
         Initial volume multipliers applied to formula-unit volume times ``z``.
         Supply exactly one of the two volume ranges.
-    fixed_space_group : int, optional
-        International space-group number to use for every candidate.
-    space_group_probabilities : Mapping[int, float], optional
-        Unnormalized, nonnegative sampling weights keyed by International
-        number. Compatible groups are filtered; the remaining positive weights
-        set their relative probabilities. Replaces the default relative
-        sampling weights derived from the Cambridge Structural Database (CSD).
-    crystal_system : CrystalSystem, optional
-        Restrict sampled space groups to this crystal system.
-    sohncke_only : bool, default=False
-        Restrict sampling to groups whose symmetry operations preserve
-        molecular handedness. Use this when symmetry-generated copies must
-        preserve a chiral molecule's handedness.
+    space_groups : SpaceGroupPolicy, default=SpaceGroupPolicy.sampled()
+        Fixed or sampled space-group selection. Its groups must have exactly
+        ``z / z_prime`` symmetry operations. A sampled policy needs positive
+        compatible weight after filtering.
 
     Examples
     --------
     Use a scale range with a finite candidate budget::
+
+        from nvalchemi.csp.symmetry import CrystalSystem, SpaceGroupPolicy
 
         config = PackingConfig(
             z=4,
@@ -130,8 +117,10 @@ class PackingConfig(BaseModel):
             batch_size=16,
             max_candidates=64,
             cell_volume_scale_range=(0.8, 1.2),
-            crystal_system=CrystalSystem.MONOCLINIC,
-            sohncke_only=True,
+            space_groups=SpaceGroupPolicy.sampled(
+                crystal_system=CrystalSystem.MONOCLINIC,
+                sohncke_only=True,
+            ),
         )
 
     Derive a separately validated configuration for one call::
@@ -158,48 +147,7 @@ class PackingConfig(BaseModel):
     cell_oversample_factor: float = 1.5
     cell_volume_range: tuple[float, float] | None = None
     cell_volume_scale_range: tuple[float, float] | None = None
-    fixed_space_group: int | None = Field(default=None, strict=True)
-    space_group_probabilities: Mapping[int, float] | None = Field(
-        default=None, repr=False
-    )
-    crystal_system: CrystalSystem | None = None
-    sohncke_only: bool = Field(default=False, strict=True)
-
-    @field_validator("space_group_probabilities", mode="before")
-    @classmethod
-    def _copy_probability_mapping(cls, value: Any) -> Any:
-        """Copy the input mapping before probability validation and freezing."""
-        if value is None:
-            return None
-        if not isinstance(value, Mapping):
-            raise TypeError("space_group_probabilities must be a mapping or None")
-        return dict(value)
-
-    @field_validator("space_group_probabilities")
-    @classmethod
-    def _freeze_probability_mapping(
-        cls, value: Mapping[int, float] | None
-    ) -> Mapping[int, float] | None:
-        """Validate space-group weights and expose an immutable mapping."""
-        if value is None:
-            return None
-        clean: dict[int, float] = {}
-        for key, weight in value.items():
-            if isinstance(key, bool) or not isinstance(key, int) or not 1 <= key <= 230:
-                raise ValueError(
-                    "space-group probability keys must be integers in [1, 230]"
-                )
-            if isinstance(weight, bool) or not isinstance(weight, (int, float)):
-                raise ValueError(
-                    "space-group probabilities must be finite nonnegative numbers"
-                )
-            numeric_weight = float(weight)
-            if not math.isfinite(numeric_weight) or numeric_weight < 0:
-                raise ValueError(
-                    "space-group probabilities must be finite nonnegative numbers"
-                )
-            clean[key] = numeric_weight
-        return MappingProxyType(clean)
+    space_groups: SpaceGroupPolicy = Field(default_factory=SpaceGroupPolicy.sampled)
 
     @model_validator(mode="after")
     def _validate_configuration(self) -> PackingConfig:
@@ -266,73 +214,28 @@ class PackingConfig(BaseModel):
                         f"{name} must contain finite positive values in ascending order"
                     )
 
-        if self.fixed_space_group is not None:
-            group = self.fixed_space_group
-            if (
-                isinstance(group, bool)
-                or not isinstance(group, int)
-                or not 1 <= group <= 230
-            ):
+        required_operations = self.z // self.z_prime
+        if self.space_groups.mode == "fixed":
+            if self.space_groups.group is None:
+                raise RuntimeError("fixed space-group policy has no group")
+            group = self.space_groups.group
+            actual_operations = get_space_group_operation_count(group)
+            if actual_operations != required_operations:
                 raise ValueError(
-                    "fixed_space_group must be an International number in [1, 230]"
+                    f"fixed space group {group} has {actual_operations} operations; "
+                    f"z / z_prime requires {required_operations} "
+                    f"(z={self.z}, z_prime={self.z_prime})"
                 )
-            if get_space_group_operation_count(group) != self.z // self.z_prime:
-                raise ValueError(
-                    "fixed_space_group operation count must equal z / z_prime"
-                )
-            if (
-                self.space_group_probabilities is not None
-                or self.crystal_system is not None
-            ):
-                raise ValueError(
-                    "fixed_space_group cannot be combined with sampled-group filters"
-                )
-            if self.sohncke_only and not is_sohncke_space_group(group):
-                raise ValueError(
-                    "fixed_space_group must be a Sohncke group when sohncke_only=True"
-                )
-        elif self.crystal_system is not None and not isinstance(
-            self.crystal_system, CrystalSystem
-        ):
-            raise TypeError("crystal_system must be a CrystalSystem or None")
-        if not isinstance(self.sohncke_only, bool):
-            raise TypeError("sohncke_only must be a bool")
-
-        if self.space_group_probabilities is not None:
-            candidates = get_space_group_candidates(
-                self.z // self.z_prime,
-                crystal_system=self.crystal_system,
-                sohncke_only=self.sohncke_only,
-            ).tolist()
-            if not any(
-                self.space_group_probabilities.get(int(group), 0.0) > 0.0
-                for group in candidates
-            ):
-                raise ValueError(
-                    "space_group_probabilities must have positive weight among compatible groups"
-                )
-        elif self.fixed_space_group is None:
-            # Confirm the bundled prior retains positive weight after filtering.
-            candidates = get_space_group_candidates(
-                self.z // self.z_prime,
-                crystal_system=self.crystal_system,
-                sohncke_only=self.sohncke_only,
-            ).tolist()
-            default_prior = csd_space_group_probabilities()
-            if not any(
-                default_prior.get(int(group), 0.0) > 0.0 for group in candidates
-            ):
-                raise ValueError(
-                    "bundled CSD space-group prior has no positive weight among compatible groups"
-                )
+        else:
+            _resolve_space_group_distribution(self.space_groups, required_operations)
         return self
 
     def effective(self, **overrides: Any) -> PackingConfig:
         """Return a new config with overrides fully validated.
 
         Unknown fields are rejected by the same ``extra='forbid'`` policy as
-        direct construction. Rebuilding also revalidates the retained prior
-        mapping instead of bypassing Pydantic validation.
+        direct construction. The retained policy is checked against the
+        effective ``z / z_prime`` without changing its weights.
         """
         values = {name: getattr(self, name) for name in type(self).model_fields}
         values.update(overrides)

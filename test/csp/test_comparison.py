@@ -23,6 +23,7 @@ import pytest
 import torch
 
 from nvalchemi.csp.comparison import RadialComparisonIndex  # noqa: E402
+from nvalchemi.csp.symmetry import SpaceGroupPolicy  # noqa: E402
 from nvalchemi.data import AtomicData, Batch  # noqa: E402
 
 
@@ -956,7 +957,7 @@ def test_packer_produced_batch_is_accepted() -> None:
             batch_size=2,
             max_candidates=2,
             cell_volume_range=(10_000.0, 10_000.0),
-            fixed_space_group=1,
+            space_groups=SpaceGroupPolicy.fixed(1),
         ),
         device="cpu",
     )(inputs, num_samples=2, rng=torch.Generator().manual_seed(9))

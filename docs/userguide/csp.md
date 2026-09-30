@@ -53,6 +53,7 @@ unsuitable starting volumes for an ice search.
 ```python
 import torch
 
+from nvalchemi.csp import SpaceGroupPolicy
 from nvalchemi.csp.chem import (
     RDKitConformerConfig,
     build_molecular_packing_input,
@@ -73,7 +74,7 @@ config = PackingConfig(
     batch_size=64,
     max_candidates=1000,
     cell_volume_range=(1000.0, 1200.0),
-    fixed_space_group=1,
+    space_groups=SpaceGroupPolicy.fixed(1),
 )
 # Bind the packer to the selected GPU.
 packer = CrystalPacker(
@@ -187,7 +188,11 @@ P-1 illustrates the two-operation case: identity leaves fractional coordinates
 unchanged, and inversion maps `(x, y, z)` to `(-x, -y, -z)` periodically.
 
 ```python
-from nvalchemi.csp import get_space_group_candidates, get_space_group_operations
+from nvalchemi.csp import (
+    SpaceGroupPolicy,
+    get_space_group_candidates,
+    get_space_group_operations,
+)
 
 assert 2 in get_space_group_candidates(2).tolist()
 p_minus_1_operations = get_space_group_operations(2)
@@ -200,11 +205,11 @@ p_minus_1_result = packer(
     rng=torch.Generator(device="cuda:0").manual_seed(8),
     z=2,
     z_prime=1,
-    fixed_space_group=2,
+    space_groups=SpaceGroupPolicy.fixed(2),
 )
 ```
 
-### Choose starting volume and sampling weights
+### Choose starting volume
 
 Choose starting volumes from molecular size and an expected crystal density.
 {py:func}`~nvalchemi.csp.estimate_formula_unit_volume` returns an estimate
@@ -216,36 +221,77 @@ Supply exactly one range. Both control initial cells. Packing can shrink a
 sampled cell but does not expand its volume; later physical optimization can
 change the volume in either direction.
 
-A fixed group gives one symmetry per run. Without `fixed_space_group`, the
-Packer samples compatible groups using weights derived from the Cambridge
-Structural Database (CSD). A caller-supplied `space_group_probabilities`
-mapping **replaces** those weights; omitted groups have zero weight, and
-remaining compatible positive weights are normalized. The bundled weights
-come from the [CCDC space-group statistics report dated 1 January 2026](https://www.ccdc.cam.ac.uk/media/CSD-Space-Group-Statistics-Space-Group-Number-Ordering-2026.pdf).
+### Choose a space-group policy
+
+`SpaceGroupPolicy` describes which groups to use and how to choose between
+them. Use `SpaceGroupPolicy.fixed(number)` for one group, or
+`SpaceGroupPolicy.sampled()` for compatible groups weighted by the bundled
+Cambridge Structural Database (CSD) prior. Omitting `space_groups` from
+`PackingConfig` selects the sampled policy. The bundled weights come from the
+[CCDC space-group statistics report dated 1 January 2026](https://www.ccdc.cam.ac.uk/media/CSD-Space-Group-Statistics-Space-Group-Number-Ordering-2026.pdf).
+
+A sampled policy can restrict the crystal system and molecular handedness:
 
 ```python
-from nvalchemi.csp import sample_space_groups
+from nvalchemi.csp import CrystalSystem, SpaceGroupPolicy
 
-# Draw groups with four operations using the bundled CSD weights.
-csd_draw = sample_space_groups(5, num_operations=4, seed=7)
-# Restrict custom draws to group 14 and P2₁2₁2₁ (group 19).
-custom_draw = sample_space_groups(
-    5, num_operations=4, probabilities={14: 1.0, 19: 1.0}, seed=7
+monoclinic_policy = SpaceGroupPolicy.sampled(
+    crystal_system=CrystalSystem.MONOCLINIC,
+    sohncke_only=True,
 )
-print(custom_draw.tolist())
 ```
 
-Use `get_space_group_candidates()` to inspect compatible groups before a run.
-The helpers also filter by crystal system or by Sohncke groups, whose
-operations preserve molecular handedness. `sohncke_only=True` is appropriate
-when symmetry copies of a chiral molecule must keep their handedness. Call-time
-Packer overrides, as in the P-1 example, revalidate a complete setting without
-changing the base config. Fixed-group settings cannot be combined with sampled
-weights. Use separate calls to request an accepted-structure target for each
-Z/Z′ or space-group choice; weighted sampling does not guarantee coverage.
-When changing a fixed-group Packer to weighted sampling, clear the inherited
-setting with `fixed_space_group=None`. Likewise, clear `cell_volume_range`
-before supplying `cell_volume_scale_range`.
+Sohncke groups have symmetry operations that preserve molecular handedness.
+Set `sohncke_only=True` when copies of a chiral molecule must keep their
+handedness. The same requirement can be checked for a fixed choice with
+`SpaceGroupPolicy.fixed(number, sohncke_only=True)`.
+
+Supply relative weights to restrict sampling to selected groups:
+
+```python
+policy = SpaceGroupPolicy.sampled(probabilities={14: 3.0, 19: 1.0})
+# Inspect a four-operation distribution before using it for packing.
+groups = policy.draw(100, num_operations=4, seed=7)
+print(groups.tolist())
+
+# Reuse the policy with the packing settings from the water example.
+weighted_config = config.effective(z=4, z_prime=1, space_groups=policy)
+```
+
+A custom mapping replaces the CSD weights. Omitted groups have zero weight.
+After compatibility filtering, positive weights are normalized; they need not
+sum to one. In this example, group 14 has three times the selection weight of
+group 19. These weights control initial group selection. Cell initialization
+and acceptance can change the proportions in returned structures, and
+weighted sampling does not guarantee coverage of every group.
+
+`PackingConfig` checks the policy against `z / z_prime` when it is constructed
+or updated. A fixed group must provide that many operations; a sampled policy
+must retain at least one compatible group with positive weight. For example,
+group 2 has two operations and is incompatible with `z=4, z_prime=1`. The
+configuration reports this mismatch before packing starts. A policy retains
+its supplied weights, so using it in one configuration does not discard
+groups needed by another.
+
+Use `config.effective(space_groups=...)` or a call-level `space_groups=...`
+override to replace the policy without changing the base configuration.
+Switching between fixed and sampled selection replaces one object. When
+switching volume modes, continue to clear `cell_volume_range` before supplying
+`cell_volume_scale_range`.
+
+`draw()` returns an int32 tensor and samples with replacement. Supply
+`num_operations` explicitly because a standalone policy has no packing
+configuration from which to infer it. A nonnegative seed uses a local CPU
+random generator; without a seed, sampled draws use the global CPU generator.
+The optional `device` sets the output device. Fixed-policy draws repeat the
+fixed group without advancing the random generator. Standalone drawing and
+packing use the same selection rules and relative weights, but their random
+samplers and numerical precision differ, so matching seeds need not produce
+matching sequences.
+
+`get_space_group_candidates()` remains available for listing compatible
+groups. The existing `sample_space_groups()` helper forwards to a sampled
+policy and `draw()` with the same arguments.
 
 ### Understand acceptance and shortfall
 

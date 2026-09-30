@@ -58,8 +58,10 @@ constructed directly.
 Choose volume and symmetry
 --------------------------
 
-Estimate a starting cell-volume range, list compatible space groups, or
-sample them using the bundled CSD weights or caller-supplied weights.
+Estimate a starting cell-volume range and select symmetry through
+``SpaceGroupPolicy``. Its ``fixed`` and ``sampled`` constructors describe group
+selection; ``draw`` samples compatible groups independently of packing.
+``PackingConfig`` checks the policy against ``z / z_prime``.
 
 .. currentmodule:: nvalchemi.csp
 
@@ -76,6 +78,7 @@ sample them using the bundled CSD weights or caller-supplied weights.
    :nosignatures:
 
    CrystalSystem
+   SpaceGroupPolicy
 
 .. autosummary::
    :toctree: generated
@@ -88,6 +91,12 @@ sample them using the bundled CSD weights or caller-supplied weights.
    get_space_group_operation_count
    get_crystal_system
    is_sohncke_space_group
+
+.. automethod:: SpaceGroupPolicy.fixed
+
+.. automethod:: SpaceGroupPolicy.sampled
+
+.. automethod:: SpaceGroupPolicy.draw
 
 
 Generate candidates

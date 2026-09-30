@@ -28,6 +28,7 @@ from nvalchemi.csp.packer import (
     PackingStopReason,
 )
 from nvalchemi.csp.storage import CSPZarrReader, CSPZarrWriter
+from nvalchemi.csp.symmetry import SpaceGroupPolicy
 from nvalchemi.data import Batch
 from nvalchemi.dynamics import FIRE2
 from nvalchemi.gen.generator import AtomisticGenerator
@@ -248,7 +249,7 @@ def test_cpu_packing_round_trips_complete_compact_result_through_zarr(
             batch_size=2,
             max_candidates=2,
             cell_volume_range=(125.0, 125.0),
-            fixed_space_group=1,
+            space_groups=SpaceGroupPolicy.fixed(1),
             min_cell_height=2.5,
             overlap_tolerance=3.25,
         ),

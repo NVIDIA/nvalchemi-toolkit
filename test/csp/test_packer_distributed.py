@@ -31,6 +31,7 @@ from nvalchemi.csp.packer import (  # noqa: E402
     PackingConfig,
     PackingStopReason,
 )
+from nvalchemi.csp.symmetry import SpaceGroupPolicy  # noqa: E402
 from test.distributed._dd_harness import free_port  # noqa: E402
 from test.distributed._gloo_harness import run_gloo  # noqa: E402
 
@@ -60,7 +61,7 @@ def _config(rank: int, *, max_candidates: int | None = None) -> PackingConfig:
         batch_size=2,
         max_candidates=max_candidates,
         cell_volume_range=(1000.0, 1100.0),
-        fixed_space_group=1,
+        space_groups=SpaceGroupPolicy.fixed(1),
         max_steps_per_candidate=4,
     )
 
@@ -72,7 +73,7 @@ def _rank_specific_config(rank: int) -> PackingConfig:
         batch_size=2 if rank == 0 else 1,
         max_candidates=None,
         cell_volume_range=(1000.0, 1050.0) if rank == 0 else (1050.0, 1100.0),
-        fixed_space_group=1 if rank == 0 else 2,
+        space_groups=SpaceGroupPolicy.fixed(1 if rank == 0 else 2),
         max_steps_per_candidate=4,
     )
 
@@ -316,7 +317,7 @@ def _grouped_pack_worker(rank: int, world_size: int, queue: Any, mode: str) -> N
             cell_step_scale=0.0,
             volume_compression_scale=0.0,
             cell_volume_range=(125.0, 125.0),
-            fixed_space_group=1,
+            space_groups=SpaceGroupPolicy.fixed(1),
         )
         budgeted = CrystalPacker(config, device="cpu")
         result = budgeted(
@@ -364,7 +365,7 @@ def _grouped_pack_worker(rank: int, world_size: int, queue: Any, mode: str) -> N
             z_prime=1,
             batch_size=2,
             cell_volume_range=(1000.0, 1100.0),
-            fixed_space_group=1,
+            space_groups=SpaceGroupPolicy.fixed(1),
         )
         single = CrystalPacker(config, device="cpu")
         inputs = _packing_input()
@@ -557,7 +558,7 @@ def _nccl_worker(rank: int, world_size: int, port: int, queue: Any) -> None:
             z_prime=1,
             batch_size=1,
             cell_volume_range=(1000.0, 1100.0),
-            fixed_space_group=1,
+            space_groups=SpaceGroupPolicy.fixed(1),
             max_steps_per_candidate=4,
         )
         stream_result = CrystalPacker(stream_config, device=f"cuda:{rank}")(

@@ -29,10 +29,12 @@ from collections.abc import Mapping
 from enum import Enum
 from functools import lru_cache
 from numbers import Integral, Real
-from typing import TypeAlias
+from types import MappingProxyType
+from typing import Any, Literal, TypeAlias
 
 import numpy as np
 import torch
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from torch import Tensor
 
 from nvalchemi.csp._data_tables import SPACE_GROUP_PROBABILITIES
@@ -146,6 +148,263 @@ def _validate_probabilities(probabilities: Mapping[int, float]) -> dict[int, flo
             raise ValueError("probability weights must be finite and nonnegative")
         result[number] = weight
     return result
+
+
+def _validate_seed(seed: int | None) -> int | None:
+    """Return a validated nonnegative seed, preserving public error categories."""
+    if seed is None:
+        return None
+    if isinstance(seed, bool) or not isinstance(seed, Integral):
+        raise TypeError("seed must be an integer or None")
+    value = int(seed)
+    if value < 0:
+        raise ValueError("seed must be nonnegative")
+    return value
+
+
+class SpaceGroupPolicy(BaseModel):
+    """Immutable fixed or weighted-sampling rule for crystal space groups.
+
+    Construct policies with :meth:`fixed` or :meth:`sampled`. A sampled
+    policy stores an optional replacement prior and crystallographic filters;
+    its compatibility depends on the operation count required by a packing
+    configuration or a standalone :meth:`draw` call.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    mode: Literal["fixed", "sampled"]
+    group: int | None = Field(default=None, strict=True)
+    probabilities: Mapping[int, float] | None = Field(default=None, repr=False)
+    crystal_system: CrystalSystem | None = None
+    sohncke_only: bool = Field(default=False, strict=True)
+
+    @field_validator("probabilities", mode="before")
+    @classmethod
+    def _copy_probabilities(cls, value: Any) -> Any:
+        """Copy and validate caller-owned prior mappings."""
+        if value is None:
+            return None
+        return _validate_probabilities(value)
+
+    @field_validator("probabilities")
+    @classmethod
+    def _freeze_probabilities(
+        cls, value: Mapping[int, float] | None
+    ) -> Mapping[int, float] | None:
+        """Expose the copied prior through a read-only mapping."""
+        return None if value is None else MappingProxyType(dict(value))
+
+    @field_validator("crystal_system", mode="before")
+    @classmethod
+    def _validate_crystal_system(cls, value: Any) -> Any:
+        if value is not None and not isinstance(value, CrystalSystem):
+            raise TypeError("crystal_system must be a CrystalSystem or None")
+        return value
+
+    @model_validator(mode="after")
+    def _validate_state(self) -> SpaceGroupPolicy:
+        if not isinstance(self.sohncke_only, bool):
+            raise TypeError("sohncke_only must be a bool")
+        if self.mode == "fixed":
+            if self.group is None:
+                raise ValueError("fixed policies require a space-group number")
+            group = _validate_space_group(self.group)
+            if self.probabilities is not None or self.crystal_system is not None:
+                raise ValueError(
+                    "fixed policies cannot include probabilities or crystal_system"
+                )
+            if self.sohncke_only and not is_sohncke_space_group(group):
+                raise ValueError(
+                    "fixed group must be a Sohncke group when sohncke_only=True"
+                )
+        elif self.group is not None:
+            raise ValueError("sampled policies cannot specify a fixed group")
+        return self
+
+    @classmethod
+    def fixed(cls, group: int, *, sohncke_only: bool = False) -> SpaceGroupPolicy:
+        """Create a policy that always selects one compatible group.
+
+        The group number and optional handedness requirement are checked
+        immediately. Its operation count is checked when the policy enters a
+        packing configuration or a draw.
+
+        Parameters
+        ----------
+        group : int
+            International space-group number in ``[1, 230]``.
+        sohncke_only : bool, default=False
+            Require the selected group to preserve molecular handedness.
+
+        Returns
+        -------
+        policy : SpaceGroupPolicy
+            Frozen fixed-group policy.
+
+        Raises
+        ------
+        TypeError
+            If ``group`` is not a non-boolean integer or ``sohncke_only`` is
+            not a boolean.
+        ValueError
+            If ``group`` is outside ``[1, 230]`` or is not a Sohncke group when
+            ``sohncke_only=True``.
+        """
+        number = _validate_space_group(group)
+        if not isinstance(sohncke_only, bool):
+            raise TypeError("sohncke_only must be a bool")
+        return cls(mode="fixed", group=number, sohncke_only=sohncke_only)
+
+    @classmethod
+    def sampled(
+        cls,
+        *,
+        probabilities: Mapping[int, float] | None = None,
+        crystal_system: CrystalSystem | None = None,
+        sohncke_only: bool = False,
+    ) -> SpaceGroupPolicy:
+        """Create a policy that samples compatible groups with replacement.
+
+        A custom mapping replaces the bundled CSD weights. Missing entries
+        have zero weight, and positive compatible weights are normalized when
+        resolving a draw or packing configuration.
+
+        Construction validates and copies the supplied weights. Compatibility
+        and positive remaining weight are checked when the policy enters a
+        packing configuration or a draw.
+
+        Parameters
+        ----------
+        probabilities : Mapping[int, float], optional
+            Replacement relative weights keyed by group number.
+        crystal_system : CrystalSystem, optional
+            Restrict selection to one crystallographic system.
+        sohncke_only : bool, default=False
+            Keep only groups whose symmetry-generated copies preserve
+            molecular handedness.
+
+        Returns
+        -------
+        policy : SpaceGroupPolicy
+            Frozen sampled-group policy with a copied prior mapping.
+
+        Raises
+        ------
+        TypeError
+            If ``probabilities`` is not a mapping, a key or weight has an
+            invalid type, ``crystal_system`` is not a ``CrystalSystem``, or
+            ``sohncke_only`` is not a boolean.
+        ValueError
+            If a key is outside ``[1, 230]`` or a weight is negative or
+            nonfinite.
+        """
+        if crystal_system is not None and not isinstance(crystal_system, CrystalSystem):
+            raise TypeError("crystal_system must be a CrystalSystem or None")
+        if not isinstance(sohncke_only, bool):
+            raise TypeError("sohncke_only must be a bool")
+        clean_prior = (
+            None if probabilities is None else _validate_probabilities(probabilities)
+        )
+        return cls(
+            mode="sampled",
+            probabilities=clean_prior,
+            crystal_system=crystal_system,
+            sohncke_only=sohncke_only,
+        )
+
+    def draw(
+        self,
+        num_samples: int,
+        *,
+        num_operations: int,
+        seed: int | None = None,
+        device: Device = None,
+    ) -> Tensor:
+        """Draw compatible International space-group numbers with replacement.
+
+        Fixed policies repeat their group without advancing the random
+        generator.
+
+        Parameters
+        ----------
+        num_samples : int
+            Positive number of groups to draw.
+        num_operations : int
+            Required number of symmetry operations.
+        seed : int, optional
+            Nonnegative seed for a local CPU ``torch.Generator``. Without a
+            seed, sampled policies consume the global CPU generator.
+        device : torch.device or str, optional
+            Device for the returned tensor.
+
+        Returns
+        -------
+        space_groups : torch.Tensor, shape ``[num_samples]``, dtype=torch.int32
+            Sampled International numbers. Fixed policies repeat their group.
+
+        Raises
+        ------
+        TypeError
+            If either count is not a non-boolean integer or ``seed`` is not a
+            non-boolean integer or ``None``.
+        ValueError
+            If a count is not positive, ``seed`` is negative, a fixed group's
+            operation count does not match, or no compatible sampled group has
+            positive weight.
+        """
+        samples = _validate_positive_integer(num_samples, "num_samples")
+        operations = _validate_positive_integer(num_operations, "num_operations")
+        seed = _validate_seed(seed)
+        groups, weights = _resolve_space_group_distribution(self, operations)
+        if self.mode == "fixed":
+            result = torch.full((samples,), groups[0], dtype=torch.int32)
+        else:
+            generator = None
+            if seed is not None:
+                generator = torch.Generator(device="cpu")
+                generator.manual_seed(seed)
+            selected = torch.multinomial(
+                torch.from_numpy(weights),
+                samples,
+                replacement=True,
+                generator=generator,
+            )
+            result = torch.tensor(groups, dtype=torch.int32)[selected]
+        return result.to(device=device) if device is not None else result
+
+
+def _resolve_space_group_distribution(
+    policy: SpaceGroupPolicy, num_operations: int
+) -> tuple[list[int], np.ndarray]:
+    """Resolve ascending group IDs and normalized relative weights in float64."""
+    count = _validate_positive_integer(num_operations, "num_operations")
+    if policy.mode == "fixed":
+        if policy.group is None:
+            raise RuntimeError("fixed space-group policy has no group")
+        actual = get_space_group_operation_count(policy.group)
+        if actual != count:
+            raise ValueError(
+                f"fixed group {policy.group} has {actual} operations; {count} required"
+            )
+        return [policy.group], np.ones(1, dtype=np.float64)
+
+    candidates = _filter_candidates(count, policy.crystal_system, policy.sohncke_only)
+    prior = (
+        _default_probabilities()
+        if policy.probabilities is None
+        else policy.probabilities
+    )
+    weights = np.asarray(
+        [prior.get(number, 0.0) for number in candidates], dtype=np.float64
+    )
+    if weights.size == 0 or not np.isfinite(weights).all() or not np.any(weights > 0):
+        raise ValueError(
+            "at least one compatible space group must have a positive sampling weight"
+        )
+    weights /= weights.max()
+    weights /= math.fsum(weights.tolist())
+    return candidates, weights
 
 
 def csd_space_group_probabilities() -> dict[int, float]:
@@ -413,33 +672,10 @@ def sample_space_groups(
     torch.int32
     """
     samples = _validate_positive_integer(num_samples, "num_samples")
-    if seed is not None:
-        if isinstance(seed, bool) or not isinstance(seed, Integral):
-            raise TypeError("seed must be an integer or None")
-        seed = int(seed)
-        if seed < 0:
-            raise ValueError("seed must be nonnegative")
-    candidates = _filter_candidates(num_operations, crystal_system, sohncke_only)
-    if probabilities is None:
-        prior = _default_probabilities()
-    else:
-        prior = _validate_probabilities(probabilities)
-    weights = np.asarray(
-        [prior.get(number, 0.0) for number in candidates], dtype=np.float64
+    seed = _validate_seed(seed)
+    policy = SpaceGroupPolicy.sampled(
+        probabilities=probabilities,
+        crystal_system=crystal_system,
+        sohncke_only=sohncke_only,
     )
-    if weights.size == 0 or not np.isfinite(weights).all() or not np.any(weights > 0):
-        raise ValueError(
-            "at least one compatible space group must have a positive sampling weight"
-        )
-    # Scaling first avoids overflow when valid finite weights have a huge sum.
-    weights /= weights.max()
-    weights /= weights.sum()
-    generator = None
-    if seed is not None:
-        generator = torch.Generator(device="cpu")
-        generator.manual_seed(seed)
-    selected = torch.multinomial(
-        torch.from_numpy(weights), samples, replacement=True, generator=generator
-    )
-    result = torch.tensor(candidates, dtype=torch.int32)[selected]
-    return result.to(device=device) if device is not None else result
+    return policy.draw(samples, num_operations=num_operations, seed=seed, device=device)

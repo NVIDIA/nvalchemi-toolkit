@@ -27,6 +27,7 @@ from nvalchemi.csp.data import MolecularPackingInput, RigidMoleculeASUBatch
 from nvalchemi.csp.storage import CSPZarrReader, CSPZarrWriter
 from nvalchemi.csp.symmetry import (
     CrystalSystem,
+    SpaceGroupPolicy,
     csd_space_group_probabilities,
     get_crystal_system,
     get_space_group_candidates,
@@ -46,6 +47,7 @@ __all__ = [
     "CSPZarrWriter",
     "MolecularPackingInput",
     "RigidMoleculeASUBatch",
+    "SpaceGroupPolicy",
     "csd_space_group_probabilities",
     "estimate_formula_unit_volume",
     "get_crystal_system",

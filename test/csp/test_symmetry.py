@@ -15,7 +15,9 @@
 
 import pytest
 import torch
+from pydantic import ValidationError
 
+from nvalchemi.csp import SpaceGroupPolicy
 from nvalchemi.csp.symmetry import (
     CrystalSystem,
     csd_space_group_probabilities,
@@ -99,6 +101,76 @@ def test_sampling_requires_surviving_positive_mass() -> None:
         sample_space_groups(1, 2, probabilities={3: 0.0})
     with pytest.raises(ValueError, match="positive"):
         sample_space_groups(1, 1, probabilities={2: 1.0})
+
+
+def test_fixed_policy_draw_repeats_group_without_advancing_random_state() -> None:
+    policy = SpaceGroupPolicy.fixed(2)
+    torch.manual_seed(71)
+    before = torch.random.get_rng_state()
+    draws = policy.draw(5, num_operations=2, seed=13)
+    after = torch.random.get_rng_state()
+    assert torch.equal(draws, torch.full((5,), 2, dtype=torch.int32))
+    assert draws.device.type == "cpu"
+    assert torch.equal(before, after)
+    with pytest.raises(ValueError, match="2 operations; 1 required"):
+        policy.draw(1, num_operations=1)
+
+
+def test_sampled_policy_copies_and_reuses_full_prior_with_stable_weights() -> None:
+    prior = {3: 1.0, 14: 3.0, 19: 1.0}
+    policy = SpaceGroupPolicy.sampled(probabilities=prior)
+    prior[14] = 0.0
+    assert policy.probabilities == {3: 1.0, 14: 3.0, 19: 1.0}
+    with pytest.raises(TypeError):
+        policy.probabilities[14] = 0.0  # type: ignore[index]
+
+    draws = policy.draw(4000, num_operations=4, seed=531)
+    assert draws.dtype == torch.int32
+    assert set(draws.tolist()) == {14, 19}
+    assert (draws == 14).float().mean().item() == pytest.approx(0.75, abs=0.04)
+
+    two_operation_draws = policy.draw(10, num_operations=2, seed=2)
+    assert torch.equal(two_operation_draws, torch.full((10,), 3, dtype=torch.int32))
+    huge_weight_draws = SpaceGroupPolicy.sampled(
+        probabilities={14: 1.0e308, 19: 1.0e308}
+    ).draw(20, num_operations=4, seed=7)
+    assert set(huge_weight_draws.tolist()) == {14, 19}
+
+
+def test_policy_constructors_reject_contradictory_and_invalid_values() -> None:
+    with pytest.raises(ValueError, match="Sohncke"):
+        SpaceGroupPolicy.fixed(2, sohncke_only=True)
+    with pytest.raises(TypeError, match="integer"):
+        SpaceGroupPolicy.fixed(True)
+    with pytest.raises(TypeError, match="crystal_system"):
+        SpaceGroupPolicy.sampled(crystal_system=0)  # type: ignore[arg-type]
+    with pytest.raises(ValidationError):
+        SpaceGroupPolicy(mode="fixed", group=1, probabilities={1: 1.0})
+    with pytest.raises(ValidationError):
+        SpaceGroupPolicy(mode="sampled", group=1)
+    with pytest.raises(ValidationError):
+        SpaceGroupPolicy(mode="sampled", unrecognized=True)
+
+
+def test_sample_helper_forwards_to_policy_draw() -> None:
+    kwargs = {
+        "probabilities": {14: 2.0, 19: 1.0},
+        "crystal_system": CrystalSystem.ORTHORHOMBIC,
+        "sohncke_only": True,
+    }
+    forwarded = sample_space_groups(50, 4, seed=18, **kwargs)
+    direct = SpaceGroupPolicy.sampled(**kwargs).draw(50, num_operations=4, seed=18)
+    assert torch.equal(forwarded, direct)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_policy_draw_places_output_on_requested_device() -> None:
+    result = SpaceGroupPolicy.sampled(probabilities={14: 1.0}).draw(
+        8, num_operations=4, seed=8, device="cuda:0"
+    )
+    assert result.dtype == torch.int32
+    assert result.device == torch.device("cuda:0")
+    assert set(result.cpu().tolist()) == {14}
 
 
 @pytest.mark.parametrize(
