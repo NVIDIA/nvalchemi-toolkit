@@ -563,7 +563,9 @@ class VAEGenerate:
             n = num_samples
         else:
             # conditional: encode the inputs, then reparametrize —
-            # one draw per input graph, matching the driver's tiling convention
+            # one draw per input graph; for repeated draws per input, add a
+            # condition step that tiles the batch (the driver does not tile
+            # on its own)
             mu, logvar = self.model.encode(inputs)
             n = mu.shape[0]
             eps = torch.randn(n, self.model.latent_dim, generator=rng, device=mu.device)
