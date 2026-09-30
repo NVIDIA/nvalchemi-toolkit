@@ -30,6 +30,7 @@ from nvalchemi.data.datapipes import (
     MultiDataset,
     MultiDatasetBatchSampler,
     MultiDatasetSampler,
+    distributed_shard,
 )
 
 
@@ -80,6 +81,57 @@ class _FakeDistributedManager:
     def is_initialized(self) -> bool:
         """Return whether the manager is initialized."""
         return self.initialized
+
+
+def test_distributed_shard_pads_an_uneven_epoch_like_torch() -> None:
+    """Verify the padded deal repeats leading items so every rank gets the same count."""
+    indices = [0, 1, 2, 3, 4]
+
+    shards = [
+        distributed_shard(indices, num_replicas=2, rank=rank, drop_last=False)
+        for rank in (0, 1)
+    ]
+
+    assert shards == [[0, 2, 4], [1, 3, 0]]
+    assert indices == [0, 1, 2, 3, 4]
+
+
+def test_distributed_shard_truncates_an_uneven_epoch_with_drop_last() -> None:
+    """Verify drop_last cuts the tail so every rank gets the same count."""
+    shards = [
+        distributed_shard([0, 1, 2, 3, 4], num_replicas=2, rank=rank, drop_last=True)
+        for rank in (0, 1)
+    ]
+
+    assert shards == [[0, 2], [1, 3]]
+
+
+def test_distributed_shard_unpadded_deals_disjoint_covering_shards() -> None:
+    """Verify pad=False deals every item exactly once, uncut and unrepeated."""
+    indices = [0, 1, 2, 3, 4]
+
+    shards = [
+        distributed_shard(
+            indices, num_replicas=2, rank=rank, drop_last=False, pad=False
+        )
+        for rank in (0, 1)
+    ]
+
+    assert shards == [[0, 2, 4], [1, 3]]
+    assert distributed_shard(
+        indices, num_replicas=2, rank=1, drop_last=True, pad=False
+    ) == [1, 3]
+    assert indices == [0, 1, 2, 3, 4]
+
+
+def test_distributed_shard_single_replica_returns_the_epoch() -> None:
+    """Verify one replica owns the whole epoch whatever the other settings."""
+    indices = [3, 1, 2]
+
+    assert (
+        distributed_shard(indices, num_replicas=1, rank=0, drop_last=True, pad=False)
+        == indices
+    )
 
 
 def test_torch_distributed_sampler_satisfies_protocol() -> None:

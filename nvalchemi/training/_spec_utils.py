@@ -19,11 +19,15 @@ from __future__ import annotations
 import importlib
 import warnings
 from collections.abc import Callable, Mapping
-from typing import Any
+from pathlib import Path
+from typing import Annotated, Any
 
 import torch
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from nvalchemi._serialization import _extract_init_kwargs_from_attrs
+from nvalchemi.data.datapipes.backends.zarr import AtomicDataZarrReader
+from nvalchemi.data.datapipes.dataset import BatchDatasetProtocol, Dataset
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training._spec import (
     BaseSpec,
@@ -313,3 +317,98 @@ def _single_model_input_from_spec(raw: Any) -> bool | None:
             f"got {type(raw).__name__}."
         )
     return raw
+
+
+class DatasetRef(BaseModel):
+    """Store reference by which a spec names one dataset."""
+
+    path: Annotated[
+        str,
+        Field(description="Filesystem path or URI of the store to read."),
+    ]
+    device: Annotated[
+        str,
+        Field(
+            default="cpu",
+            description="Device the dataset collates the rows it serves onto.",
+        ),
+    ] = "cpu"
+
+    model_config = ConfigDict(extra="forbid")
+
+
+def dataset_spec_dict(
+    dataset: BatchDatasetProtocol, *, field: str, remedy: str | None = None
+) -> dict[str, Any]:
+    """Return the store reference that a path-backed dataset serializes to.
+
+    Parameters
+    ----------
+    dataset : BatchDatasetProtocol
+        Dataset to reference. Only a dataset that reads a filesystem or URI
+        store can be named in a spec. A dataset that holds its samples in
+        memory cannot.
+    field : str
+        Name of the spec field being serialized, quoted in the error.
+    remedy : str | None, optional
+        Final sentence of the error, telling the caller how to obtain a
+        path-backed dataset. Default ``None`` uses a sentence that names
+        ``AtomicDataZarrWriter``.
+
+    Returns
+    -------
+    dict[str, Any]
+        :class:`DatasetRef` fields, ``{"path": ..., "device": ...}``, which
+        :func:`dataset_from_spec_dict` reopens.
+
+    Raises
+    ------
+    ValueError
+        If *dataset* is not backed by a store that a path names.
+    """
+    store = getattr(getattr(dataset, "reader", None), "store", None)
+    if not isinstance(store, (str, Path)):
+        if remedy is None:
+            remedy = (
+                "Write the samples to a store with an AtomicDataZarrWriter and "
+                f"point the spec at that path, or re-supply {field} at "
+                "construction."
+            )
+        raise ValueError(
+            f"{field} is a {type(dataset).__name__} holding its samples in "
+            "memory, which no spec can name: a spec references a dataset by "
+            f"the store it reads. {remedy}"
+        )
+    return {"path": str(store), "device": str(getattr(dataset, "target_device", "cpu"))}
+
+
+def dataset_from_spec_dict(spec: Mapping[str, Any], *, field: str) -> Dataset:
+    """Reopen the dataset that :func:`dataset_spec_dict` referenced.
+
+    Parameters
+    ----------
+    spec : Mapping[str, Any]
+        Reference produced by :func:`dataset_spec_dict`.
+    field : str
+        Name of the spec field being rebuilt, quoted in the error.
+
+    Returns
+    -------
+    Dataset
+        Dataset over the referenced store. The reader it opens stays open for
+        the caller to close.
+
+    Raises
+    ------
+    ValueError
+        If *spec* names no store to read, or carries a key that is not part of
+        a store reference.
+    """
+    try:
+        reference = DatasetRef.model_validate(spec)
+    except ValidationError as exc:
+        raise ValueError(
+            f"{field} must reference a dataset by the store it reads, as "
+            f"{{'path': ..., 'device': ...}}; got {dict(spec)!r}: {exc}"
+        ) from exc
+    return Dataset(AtomicDataZarrReader(reference.path), device=reference.device)

@@ -71,13 +71,11 @@ from nvalchemi.training.distillation import (
 )
 
 # %%
-# Configure a small gallery run
-# -----------------------------
-# Sphinx-gallery examples should execute quickly and deterministically, so the
-# configuration is a handful of constants rather than command-line arguments.
-# Scaling this to a real workflow means growing the dataset and step count and
-# swapping the toy potential below for a wrapped MLIP. ``DEVICE`` is the one
-# place to change to train on a GPU, for example ``torch.device("cuda")``.
+# Configure the run
+# -----------------
+# These constants configure the dataset, the toy potentials, and the training
+# run. ``DEVICE`` selects where everything runs; set it to
+# ``torch.device("cuda")`` to run on a GPU.
 
 DEVICE = torch.device("cpu")
 

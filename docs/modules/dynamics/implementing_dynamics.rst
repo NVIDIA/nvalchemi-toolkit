@@ -58,6 +58,13 @@ These class-level sets drive **automatic validation**:
 * ``__provides_keys__`` documents which additional batch fields the
   integrator writes (beyond model outputs like forces and energy).
   The diagnostic helper ``_validate_batch_keys`` can verify them.
+  It also drives :meth:`~nvalchemi.dynamics.BaseDynamics.required_input_keys`:
+  every provided key other than ``positions``, plus ``atomic_masses`` when
+  ``velocities`` is provided.
+  :meth:`~nvalchemi.dynamics.BaseDynamics.check_initial_batch` checks an
+  initial batch against those keys before a run starts. A batch missing a
+  field the integrator updates in place is therefore refused up front rather
+  than inside the first step.
 
 When dynamics are composed into a :class:`~nvalchemi.dynamics.FusedStage`,
 the fused stage computes the **union** of all sub-stage keys
