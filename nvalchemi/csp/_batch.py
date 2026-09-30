@@ -24,7 +24,11 @@ from torch import Tensor
 
 from nvalchemi.data.atomic_data import _default_mass_table
 from nvalchemi.data.batch import Batch
-from nvalchemi.data.level_storage import LevelSchema, MultiLevelStorage
+from nvalchemi.data.level_storage import (
+    LevelSchema,
+    MultiLevelStorage,
+    _resolve_device,
+)
 
 if TYPE_CHECKING:
     from nvalchemi.csp.data import RigidMoleculeASUBatch
@@ -43,14 +47,6 @@ _SYSTEM_SOURCE_FIELDS = (
     "csp_source_z_prime",
 )
 _ATOM_CHUNK_SIZE = 32768
-
-
-def _canonical_device(device: torch.device | str) -> torch.device:
-    """Resolve an unindexed CUDA alias to its current concrete device."""
-    resolved = torch.device(device)
-    if resolved.type == "cuda" and resolved.index is None:
-        return torch.device("cuda", torch.cuda.current_device())
-    return resolved
 
 
 @lru_cache(maxsize=None)
@@ -75,7 +71,7 @@ def _operation_tables(
     device: torch.device | str,
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Return cached symmetry operation tensors on ``device``."""
-    return _operation_tables_cached(_canonical_device(device))
+    return _operation_tables_cached(_resolve_device(torch.device(device)))
 
 
 @lru_cache(maxsize=None)
@@ -86,7 +82,7 @@ def _mass_table_cached(device: torch.device) -> Tensor:
 
 def _mass_table(device: torch.device | str) -> Tensor:
     """Return the Toolkit atomic-mass lookup table cached on ``device``."""
-    return _mass_table_cached(_canonical_device(device))
+    return _mass_table_cached(_resolve_device(torch.device(device)))
 
 
 def _selected_indices(compact: RigidMoleculeASUBatch, indices: Tensor | None) -> Tensor:
@@ -147,7 +143,9 @@ def expand_asu_batch(
 ) -> Batch:
     """Expand selected ASU rows to full-cell coordinates with provenance maps."""
     target_device = (
-        _canonical_device(device) if device is not None else compact.cells.device
+        _resolve_device(torch.device(device))
+        if device is not None
+        else compact.cells.device
     )
     selected_index = _selected_indices(compact, indices)
     selected_count = int(selected_index.numel())

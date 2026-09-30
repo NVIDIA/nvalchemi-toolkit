@@ -38,6 +38,7 @@ from nvalchemi.csp.comparison import (
     _validate_confirmed_subset,
 )
 from nvalchemi.data import Batch
+from nvalchemi.data.level_storage import _resolve_device
 
 _PILOT_CONTIGUOUS = 160
 _PILOT_SPREAD = 160
@@ -2929,8 +2930,7 @@ def deduplicate_stream(
         raise ValueError("device must be CPU or CUDA")
     if target_device.type == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA device requested but CUDA is unavailable")
-    if target_device.type == "cuda" and target_device.index is None:
-        target_device = torch.device("cuda", torch.cuda.current_device())
+    target_device = _resolve_device(target_device)
     if input_batch_size is None:
         input_batch_size = 1024 if target_device.type == "cuda" else 64
     else:
@@ -3599,8 +3599,7 @@ def iter_matches_stream(
         raise ValueError("device must be CPU or CUDA")
     if target_device.type == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA device requested but CUDA is unavailable")
-    if target_device.type == "cuda" and target_device.index is None:
-        target_device = torch.device("cuda", torch.cuda.current_device())
+    target_device = _resolve_device(target_device)
 
     # Everything below belongs to the iterator call and is dropped on exhaustion
     # or explicit close; loader objects remain caller-owned.

@@ -46,6 +46,7 @@ from nvalchemi.csp.packer.result import (
     PackingResult,
     PackingStopReason,
 )
+from nvalchemi.data.level_storage import _resolve_device
 
 __all__ = ["CrystalPacker"]
 
@@ -338,12 +339,10 @@ class CrystalPacker:
         elif target.type == "cuda":
             if not torch.cuda.is_available():
                 raise ValueError("CUDA is not available")
-            index = (
-                torch.cuda.current_device() if target.index is None else target.index
-            )
+            target = _resolve_device(target)
+            index = target.index
             if not 0 <= index < torch.cuda.device_count():
                 raise ValueError(f"CUDA device index {index} is unavailable")
-            target = torch.device("cuda", index)
         else:
             raise ValueError("device must be 'cpu' or a CUDA device")
         self.config = config
