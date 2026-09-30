@@ -628,6 +628,35 @@ def test_public_cpu_expiration_partially_refills_and_returns_empty_shortfall() -
     assert events[3].generated_count == 3
 
 
+@pytest.mark.parametrize("num_samples", [1, 2])
+def test_public_cpu_default_auto_budget_bounds_unreachable_acceptance(
+    num_samples: int,
+) -> None:
+    config = PackingConfig(
+        z=1,
+        z_prime=1,
+        batch_size=64,
+        max_steps_per_candidate=1,
+        convergence_check_interval=1,
+        overlap_tolerance=0.0,
+        step_scale=0.0,
+        cell_step_scale=0.0,
+        volume_compression_scale=0.0,
+        cell_volume_range=(125.0, 125.0),
+        fixed_space_group=1,
+    )
+    result = CrystalPacker(config, device="cpu")(
+        _one_atom_input(contact_distance=7.0),
+        num_samples=num_samples,
+        rng=torch.Generator().manual_seed(87),
+    )
+
+    assert config.max_candidates == "auto"
+    assert len(result) == 0
+    assert result.generated_count == 1000 * num_samples
+    assert result.stop_reason is PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED
+
+
 def test_refilled_candidate_skips_relaxation_with_stale_nonzero_force(
     monkeypatch,
 ) -> None:

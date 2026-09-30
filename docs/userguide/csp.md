@@ -45,9 +45,9 @@ GPU, and expand two accepted structures. Install `nvalchemi-toolkit[rdkit]`
 and use an environment with CUDA support.
 
 ```{note}
-The 1000–1200 Å³ starting cells are deliberately oversized for one water
-molecule so the example completes quickly. They are unsuitable starting
-volumes for an ice search.
+The $(1000\text{–}1200)\,\mathrm{\AA}^3$ starting cells are deliberately
+oversized for one water molecule so the example completes quickly. They are
+unsuitable starting volumes for an ice search.
 ```
 
 ```python
@@ -60,10 +60,13 @@ from nvalchemi.csp.chem import (
 )
 from nvalchemi.csp.packer import CrystalPacker, PackingConfig
 
+# Generate one water conformer with RDKit.
 molecule = generate_conformers_from_smiles(
     "O", config=RDKitConformerConfig(num_conformers=1, random_seed=7, num_threads=1)
 )
+# Assemble the molecules and contact distances for one formula unit.
 packing_input = build_molecular_packing_input([molecule])
+# Configure the starting cells, symmetry, and finite trial budget.
 config = PackingConfig(
     z=1,
     z_prime=1,
@@ -72,10 +75,12 @@ config = PackingConfig(
     cell_volume_range=(1000.0, 1200.0),
     fixed_space_group=1,
 )
+# Bind the packer to the selected GPU.
 packer = CrystalPacker(
     config=config,
     device="cuda:0",
 )
+# Generate accepted starting structures and inspect any shortfall.
 result = packer(
     packing_input,
     num_samples=200,
@@ -87,15 +92,58 @@ print("stopped:", result.stop_reason)
 if len(result) < 2:
     raise RuntimeError("Fewer than two candidates were accepted")
 
+# Expand two accepted ASU structures into full-cell atomistic data.
 selected = result.structures.to_batch(indices=torch.tensor([0, 1]))
 assert selected.num_graphs == 2
 ```
 
 `num_samples` requests accepted structures. `batch_size` limits the trials
-active at once, while `max_candidates` limits all initialized trials. Rejected
-trials consume that budget, so a finite search may return fewer than 200
-structures. Inspect the accepted count and stop reason before continuing.
+active at once. By default, `max_candidates="auto"` limits all initialized
+trials to `1000 * num_samples` for each call. A positive integer sets a fixed
+budget; explicit `None` leaves the trial budget unlimited. Rejected trials
+consume that budget, so a finite search may return fewer structures than
+requested. Inspect the accepted count and stop reason before continuing.
+
 `selected` contains full-cell atom coordinates for two candidates.
+
+The automatic cap is a safety limit, not an acceptance guarantee or a
+wall-clock timeout. At an acceptance rate of about 0.1%, this budget yields the
+requested count on average and can still return a shortfall. A bounded
+pre-flight remains useful before scaling up.
+
+```{admonition} Pre-flight large packing searches
+:class: warning
+
+With explicit `max_candidates=None`, the trial budget is unlimited. Unreachable
+acceptance criteria can keep the search running without useful progress. Before
+a large or unlimited search, run a short pre-flight with a finite candidate
+budget, using the intended starting-volume range and per-candidate relaxation
+limit. Inspect accepted structures versus generated
+trials. An overly small starting volume can produce low or zero acceptance, and
+packing does not expand the cell volume. Revisit the volume settings and repeat
+the pre-flight before scaling up.
+```
+
+```python
+preflight = packer(
+    packing_input,
+    num_samples=32,
+    max_candidates=32000,
+    run_id=76,
+)
+print(
+    "pre-flight accepted:", len(preflight),
+    "trials:", preflight.generated_count,
+    "stopped:", preflight.stop_reason,
+)
+```
+
+This pre-flight permits at most 32000 initialized trials and retains the configured
+per-candidate relaxation limit. Use the settings intended for the search. Accepted
+and generated counts are diagnostic: there is no universal acceptance
+threshold or automatic decision to continue. Restrictive settings can prevent
+cell initialization and raise an error. These controls bound work rather than
+impose a wall-clock timeout.
 
 ## Set up a molecular and crystallographic search
 
@@ -160,8 +208,9 @@ p_minus_1_result = packer(
 
 Choose starting volumes from molecular size and an expected crystal density.
 {py:func}`~nvalchemi.csp.estimate_formula_unit_volume` returns an estimate
-`V_fu` for one formula unit in Å³. `cell_volume_range=(low, high)` specifies
-absolute **cell** volumes in Å³. Alternatively,
+`V_fu` for one formula unit in $\mathrm{\AA}^3$.
+`cell_volume_range=(low, high)` specifies absolute **cell** volumes in
+$\mathrm{\AA}^3$. Alternatively,
 `cell_volume_scale_range=(low, high)` uses `(low * Z * V_fu, high * Z * V_fu)`.
 Supply exactly one range. Both control initial cells. Packing can shrink a
 sampled cell but does not expand its volume; later physical optimization can
@@ -202,8 +251,9 @@ before supplying `cell_volume_scale_range`.
 
 The Packer checks contacts between different molecular copies, including
 periodic copies. An **overlap** is the positive difference between a contact
-cutoff and an atom-pair distance, in Å. Small residual overlap can remain: a
-trial is accepted when its largest overlap is at most `overlap_tolerance`.
+cutoff and an atom-pair distance, in $\mathrm{\AA}$. Small residual overlap
+can remain: a trial is accepted when its largest overlap is at most
+`overlap_tolerance`.
 The accepted structures carry `steps`, `total_overlap`, and `max_overlap` in
 `result.structures.properties`. These are clash diagnostics, not physical
 energies.
@@ -331,7 +381,7 @@ them. This example reuses `packer`, `packing_input`, and `demo_model` from
 above:
 
 ```python
-from nvalchemi.gen import AtomisticGenerator, GenerationPipeline
+from nvalchemi.gen import AtomisticGenerator
 
 
 def generate_for_relaxation(formula_unit, *, num_samples, rng):
@@ -350,9 +400,7 @@ generator = AtomisticGenerator(
     device="cuda:0",
     seed=79,
 )
-pipeline = GenerationPipeline(
-    stages=[generator, FIRE2(model=demo_model, dt=0.05, n_steps=1)]
-)
+pipeline = generator | FIRE2(model=demo_model, dt=0.05, n_steps=1)
 with pipeline:
     relaxed = pipeline(packing_input)
 ```
@@ -380,7 +428,8 @@ quadratically. For very large pools, select plausible pairs or work in chunks.
 
 ### What the radial mismatch score means
 
-For each atom, the index sorts distances to neighbors within `cutoff`, in Å;
+For each atom, the index sorts distances to neighbors within `cutoff`, in
+$\mathrm{\AA}$;
 shorter lists are padded with the cutoff distance. It finds the most similar
 compatible atom environment in the other structure by comparing those
 distance patterns, regardless of the atoms' coordinates in a common frame.
@@ -391,9 +440,10 @@ environment: this is not a one-to-one atom assignment.
 The **radial mismatch score** is the largest relative mismatch remaining
 after these matches. For two positive distances, the mismatch is
 `max(d1, d2) / min(d1, d2) - 1`. At `threshold=0.1`, the larger distance may
-be at most 10% above the smaller one. For example, 2.0 Å and 2.1 Å have a
-score of 0.05. The threshold is dimensionless, not a tolerance in Å. Lower
-scores mean closer local distance patterns.
+be at most 10% above the smaller one. For example, $2.0\,\mathrm{\AA}$ and
+$2.1\,\mathrm{\AA}$ have a score of 0.05. The threshold is dimensionless, not
+a tolerance in $\mathrm{\AA}$. Lower scores mean closer local distance
+patterns.
 
 The score ignores angles, chirality, energy, and distances beyond `cutoff`.
 Distinct crystals can therefore have low mismatch scores: **matches can be false
@@ -744,11 +794,12 @@ block with the same `type_map` and `typed_index`.
 
 ## Advanced data and storage details
 
-The formula-unit input owns its conformer pool, contact distances in Å,
-component IDs, and volume estimate in Å³. An ASU batch shares that input and
-stores each candidate's cell, space group, and independent placements. Cell
-vectors are rows of a 3 × 3 matrix in Å. Fractional molecular centers are
-dimensionless and become Cartesian through `fractional @ cell`; rigid
+The formula-unit input owns its conformer pool, contact distances in
+$\mathrm{\AA}$, component IDs, and volume estimate in $\mathrm{\AA}^3$. An
+ASU batch shares that input and stores each candidate's cell, space group, and
+independent placements. Cell vectors are rows of a 3 × 3 matrix in
+$\mathrm{\AA}$. Fractional molecular centers are dimensionless and become
+Cartesian through `fractional @ cell`; rigid
 rotations act on Cartesian molecular displacements. Expansion emits
 `A_fu * Z` atoms per cell, where `A_fu` is the atom count of one formula unit.
 Molecular centers are wrapped; atom coordinates are not wrapped separately.

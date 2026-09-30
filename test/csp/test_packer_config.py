@@ -108,6 +108,28 @@ def test_config_rejects_invalid_values(
         make_config(**updates)
 
 
+def test_automatic_candidate_budget_mode_is_preserved_and_overridable() -> None:
+    config = make_config()
+    assert config.max_candidates == "auto"
+    assert config.effective(max_steps_per_candidate=20).max_candidates == "auto"
+    assert config.effective(max_candidates=None).max_candidates is None
+    assert config.effective(max_candidates=7).max_candidates == 7
+    assert (
+        make_config(max_candidates=7).effective(max_candidates="auto").max_candidates
+        == "auto"
+    )
+
+    for budget in ("auto", None, 7):
+        serialized = make_config(max_candidates=budget).model_dump()
+        assert PackingConfig.model_validate(serialized).max_candidates == budget
+
+
+@pytest.mark.parametrize("budget", [True, 1.5, "unlimited"])
+def test_config_rejects_invalid_candidate_budget_types(budget: object) -> None:
+    with pytest.raises(ValidationError):
+        make_config(max_candidates=budget)
+
+
 def test_config_is_frozen_forbids_extra_keys_and_revalidates_effective() -> None:
     config = make_config(max_candidates=2)
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):

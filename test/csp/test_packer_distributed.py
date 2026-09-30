@@ -35,14 +35,16 @@ from test.distributed._dd_harness import free_port  # noqa: E402
 from test.distributed._gloo_harness import run_gloo  # noqa: E402
 
 
-def _packing_input(*, marker: str = "same") -> MolecularPackingInput:
+def _packing_input(
+    *, marker: str = "same", contact_distance: float = 1.0
+) -> MolecularPackingInput:
     return MolecularPackingInput(
         conformer_positions=torch.zeros((1, 3), dtype=torch.float32),
         conformer_ptr=torch.tensor([0, 1], dtype=torch.int32),
         molecule_conformer_ptr=torch.tensor([0, 1], dtype=torch.int32),
         molecule_atom_ptr=torch.tensor([0, 1], dtype=torch.int32),
         atomic_numbers=torch.tensor([6], dtype=torch.int64),
-        contact_distances=torch.tensor([[1.0]], dtype=torch.float32),
+        contact_distances=torch.tensor([[contact_distance]], dtype=torch.float32),
         component_index=torch.tensor([0], dtype=torch.int32),
         formula_unit_volume=1000.0,
         metadata={"marker": marker, "nested": {"value": 1}},
@@ -300,6 +302,39 @@ def _grouped_pack_worker(rank: int, world_size: int, queue: Any, mode: str) -> N
                     gathered.generated_count,
                     gathered.stop_reason.value,
                 ),
+            )
+        )
+    elif mode == "default_auto_budget_global":
+        config = PackingConfig(
+            z=2,
+            z_prime=2,
+            batch_size=64,
+            max_steps_per_candidate=1,
+            convergence_check_interval=1,
+            overlap_tolerance=0.0,
+            step_scale=0.0,
+            cell_step_scale=0.0,
+            volume_compression_scale=0.0,
+            cell_volume_range=(125.0, 125.0),
+            fixed_space_group=1,
+        )
+        budgeted = CrystalPacker(config, device="cpu")
+        result = budgeted(
+            _packing_input(contact_distance=7.0),
+            num_samples=2,
+            rank_targets=(1, 1),
+            rank_candidate_budgets=(1000, 1000),
+            gather_to_rank=1,
+            process_group=dist.group.WORLD,
+            run_id=527,
+            rng=torch.Generator().manual_seed(28),
+        )
+        queue.put(
+            (
+                rank,
+                None
+                if result is None
+                else (len(result), result.generated_count, result.stop_reason.value),
             )
         )
     elif mode == "preflight_mismatch":
@@ -708,6 +743,18 @@ def test_gloo_default_finite_budget_is_bounded_and_gathered_shortfall_is_aggrega
     assert results[1][2][1] == 3
     assert results[1][2][0] < 4
     assert results[1][2][2] == PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED.value
+
+
+def test_gloo_default_auto_budget_uses_global_target_before_partitioning() -> None:
+    results = dict(
+        run_gloo(
+            world_size=2, fn=_grouped_pack_worker, args=("default_auto_budget_global",)
+        )
+    )
+    assert results == {
+        0: None,
+        1: (0, 2000, PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED.value),
+    }
 
 
 def test_gloo_catchable_callback_failure_reaches_every_rank() -> None:

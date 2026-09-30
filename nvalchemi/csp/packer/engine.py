@@ -49,6 +49,8 @@ from nvalchemi.csp.packer.result import (
 
 __all__ = ["CrystalPacker"]
 
+_DEFAULT_CANDIDATE_MULTIPLIER = 1000
+
 
 @dataclass
 class _PackingCore:
@@ -337,9 +339,8 @@ class CrystalPacker:
         """Generate up to ``num_samples`` crystal starting structures in ASU
         representation.
 
-        ``num_samples`` is the number of accepted structures requested.
-        ``batch_size`` controls how many candidates can be active at once;
-        ``max_candidates`` limits total trials and can produce a shorter result.
+        Calls :meth:`pack`; see that method for trial-budget semantics and
+        bounded pre-flight guidance.
 
         Parameters
         ----------
@@ -370,7 +371,8 @@ class CrystalPacker:
         rank_candidate_budgets : sequence of int, optional
             Per-rank candidate caps summing to finite effective
             ``max_candidates``. Custom targets require these when that global
-            candidate cap is finite.
+            candidate cap is finite. Automatic budgets are resolved from the
+            global sample target before partitioning.
         progress_callback : callable, optional
             Called at performed convergence checks. A distributed rank with a
             zero target or zero candidate budget may return without a callback.
@@ -423,8 +425,21 @@ class CrystalPacker:
         progress_callback: Callable[[PackingProgress], None] | None = None,
         **config_overrides: object,
     ) -> PackingResult | None:
-        """Generate and return crystal starting structures in ASU
-        representation.
+        """Generate and return crystal starting structures in ASU representation.
+
+        ``num_samples`` requests accepted structures; ``batch_size`` limits
+        active trials. By default, ``max_candidates="auto"`` limits initialized
+        trials to ``1000 * num_samples``. A positive integer sets a fixed cap;
+        explicit ``None`` allows unlimited trials. Finite budgets can return
+        fewer accepted structures than requested.
+
+        An unlimited search assumes reachable acceptance criteria and can keep
+        running without useful progress otherwise. Before a large or unlimited
+        search, use a short pre-flight with a finite candidate budget and the
+        intended starting-volume range, overlap tolerance, and per-candidate
+        relaxation limit. Inspect accepted versus generated counts; low or zero
+        acceptance can indicate an overly small starting volume. Revisit the
+        volume settings and repeat the pre-flight before scaling up.
 
         Parameters
         ----------
@@ -454,7 +469,8 @@ class CrystalPacker:
         rank_candidate_budgets : sequence of int, optional
             Per-rank candidate caps summing to finite effective
             ``max_candidates``. Custom targets require these when that global
-            candidate cap is finite.
+            candidate cap is finite. Automatic budgets are resolved from the
+            global sample target before partitioning.
         progress_callback : callable, optional
             Called at performed convergence checks. A distributed rank with a
             zero target or zero candidate budget may return without a callback.
@@ -496,6 +512,10 @@ class CrystalPacker:
             if progress_callback is not None and not callable(progress_callback):
                 raise TypeError("progress_callback must be callable or None")
             config = self.config.effective(**config_overrides)
+            if config.max_candidates == "auto":
+                config = config.effective(
+                    max_candidates=_DEFAULT_CANDIDATE_MULTIPLIER * target_count
+                )
         except Exception as error:
             if not grouped:
                 raise

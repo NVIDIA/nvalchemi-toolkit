@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -36,11 +36,12 @@ class PackingConfig(BaseModel):
     """Choose how many trial structures to sample, which crystal symmetries and cell
     sizes to use, and when a trial is accepted.
 
-    ``batch_size`` is the maximum number of candidates active at once.
-    ``max_candidates`` optionally limits total candidates generated; it may be
-    smaller than a call's requested output target, in which case that call can
-    return a short result. The output target and random generator belong to the
-    generating-function call.
+    ``batch_size`` is the maximum number of candidates active at once. By
+    default, ``max_candidates="auto"`` limits initialized trials to
+    ``1000 * num_samples`` for each call. A positive integer sets a fixed cap;
+    explicit ``None`` leaves the budget unlimited. A finite budget may return
+    fewer structures than requested. The output target and random generator
+    belong to the generating-function call.
 
     Exactly one cell volume mode is required. ``cell_volume_range`` gives an
     absolute conventional-cell volume interval in cubic angstroms, while
@@ -59,9 +60,18 @@ class PackingConfig(BaseModel):
         Number of formula units in the asymmetric unit; must divide ``z``.
     batch_size : int
         Maximum number of candidates active at once.
-    max_candidates : int, optional
-        Maximum number of trial structures initialized during a call; ``None``
-        leaves this budget unlimited.
+    max_candidates : int or {"auto"} or None, default="auto"
+        Maximum number of trial structures initialized during a call.
+        ``"auto"`` resolves to ``1000 * num_samples``; a positive integer sets
+        an absolute cap, and ``None`` leaves the budget unlimited.
+        An explicit unlimited budget assumes reachable acceptance criteria and
+        can keep the search running without useful progress. Before a large or
+        unlimited run, use a short pre-flight with a finite candidate budget
+        and the intended starting-volume range, overlap tolerance, and
+        per-candidate relaxation limit. Inspect accepted versus generated
+        counts; low or zero acceptance can indicate an overly small starting
+        volume. Revisit the volume settings and repeat the pre-flight before
+        scaling up.
     max_steps_per_candidate : int, default=500
         Maximum relaxation updates for one candidate before it expires.
     convergence_check_interval : int, default=10
@@ -134,7 +144,7 @@ class PackingConfig(BaseModel):
     z: int = Field(strict=True)
     z_prime: int = Field(strict=True)
     batch_size: int = Field(strict=True)
-    max_candidates: int | None = Field(default=None, strict=True)
+    max_candidates: Annotated[int, Field(strict=True)] | Literal["auto"] | None = "auto"
     max_steps_per_candidate: int = Field(default=500, strict=True)
     convergence_check_interval: int = Field(default=10, strict=True)
     overlap_tolerance: float = 0.05
@@ -206,10 +216,12 @@ class PackingConfig(BaseModel):
                 raise ValueError(f"{name} must be a positive integer")
         if self.z % self.z_prime:
             raise ValueError("z_prime must divide z")
-        if self.max_candidates is not None and (
+        if isinstance(self.max_candidates, int) and (
             isinstance(self.max_candidates, bool) or self.max_candidates <= 0
         ):
-            raise ValueError("max_candidates must be a positive integer or None")
+            raise ValueError(
+                "max_candidates must be a positive integer, 'auto', or None"
+            )
 
         positive_controls = ("max_step", "min_cell_height")
         for name in positive_controls:
