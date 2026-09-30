@@ -51,6 +51,31 @@ __all__ = ["CrystalPacker"]
 
 _DEFAULT_CANDIDATE_MULTIPLIER = 1000
 
+# Fixed arithmetic offsets derive repeatable rank and refill seeds from the call
+# seed and packing state. Keep their values stable to preserve seeded outputs.
+_WARP_SEED_MODULUS = 2**31 - 1
+_RANK_SEED_STRIDE = 2654435761
+_REFILL_GENERATED_SEED_STRIDE = 104729
+_REFILL_COUNT_SEED_STRIDE = 9176
+
+
+def _validate_rank_vector(
+    values: Sequence[int], *, name: str, group_size: int
+) -> tuple[int, ...]:
+    """Validate one nonnegative integer value for each process-group rank."""
+    if (
+        isinstance(values, (str, bytes))
+        or not isinstance(values, Sequence)
+        or len(values) != group_size
+    ):
+        raise ValueError(f"{name} must contain one value per group rank")
+    result: list[int] = []
+    for value in values:
+        if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
+            raise ValueError(f"{name} values must be nonnegative integers")
+        result.append(int(value))
+    return tuple(result)
+
 
 @dataclass
 class _PackingCore:
@@ -109,9 +134,11 @@ class _PackingCore:
             )
             return rows[:0]
         selected_rows = rows[:count].to(device=self.device, dtype=torch.int64)
-        round_seed = (self.base_seed + self.generated * 104729 + count * 9176) % (
-            2**31 - 1
-        )
+        round_seed = (
+            self.base_seed
+            + self.generated * _REFILL_GENERATED_SEED_STRIDE
+            + count * _REFILL_COUNT_SEED_STRIDE
+        ) % _WARP_SEED_MODULUS
         cells, selected_groups = sample_valid_cells(
             count=count,
             config=self.config,
@@ -611,7 +638,9 @@ class CrystalPacker:
             self._validate_input_placement(inputs, device)
             base_seed = self._draw_seed(rng, device)
             if grouped and group_size > 1:
-                base_seed = (base_seed + group_rank * 2654435761) % (2**31 - 1)
+                base_seed = (
+                    base_seed + group_rank * _RANK_SEED_STRIDE
+                ) % _WARP_SEED_MODULUS
             formula = {
                 name: getattr(inputs, name).to(device=device)
                 for name in (
@@ -848,7 +877,7 @@ class CrystalPacker:
                     raise ValueError("gather_to_rank must be a valid group-local rank")
             custom_targets = rank_targets is not None
             if custom_targets:
-                targets = self._validate_rank_vector(
+                targets = _validate_rank_vector(
                     rank_targets, name="rank_targets", group_size=group_size
                 )
                 if sum(targets) != num_samples:
@@ -873,7 +902,7 @@ class CrystalPacker:
                     "local structure_molecule_ptr exceeds int32 capacity"
                 )
             if rank_candidate_budgets is not None:
-                budgets = self._validate_rank_vector(
+                budgets = _validate_rank_vector(
                     rank_candidate_budgets,
                     name="rank_candidate_budgets",
                     group_size=group_size,
@@ -958,24 +987,6 @@ class CrystalPacker:
             budget_vector[group_rank],
             int(identity.item()),
         )
-
-    @staticmethod
-    def _validate_rank_vector(
-        values: Sequence[int], *, name: str, group_size: int
-    ) -> tuple[int, ...]:
-        """Validate one nonnegative integer value for each process-group rank."""
-        if (
-            isinstance(values, (str, bytes))
-            or not isinstance(values, Sequence)
-            or len(values) != group_size
-        ):
-            raise ValueError(f"{name} must contain one value per group rank")
-        result: list[int] = []
-        for value in values:
-            if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
-                raise ValueError(f"{name} values must be nonnegative integers")
-            result.append(int(value))
-        return tuple(result)
 
     @staticmethod
     def _collective_error(
@@ -1312,7 +1323,7 @@ class CrystalPacker:
         return int(
             torch.randint(
                 0,
-                2**31 - 1,
+                _WARP_SEED_MODULUS,
                 (),
                 dtype=torch.int64,
                 device=generator_device,
