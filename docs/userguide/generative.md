@@ -526,6 +526,8 @@ class GANGenerate:
             [AtomicData(positions=p, atomic_numbers=numbers) for p in positions]
         )
 
+from nvalchemi.models.gen import DemoGANModel
+
 # the demo model satisfies this sketch's interface (latent_dim + decode)
 gan = AtomisticGenerator(generator_func=GANGenerate(DemoGANModel()))
 samples = gan(num_samples=4)
@@ -541,6 +543,10 @@ class VAEGenerate:
     def __init__(self, model) -> None:
         self.model = model
 
+    @property
+    def device(self) -> torch.device:
+        return next(self.model.parameters()).device
+
     def __call__(
         self,
         inputs=None,
@@ -551,14 +557,21 @@ class VAEGenerate:
     ) -> Batch:
         if inputs is None:
             # unconditional: sample the prior
-            z = torch.randn(num_samples, self.model.latent_dim, generator=rng)
+            z = torch.randn(
+                num_samples, self.model.latent_dim, generator=rng, device=self.device
+            )
+            n = num_samples
         else:
-            # conditional: encode the inputs, then reparametrize
+            # conditional: encode the inputs, then reparametrize —
+            # one draw per input graph, matching the driver's tiling convention
             mu, logvar = self.model.encode(inputs)
-            eps = torch.randn(num_samples, self.model.latent_dim, generator=rng)
+            n = mu.shape[0]
+            eps = torch.randn(n, self.model.latent_dim, generator=rng, device=mu.device)
             z = mu + eps * torch.exp(0.5 * logvar)
-        positions = self.model.decode(z).reshape(num_samples, -1, 3)
-        numbers = torch.full((positions.shape[1],), 6, dtype=torch.long)
+        positions = self.model.decode(z).reshape(n, -1, 3)
+        numbers = torch.full(
+            (positions.shape[1],), 6, dtype=torch.long, device=z.device
+        )
         return Batch.from_data_list(
             [AtomicData(positions=p, atomic_numbers=numbers) for p in positions]
         )
