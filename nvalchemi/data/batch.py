@@ -74,6 +74,8 @@ _LEVEL_ALIASES = {
 }
 _UNDETACHABLE_LEVELS = frozenset({"atoms", "system"})
 """Levels whose storage the batch needs for its atom and graph counts."""
+_FIELD_LEVEL_NAMES = {"atoms": "atom", "edges": "edge", "system": "system"}
+"""Built-in storage group mapped to the level name a ``field_levels`` map spells."""
 _INT32_MAX = torch.iinfo(torch.int32).max
 _UNIFORM_BUFFER_DTYPES = frozenset(
     {torch.bool, torch.float32, torch.float64, torch.int32, torch.int64}
@@ -1280,6 +1282,120 @@ class Batch(DataMixin):
             data_class=AtomicData,
         )
         return batch._make_contiguous()
+
+    def to_raw_dicts(
+        self, *, drop: Iterable[str] = ()
+    ) -> tuple[list[dict[str, Tensor]], dict[str, str]]:
+        """Split the batch into per-graph raw tensor dicts, the inverse of :meth:`from_raw_dicts`.
+
+        Every stored field is sliced per graph, at the level its storage
+        holds it, and returned together with the ``field_levels`` map that
+        :meth:`from_raw_dicts` classifies the samples by. A storage wider than
+        the graphs it holds, such as one compacted by :meth:`defrag` or one
+        built by :meth:`empty` and filled part way, contributes only the rows
+        its segment lengths describe. A product-level field is returned on its
+        logical ``(left, right, ...)`` axes, as :meth:`get_data` returns it.
+        The slices are views on the batch's own tensors, so no copy is made.
+
+        Parameters
+        ----------
+        drop : Iterable[str], optional
+            Keys to leave out, at whichever level each is stored. A key the
+            batch does not carry is ignored. Default ``()`` returns every key.
+
+        Returns
+        -------
+        tuple[list[dict[str, Tensor]], dict[str, str]]
+            One dict per graph, and the map from every returned key to its
+            level: ``"atom"``, ``"edge"``, ``"system"``, or the name of a
+            registered custom level. Passing both back to
+            :meth:`from_raw_dicts`, with this batch's schema as ``attr_map``
+            when it registers custom levels, rebuilds an equal batch.
+
+        Raises
+        ------
+        ValueError
+            If a batch-global index field such as ``neighbor_list`` is kept.
+            :meth:`from_raw_dicts` offsets such a field a second time on the
+            way back in, so the rebuilt batch would index past its own nodes.
+            Drop it and rebuild the neighbor list from the positions instead.
+        RuntimeError
+            If a level holds a negative segment length, or if a field holds
+            fewer rows than its level's segment lengths describe.
+
+        Examples
+        --------
+        >>> from nvalchemi.data import AtomicData, Batch
+        >>> batch = Batch.from_data_list([
+        ...     AtomicData(positions=torch.zeros(2, 3), atomic_numbers=torch.tensor([1, 1])),
+        ...     AtomicData(positions=torch.ones(3, 3), atomic_numbers=torch.tensor([6, 6, 6])),
+        ... ])
+        >>> samples, field_levels = batch.to_raw_dicts()
+        >>> [sample["positions"].shape[0] for sample in samples]
+        [2, 3]
+        >>> field_levels["positions"]
+        'atom'
+        >>> Batch.from_raw_dicts(samples, field_levels=field_levels).num_nodes_list
+        [2, 3]
+        """
+        dropped = set(drop)
+        schema = self._storage.attr_map
+        num_graphs = self.num_graphs
+        samples: list[dict[str, Tensor]] = [{} for _ in range(num_graphs)]
+        field_levels: dict[str, str] = {}
+
+        def _counts(name: str) -> list[int]:
+            group = self._storage.groups[name]
+            if not isinstance(group, SegmentedLevelStorage):
+                return [1] * num_graphs
+            counts = group.segment_lengths[:num_graphs].tolist()
+            if any(count < 0 for count in counts):
+                raise RuntimeError(
+                    f"Level '{name}' holds a negative segment length; got per-graph "
+                    f"counts {counts!r}, so no graph boundary can be trusted."
+                )
+            return counts
+
+        for name in schema.level_names:
+            group = self._storage.groups.get(name)
+            if group is None:
+                continue
+            kept = [key for key in group.keys() if key not in dropped]
+            if not kept:
+                continue
+            counts = _counts(name)
+            total = sum(counts)
+            product_shapes: list[tuple[int, int]] | None = None
+            if schema.level_kind(name) == "product":
+                left, right = schema.product_parents[name]
+                product_shapes = list(zip(_counts(left), _counts(right), strict=True))
+            level = _FIELD_LEVEL_NAMES.get(name, name)
+            for key in kept:
+                if name == "edges" and key in _INDEX_KEYS:
+                    raise ValueError(
+                        f"Batch.to_raw_dicts cannot carry {key!r}: it holds "
+                        "batch-global node indices that Batch.from_raw_dicts "
+                        "offsets a second time on the way back in, so the rebuilt "
+                        "batch would index past its own nodes. Pass "
+                        f"drop=({key!r},) and rebuild the neighbor list from the "
+                        "positions instead."
+                    )
+                tensor = group[key]
+                if tensor.shape[0] < total:
+                    raise RuntimeError(
+                        f"Field '{key}' at level '{name}' holds {tensor.shape[0]} "
+                        f"rows against the {total} its segment lengths describe; "
+                        "the batch is internally inconsistent and cannot be split."
+                    )
+                start = 0
+                for index, count in enumerate(counts):
+                    value = tensor[start : start + count]
+                    if product_shapes is not None:
+                        value = value.reshape(*product_shapes[index], *value.shape[1:])
+                    samples[index][key] = value
+                    start += count
+                field_levels[key] = level
+        return samples, field_levels
 
     @classmethod
     def empty(
