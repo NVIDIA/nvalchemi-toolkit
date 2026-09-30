@@ -16,7 +16,12 @@
 
 from __future__ import annotations
 
-from nvalchemi.hooks._context import DynamicsContext, HookContext, TrainContext
+from nvalchemi.hooks._context import (
+    DynamicsContext,
+    GenerationContext,
+    HookContext,
+    TrainContext,
+)
 from nvalchemi.hooks._protocol import CheckpointableHook, Hook
 from nvalchemi.hooks._registry import HookRegistryMixin
 from nvalchemi.hooks.bias import BiasedPotentialHook
@@ -52,6 +57,7 @@ __all__ = [
     "CheckpointableHook",
     "DynamicsContext",
     "DynamicsRichLayout",
+    "GenerationContext",
     "Hook",
     "HookContext",
     "HookRegistryMixin",
