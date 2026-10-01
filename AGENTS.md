@@ -228,6 +228,7 @@ chains are documented in `.claude/skills/README.md`.
 | `nvalchemi-model-wrapping` | Wrapping an MLIP or custom PyTorch model via `BaseModelMixin` |
 | `nvalchemi-training-api` | Training from scratch: strategy, losses, optimizers, validation, checkpoints; scaling to multi-GPU/multi-node (DDP) |
 | `nvalchemi-fine-tuning` | Adapting a pretrained model to new reference data |
+| `nvalchemi-distillation` | Distilling a teacher MLIP into a student: signals, labeling, on-policy, evaluation, recipe CLI |
 | `nvalchemi-loss-api` | Choosing, weighting, masking, or implementing loss functions |
 | `nvalchemi-dynamics-api` | Any MD/relaxation/EOS simulation script or batched GPU pipeline |
 | `nvalchemi-dynamics-hooks` | Per-step callbacks: neighbor lists, convergence, logging |

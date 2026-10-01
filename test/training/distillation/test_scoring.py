@@ -463,6 +463,48 @@ class _ChargeConsumerModel(torch.nn.Module, BaseModelMixin):
         return OrderedDict([("energy", energy)])
 
 
+class _FieldWritingTeacher(torch.nn.Module, BaseModelMixin):
+    """Teacher whose energy curves with positions and that shadows a batch field.
+
+    Stands in for a composition that wires one stage into the next. The write
+    lands in the batch's instance dictionary, the way
+    :class:`~nvalchemi.models.pipeline.PipelineModelWrapper` puts an
+    intermediate there. Unlike a pipeline, it does not narrow the grad mode of
+    the double-backward pass a Hessian-vector product needs.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy"}),
+            autograd_outputs=frozenset(),
+            autograd_inputs=frozenset({"positions"}),
+            neighbor_config=None,
+        )
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        """Return no embedding shapes."""
+        return {}
+
+    def compute_embeddings(self, data: Any, **kwargs: Any) -> Any:  # noqa: ARG002
+        """Raise, since this teacher produces no embeddings."""
+        raise NotImplementedError
+
+    def forward(self, data: Batch, **kwargs: Any) -> OrderedDict:  # noqa: ARG002
+        """Shadow the batch's charges, then return an energy quadratic in positions."""
+        object.__setattr__(
+            data, "charges", torch.full((data.num_nodes,), _WIRED_CHARGE)
+        )
+        node_energy = data.charges.reshape(-1, 1) * data.positions.pow(2).sum(
+            dim=-1, keepdim=True
+        )
+        energy = torch.zeros(data.num_graphs, 1, dtype=data.positions.dtype).index_add(
+            0, data.batch_idx, node_energy
+        )
+        return OrderedDict([("energy", energy)])
+
+
 class _DeclaredFieldsScorer:
     """Scorer publishing ``label_fields`` its signal names alone would not imply."""
 
@@ -1757,6 +1799,35 @@ class TestComposedTeacherFieldIsolation:
         assert set(after) == set(before)
         assert all(after[key] is before[key] for key in before)
         assert set(small_batch.__dict__) == shadows
+
+
+class TestHvpFieldIsolation:
+    """A Hessian-vector product, like a label, leaves no teacher write behind."""
+
+    def test_a_written_field_the_batch_lacked_is_gone_afterwards(self) -> None:
+        """The charges the teacher writes leave no trace on the batch."""
+        batch = _make_charge_batch()
+        scorer = InProcessTeacherScorer(_FieldWritingTeacher(), ["hessian"])
+        scorer.label_hvp(batch, torch.ones_like(batch.positions))
+        assert "charges" not in batch.__dict__
+        assert "charges" not in batch
+
+    def test_a_written_field_the_batch_carried_is_restored(self) -> None:
+        """A batch's own charges read back unshadowed, as the same tensor."""
+        batch = _make_charge_batch(charge=1.0)
+        before = batch.charges
+        scorer = InProcessTeacherScorer(_FieldWritingTeacher(), ["hessian"])
+        scorer.label_hvp(batch, torch.ones_like(batch.positions))
+        assert batch.charges is before
+        torch.testing.assert_close(batch.charges, torch.ones(batch.num_nodes))
+
+    def test_the_product_is_the_curvature_the_written_charges_give(self) -> None:
+        """Isolating the fields does not disturb the product the teacher returns."""
+        batch = _make_charge_batch()
+        scorer = InProcessTeacherScorer(_FieldWritingTeacher(), ["hessian"])
+        product = scorer.label_hvp(batch, torch.ones_like(batch.positions))
+        expected = torch.full_like(batch.positions, 2.0 * _WIRED_CHARGE)
+        torch.testing.assert_close(product, expected)
 
 
 class TestInProcessTeacherScorerAutogradNeighborTeacher:

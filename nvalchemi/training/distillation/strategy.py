@@ -28,7 +28,7 @@ from pydantic import Field, PrivateAttr, model_validator
 from torch import distributed as dist
 
 from nvalchemi._serialization import _dtype_deserialize, _import_cls
-from nvalchemi._typing import ModelOutputs
+from nvalchemi._typing import Forces, ModelOutputs, NodePositions
 from nvalchemi.data.datapipes.dataset import (
     BatchDatasetProtocol,
     dataset_device,
@@ -39,17 +39,23 @@ from nvalchemi.data.level_storage import resolve_device
 from nvalchemi.distributed import collective_device
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.dynamics.structure_sampler import WithinBudget
+from nvalchemi.models._utils import hessian_vector_product
 from nvalchemi.models.base import BaseModelMixin
-from nvalchemi.training import TrainingStage
+from nvalchemi.training import ModelReference, TrainingStage
 from nvalchemi.training import _spec_utils as strategy_spec
 from nvalchemi.training import _strategy_validation as strategy_validation
 from nvalchemi.training.distillation._attach import _attach_teacher_labels
+from nvalchemi.training.distillation._restart import (
+    _batch_from_state,
+    _OnPolicyRestartHook,
+)
 from nvalchemi.training.distillation.config import (
     OnPolicyConfig,
     ResizableSink,
     _check_sole_migrator,
     _check_structure_status,
     _propagator_tree,
+    _status_migrators,
 )
 from nvalchemi.training.distillation.hooks import (
     TeacherLabelHook,
@@ -60,6 +66,12 @@ from nvalchemi.training.distillation.hooks import (
     _strip_replay_frame,
     nonfinite_divergence,
 )
+from nvalchemi.training.distillation.losses.distribution import BoltzmannMatchingLoss
+from nvalchemi.training.distillation.losses.embedding import (
+    _PROJECTOR_REMEDY,
+    EmbeddingMatchingLoss,
+)
+from nvalchemi.training.distillation.losses.hessian import HessianMatchingLoss
 from nvalchemi.training.distillation.replay import (
     _SCHEMA_REMEDY,
     ReplayBuffer,
@@ -68,9 +80,14 @@ from nvalchemi.training.distillation.replay import (
 )
 from nvalchemi.training.distillation.scoring import (
     _EMBEDDING_KEYS,
+    _HVP_PROBE_FIELD,
     _TEACHER_FIELD_PREFIX,
+    BUILTIN_SIGNALS,
     InProcessTeacherScorer,
+    _node_embedding_shapes,
     _reject_foreign_fields,
+    _restore_grad_flags,
+    _snapshot_grad_flags,
     scorer_fields,
     signal_fields,
     signal_for_field,
@@ -98,6 +115,8 @@ from nvalchemi.training.runtime import (
 from nvalchemi.training.strategy import TrainingStrategy
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from torch.optim.lr_scheduler import LRScheduler
 
     from nvalchemi.data.batch import Batch
@@ -110,13 +129,24 @@ if TYPE_CHECKING:
         ComposedLossFunction,
     )
 
-__all__ = ["DistillationStrategy", "default_distillation_fn"]
+__all__ = [
+    "DistillationStrategy",
+    "default_distillation_fn",
+    "embedding_distillation_fn",
+    "hessian_distillation_fn",
+]
 
 _REQUIRED_MODELS = frozenset({"student", "teacher"})
 """Model names every distillation strategy must be given."""
 
+_PROJECTOR_MODEL = "projector"
+"""Name of the auxiliary model that projects the student's embeddings."""
+
 _PREDICTION_KEY_PREFIX = "predicted_"
-"""Prefix the stock training function publishes every student output under."""
+"""Prefix the stock training functions publish every student output under."""
+
+_HVP_OUTPUT = "hvp"
+"""Student output name a Hessian objective's prediction key resolves to."""
 
 _SEED_OK, _SEED_EMPTY, _SEED_FAILED = 0, 1, 2
 """Verdict codes a rank reports on its initial batch: seeded, empty shard, or failed build."""
@@ -153,21 +183,220 @@ def default_distillation_fn(
     }
 
 
+def embedding_distillation_fn(
+    models: Mapping[str, BaseModelMixin], batch: Batch
+) -> dict[str, torch.Tensor]:
+    """Run the student forward pass and add its node embeddings as a prediction.
+
+    The student's node embeddings come from
+    :meth:`~nvalchemi.models.base.BaseModelMixin.compute_embeddings`, a second
+    pass over the batch, which is why
+    :class:`~nvalchemi.training.distillation.EmbeddingMatchingLoss` needs this
+    training function. The batch is left as it was found. When the strategy
+    has a ``"projector"`` model, the projector is applied to the student's
+    embeddings before they are returned, never to the teacher's, and it trains
+    through its own ``optimizer_configs`` entry.
+
+    Parameters
+    ----------
+    models : Mapping[str, BaseModelMixin]
+        Named models of the strategy; ``"student"`` and, when present,
+        ``"projector"`` are read.
+    batch : Batch
+        Input batch of atomic graphs.
+
+    Returns
+    -------
+    dict[str, torch.Tensor]
+        The stock ``predicted_*`` outputs plus ``predicted_node_embeddings``.
+
+    Raises
+    ------
+    RuntimeError
+        If the student's ``compute_embeddings`` writes no ``node_embeddings``.
+        Also if, while gradients are enabled and at least one student parameter
+        is trainable, it writes embeddings detached from those parameters, as a
+        wrapper that computes them under :func:`torch.no_grad` does; the
+        embedding term could not train the student through them. A student
+        with no trainable parameter skips this second check, since there is
+        nothing for the embeddings to be detached from. A projector that
+        declares ``frozen_student=True`` waives it too, for a student whose
+        representation is frozen on purpose so that the projector alone
+        carries the term.
+
+    See Also
+    --------
+    nvalchemi.training.distillation.EmbeddingProjector : The width adapter.
+
+    Notes
+    -----
+    The student runs twice per batch, which doubles its share of a training
+    step. ``compute_embeddings`` is not part of the interface a
+    :class:`~torch.nn.parallel.DistributedDataParallel` replica proxies, so the
+    embedding pass runs on the wrapped module. Its gradients are still
+    reduced. However, ``find_unused_parameters=True`` cannot see a student
+    submodule exercised *only* by ``compute_embeddings``; that combination is
+    the one configuration to avoid.
+    """
+    predictions = default_distillation_fn(models, batch)
+    student = unwrap_model(models["student"])
+    with batch.without_keys(*_EMBEDDING_KEYS):
+        student.compute_embeddings(batch)
+        if "node_embeddings" not in batch:
+            raise RuntimeError(
+                "Student compute_embeddings() must write ``node_embeddings`` onto "
+                "the batch for embedding matching; got a batch carrying "
+                f"{sorted(key for key in _EMBEDDING_KEYS if key in batch)!r}."
+            )
+        embeddings = batch["node_embeddings"]
+    projector = models.get(_PROJECTOR_MODEL)
+    if (
+        torch.is_grad_enabled()
+        and not embeddings.requires_grad
+        and any(parameter.requires_grad for parameter in student.parameters())
+        and not (
+            projector is not None
+            and getattr(unwrap_model(projector), "frozen_student", False)
+        )
+    ):
+        raise RuntimeError(
+            "Student compute_embeddings() returned node embeddings detached from "
+            f"the student's trainable parameters; got a {type(student).__name__!r} "
+            "student whose embedding pass runs without gradients. The embedding "
+            "objective would train the projector and nothing else. Override "
+            "compute_embeddings on the wrapper so it runs with gradients enabled, "
+            "register the projector with frozen_student=True if the student's "
+            "trunk is frozen on purpose and the projector alone is to carry the "
+            "term, or drop the term."
+        )
+    if projector is not None:
+        embeddings = projector(embeddings)
+    predictions["predicted_node_embeddings"] = embeddings
+    return predictions
+
+
+def hessian_distillation_fn(
+    models: Mapping[str, BaseModelMixin], batch: Batch
+) -> dict[str, torch.Tensor]:
+    """Run the student forward pass and add its Hessian-vector product.
+
+    The student's Hessian-vector product is the product of its energy Hessian
+    with the probe direction in ``teacher_hvp_probe``, the direction the
+    teacher's own product was labeled with. It is taken on a second pass
+    narrowed to the student's energy. The second pass is needed because a
+    conservative model derives its forces from the autograd graph that the
+    second derivative needs, and frees that graph outside training mode, so
+    the stock forward's energy cannot be differentiated again. Both
+    derivatives are taken with ``create_graph=True``, so
+    :class:`~nvalchemi.training.distillation.HessianMatchingLoss` can
+    backpropagate through them. The batch's ``requires_grad`` flags are
+    restored, and the narrowed pass reuses the neighbor list the stock forward
+    just ran on.
+
+    Parameters
+    ----------
+    models : Mapping[str, BaseModelMixin]
+        Named models of the strategy; only ``"student"`` is read.
+    batch : Batch
+        Input batch, carrying the ``teacher_hvp_probe`` field the ``hessian``
+        teacher signal writes.
+
+    Returns
+    -------
+    dict[str, torch.Tensor]
+        The stock ``predicted_*`` outputs plus ``predicted_hvp``.
+
+    Raises
+    ------
+    KeyError
+        If the batch carries no probe, which means it was never labeled with
+        the ``hessian`` signal, or if the student computes no energy to
+        differentiate.
+
+    Notes
+    -----
+    On every frame the student trains on, the second pass adds two backward
+    passes, one of them through a second-order graph held for the whole step.
+    A stochastic student draws afresh in the narrowed pass, so its curvature is
+    measured on a different realization than its energy.
+    """
+    probe = getattr(batch, _HVP_PROBE_FIELD, None)
+    if probe is None:
+        raise KeyError(
+            f"Batch is missing the {_HVP_PROBE_FIELD!r} field required to take "
+            "the student's Hessian-vector product along the direction the "
+            "teacher was labeled with. Request the 'hessian' teacher signal so "
+            "the probe travels with the label."
+        )
+    student = unwrap_model(models["student"])
+    grad_flags = _snapshot_grad_flags(batch, student.model_config)
+    try:
+        predictions = default_distillation_fn(models, batch)
+        predictions["predicted_hvp"] = _student_hvp(student, batch, probe)
+    finally:
+        _restore_grad_flags(batch, grad_flags)
+    return predictions
+
+
+def _student_hvp(student: BaseModelMixin, batch: Batch, probe: NodePositions) -> Forces:
+    """Return the student's Hessian-vector product from an energy-only pass.
+
+    Whatever neighbor list the batch carries is used as it stands. The teacher
+    side isolates a rebuild because the batch it is handed was built for a
+    different model at a different cutoff. This pass, however, runs the model
+    the stock forward just ran on this very batch. A rebuild would only
+    reproduce the list that forward already consumed, once per optimizer step,
+    for every neighbor-list student.
+    """
+    with student.narrowed_outputs({"energy"}), torch.enable_grad():
+        positions = batch.positions
+        positions.requires_grad_(True)
+        energy = student(batch).get("energy")
+        if energy is None:
+            raise KeyError(
+                "Hessian matching differentiates the student's energy "
+                "twice, so the student must compute an energy; got a "
+                f"student declaring outputs {sorted(student.model_config.outputs)!r}."
+            )
+        return hessian_vector_product(energy, positions, probe, create_graph=True)
+
+
+_STOCK_TRAINING_FNS = {
+    default_distillation_fn: frozenset(),
+    embedding_distillation_fn: frozenset({"node_embeddings"}),
+    hessian_distillation_fn: frozenset({_HVP_OUTPUT}),
+}
+"""Predictions each stock training function adds beyond the student's outputs."""
+
+
 def _derived_teacher_signals(loss_fn: ComposedLossFunction) -> frozenset[str]:
     """Return the built-in teacher signals the loss composition's targets require.
 
     A ``teacher_*`` target no built-in signal populates is a custom teacher
     field — one :func:`~nvalchemi.training.distillation.label_dataset` persisted
     from a custom scorer — that the batch must already carry, so it is passed
-    over here rather than refused.
+    over here rather than refused. A companion field that a signal writes
+    beside its main field, such as the ``hessian`` probe direction, is refused
+    instead. It records how the label was produced and is not a quantity to
+    supervise against.
     """
     signals: set[str] = set()
     for key in loss_target_keys(loss_fn):
         signal = (
             signal_for_field(key) if key.startswith(_TEACHER_FIELD_PREFIX) else None
         )
-        if signal is not None:
-            signals.add(signal)
+        if signal is None:
+            continue
+        produced = BUILTIN_SIGNALS[signal].field
+        if key != produced:
+            raise ValueError(
+                f"Loss target {key!r} is a companion field: the {signal!r} signal "
+                f"writes it beside {produced!r} to record how that field was "
+                "produced. A probe is the direction the product was taken along, "
+                "not a quantity the student is supervised against. Point the loss "
+                f"at {produced!r}."
+            )
+        signals.add(signal)
     return frozenset(signals)
 
 
@@ -199,6 +428,17 @@ def _set_rebuild_overrides(
             )
         forwarded[name] = value
     return forwarded
+
+
+def _matching_components(
+    loss_fn: ComposedLossFunction, kind: type[Any]
+) -> tuple[str, ...]:
+    """Return the class names of the loss components that are instances of *kind*."""
+    return tuple(
+        type(component).__name__
+        for component in loss_fn.components
+        if isinstance(component, kind)
+    )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -535,6 +775,24 @@ class DistillationStrategy(TrainingStrategy):
     replaced by fresh initial structures. The buffer therefore keeps filling
     with structures that are still moving.
 
+    Beyond the signals that have a supervised shape, three objectives need more
+    from the run than a target field. Embedding matching compares the
+    student's and teacher's per-atom representations. It needs a second pass
+    over the batch on both sides. Across architectures, it also needs the
+    learnable :class:`~nvalchemi.training.distillation.EmbeddingProjector`,
+    registered as a ``"projector"`` model with an optimizer of its own.
+    Hessian matching compares Hessian-vector products, the products of each
+    model's energy Hessian with a random probe direction. It needs the
+    student's energy differentiated twice along the probe the teacher was
+    labeled with. Neither of these predictions is a forward-pass output, so
+    each objective needs the training function that produces it:
+    :func:`~nvalchemi.training.distillation.embedding_distillation_fn` or
+    :func:`~nvalchemi.training.distillation.hessian_distillation_fn`.
+    Boltzmann matching compares the two models' Boltzmann distributions over
+    configurations. It needs no new prediction, but it does need the on-policy
+    loop, because it reads a batch as a sample of the student's own ensemble.
+    All three requirements are checked at construction.
+
     Raises
     ------
     ValueError
@@ -542,19 +800,29 @@ class DistillationStrategy(TrainingStrategy):
         ``"teacher"``, if the teacher is given an optimizer config, if the
         student or an auxiliary model is not, if a loss component reads a
         prediction the student does not compute or names one outside the
-        ``predicted_`` namespace under the stock ``training_fn``, if an explicit
+        ``predicted_`` namespace under a stock ``training_fn``, if an explicit
         ``teacher_signals`` omits a signal a loss needs, if no built-in teacher
         signal is requested at all, if the teacher cannot produce a requested signal,
         if the teacher is a composition that plans more than one neighbor-list
-        source, or if ``label_dtype`` is not a floating-point dtype. In
-        on-policy mode, also if the run is sized in epochs, if the propagator
-        holds neither the student nor a model composing it, if
-        ``replay_ratio`` and ``reference_dataset`` disagree (a ratio below
-        ``1`` requires a reference dataset and a ratio of ``1`` rejects one),
-        if ``reference_dataset`` is empty or emits on an accelerator the run
-        does not train on, if ``replay_device`` or the reference dataset's
-        fields cannot be mixed with generated frames, or if the propagator's
-        scorer and the reference dataset do not carry the same teacher fields.
+        source, or if ``label_dtype`` is not a floating-point dtype. With an
+        embedding objective under the stock embedding training function, also
+        if the student publishes no node-embedding shape, if the student,
+        projector, and teacher widths do not compose, or if the projector
+        declares ``frozen_student=True`` over a fully trainable student. With a
+        Hessian objective, also if the student computes no energy. With a
+        Boltzmann objective, also if the run is not on-policy, if
+        ``on_policy.samples_equilibrium`` is ``False``, if it is left ``None``
+        and the propagator relaxes or converges graphs out, if the term sits in
+        the validation loss, or if a ``validation_config`` has no ``loss_fn`` of
+        its own and would reuse the training loss. In on-policy mode, also if
+        the run is sized in epochs, if the propagator holds neither the student
+        nor a model composing it, if ``replay_ratio`` and ``reference_dataset``
+        disagree (a ratio below ``1`` requires a reference dataset and a ratio
+        of ``1`` rejects one), if ``reference_dataset`` is empty or emits on an
+        accelerator the run does not train on, if ``replay_device`` or the
+        reference dataset's fields cannot be mixed with generated frames, or if
+        the propagator's scorer and the reference dataset do not carry the same
+        teacher fields.
 
     Examples
     --------
@@ -611,13 +879,26 @@ class DistillationStrategy(TrainingStrategy):
     replace any carried copy. ``ValidationConfig(use_ema="auto")`` validates
     the EMA student against the live teacher (``model_source="mixed"``), while
     ``use_ema="always"`` also demands an inference-slot entry for the teacher.
-    Checkpoints serialize every model, teacher included, so size the checkpoint
-    interval for a large teacher.
+    Checkpoints store the frozen teacher once per checkpoint root and reference
+    it from every later index. A periodic write therefore costs the student's
+    weights alone; see :meth:`checkpoint_model_references`.
 
-    ``on_policy`` and ``reference_dataset`` hold live runtime objects that no
-    spec can describe. :meth:`to_spec_dict` therefore omits them and warns. A
-    strategy rebuilt from such a spec runs offline until they are supplied
-    again.
+    ``on_policy`` and ``reference_dataset`` serialize as references: the
+    propagator's constructor spec, the scorer's signals over
+    ``models["teacher"]``, and the stores the datasets read.
+    :meth:`to_spec_dict` therefore carries a whole on-policy run as an
+    ``on_policy`` block, and :meth:`from_spec_dict` rebuilds the loop around
+    the supplied ``models``. A piece that no recipe describes, such as an
+    in-memory dataset or a propagator that hides its constructor arguments,
+    leaves ``on_policy`` out with a warning. :meth:`from_spec_dict`,
+    :meth:`from_checkpoint_dict`, and :meth:`load_checkpoint` accept
+    ``on_policy`` and ``reference_dataset`` as keyword arguments, and a live
+    object passed that way outranks the spec's ``on_policy`` block. A strategy
+    with a Boltzmann term refuses to rebuild without the loop. An interrupted
+    on-policy run carries a restart bundle through the checkpoint: its
+    trajectory, the propagator's step count, the initial structures'
+    position, and its replay frames. A resumed run therefore continues rather
+    than reseeding.
     """
 
     teacher_signals: Annotated[
@@ -684,6 +965,9 @@ class DistillationStrategy(TrainingStrategy):
     _warned_label_seam: bool = PrivateAttr(default=False)
     _warned_unwrapped_student: bool = PrivateAttr(default=False)
     _replay_buffer: ReplayBuffer | None = PrivateAttr(default=None)
+    _on_policy_state: Any = PrivateAttr(default=None)
+    _generation_exhausted: bool = PrivateAttr(default=False)
+    _validation_probe_index: int | None = PrivateAttr(default=None)
     _validated_step: int | None = PrivateAttr(default=None)
 
     @property
@@ -771,21 +1055,24 @@ class DistillationStrategy(TrainingStrategy):
     @model_validator(mode="before")
     @classmethod
     def _prepend_labeling_hook(cls, data: Any) -> Any:
-        """Put the internal teacher-labeling hook ahead of the caller's hooks.
+        """Put the internal labeling and restart hooks ahead of the caller's hooks.
 
         A seam carried in the incoming hooks is replaced rather than kept, so
-        rebuilding a strategy from a live one's ``hooks`` leaves exactly one
-        labeling hook, still ahead of every caller hook.
+        rebuilding a strategy from a live one's ``hooks`` leaves exactly one of
+        each, still ahead of every caller hook.
         """
         if not isinstance(data, dict):
             return data
         normalized = dict(data)
+        internal: list[Any] = [_TeacherLabelHook()]
+        if normalized.get("on_policy") is not None:
+            internal.append(_OnPolicyRestartHook())
         normalized["hooks"] = [
-            _TeacherLabelHook(),
+            *internal,
             *(
                 hook
                 for hook in (normalized.get("hooks") or [])
-                if not isinstance(hook, _TeacherLabelHook)
+                if not isinstance(hook, (_TeacherLabelHook, _OnPolicyRestartHook))
             ),
         ]
         return normalized
@@ -816,7 +1103,9 @@ class DistillationStrategy(TrainingStrategy):
                 f"{self.label_dtype!r}."
             )
         self._validate_student_outputs()
-        signals = self._resolve_teacher_signals()
+        signals = self.resolve_teacher_signals(
+            self.loss_fn, self.validation_config, self.teacher_signals
+        )
         self._scorer = InProcessTeacherScorer(
             self.models["teacher"],
             signals,
@@ -832,24 +1121,38 @@ class DistillationStrategy(TrainingStrategy):
     def _validate_student_outputs(self) -> None:
         """Check both losses' prediction keys against what the student computes.
 
-        Only under the stock function: ``default_distillation_fn`` emits exactly
-        ``active_outputs`` intersected with ``outputs``, so a narrowed student
-        is caught here rather than on its first batch. The validation loss is
-        checked whenever ``validation_fn`` falling back to ``training_fn`` is
-        the stock one.
+        The check runs only under a stock training function. Each one emits
+        ``active_outputs`` intersected with ``outputs``, plus whatever it
+        derives on top, so a narrowed student is caught here rather than on its
+        first batch. The validation loss is checked whenever its effective
+        function, ``validation_fn`` falling back to ``training_fn``, is a stock
+        one.
         """
-        if self.training_fn is default_distillation_fn:
-            self._validate_prediction_keys(self.loss_fn.components, "training")
+        derived = _STOCK_TRAINING_FNS.get(self.training_fn)
+        if derived is not None:
+            self._validate_prediction_keys(self.loss_fn.components, "training", derived)
         validation = self.validation_config
         if validation is None or validation.loss_fn is None:
             return
-        if (validation.validation_fn or self.training_fn) is default_distillation_fn:
-            self._validate_prediction_keys(validation.loss_fn.components, "validation")
+        validation_derived = _STOCK_TRAINING_FNS.get(
+            validation.validation_fn or self.training_fn
+        )
+        if validation_derived is not None:
+            self._validate_prediction_keys(
+                validation.loss_fn.components, "validation", validation_derived
+            )
 
     def _validate_prediction_keys(
-        self, components: Sequence[BaseLossFunction], side: str
+        self,
+        components: Sequence[BaseLossFunction],
+        side: str,
+        derived: frozenset[str],
     ) -> None:
-        """Check one composition's prediction keys, naming *side* in every error."""
+        """Check one composition's prediction keys, naming *side* in every error.
+
+        *derived* names the predictions the stock training function in play adds
+        on top of the student's own outputs.
+        """
         student = self.models["student"]
         declared = student.model_config.outputs
         active = student.output_data()
@@ -860,22 +1163,32 @@ class DistillationStrategy(TrainingStrategy):
             label = f"{side} loss component {type(component).__name__!r}"
             if not key.startswith(_PREDICTION_KEY_PREFIX):
                 raise ValueError(
-                    f"The {label} reads prediction_key={key!r}, which "
-                    "default_distillation_fn never emits: it publishes every "
-                    f"student output under {_PREDICTION_KEY_PREFIX}<output>. "
-                    "Rename the key into that namespace, or pass a training_fn "
-                    "that owns its own convention."
+                    f"The {label} reads prediction_key={key!r}, which the stock "
+                    "training functions never emit: they publish every student "
+                    f"output under {_PREDICTION_KEY_PREFIX}<output>. Rename the "
+                    "key into that namespace, or pass a training_fn that owns "
+                    "its own convention."
                 )
             output = key.removeprefix(_PREDICTION_KEY_PREFIX)
-            if output in active:
+            if output in active or output in derived:
                 continue
             if output in _EMBEDDING_KEYS:
                 raise ValueError(
-                    f"The {label} reads prediction_key={key!r}, which the stock "
+                    f"The {label} reads prediction_key={key!r}, which this "
                     "training_fn cannot produce: embeddings come from the "
                     "student's compute_embeddings(), not from its forward pass. "
-                    "Pass a training_fn that calls compute_embeddings and returns "
-                    f"the embedding under {key!r}."
+                    "Pass training_fn=embedding_distillation_fn, which calls "
+                    "compute_embeddings, routes the result through a 'projector' "
+                    f"model when one is registered, and returns it under {key!r}."
+                )
+            if output == _HVP_OUTPUT:
+                raise ValueError(
+                    f"The {label} reads prediction_key={key!r}, which this "
+                    "training_fn cannot produce: a Hessian-vector product is a "
+                    "second derivative of the student's energy, not a forward "
+                    "output. Pass training_fn=hessian_distillation_fn, which "
+                    "differentiates the energy twice along the probe the teacher "
+                    "was labeled with."
                 )
             if output in declared:
                 raise ValueError(
@@ -890,14 +1203,48 @@ class DistillationStrategy(TrainingStrategy):
                 f"missing {output!r}."
             )
 
-    def _resolve_teacher_signals(self) -> frozenset[str]:
-        """Return the signals both losses need, widened by an explicit request."""
-        derived = {"training": _derived_teacher_signals(self.loss_fn)}
-        validation = self.validation_config
-        if validation is not None and validation.loss_fn is not None:
-            derived["validation"] = _derived_teacher_signals(validation.loss_fn)
+    @classmethod
+    def resolve_teacher_signals(
+        cls,
+        loss_fn: ComposedLossFunction,
+        validation_config: ValidationConfig | None = None,
+        teacher_signals: Iterable[str] | None = None,
+    ) -> tuple[str, ...]:
+        """Return the teacher signals a run built from these pieces scores for.
+
+        Each built-in ``teacher_*`` target that *loss_fn* or the validation
+        loss reads names a signal. An explicit *teacher_signals* set must cover
+        those signals and may request more. The strategy validates itself by
+        the same rule, so a tool reading a recipe reports the same set before a
+        teacher is loaded.
+
+        Parameters
+        ----------
+        loss_fn : ComposedLossFunction
+            Training loss whose ``teacher_*`` targets name signals.
+        validation_config : ValidationConfig or None, optional
+            Validation whose own loss, when set, widens the signals. Default
+            ``None``.
+        teacher_signals : Iterable[str] or None, optional
+            Explicit set the run scores for; ``None`` derives it from the
+            losses. Default ``None``.
+
+        Returns
+        -------
+        tuple[str, ...]
+            The resolved signal names, sorted.
+
+        Raises
+        ------
+        ValueError
+            If *teacher_signals* leaves a loss target uncovered, or nothing
+            names a signal at all.
+        """
+        derived = {"training": _derived_teacher_signals(loss_fn)}
+        if validation_config is not None and validation_config.loss_fn is not None:
+            derived["validation"] = _derived_teacher_signals(validation_config.loss_fn)
         required: frozenset[str] = frozenset().union(*derived.values())
-        resolved = required if self.teacher_signals is None else self.teacher_signals
+        resolved = required if teacher_signals is None else frozenset(teacher_signals)
         uncovered = {
             side: sorted(signals - resolved)
             for side, signals in derived.items()
@@ -913,11 +1260,11 @@ class DistillationStrategy(TrainingStrategy):
             raise ValueError(
                 "DistillationStrategy needs at least one teacher signal; got no "
                 "built-in teacher_* target in the training or validation loss and "
-                f"teacher_signals={self.teacher_signals!r}. A custom teacher_* field "
+                f"teacher_signals={teacher_signals!r}. A custom teacher_* field "
                 "the batch already carries is not a signal; name one in "
                 "teacher_signals or read a built-in teacher target."
             )
-        return resolved
+        return tuple(sorted(resolved))
 
     @model_validator(mode="after")
     def _validate_on_policy(self) -> DistillationStrategy:
@@ -1130,6 +1477,334 @@ class DistillationStrategy(TrainingStrategy):
                 stacklevel=2,
             )
 
+    @model_validator(mode="after")
+    def _validate_advanced_objectives(self) -> DistillationStrategy:
+        """Enforce what the embedding, Hessian, and Boltzmann terms need."""
+        self._validate_embedding_matching()
+        self._validate_hessian_matching()
+        self._validate_distribution_matching()
+        return self
+
+    def _matching_sides(
+        self, kind: type[Any], training_fn: Any = None
+    ) -> list[tuple[tuple[str, ...], str]]:
+        """Return the components of *kind* each side's loss runs under *training_fn*.
+
+        A ``validation_config`` carrying its own ``loss_fn`` reaches the student
+        through its effective validation function, ``validation_fn`` falling
+        back to ``training_fn``. A term that only the validation loss holds is
+        therefore checked here too, and every message names the side the term
+        came from. ``training_fn=None`` matches a term whatever function its
+        side runs.
+        """
+        sides = [(self.loss_fn, self.training_fn, "training")]
+        validation = self.validation_config
+        if validation is not None and validation.loss_fn is not None:
+            sides.append(
+                (
+                    validation.loss_fn,
+                    validation.validation_fn or self.training_fn,
+                    "validation",
+                )
+            )
+        return [
+            (terms, side)
+            for loss_fn, effective_fn, side in sides
+            if (terms := _matching_components(loss_fn, kind))
+            and (training_fn is None or effective_fn is training_fn)
+        ]
+
+    def _validate_embedding_matching(self) -> None:
+        """Check that the student, projector, and teacher embedding widths compose.
+
+        Only the stock embedding training function is checked, because it is the
+        one whose routing this check can reason about. It projects the student's
+        embeddings with ``models['projector']`` when there is one, so the widths
+        have to compose. A caller's own training function owns its own routing.
+        """
+        student = self.models["student"]
+        for terms, side in self._matching_sides(
+            EmbeddingMatchingLoss, embedding_distillation_fn
+        ):
+            label = f"{side} loss component(s) {list(terms)!r}"
+            student_shape = _node_embedding_shapes(student).get("node_embeddings")
+            if student_shape is None:
+                raise ValueError(
+                    f"The {label} match the student's node embeddings, so the "
+                    "student must publish a 'node_embeddings' shape and write it "
+                    "in compute_embeddings(); got embedding_shapes="
+                    f"{sorted(_node_embedding_shapes(student))!r}."
+                )
+            width = student_shape[-1]
+            projector = (
+                self.models[_PROJECTOR_MODEL]
+                if _PROJECTOR_MODEL in self.models
+                else None
+            )
+            if projector is not None:
+                in_features = getattr(projector, "in_features", None)
+                if in_features is not None and in_features != width:
+                    raise ValueError(
+                        "The projector reads the student's embeddings, so its input "
+                        f"width must be the student's; got in_features={in_features!r} "
+                        f"against a student of width {width!r}."
+                    )
+                if getattr(projector, "frozen_student", False) and all(
+                    parameter.requires_grad for parameter in student.parameters()
+                ):
+                    raise ValueError(
+                        "The projector declares frozen_student=True, so the "
+                        f"{label} are to train it alone over a frozen student "
+                        "representation, but every student parameter is trainable. "
+                        "Freeze the student's trunk with requires_grad_(False), or "
+                        "drop the flag. The flag also waives the check that catches "
+                        "embeddings detached by accident, so it must not stay set "
+                        "on a trainable student."
+                    )
+                width = getattr(projector, "out_features", width)
+            teacher_shape = _node_embedding_shapes(self.models["teacher"]).get(
+                "node_embeddings"
+            )
+            if teacher_shape is not None and width != teacher_shape[-1]:
+                raise ValueError(
+                    f"The {label} compare representations component by component, "
+                    "so what reaches the loss must have the teacher's width; got "
+                    f"{width!r} against a teacher of width {teacher_shape[-1]!r}. "
+                    f"{_PROJECTOR_REMEDY}"
+                )
+
+    def _validate_hessian_matching(self) -> None:
+        """Check that the student computes the energy a Hessian term differentiates.
+
+        A direct-force student triggers a warning rather than a refusal. The
+        term is computable and its values are right, but the second derivative
+        it drives down is the one the energy head implies. That is not the
+        Jacobian of the force head a force loss trains, so the curvature that
+        decides an integrator's stability for that student is left
+        unsupervised.
+        """
+        sides = self._matching_sides(HessianMatchingLoss, hessian_distillation_fn)
+        if not sides:
+            return
+        active = self.models["student"].output_data()
+        for terms, side in sides:
+            if "energy" not in active:
+                raise ValueError(
+                    f"The {side} loss component(s) {list(terms)!r} need the "
+                    "student's Hessian-vector product, which "
+                    "hessian_distillation_fn takes by differentiating the "
+                    "student's energy twice, so the student must compute an "
+                    f"energy; got active outputs {sorted(active)!r}."
+                )
+        config = self.models["student"].model_config
+        if "forces" in config.outputs and "forces" not in config.autograd_outputs:
+            named = sorted({name for terms, _ in sides for name in terms})
+            warnings.warn(
+                f"Loss component(s) {named!r} differentiate the student's energy "
+                "twice, but the student predicts its forces with a head of its "
+                "own rather than as that energy's gradient; got autograd_outputs="
+                f"{sorted(config.autograd_outputs)!r}. The curvature term then "
+                "supervises the energy head alone. The force head a force loss "
+                "trains gets no second-order signal at all. Distill a conservative "
+                "student for the term to reach the forces, or read it as a "
+                "constraint on the energy surface only.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    def _validate_distribution_matching(self) -> None:
+        """Require an equilibrium on-policy sample for every Boltzmann term.
+
+        The estimator reads the batch as a sample of the student's own
+        canonical distribution, so it needs the segment loop and a propagator
+        that keeps sampling. ``samples_equilibrium`` declares whether the
+        propagator does; when it is ``None``,
+        :meth:`_refuse_inferred_non_equilibrium` infers the answer. What
+        reaches the loss is a draw from the replay buffer, so an unbounded
+        buffer and a ``replay_ratio`` below ``1`` each draw a warning.
+        Validation data is off-policy by construction, so a term on the
+        validation side is refused, and so is a validation config that would
+        reuse the training loss.
+        """
+        sides = {
+            side: terms for terms, side in self._matching_sides(BoltzmannMatchingLoss)
+        }
+        if "validation" in sides:
+            raise ValueError(
+                f"The validation loss component(s) {list(sides['validation'])!r} "
+                "read a batch as a sample of the student's own Boltzmann "
+                "distribution, but a validation set is off-policy by construction. "
+                "It is a fixed sample of whatever produced it, so the uniform "
+                "weights the estimator assumes are wrong rather than noisy, and "
+                "the metric would mislead checkpoint selection and the metric "
+                "schedulers. Give the validation config a pointwise loss instead, "
+                "such as EnergyMSELoss(target_key='teacher_energy') + "
+                "ForceMSELoss(target_key='teacher_forces')."
+            )
+        terms = sides.get("training")
+        if terms is None:
+            return
+        if self.on_policy is None:
+            raise ValueError(
+                f"Loss component(s) {list(terms)!r} read a batch as a sample of "
+                "the student's own Boltzmann distribution, over configurations "
+                "the student itself visited; got on_policy=None. An offline "
+                "dataset is a sample of whatever produced it, which makes the "
+                "estimator's uniform weights wrong rather than noisy. Configure "
+                "the segment loop, or drop the term. A spec or checkpoint carries "
+                "no segment loop, so a rebuild re-supplies it: pass on_policy, "
+                "with the models its propagator holds, to load_checkpoint or "
+                "from_spec_dict, or restore_checkpoint into a strategy already "
+                "built with it. Reweighting an off-policy sample is not offered, "
+                "because the importance weights the estimator folds away as "
+                "uniform cannot be recovered from the batch. An existing dataset "
+                "reaches the term as reference_dataset instead, mixed into "
+                "generated frames by replay_ratio and read as regularization."
+            )
+        if self.on_policy.samples_equilibrium is False:
+            raise ValueError(
+                f"Loss component(s) {list(terms)!r} are defined on an equilibrium "
+                "ensemble; got on_policy.samples_equilibrium=False, which declares "
+                "that the propagator does not sample one. Generate with a "
+                "propagator that does and declare it with samples_equilibrium=True, "
+                "leave the setting None to infer it from the propagator, or drop "
+                "the term."
+            )
+        if self.on_policy.samples_equilibrium is None:
+            self._refuse_inferred_non_equilibrium(terms)
+        if self.on_policy.replay_ratio < 1.0:
+            warnings.warn(
+                f"Loss component(s) {list(terms)!r} read every batch as a sample "
+                "of the student's own ensemble; got replay_ratio="
+                f"{self.on_policy.replay_ratio!r}, which mixes reference frames "
+                "into each batch. The estimator cannot tell those frames from "
+                "generated ones and weights them as if the student had visited "
+                "them. Set replay_ratio=1 to keep reference rows out of the batch, "
+                "or keep the reference share small and read the term as "
+                "regularization. With replay_ratio=1 the estimate is as current as "
+                "the replay buffer, which is what replay_capacity bounds.",
+                UserWarning,
+                stacklevel=2,
+            )
+        if self.on_policy.replay_capacity is None:
+            labelings = (
+                self.on_policy.generation_steps // self.on_policy.label_frequency + 1
+            )
+            warnings.warn(
+                f"Loss component(s) {list(terms)!r} read every batch as a sample "
+                "of the student's own ensemble; got replay_capacity=None. An "
+                "unbounded replay buffer retires nothing, and every segment's "
+                "loader draws uniformly over all of it. After N segments only "
+                "about one N-th of a batch came from the current student, and the "
+                "rest is the time-average of every policy the run has had, which "
+                "is the off-policy sample an offline dataset is refused for. Bound "
+                "the capacity to what one segment or a few segments yield, "
+                f"{labelings} labeling(s) per segment here at one frame per "
+                "walker each, and leave replay_eviction='fifo' so the stalest "
+                "frames retire first. A one-segment buffer is the most current "
+                "and gives the softmax the fewest distinct configurations to "
+                "weight.",
+                UserWarning,
+                stacklevel=2,
+            )
+        if (
+            self.validation_config is not None
+            and self.validation_config.loss_fn is None
+        ):
+            raise ValueError(
+                f"Loss component(s) {list(terms)!r} are defined on the batches "
+                "the student generated; got validation_config.loss_fn=None. A "
+                "ValidationConfig without a loss_fn of its own reuses this "
+                "strategy's training loss, Boltzmann term included, and the "
+                "labeling seam scores validation batches for it, so the term "
+                "would run on the validation set. That set is off-policy by "
+                "construction: it is a fixed sample of whatever produced it, its "
+                "graphs need not be one system's configurations, and reducing "
+                "energies by k_B T lets the term dominate the composite metric "
+                "that checkpoint selection and the metric schedulers read. Give "
+                "the validation config a pointwise loss, such as "
+                "EnergyMSELoss(target_key='teacher_energy') + "
+                "ForceMSELoss(target_key='teacher_forces'), or drop the "
+                "validation config."
+            )
+
+    def _refuse_inferred_non_equilibrium(self, terms: tuple[str, ...]) -> None:
+        """Refuse a propagator whose parts show that it does not keep sampling.
+
+        This is the rule ``samples_equilibrium=None`` stands for. A relaxation
+        propagator, one whose class declares
+        :attr:`~nvalchemi.dynamics.BaseDynamics.samples_equilibrium` false as
+        the built-in optimizers do, descends to a minimum. A converging
+        propagator freezes each graph as it converges, whether the criterion
+        is the propagator's own, a hook registered on it, or the one the loop
+        installs from ``fmax`` or ``convergence_hook``. Registered criteria
+        come from the same walk the lifecycle uses,
+        :func:`~nvalchemi.training.distillation.config._status_migrators`,
+        kept when they graduate a graph past the root's ``exit_status``; a
+        migration into a status the root still steps hands the graph to
+        another sub-stage, as a :class:`~nvalchemi.dynamics.FusedStage` does
+        between its own, and is not a stop. Every refusal names the
+        declaration that overrides it.
+        """
+        assert self.on_policy is not None  # noqa: S101  # narrowing
+        stages = list(_propagator_tree(self.on_policy.dynamics))
+        relaxing = [
+            type(stage).__name__ for stage in stages if not stage.samples_equilibrium
+        ]
+        if relaxing:
+            raise ValueError(
+                f"Loss component(s) {list(terms)!r} are defined on an equilibrium "
+                f"ensemble, but the run has a relaxation propagator driving "
+                f"{relaxing!r}; a relaxation does not sample one. It descends to a "
+                "minimum, so its frames are a path rather than a distribution. "
+                "Generate with a thermostatted integrator, drop the term, or set "
+                "on_policy.samples_equilibrium=True if the propagator does sample "
+                "an equilibrium ensemble."
+            )
+        if (
+            self.on_policy.fmax is not None
+            or self.on_policy.convergence_hook is not None
+        ):
+            configured = (
+                f"fmax={self.on_policy.fmax!r}"
+                if self.on_policy.fmax is not None
+                else f"convergence_hook={self.on_policy.convergence_hook!r}"
+            )
+            raise ValueError(
+                f"Loss component(s) {list(terms)!r} are defined on an equilibrium "
+                f"ensemble, but the segment loop has {configured}, so it converges "
+                "graphs out and stops sampling them. The criterion freezes each "
+                "converged graph at the state it converged to and graduates it out "
+                "of the batch the term is matching against. The loop installs the "
+                "criterion on the propagator at run time, so it is checked here "
+                "on the loop's settings rather than on the propagator. Generate "
+                "without a convergence criterion, drop the term, or set "
+                "on_policy.samples_equilibrium=True if the propagator does sample "
+                "an equilibrium ensemble."
+            )
+        exit_status = self.on_policy.dynamics.exit_status
+        graduating = {
+            id(hook)
+            for hook in _status_migrators(self.on_policy.dynamics)
+            if hook.target_status >= exit_status
+        }
+        converging = [
+            type(stage).__name__
+            for stage in stages
+            if getattr(stage, "convergence_hook", None) is not None
+            or any(id(hook) in graduating for hook in getattr(stage, "hooks", ()))
+        ]
+        if converging:
+            raise ValueError(
+                f"Loss component(s) {list(terms)!r} are defined on an equilibrium "
+                f"ensemble, but a convergence hook on {converging!r} converges "
+                "graphs out, so the propagator stops sampling them. Every "
+                "converged graph is frozen at the state it converged to. Generate "
+                "without a convergence hook, drop the term, or set "
+                "on_policy.samples_equilibrium=True if the propagator does sample "
+                "an equilibrium ensemble."
+            )
+
     def attach_teacher_labels(self, batch: Batch) -> bool:
         """Attach the teacher fields *batch* is missing, and report whether it did.
 
@@ -1140,7 +1815,10 @@ class DistillationStrategy(TrainingStrategy):
         scorer is called inside whatever autocast region the training loop
         holds open. The strategy's own scorer disables autocast, so the labels
         match what :func:`~nvalchemi.training.distillation.label_dataset`
-        persisted wherever the store returns the label dtype.
+        persisted wherever the store returns the label dtype. Inside
+        :meth:`validate`, the Hessian probe is drawn from a seed keyed to the
+        batch's position in the pass, handed to the scorer for that call
+        alone; see that method.
 
         Parameters
         ----------
@@ -1155,12 +1833,62 @@ class DistillationStrategy(TrainingStrategy):
         """
         if not self._missing_teacher_fields(batch):
             return False
-        _attach_teacher_labels(batch, self.teacher_scorer.label(batch))
+        index = self._validation_probe_index
+        if index is not None:
+            self._validation_probe_index = index + 1
+        _attach_teacher_labels(
+            batch, self.teacher_scorer.label(batch, probe_seed=index)
+        )
         return True
 
     def _missing_teacher_fields(self, batch: Batch) -> list[str]:
         """Return the resolved teacher fields *batch* does not carry."""
         return [field for field in self._teacher_fields if field not in batch]
+
+    def validate(self) -> dict[str, Any] | None:
+        """Run a validation pass whose batches keep their probe directions.
+
+        Validation batches are relabeled on the fly on every pass. A Hessian
+        term would then draw a fresh Hutchinson probe each time, which moves
+        the reported number for a student that has not changed. Each batch is
+        instead scored along a direction keyed to its position in the pass,
+        passed to the scorer as a call-time ``probe_seed`` that leaves the
+        scorer's own setting untouched. The metric is then a function of the
+        student alone, as long as the validation data iterates in a stable
+        order. Training keeps drawing fresh probes.
+
+        Returns
+        -------
+        dict[str, Any] | None
+            The validation summary, also stored on ``last_validation``.
+        """
+        self._validation_probe_index = 0
+        try:
+            return super().validate()
+        finally:
+            self._validation_probe_index = None
+
+    def checkpoint_model_references(self) -> dict[str, ModelReference]:
+        """Return the models a checkpoint stores once per root, not at every index.
+
+        The teacher is frozen for the whole run, so writing it into every
+        periodic checkpoint would duplicate a model that never changes.
+        Declared here, the teacher is stored at the first index under a root,
+        and every later checkpoint holds a model reference to it. A periodic
+        write then costs the student's weights alone. A restart reads back the
+        stored teacher the run actually trained against rather than rebuilding
+        it from its ``checkpoint_spec()``. That spec names the factory that
+        built the architecture, not the weights a fine-tune left in it. The
+        reference carries a sampled fingerprint that identifies the stored copy
+        without validating it.
+
+        Returns
+        -------
+        dict[str, ModelReference]
+            ``{"teacher": ModelReference()}``. The checkpoint layer adds the
+            index and the fingerprint to the manifest entry.
+        """
+        return {"teacher": ModelReference()}
 
     def run(self, dataloader: Iterable[Batch] | None = None) -> None:
         """Execute the offline training loop or the on-policy segment loop.
@@ -1225,10 +1953,20 @@ class DistillationStrategy(TrainingStrategy):
         fire at segment boundaries, and step-cadence validation fires inside
         segments. The run closes with one final validation unless a cadence
         already validated at the final step. The segment is also the restart
-        granularity. The propagator state is not checkpointed. A resumed run
-        reseeds its trajectory, and a segment that a checkpoint interrupted is
-        counted as finished on resume. A second call keeps the replay buffer
-        the first call filled and reseeds only the trajectory.
+        granularity. A run restored from a checkpoint picks up the restart
+        bundle: its trajectory, the propagator's step count, the initial
+        structures' position, and its replay frames. The restored frames
+        replace the buffer's contents. A segment that a checkpoint interrupted
+        is counted as finished on resume, so a checkpoint written part-way
+        through a training phase costs the resumed run one extra generation
+        phase. Once generation has run dry, the restart bundle carries the
+        frames and the exhaustion itself, and the resumed run keeps training on
+        the buffer. The bundle is rank-local, because the checkpoint that holds
+        it is written on rank zero alone. A multi-rank restart is therefore
+        handled as ``OnPolicySettings.restart`` says. By default it is refused.
+        Under ``"reseed"`` the bundle is dropped with a warning, and each rank
+        reseeds with a cold buffer. A second call keeps the replay buffer the
+        first call filled and reseeds only the trajectory.
 
         The student generates in evaluation mode and trains in training mode.
         A propagator model that merely composes the student is held in
@@ -1297,6 +2035,12 @@ class DistillationStrategy(TrainingStrategy):
     def _run_on_policy(self, config: OnPolicyConfig) -> None:
         """Drive generate-label-train segments until ``num_steps`` is reached.
 
+        The labeling hook is rebuilt on every call, so a resumed run hands it
+        the step the interrupted run last labeled. That step is the forced
+        boundary label at ``generation_steps - 1``. The restart bundle does not
+        carry it, and without it the cadence would fire on the adjacent step
+        and store a frame one step away from a frame already in the buffer.
+
         The rank shard is installed on the initial structures here rather than
         at construction, for two reasons. The world size is set by the
         launcher. Installing the shard also resets the position, which a second
@@ -1322,7 +2066,7 @@ class DistillationStrategy(TrainingStrategy):
             ):
                 propagator_model.to(self.devices[0])
             unsynchronized = self.models["student"]
-            self._run_setup_hooks()
+            self.run_setup_hooks()
             self._validate_synchronized_student(config, unsynchronized)
             replay_device = self._resolve_replay_device(config)
             target_step_count = self._resolve_target_step_count(None)
@@ -1339,7 +2083,6 @@ class DistillationStrategy(TrainingStrategy):
                     get_rank(self.distributed_manager),
                     get_world_size(self.distributed_manager),
                 )
-                state = self._seed_initial_state(config, primary_device)
                 if self._replay_buffer is None:
                     self._replay_buffer = ReplayBuffer(
                         capacity=config.replay_capacity,
@@ -1348,6 +2091,11 @@ class DistillationStrategy(TrainingStrategy):
                         device=replay_device,
                     )
                 buffer = self._replay_buffer
+                self._generation_exhausted = False
+                state, labeled_step = self._resume_or_seed(config, buffer)
+                if state is not None:
+                    state = _to_device(state, primary_device)
+                self._on_policy_state = state
                 # Compare against the student module, not a DDPHook's wrapper.
                 student = unwrap_model(self.models["student"])
                 propagator_model = config.dynamics.model
@@ -1365,8 +2113,14 @@ class DistillationStrategy(TrainingStrategy):
                     exit_status=None
                     if config.convergence_criterion is None
                     else config.dynamics.exit_status,
+                    labeled_step=labeled_step,
                 )
-                with _relaxation_lifecycle(config, state, label_hook) as lifecycle:
+                lifecycle_context = (
+                    _relaxation_lifecycle(config, state, label_hook)
+                    if state is not None
+                    else nullcontext(None)
+                )
+                with lifecycle_context as lifecycle:
                     config.dynamics.register_hook(label_hook)
                     try:
                         # Freeze the teacher for both phases and keep the student in
@@ -1392,6 +2146,9 @@ class DistillationStrategy(TrainingStrategy):
                                         buffer,
                                         target_step_count,
                                     )
+                                    self._on_policy_state = state
+                                    if state is None:
+                                        self._generation_exhausted = True
                                 training_steps = min(
                                     config.training_steps_per_segment,
                                     target_step_count - self.step_count,
@@ -2143,6 +2900,213 @@ class DistillationStrategy(TrainingStrategy):
         """
         return get_rank(self.distributed_manager) * config.rank_seed_stride
 
+    def _resume_or_seed(
+        self, config: OnPolicyConfig, buffer: ReplayBuffer
+    ) -> tuple[Batch | None, int | None]:
+        """Return the batch to propagate, resuming a checkpointed run when there is one.
+
+        A restored checkpoint carries a restart bundle: the trajectory the
+        interrupted run had reached, the propagator's cumulative step count,
+        the initial structures' position, and the frames already in its replay
+        buffer. The resumed run therefore continues the same trajectory rather
+        than starting a fresh one. The continuation is exact for a propagator
+        whose whole state is the batch and that counter. The built-in
+        integrators qualify, because their Langevin noise is keyed on the step
+        count. A relaxation optimizer's adaptive history lives outside the
+        batch and restarts from its constructor arguments, so only the
+        positions continue.
+
+        The bundle's frames *are* the replay buffer as of the checkpoint, so
+        they replace what the buffer holds rather than being appended. The
+        bundle describes one rank's run, because
+        :class:`~nvalchemi.training.hooks.CheckpointHook` writes on rank zero
+        alone. It is consumed only when that rank is the whole world at both
+        ends of the restart. A bundle written on or restored onto a wider
+        world, or whose position this rank's shard cannot take, is handled as
+        ``config.restart`` says. It is refused under ``"error"`` and
+        ``"resume"``. Under ``"reseed"`` it is dropped with a warning, and this
+        rank seeds afresh with a cold replay buffer. ``"resume"`` also refuses
+        a restore that carries no bundle. A bundle written after generation
+        ran dry carries the frames and the exhaustion rather than a
+        trajectory, so the resumed run keeps training on the buffer.
+
+        Returns
+        -------
+        tuple[Batch | None, int | None]
+            The batch the next segment propagates from, or ``None`` once
+            generation is exhausted, and the step the interrupted run last
+            labeled. The segment loop hands that step to the labeling hook it
+            rebuilds. The step is ``None`` when the run seeds, which leaves a
+            fresh hook's cadence untouched.
+
+        Raises
+        ------
+        RuntimeError
+            If the bundle cannot be consumed and ``config.restart`` is not
+            ``"reseed"``, or if ``config.restart="resume"`` finds no bundle.
+        """
+        restored = self._take_restart_state()
+        if restored is None:
+            if config.restart == "resume":
+                raise RuntimeError(
+                    "OnPolicyConfig.restart='resume' requires a restart bundle "
+                    "to continue from, and this run carries none: no checkpoint "
+                    "was restored, or the one restored was written before the "
+                    "segment loop reached its first checkpoint. Restore a "
+                    "checkpoint of an on-policy run, or set restart='error' to "
+                    "let a fresh run seed."
+                )
+            return self._seed_initial_state(config, self.devices[0]), None
+        reason = self._rank_local_restart_reason(restored)
+        if reason is None:
+            reason = self._restore_structure_position(config, restored)
+        if reason is not None:
+            if config.restart != "reseed":
+                raise RuntimeError(
+                    f"The on-policy restart bundle cannot be consumed: {reason} "
+                    "Set OnPolicyConfig.restart='reseed' to drop the bundle and "
+                    "start the generation state cold on every rank, or restart "
+                    "on the world the bundle was written on "
+                    f"(restart={config.restart!r})."
+                )
+            warnings.warn(
+                f"The on-policy restart bundle is dropped: {reason} This rank "
+                "seeds afresh from its own share of the initial structures "
+                "with a cold replay buffer instead, so budget the first "
+                "segments after the restart for refilling it: until they do, "
+                "the mixture is drawn from the reference dataset alone.",
+                UserWarning,
+                stacklevel=2,
+            )
+            return self._seed_initial_state(config, self.devices[0]), None
+        config.dynamics.step_count = int(restored["dynamics_step_count"])
+        self._warn_settings_drift(config, restored)
+        frames = restored.get("replay_frames")
+        if frames is not None:
+            buffer.clear()
+            buffer.extend(_batch_from_state(frames))
+        labeled_step = max(config.dynamics.step_count - 1, 0)
+        if restored.get("generation_exhausted", False):
+            self._generation_exhausted = True
+            return None, labeled_step
+        return _batch_from_state(restored["trajectory"]), labeled_step
+
+    def _restore_structure_position(
+        self, config: OnPolicyConfig, restored: Mapping[str, Any]
+    ) -> str | None:
+        """Resume the initial structures at the bundle's position, or say why not.
+
+        Parameters
+        ----------
+        config : OnPolicyConfig
+            Segment loop whose initial structures are resumed, already
+            narrowed to this rank's shard.
+        restored : Mapping[str, Any]
+            Restart bundle a restored checkpoint carried.
+
+        Returns
+        -------
+        str | None
+            A sentence explaining why this rank's shard cannot take the
+            position, or ``None`` when the position was resumed.
+        """
+        position = restored["initial_structures"]
+        try:
+            config.initial_structures.load_state_dict(position)
+        except ValueError:
+            return (
+                f"its position was written for rank {position['rank']!r} of "
+                f"{position['world_size']!r}, and this rank's shard counts "
+                "rows in a different set."
+            )
+        return None
+
+    @staticmethod
+    def _warn_settings_drift(
+        config: OnPolicyConfig, restored: Mapping[str, Any]
+    ) -> None:
+        """Report the settings the resumed loop sets differently from the interrupted one.
+
+        Parameters
+        ----------
+        config : OnPolicyConfig
+            Segment loop the run resumes under.
+        restored : Mapping[str, Any]
+            Restart bundle a restored checkpoint carried.
+
+        Warns
+        -----
+        UserWarning
+            If a setting the restart bundle recorded differs from the current
+            one. ``restart`` is exempt, because changing it between the two
+            runs is how a user chooses how to restart.
+        """
+        recorded = restored["settings"]
+        current = config.settings.model_dump(mode="json")
+        drifted = sorted(
+            name
+            for name, value in current.items()
+            if name != "restart" and name in recorded and recorded[name] != value
+        )
+        if not drifted:
+            return
+        now = {name: current[name] for name in drifted}
+        then = {name: recorded[name] for name in drifted}
+        warnings.warn(
+            f"The resumed segment loop sets {drifted!r} differently from the "
+            "run the restart bundle was written by, so the restored "
+            "trajectory, replay frames, and position were produced under "
+            f"settings the rest of this run will not use; got {now!r} against "
+            f"{then!r}. Restore the settings to compare the halves, or start a "
+            "fresh run to change them.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    def _rank_local_restart_reason(self, restored: Mapping[str, Any]) -> str | None:
+        """Return why a rank-zero-only restart bundle cannot be consumed, or ``None``.
+
+        The bundle describes the whole run only when two worlds both have a
+        single rank: the world it was written in, which the shard in its
+        recorded position names, and the world it is restored into.
+
+        Parameters
+        ----------
+        restored : Mapping[str, Any]
+            Restart bundle a restored checkpoint carried.
+
+        Returns
+        -------
+        str | None
+            A sentence naming the mismatch, or ``None`` when a single rank
+            wrote the bundle and a single rank is restoring it.
+        """
+        world_size = get_world_size(self.distributed_manager)
+        if world_size > 1:
+            return (
+                f"the segment loop is resuming on world_size={world_size!r}, "
+                "and the checkpoint it rides in is written by rank zero alone. "
+                "It holds one rank's trajectory and one rank's replay frames, "
+                "and replaying those onto every rank would have every rank "
+                "propagate rank zero's structures and train on rank zero's "
+                "frames."
+            )
+        saved_world_size = int(restored["initial_structures"]["world_size"])
+        if saved_world_size > 1:
+            return (
+                f"it was written on world_size={saved_world_size!r} and is "
+                "being restored on one rank, which would silently continue "
+                "rank zero's trajectories and discard the rest."
+            )
+        return None
+
+    def _take_restart_state(self) -> dict[str, Any] | None:
+        """Return the restart bundle a restored checkpoint carried, once."""
+        for hook in self.hooks:
+            if isinstance(hook, _OnPolicyRestartHook):
+                return hook.take()
+        return None
+
     def _capture_segment(
         self,
         config: OnPolicyConfig,
@@ -2171,9 +3135,18 @@ class DistillationStrategy(TrainingStrategy):
         """Serialize declarative distillation settings to a JSON-ready dict.
 
         The bundle names its own class under ``strategy_cls``, which
-        :meth:`from_spec_dict` builds. ``on_policy`` and ``reference_dataset``
-        hold a live propagator, scorer, and datasets that no spec can describe.
-        They are therefore omitted, and a rebuilt strategy runs offline.
+        :meth:`from_spec_dict` builds. An on-policy run serializes as
+        references: ``on_policy`` becomes the ``on_policy`` block that
+        :meth:`~nvalchemi.training.distillation.OnPolicyConfig.to_spec_dict`
+        produces, and ``reference_dataset`` becomes the store it reads. The
+        rebuilt strategy therefore needs only its models supplied. A piece
+        that no recipe describes, such as a dataset holding its samples in
+        memory or a propagator hiding its constructor arguments, leaves the
+        whole ``on_policy`` entry out, with a warning that names it. The spec
+        never carries a block that would rebuild into a different run. Such a
+        strategy runs offline unless the two are passed back to
+        :meth:`from_spec_dict`, :meth:`from_checkpoint_dict`, or
+        :meth:`load_checkpoint`.
 
         Returns
         -------
@@ -2183,7 +3156,8 @@ class DistillationStrategy(TrainingStrategy):
         Warns
         -----
         UserWarning
-            If ``on_policy`` is set, because the spec cannot carry it.
+            If ``on_policy`` or ``reference_dataset`` holds something no recipe
+            can describe, naming what it was.
         """
         spec = super().to_spec_dict()
         spec["strategy_cls"] = f"{type(self).__module__}.{type(self).__qualname__}"
@@ -2194,15 +3168,29 @@ class DistillationStrategy(TrainingStrategy):
         spec["label_dtype"] = (
             None if self.label_dtype is None else str(self.label_dtype)
         )
-        if self.on_policy is not None:
+        if self.on_policy is None:
+            return spec
+        try:
+            spec["on_policy"] = self.on_policy.to_spec_dict(
+                teacher=self.models["teacher"]
+            )
+            spec["reference_dataset"] = (
+                None
+                if self.reference_dataset is None
+                else strategy_spec.dataset_spec_dict(
+                    self.reference_dataset,
+                    field="DistillationStrategy.reference_dataset",
+                )
+            )
+        except ValueError as exc:
             warnings.warn(
-                "on_policy and reference_dataset hold live runtime objects and "
-                "are omitted from the spec, so a strategy rebuilt from it runs "
-                "offline over the dataloader passed to run(). Re-supply them at "
-                "construction to keep generating on-policy.",
+                f"The on-policy recipe is omitted from the spec: {exc} A "
+                "strategy rebuilt from this spec runs offline over the "
+                "dataloader passed to run().",
                 UserWarning,
                 stacklevel=2,
             )
+            spec.pop("on_policy", None)
         return spec
 
     @classmethod
@@ -2214,6 +3202,8 @@ class DistillationStrategy(TrainingStrategy):
         hooks: Sequence[Any] | None = None,
         training_fn: Any = None,
         validation_config: ValidationConfig | None = None,
+        on_policy: OnPolicyConfig | None = None,
+        reference_dataset: BatchDatasetProtocol | None = None,
     ) -> DistillationStrategy:
         """Rebuild a :class:`DistillationStrategy` from ``to_spec_dict`` output.
 
@@ -2223,6 +3213,21 @@ class DistillationStrategy(TrainingStrategy):
         keyword must widen this call with it. An optional keyword is forwarded
         only when it is set, so a subclass overriding ``from_spec_dict`` without
         it still rebuilds from a plain spec.
+
+        A spec that carries an ``on_policy`` block rebuilds the segment loop
+        around the supplied ``models``: the propagator around
+        ``models['student']``, the scorer around ``models['teacher']``, and
+        the initial structures and the reference dataset from the stores they
+        name. The stores are opened on the spec's primary device rather than
+        on the device the block recorded, so a checkpoint restored under
+        another ``map_location`` reads its data where the run now trains.
+        ``on_policy``, ``reference_dataset``, and ``validation_config`` are
+        runtime overrides: live objects that a spec cannot carry whole.
+        :meth:`load_checkpoint` and :meth:`from_checkpoint_dict` forward them
+        to this method as extra keyword arguments, and :meth:`load_checkpoint`
+        passes its caller's *models* through the loader's own ``models``
+        keyword. An explicit keyword here wins, and the spec's ``on_policy``
+        block is the fallback.
 
         Parameters
         ----------
@@ -2241,6 +3246,13 @@ class DistillationStrategy(TrainingStrategy):
             carries a live loader, so a validation-only ``teacher_*`` target is
             resolved by passing the config here rather than assigning it
             afterwards, which re-runs no validator.
+        on_policy : OnPolicyConfig | None, optional
+            Segment loop to use instead of the spec's ``on_policy`` block.
+            Default ``None`` (rebuild the loop from that block, when the spec
+            carries one).
+        reference_dataset : BatchDatasetProtocol | None, optional
+            Reference dataset to use instead of the one the spec names. Default
+            ``None``.
 
         Returns
         -------
@@ -2252,11 +3264,25 @@ class DistillationStrategy(TrainingStrategy):
         ------
         ValueError
             If *spec* is missing a required key, if its ``strategy_cls`` entry
-            is not a dotted class path string, or if that path resolves to a
-            class that is not a :class:`DistillationStrategy` subclass.
+            is not a dotted class path string, if that path cannot be imported,
+            or if it resolves to a class that is not a
+            :class:`DistillationStrategy` subclass.
         TypeError
             If a runtime keyword is supplied but the subclass *spec* names
             overrides ``from_spec_dict`` without accepting it.
+
+        Notes
+        -----
+        The spec's ``on_policy`` block is the weakest source, because it is
+        the only one that cannot be complete: it names its initial-structure
+        store by path and its propagator by constructor arguments. A run
+        started from an
+        :class:`~nvalchemi.data.datapipes.in_memory_dataset.InMemoryDataset`,
+        or whose propagator hides its constructor arguments, therefore
+        serializes without its ``on_policy`` block, with a warning, and
+        restoring it means passing *on_policy* here. A propagator carrying
+        hooks keeps its block: the hooks are left out with a warning, and the
+        rebuilt propagator starts without them.
         """
         required = ("optimizer_configs", "devices", "loss_fn_spec")
         missing = [key for key in required if key not in spec]
@@ -2272,7 +3298,13 @@ class DistillationStrategy(TrainingStrategy):
                     "from_spec_dict: 'strategy_cls' must be a dotted class path "
                     f"string; got {type(raw_strategy_cls).__name__}."
                 )
-            imported = _import_cls(raw_strategy_cls)
+            try:
+                imported = _import_cls(raw_strategy_cls)
+            except (ImportError, AttributeError, TypeError) as exc:
+                raise ValueError(
+                    f"from_spec_dict: 'strategy_cls' {raw_strategy_cls!r} could "
+                    f"not be imported: {exc}"
+                ) from exc
             if not issubclass(imported, cls):
                 raise ValueError(
                     f"from_spec_dict: {raw_strategy_cls!r} must resolve to a "
@@ -2285,7 +3317,12 @@ class DistillationStrategy(TrainingStrategy):
                     hooks=hooks,
                     training_fn=training_fn,
                     **_set_rebuild_overrides(
-                        imported, {"validation_config": validation_config}
+                        imported,
+                        {
+                            "validation_config": validation_config,
+                            "on_policy": on_policy,
+                            "reference_dataset": reference_dataset,
+                        },
                     ),
                 )
         model_input = strategy_spec._models_from_spec_and_overrides(
@@ -2295,6 +3332,24 @@ class DistillationStrategy(TrainingStrategy):
                 spec.get("single_model_input")
             ),
         )
+        devices = strategy_spec._devices_from_spec(spec["devices"])
+        recipe = spec.get("on_policy")
+        rebuildable = isinstance(model_input, Mapping) and _REQUIRED_MODELS <= set(
+            model_input
+        )
+        if on_policy is None and recipe is not None and rebuildable:
+            on_policy = OnPolicyConfig.from_spec_dict(
+                recipe,
+                student=model_input["student"],
+                teacher=model_input["teacher"],
+                device=devices[0],
+            )
+        reference_spec = spec.get("reference_dataset")
+        if reference_dataset is None and reference_spec is not None:
+            reference_dataset = strategy_spec.dataset_from_spec_dict(
+                {**reference_spec, "device": str(devices[0])},
+                field="DistillationStrategy.reference_dataset",
+            )
         return cls(
             models=model_input,
             optimizer_configs=strategy_spec._optimizer_configs_from_spec(
@@ -2306,7 +3361,7 @@ class DistillationStrategy(TrainingStrategy):
             hooks=list(hooks) if hooks is not None else [],
             training_fn=strategy_spec._training_fn_from_spec(spec, training_fn),
             loss_fn=strategy_spec._loss_fn_from_spec(spec["loss_fn_spec"]),
-            devices=strategy_spec._devices_from_spec(spec["devices"]),
+            devices=devices,
             validation_config=validation_config,
             teacher_signals=spec.get("teacher_signals"),
             label_missing=spec.get("label_missing", True),
@@ -2315,4 +3370,154 @@ class DistillationStrategy(TrainingStrategy):
                 if spec.get("label_dtype") is None
                 else _dtype_deserialize(spec["label_dtype"])
             ),
+            on_policy=on_policy,
+            reference_dataset=reference_dataset,
+        )
+
+    @classmethod
+    def from_checkpoint_dict(
+        cls,
+        spec: Mapping[str, Any],
+        *,
+        models: strategy_validation.ModelInput | None = None,
+        hooks: Sequence[Any] | None = None,
+        training_fn: Any = None,
+        validation_config: ValidationConfig | None = None,
+        on_policy: OnPolicyConfig | None = None,
+        reference_dataset: BatchDatasetProtocol | None = None,
+        **runtime_overrides: Any,
+    ) -> DistillationStrategy:
+        """Rebuild a strategy from checkpoint metadata, the segment loop included.
+
+        It extends
+        :meth:`~nvalchemi.training.TrainingStrategy.from_checkpoint_dict` by
+        forwarding the runtime objects that :meth:`to_spec_dict` cannot carry
+        to :meth:`from_spec_dict` as runtime overrides. Only the overrides that
+        are set are forwarded, so a subclass whose ``from_spec_dict`` lacks one
+        of them still rebuilds.
+
+        Parameters
+        ----------
+        spec : Mapping[str, Any]
+            A dict produced by :meth:`to_checkpoint_dict`.
+        models : BaseModelMixin | dict[str, BaseModelMixin] | None, optional
+            Runtime model override(s), normally the models loaded from the
+            checkpoint weight files.
+        hooks : Sequence[Any] | None, optional
+            Runtime hooks appended by the caller.
+        training_fn : Any, optional
+            Runtime callable or dotted-path override.
+        validation_config : ValidationConfig | None, optional
+            Runtime validation configuration. Specs exclude it because it
+            carries a live loader, so a validation-only ``teacher_*`` target is
+            resolved by passing the config here rather than assigning it
+            afterwards, which re-runs no validator.
+        on_policy : OnPolicyConfig | None, optional
+            Segment loop to rebuild the run with, built around the supplied
+            student. Default ``None`` rebuilds an offline run.
+        reference_dataset : BatchDatasetProtocol | None, optional
+            Reference dataset the segment loop mixes into every batch. Default
+            ``None``.
+        **runtime_overrides : Any
+            Further keyword arguments a subclass's ``from_spec_dict`` accepts.
+
+        Returns
+        -------
+        DistillationStrategy
+            A strategy with declarative fields and restart counters restored.
+        """
+        supplied = {
+            "validation_config": validation_config,
+            "on_policy": on_policy,
+            "reference_dataset": reference_dataset,
+        }
+        return super().from_checkpoint_dict(
+            spec,
+            models=models,
+            hooks=hooks,
+            training_fn=training_fn,
+            **{name: value for name, value in supplied.items() if value is not None},
+            **runtime_overrides,
+        )
+
+    @classmethod
+    def load_checkpoint(
+        cls,
+        root_folder: Path | str,
+        checkpoint_index: int = -1,
+        map_location: str | torch.device | None = None,
+        *,
+        models: strategy_validation.ModelInput | None = None,
+        hooks: Sequence[Any] | None = None,
+        training_fn: Any = None,
+        validators: Sequence[Any] | None = None,
+        validation_config: ValidationConfig | None = None,
+        on_policy: OnPolicyConfig | None = None,
+        reference_dataset: BatchDatasetProtocol | None = None,
+        **runtime_overrides: Any,
+    ) -> DistillationStrategy:
+        """Load a restartable checkpoint, re-supplying what the spec omits.
+
+        It extends :meth:`~nvalchemi.training.TrainingStrategy.load_checkpoint`
+        with the runtime objects a distillation spec cannot describe.
+        They reach :meth:`from_spec_dict` as runtime overrides that the loader
+        forwards. The segment loop is tied to the student it propagates, so
+        *models* is re-supplied alongside *on_policy*, and the checkpoint's
+        weights are loaded into those models. A strategy with a Boltzmann term
+        refuses to rebuild without the loop.
+
+        Parameters
+        ----------
+        root_folder : Path | str
+            Root directory containing checkpoint files.
+        checkpoint_index : int, optional
+            Checkpoint index to load. ``-1`` loads the latest manifest index.
+        map_location : str | torch.device | None, optional
+            Device override passed through to :func:`torch.load` and the
+            restored strategy metadata.
+        models : BaseModelMixin | dict[str, BaseModelMixin] | None, optional
+            Models to restore the checkpoint's weights into, in place of the
+            ones the loader builds from the saved specs: the objects the
+            segment loop's propagator holds. Default ``None``.
+        hooks : Sequence[Any] | None, optional
+            Runtime hooks to attach to the restored strategy.
+        training_fn : Any, optional
+            Runtime training function override.
+        validators : Sequence[Any] | None, optional
+            Loaded-checkpoint validators forwarded to the lower-level loader.
+        validation_config : ValidationConfig | None, optional
+            Runtime validation configuration. Specs exclude it because it
+            carries a live loader, so a validation-only ``teacher_*`` target is
+            resolved by passing the config here rather than assigning it
+            afterwards, which re-runs no validator.
+        on_policy : OnPolicyConfig | None, optional
+            Segment loop to restore the run with. Default ``None`` restores an
+            offline run.
+        reference_dataset : BatchDatasetProtocol | None, optional
+            Reference dataset the segment loop mixes into every batch. Default
+            ``None``.
+        **runtime_overrides : Any
+            Further keyword arguments a subclass's ``from_spec_dict`` accepts.
+
+        Returns
+        -------
+        DistillationStrategy
+            Restored strategy with model, optimizer, scheduler, and runtime
+            counters loaded.
+        """
+        supplied = {
+            "validation_config": validation_config,
+            "on_policy": on_policy,
+            "reference_dataset": reference_dataset,
+        }
+        return super().load_checkpoint(
+            root_folder,
+            checkpoint_index,
+            map_location,
+            models=models,
+            hooks=hooks,
+            training_fn=training_fn,
+            validators=validators,
+            **{name: value for name, value in supplied.items() if value is not None},
+            **runtime_overrides,
         )

@@ -38,7 +38,11 @@ from nvalchemi.training.distillation import (
     OnPolicyConfig,
     OnPolicySettings,
 )
-from nvalchemi.training.distillation.config import _check_structure_status
+from nvalchemi.training.distillation.config import (
+    _check_structure_status,
+    _competing_migrators,
+    _status_migrators,
+)
 from test.training.conftest import _build_atomic_data, _build_demo_model
 from test.training.distillation.conftest import (
     _build_atom_only_dataset,
@@ -146,7 +150,7 @@ class _LoadBatchesOnly:
 
 
 class _RowsOnlySource:
-    """Stand-in with the seeding members but none of the cursor ones."""
+    """Stand-in with the seeding members but none of the position ones."""
 
     def probe(self) -> Batch:
         """Return one structure."""
@@ -211,6 +215,31 @@ class TestOnPolicySettings:
         rebuilt = OnPolicySettings.model_validate(settings.model_dump(mode="json"))
 
         assert rebuilt.require_wrapped_student is False
+        assert rebuilt == settings
+
+    def test_restart_is_a_setting_a_recipe_carries(self) -> None:
+        """``restart`` defaults to refusing an unconsumable bundle and round-trips a choice."""
+        assert OnPolicySettings(**_make_settings_kwargs()).restart == "error"
+        settings = OnPolicySettings(**_make_settings_kwargs(restart="reseed"))
+
+        rebuilt = OnPolicySettings.model_validate(settings.model_dump(mode="json"))
+
+        assert rebuilt.restart == "reseed"
+        assert rebuilt == settings
+
+    def test_an_unknown_restart_policy_is_rejected(self) -> None:
+        """Only the three named policies are accepted."""
+        with pytest.raises(ValidationError):
+            OnPolicySettings(**_make_settings_kwargs(restart="merge"))
+
+    def test_samples_equilibrium_is_a_setting_a_recipe_carries(self) -> None:
+        """``samples_equilibrium`` defaults to inference and round-trips a declaration."""
+        assert OnPolicySettings(**_make_settings_kwargs()).samples_equilibrium is None
+        settings = OnPolicySettings(**_make_settings_kwargs(samples_equilibrium=True))
+
+        rebuilt = OnPolicySettings.model_validate(settings.model_dump(mode="json"))
+
+        assert rebuilt.samples_equilibrium is True
         assert rebuilt == settings
 
     def test_a_non_positive_rank_seed_stride_is_rejected(self) -> None:
@@ -349,7 +378,7 @@ class TestOnPolicyConfigComposition:
         with pytest.raises(ValueError, match="BatchDatasetProtocol"):
             OnPolicyConfig(**_make_config_kwargs(initial_structures=_LoadBatchesOnly()))
 
-    def test_a_source_missing_the_cursor_members_is_refused_not_wrapped(self) -> None:
+    def test_a_source_missing_the_position_members_is_refused_not_wrapped(self) -> None:
         """Seeding members alone do not make a source, and there are no rows to wrap."""
         with pytest.raises(ValueError, match="InitialStructuresSource"):
             OnPolicyConfig(**_make_config_kwargs(initial_structures=_RowsOnlySource()))
@@ -571,3 +600,54 @@ class TestStructureStatusContract:
                 state,
                 ConvergenceHook.from_fmax(0.05, source_status=1, target_status=2),
             )
+
+
+class TestStatusMigrators:
+    """The status-migrator walk the lifecycle and the objectives share."""
+
+    def _propagator(self) -> DemoDynamics:
+        """Return a bare demo propagator with no criterion of its own."""
+        return DemoDynamics(_build_demo_model(), n_steps=10, dt=0.5)
+
+    def test_a_registered_hook_and_the_propagators_own_criterion_are_listed(
+        self,
+    ) -> None:
+        """Both places a propagator holds a migrator are walked, in registration order."""
+        dynamics = self._propagator()
+        registered = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
+        own = ConvergenceHook.from_fmax(0.05, source_status=1, target_status=2)
+        dynamics.register_hook(registered)
+        dynamics.convergence_hook = own
+
+        assert _status_migrators(dynamics) == [registered, own]
+
+    def test_a_criterion_without_a_migration_is_not_a_migrator(self) -> None:
+        """A detector with no source or target status only ends a chunk early."""
+        dynamics = self._propagator()
+        dynamics.convergence_hook = ConvergenceHook.from_fmax(0.05)
+
+        assert _status_migrators(dynamics) == []
+
+    def test_a_fused_stages_own_migrators_are_reached_through_its_sub_stages(
+        self,
+    ) -> None:
+        """The migrator a FusedStage builds for its first sub-stage is found."""
+        fused = self._propagator() + self._propagator()
+
+        migrations = [
+            (hook.source_status, hook.target_status)
+            for hook in _status_migrators(fused)
+        ]
+
+        assert migrations == [(0, 1)]
+
+    def test_competing_migrators_leave_the_criterion_out(self) -> None:
+        """The lifecycle's own criterion is not its own competitor."""
+        dynamics = self._propagator()
+        criterion = ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1)
+        other = ConvergenceHook.from_fmax(0.01, source_status=0, target_status=1)
+        dynamics.register_hook(criterion)
+        dynamics.register_hook(other)
+
+        assert _competing_migrators(dynamics, criterion) == [other]
+        assert _status_migrators(dynamics) == [criterion, other]

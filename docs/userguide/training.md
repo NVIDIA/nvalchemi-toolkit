@@ -277,6 +277,15 @@ by `training_fn`, while `target_key="teacher_energy"` names the target returned 
 assembler with the configured loss, predictions, batch, and current workflow, then
 passes the resulting target mapping into `loss_fn`.
 
+```{tip}
+`training_fn` and `loss_target_assembler` are the general mechanism, shown here
+on a student-teacher forward pass. Distillation itself does not need them.
+{py:class}`~nvalchemi.training.distillation.DistillationStrategy` scores the
+teacher into `teacher_*` batch fields, which any built-in loss term reads
+through its ordinary `target_key`, and it can label a dataset once instead of
+running the teacher every epoch. See {ref}`distillation_guide`.
+```
+
 ```{warning}
 Having `training_fn` and `loss_target_assembler` as a mere callable that's
 passed into `TrainingStrategy` was
@@ -298,6 +307,9 @@ Per-batch output should wait for the batch stages that carry the relevant data.
 At `run()`, the strategy resolves this startup sequence: it moves models to
 devices, lets setup hooks mutate the workflow, normalizes update hooks into a
 single orchestrator, and builds optimizers and schedulers. The loop then begins.
+{py:meth}`~nvalchemi.training.TrainingStrategy.run_setup_hooks` runs that
+`SETUP` dispatch on its own. Call it when you restore a strategy outside a run
+and need what a hook publishes at setup.
 
 Understanding how the strategy tracks progress through that loop is the
 foundation for writing hooks that fire at the right time.
@@ -604,9 +616,16 @@ warning above). The checkpoint cannot reconstruct them; they must be supplied
 again at load time.
 
 Use {py:class}`~nvalchemi.training.CheckpointHook` to write checkpoints
-periodically from `AFTER_BATCH` or `AFTER_EPOCH`. Use
+periodically from `AFTER_BATCH` or `AFTER_EPOCH`. With `save_at_end=True`, it
+also saves when training ends, unless the newest save already recorded that
+step. A step budget that is not a multiple of the interval therefore still
+leaves its final weights on disk. Use
 `TrainingStrategy.save_checkpoint(...)` to save at an explicit point in a
-script. See {doc}`/modules/training/checkpoints` for strategy reconstruction,
+script. A strategy that wants one of its models stored once per checkpoint
+root, rather than once per index, declares it from
+`checkpoint_model_references()` as a
+{py:class}`~nvalchemi.training.ModelReference`; the base class declares none.
+See {doc}`/modules/training/checkpoints` for strategy reconstruction,
 hook state, model specs, and distributed checkpoint behavior.
 
 (restart-semantics)=
@@ -650,6 +669,11 @@ strategy = FineTuningStrategy.from_pretrained_checkpoint(
 )
 strategy.run(finetune_loader)
 ```
+
+`load_checkpoint` forwards the keyword arguments it does not take itself, as
+runtime overrides, to the strategy class the checkpoint's spec names. That is
+how a subclass receives the live objects its spec could not carry. The base
+`TrainingStrategy` refuses any override it is handed.
 
 The key difference: `load_checkpoint` resumes exactly where training stopped,
 counters and all. `from_pretrained_checkpoint` gives the model its learned

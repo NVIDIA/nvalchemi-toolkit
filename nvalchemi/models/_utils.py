@@ -42,6 +42,7 @@ __all__ = [
     "autograd_forces_and_stresses",
     "autograd_stresses",
     "cell_cache_needs_update",
+    "hessian_vector_product",
     "prepare_strain",
     "sum_outputs",
 ]
@@ -363,3 +364,88 @@ def sum_outputs(
             else:
                 result[key] = val
     return result
+
+
+def hessian_vector_product(
+    energy: Energy,
+    positions: NodePositions,
+    probe: NodePositions,
+    *,
+    create_graph: bool = False,
+) -> Forces:
+    r"""Return the product of an energy's position Hessian with a probe vector.
+
+    The Hessian of a batch is block-diagonal over its graphs. One
+    double-backward pass over the summed energy therefore returns every
+    graph's product, stacked into one ``(V, 3)`` tensor. The cost is two
+    backward passes rather than :math:`3V`:
+
+    .. math::
+
+        (\mathbf{H}\mathbf{v})_{ia} =
+        \sum_{b\beta} \frac{\partial^2 E}{\partial r_{ia} \partial r_{ib\beta}}
+        v_{ib\beta}
+        = \frac{\partial}{\partial r_{ia}}
+        \left( \nabla_{\mathbf{r}} E \cdot \mathbf{v} \right).
+
+    Both the teacher's label and the student's prediction go through this
+    function, so the two are the same estimator of the same quantity.
+
+    Parameters
+    ----------
+    energy : Energy
+        Energy of shape ``(B, 1)``, carrying an autograd graph back to
+        *positions*.
+    positions : NodePositions
+        Positions of shape ``(V, 3)`` the energy is differentiated with respect
+        to, with ``requires_grad`` enabled.
+    probe : NodePositions
+        Probe direction of shape ``(V, 3)``.
+    create_graph : bool, optional
+        Whether the returned product stays attached to the autograd graph. A
+        student prediction needs this; a teacher label does not. Default
+        ``False``.
+
+    Returns
+    -------
+    Forces
+        Hessian-vector product of shape ``(V, 3)``, in force units per length.
+
+    Raises
+    ------
+    RuntimeError
+        If the energy does not carry an autograd graph back to *positions*, or
+        if the model is not twice differentiable.
+
+    Notes
+    -----
+    When the positions do not enter the gradient, as for an energy linear in
+    the positions, the Hessian is zero. The product is then returned as zeros
+    rather than refused. With ``create_graph``, the zeros stay attached to the
+    energy's graph, so a loss can still backpropagate through them. The
+    Hessian is the curvature of the *energy*, so a direct-force teacher
+    contributes curvature that its own force head need not agree with.
+    """
+    try:
+        gradient = torch.autograd.grad(energy.sum(), positions, create_graph=True)[0]
+        product = (
+            torch.autograd.grad(
+                (gradient * probe).sum(),
+                positions,
+                create_graph=create_graph,
+                allow_unused=True,
+            )[0]
+            if gradient.requires_grad
+            else None
+        )
+    except RuntimeError as exc:
+        raise RuntimeError(
+            "Hessian-vector products differentiate the energy twice with respect "
+            "to positions, so the model must be twice differentiable and its "
+            "energy must carry an autograd graph back to positions with "
+            f"requires_grad enabled; got {exc}."
+        ) from exc
+    if product is None:
+        product = torch.zeros_like(positions)
+        return product + 0.0 * energy.sum() if create_graph else product
+    return product

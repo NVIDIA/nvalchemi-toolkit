@@ -324,8 +324,10 @@ class ReplayBuffer:
     Parameters
     ----------
     capacity : int | None, optional
-        Maximum number of frames kept. Bound it on long runs. Default ``None``
-        (unbounded).
+        Maximum number of frames kept. Bound it on long runs. Also bound it on
+        any run whose objective reads a batch as a sample of the current
+        policy, because a draw over a buffer that never retires frames is a
+        draw over every policy the run has had. Default ``None`` (unbounded).
     eviction : {"fifo"} | EvictionPolicy, optional
         Policy deciding which frames leave a full buffer. Default ``"fifo"``,
         which builds :class:`FIFO`.
@@ -475,6 +477,17 @@ class ReplayBuffer:
             return None
         _ = frames.batch_ptr
         return frames.index_select(kept)
+
+    def clear(self) -> None:
+        """Drop every stored frame and unfreeze the key schema.
+
+        The buffer returns to the state it was constructed in, so the next
+        :meth:`extend` freezes its schema afresh. A restart uses this to
+        replace a live buffer's contents with the replay frames a restart
+        bundle carries, rather than merge the two.
+        """
+        self._dataset = None
+        self._schema = frozenset()
 
     def _check_schema(self, incoming: frozenset[str]) -> None:
         """Reject frames whose keys or levels differ from the frozen schema."""

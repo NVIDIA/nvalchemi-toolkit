@@ -18,6 +18,8 @@ from __future__ import annotations
 import abc
 import warnings
 from collections import OrderedDict
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
@@ -347,6 +349,10 @@ class BaseModelMixin(abc.ABC):
       collect input dict.
     - ``adapt_output()`` — map raw model output to :class:`ModelOutputs`
       ordered dict.
+    - ``narrowed_outputs()`` — narrow ``active_outputs`` for the duration
+      of a block and restore it afterwards.
+    - ``requires_autograd`` — whether the active outputs include one the
+      model differentiates for, so its forward needs autograd enabled.
     """
 
     # model_config must be set as an instance attribute in each subclass __init__:
@@ -527,6 +533,70 @@ class BaseModelMixin(abc.ABC):
             )
         setattr(self.model_config, key, value)
 
+    @contextmanager
+    def narrowed_outputs(self, outputs: Iterable[str]) -> Iterator[None]:
+        """Compute only *outputs* for the duration of a block.
+
+        ``active_outputs`` is set to *outputs* on entry and restored on exit,
+        whether the block returns or raises. A caller that needs one output
+        of a model configured for several, such as an energy to differentiate
+        twice while the forces stay off, narrows the pass this way and hands
+        the model back as it found it.
+
+        Parameters
+        ----------
+        outputs : Iterable[str]
+            Output keys to leave active inside the block.
+
+        Yields
+        ------
+        None
+            Control while the narrowed ``active_outputs`` is in force.
+
+        Examples
+        --------
+        >>> with model.narrowed_outputs({"energy"}):  # doctest: +SKIP
+        ...     energy = model(batch)["energy"]
+        >>> "forces" in model.model_config.active_outputs  # doctest: +SKIP
+        True
+        """
+        previous = set(self.model_config.active_outputs)
+        self.set_config("active_outputs", set(outputs))
+        try:
+            yield
+        finally:
+            self.set_config("active_outputs", previous)
+
+    @property
+    def requires_autograd(self) -> bool:
+        """Whether the model's forward pass needs autograd enabled around it.
+
+        ``True`` when at least one of ``model_config.active_outputs`` is in
+        ``model_config.autograd_outputs``, meaning the model produces it by
+        differentiating its forward. :meth:`adapt_input` marks the
+        ``autograd_inputs`` ``requires_grad`` under the same condition, so a
+        caller that runs the model under :func:`torch.no_grad` reads this
+        first. A model that only publishes direct outputs reports ``False``.
+
+        Returns
+        -------
+        bool
+            Whether an active output is computed by autograd.
+
+        Examples
+        --------
+        >>> from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+        >>> model = DemoModelWrapper(DemoModel())
+        >>> model.requires_autograd
+        True
+        >>> with model.narrowed_outputs({"energy"}):
+        ...     model.requires_autograd
+        False
+        """
+        return bool(
+            self.model_config.autograd_outputs & self.model_config.active_outputs
+        )
+
     def adapt_input(
         self, data: AtomicData | Batch | AtomsLike, **kwargs: Any
     ) -> dict[str, Any]:
@@ -551,8 +621,7 @@ class BaseModelMixin(abc.ABC):
             Input in the format expected by the external model.
         """
         effective_grad_keys = set(self.model_config.gradient_keys)
-        # Enable grad on autograd_inputs if any autograd output is active
-        if self.model_config.autograd_outputs & self.model_config.active_outputs:
+        if self.requires_autograd:
             effective_grad_keys |= self.model_config.autograd_inputs
         for key in effective_grad_keys:
             value = getattr(data, key, None)

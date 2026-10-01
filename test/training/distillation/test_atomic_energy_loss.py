@@ -27,7 +27,7 @@ import torch
 
 from nvalchemi.data import Batch
 from nvalchemi.models.lj import LennardJonesModelWrapper
-from nvalchemi.training._spec import create_model_spec_from_json
+from nvalchemi.training import create_model_spec_from_json
 from nvalchemi.training.distillation import (
     AtomicEnergyMatchingLoss,
     InProcessTeacherScorer,

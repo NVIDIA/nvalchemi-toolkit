@@ -23,7 +23,15 @@ intended home for future concrete transform submodules
 from __future__ import annotations
 
 from nvalchemi.data.transforms.compose import Compose
+from nvalchemi.data.transforms.supercell import (
+    DEFAULT_EXTENSIVE_SYSTEM_KEYS,
+    DEFAULT_INTENSIVE_SYSTEM_KEYS,
+    make_supercell,
+)
 
 __all__ = [
+    "DEFAULT_EXTENSIVE_SYSTEM_KEYS",
+    "DEFAULT_INTENSIVE_SYSTEM_KEYS",
     "Compose",
+    "make_supercell",
 ]

@@ -20,7 +20,7 @@ import itertools
 import json
 import time
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -314,6 +314,40 @@ class _EmptyReferenceDataset(InMemoryDataset):
     def load_batches(self, *args: Any, **kwargs: Any) -> list[Batch]:  # noqa: ARG002
         """Fail the way indexing an empty dataset does, which construction pre-empts."""
         raise IndexError("index 0 is out of bounds for dimension 0 with size 0")
+
+
+class _ToyOnPolicyStrategy(DistillationStrategy):
+    """A user-authored subclass a spec can name by dotted path."""
+
+
+_TOY_STRATEGY_PATH = (
+    f"{_ToyOnPolicyStrategy.__module__}.{_ToyOnPolicyStrategy.__qualname__}"
+)
+"""Dotted path of the subclass above, as a spec's ``strategy_cls`` carries it."""
+
+
+class _OfflineRebuildStrategy(DistillationStrategy):
+    """A subclass whose ``from_spec_dict`` predates the on-policy keywords."""
+
+    @classmethod
+    def from_spec_dict(
+        cls,
+        spec: Mapping[str, Any],
+        *,
+        models: Any = None,
+        hooks: Sequence[Any] | None = None,
+        training_fn: Any = None,
+    ) -> _OfflineRebuildStrategy:
+        """Rebuild through the base class using the offline keyword set."""
+        return super().from_spec_dict(
+            spec, models=models, hooks=hooks, training_fn=training_fn
+        )
+
+
+_OFFLINE_STRATEGY_PATH = (
+    f"{_OfflineRebuildStrategy.__module__}.{_OfflineRebuildStrategy.__qualname__}"
+)
+"""Dotted path of the offline-signature subclass above."""
 
 
 class _CustomFieldScorer:
@@ -1707,6 +1741,71 @@ class TestOnPolicySerialization:
         assert rebuilt.reference_dataset is None
         rebuilt.run([_build_propagator_batch(_REFERENCE_ELEMENT, 2, base_seed=900)])
         assert rebuilt.step_count == 2
+
+    def test_the_subclass_dispatch_carries_the_supplied_segment_loop(self) -> None:
+        """A spec naming a subclass rebuilds it around the caller's loop, not the spec's."""
+        student = _build_demo_model()
+        teacher = _build_direct_force_teacher(seed=2)
+        strategy = _make_on_policy_strategy(
+            student=student, teacher=teacher, num_steps=2
+        )
+        with pytest.warns(UserWarning, match="omitted from the spec"):
+            spec = strategy.to_spec_dict()
+        spec["strategy_cls"] = _TOY_STRATEGY_PATH
+
+        rebuilt = DistillationStrategy.from_spec_dict(
+            spec,
+            models={"student": student, "teacher": teacher},
+            on_policy=strategy.on_policy,
+            reference_dataset=strategy.reference_dataset,
+        )
+
+        assert type(rebuilt) is _ToyOnPolicyStrategy
+        assert rebuilt.on_policy is strategy.on_policy
+        assert rebuilt.reference_dataset is strategy.reference_dataset
+
+    def test_unset_on_policy_keywords_are_not_forwarded_to_an_offline_subclass(
+        self,
+    ) -> None:
+        """A subclass knowing only the offline keywords still rebuilds an offline spec."""
+        strategy = _make_on_policy_strategy(num_steps=2)
+        with pytest.warns(UserWarning, match="omitted from the spec"):
+            spec = strategy.to_spec_dict()
+        spec["strategy_cls"] = _OFFLINE_STRATEGY_PATH
+
+        rebuilt = DistillationStrategy.from_spec_dict(
+            spec,
+            models={
+                "student": _build_demo_model(),
+                "teacher": _build_direct_force_teacher(seed=2),
+            },
+        )
+
+        assert type(rebuilt) is _OfflineRebuildStrategy
+        assert rebuilt.on_policy is None
+
+    def test_a_supplied_loop_an_offline_subclass_cannot_take_raises(self) -> None:
+        """A set on-policy keyword the override refuses names the subclass and keyword."""
+        strategy = _make_on_policy_strategy(num_steps=2)
+        with pytest.warns(UserWarning, match="omitted from the spec"):
+            spec = strategy.to_spec_dict()
+        spec["strategy_cls"] = _OFFLINE_STRATEGY_PATH
+
+        with pytest.raises(
+            TypeError,
+            match=(
+                "_OfflineRebuildStrategy.from_spec_dict does not accept the "
+                "'on_policy' keyword"
+            ),
+        ):
+            DistillationStrategy.from_spec_dict(
+                spec,
+                models={
+                    "student": _build_demo_model(),
+                    "teacher": _build_direct_force_teacher(seed=2),
+                },
+                on_policy=strategy.on_policy,
+            )
 
     def test_an_offline_strategy_serializes_without_warning(self) -> None:
         """The warning is about the on-policy fields, not about distillation."""

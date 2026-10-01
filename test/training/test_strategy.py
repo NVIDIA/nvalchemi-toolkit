@@ -1067,6 +1067,36 @@ def _snapshot_ctx(ctx: HookContext) -> _LossSnapshot:
     )
 
 
+class TestRunSetupHooks:
+    def test_setup_hooks_see_the_strategy_built_context(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        """A hook claiming SETUP reads the strategy's counters, rank, and workflow."""
+        seen: list[TrainContext] = []
+
+        class _SetupHook:
+            stage = TrainingStage.SETUP
+            frequency = 1
+
+            def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:
+                seen.append(ctx)
+
+        strategy = TrainingStrategy(
+            **{**baseline_strategy_kwargs, "hooks": [_SetupHook()]}
+        )
+        strategy.step_count = 7
+
+        returned = strategy.run_setup_hooks("loader")
+
+        assert returned == "loader"
+        assert strategy.active_dataloader == "loader"
+        assert len(seen) == 1
+        assert seen[0].step_count == 7
+        assert seen[0].global_rank == 0
+        assert seen[0].workflow is strategy
+        assert seen[0].models is strategy.models
+
+
 class TestTrainingStrategyHookOrder:
     def test_update_hook_folding_does_not_reregister_existing_hooks(
         self, baseline_strategy_kwargs: dict[str, Any]
@@ -1496,6 +1526,67 @@ class TestTrainingStrategySpecRoundTrip:
         with pytest.warns(UserWarning, match="Omitting non-importable training_fn"):
             spec = strategy.to_spec_dict()
         assert "training_fn" not in spec
+
+
+class _RuntimeObjectStrategy(TrainingStrategy):
+    """Strategy whose ``from_spec_dict`` takes a live object no spec carries."""
+
+    received: Any = None
+
+    @classmethod
+    def from_spec_dict(
+        cls,
+        spec: Mapping[str, Any],
+        *,
+        models: Any = None,
+        hooks: Any = None,
+        training_fn: Any = None,
+        marker: object | None = None,
+    ) -> TrainingStrategy:
+        """Record *marker* and rebuild through the base class."""
+        cls.received = marker
+        return super().from_spec_dict(
+            spec, models=models, hooks=hooks, training_fn=training_fn
+        )
+
+
+class TestRuntimeOverrides:
+    """Runtime overrides that a checkpoint rebuild forwards to ``from_spec_dict``."""
+
+    def test_base_from_spec_dict_refuses_unknown_overrides_by_name(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        """A misspelled keyword is refused rather than dropped."""
+        spec = TrainingStrategy(**baseline_strategy_kwargs).to_spec_dict()
+        with pytest.raises(TypeError, match=r"\['on_polcy'\]"):
+            TrainingStrategy.from_spec_dict(
+                spec, models=_build_demo_model(), hooks=[], on_polcy=object()
+            )
+
+    def test_from_checkpoint_dict_forwards_overrides_to_the_subclass(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        """The subclass a spec names receives the override through the base rebuild."""
+        spec = _RuntimeObjectStrategy(**baseline_strategy_kwargs).to_checkpoint_dict()
+        marker = object()
+        _RuntimeObjectStrategy.received = None
+
+        restored = TrainingStrategy.from_checkpoint_dict(
+            spec, models=_build_demo_model(), hooks=[], marker=marker
+        )
+
+        assert isinstance(restored, _RuntimeObjectStrategy)
+        assert _RuntimeObjectStrategy.received is marker
+
+    def test_from_checkpoint_dict_refuses_an_override_the_subclass_lacks(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        """An override the named class cannot take surfaces as a TypeError."""
+        spec = _RuntimeObjectStrategy(**baseline_strategy_kwargs).to_checkpoint_dict()
+        with pytest.raises(TypeError, match="unexpected keyword argument 'other'"):
+            TrainingStrategy.from_checkpoint_dict(
+                spec, models=_build_demo_model(), hooks=[], other=object()
+            )
 
 
 class TestValidationCapabilities:

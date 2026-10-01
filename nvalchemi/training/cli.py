@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import json
 import math
-import os
 from collections.abc import Iterable, Mapping
 from contextlib import ExitStack
 from pathlib import Path
@@ -45,26 +44,39 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from nvalchemi.hooks import CheckpointableHook, Hook
 from nvalchemi.training import (
-    DDPHook,
     FineTuningStrategy,
     TrainingStage,
     TrainingStrategy,
-    ValidationConfig,
 )
 from nvalchemi.training import _spec_utils as strategy_spec
-from nvalchemi.training._spec import create_model_spec, create_model_spec_from_json
-from nvalchemi.training.hooks.update import TrainingUpdateHook
-from nvalchemi.training.losses.composition import (
-    ComposedLossFunction,
-    DTypePolicy,
-    loss_component_to_spec,
+from nvalchemi.training._spec import create_model_spec_from_json
+from nvalchemi.training.cli_common import (
+    DatasetSpec,
+    MaceSourceOptions,
+    ModelSource,
+    OutputSpec,
+    RuntimeHookSpec,
+    SourceSpec,
+    ValidationSpec,
+    _training_stage_name,
+    build_dataloader,
+    build_runtime_hooks,
+    build_supported_source_model,
+    build_validation_config,
+    common_loader_options,
+    common_validation_options,
+    console,
+    dataset_device,
+    path_exists,
+    primary_strategy_device,
+    resolve_distributed_enabled,
+    setup_distributed_manager,
+    write_or_print,
 )
+from nvalchemi.training.losses.composition import ComposedLossFunction, DTypePolicy
 from nvalchemi.training.losses.terms import EnergyMSELoss, ForceMSELoss
 from nvalchemi.training.optimizers import OptimizerConfig
-
-console = Console(stderr=True)
 
 _MAIN_EPILOG = (
     "This CLI scaffolds, validates, and starts training specifications. "
@@ -124,7 +136,6 @@ _SPEC_EPILOG = (
 )
 
 TrainingWorkflow: TypeAlias = Literal["train", "finetune"]
-ModelSource: TypeAlias = Literal["native-checkpoint", "mace", "aimnet2", "custom"]
 StrategySpec: TypeAlias = Mapping[str, Any]
 
 _DTYPE_POLICIES: tuple[DTypePolicy, ...] = get_args(DTypePolicy)
@@ -135,484 +146,6 @@ _MODEL_SOURCES: tuple[ModelSource, ...] = (
     "aimnet2",
     "custom",
 )
-
-
-def _training_stage_name(value: Any) -> str:
-    """Return a canonical ``TrainingStage`` name from JSON-friendly input."""
-    if isinstance(value, TrainingStage):
-        return value.name
-    if isinstance(value, int):
-        try:
-            return TrainingStage(value).name
-        except ValueError as exc:
-            raise ValueError(f"unknown TrainingStage value {value!r}") from exc
-    if isinstance(value, str):
-        name = value.removeprefix("TrainingStage.")
-        try:
-            return TrainingStage[name].name
-        except KeyError as exc:
-            raise ValueError(f"unknown TrainingStage name {value!r}") from exc
-    raise ValueError(
-        "Training stage overrides must be TrainingStage names or integer values."
-    )
-
-
-def _training_stage(value: Any) -> TrainingStage:
-    """Return a ``TrainingStage`` from a canonical name or JSON value."""
-    return TrainingStage[_training_stage_name(value)]
-
-
-class HookSpec(BaseModel):
-    """Serialized constructor payload for a single runtime training hook.
-
-    A ``HookSpec`` is the innermost hook layer in the CLI job envelope: it
-    mirrors the ``BaseSpec`` JSON emitted for a hook, carrying the dotted
-    ``cls_path`` to import and a ``timestamp``, while ``extra="allow"`` retains
-    the remaining keyword fields that get unpacked into the hook constructor
-    at build time. It is wrapped by :class:`RuntimeHookSpec`, which pairs it
-    with optional stage overrides; execution code turns it into a live hook via
-    ``create_model_spec_from_json(...).build()`` (see ``_build_checked_hook``).
-
-    Examples
-    --------
-    A checkpoint hook spec as it appears inside ``source.hooks``::
-
-        HookSpec(
-            cls_path="nvalchemi.training.hooks.checkpoint.CheckpointHook",
-            timestamp="2026-01-01T00:00:00Z",
-            checkpoint_dir="runs/mace-ft/checkpoints",
-        )
-
-    Notes
-    -----
-    Extra keys beyond ``cls_path`` and ``timestamp`` are preserved (not
-    rejected) and are forwarded as constructor keyword arguments; the built
-    object must satisfy :class:`Hook`, :class:`CheckpointableHook`, or
-    :class:`TrainingUpdateHook` or validation of the enclosing spec fails.
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    cls_path: Annotated[
-        str,
-        Field(description="Dotted import path for the hook class or factory."),
-    ]
-    timestamp: Annotated[
-        str,
-        Field(description="Timestamp recorded by the serialized BaseSpec."),
-    ]
-
-
-class RuntimeHookSpec(BaseModel):
-    """Runtime hook entry with optional training-stage overrides.
-
-    Each element of ``SourceSpec.hooks`` is a ``RuntimeHookSpec``: it wraps one
-    :class:`HookSpec` (the ``spec`` constructor payload) and an optional list of
-    :class:`TrainingStage` names in ``stages`` that override where the hook
-    fires. When several stages are listed, execution builds one hook instance
-    per stage. These hooks are attached at run time by CLI execution code and
-    are deliberately not part of ``FineTuningStrategy.to_spec_dict()``.
-
-    Examples
-    --------
-    Fire a logging hook before and after each forward pass::
-
-        RuntimeHookSpec(
-            spec={
-                "cls_path": "nvalchemi.training.hooks.logging.LoggingHook",
-                "timestamp": "2026-01-01T00:00:00Z",
-            },
-            stages=["BEFORE_FORWARD", "AFTER_FORWARD"],
-        )
-
-    Notes
-    -----
-    A ``before`` validator accepts two JSON shapes: the explicit
-    ``{"spec": ..., "stages": ...}`` form above, or a bare ``BaseSpec`` object
-    (one containing ``cls_path``) whose ``stages``/``stage`` keys are lifted out
-    automatically. Stage names are normalized and the hook is trial-built during
-    validation, so an unimportable ``cls_path`` or a wrong hook type fails fast.
-    Omitting ``stages`` falls back to the stage stored in the spec or the hook
-    constructor default.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    spec: Annotated[
-        HookSpec,
-        Field(
-            description=(
-                "Serialized hook constructor spec: cls_path, timestamp, and "
-                "the keyword arguments to unpack into the hook constructor."
-            )
-        ),
-    ]
-    stages: list[str] = Field(
-        default_factory=list,
-        description=(
-            "Optional TrainingStage name overrides where this hook should fire, "
-            "for example ['BEFORE_FORWARD']. Multiple stages build one hook "
-            "instance per stage. Omit to use the stage stored in spec or the "
-            "hook constructor default."
-        ),
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def _accept_raw_spec(cls, data: Any) -> Any:
-        """Accept source.hooks entries that are bare BaseSpec JSON objects."""
-        if isinstance(data, Mapping) and "spec" in data:
-            return data
-        if isinstance(data, Mapping) and "cls_path" in data:
-            spec = dict(data)
-            stages = spec.pop("stages", None)
-            if stages is None and "stage" in spec:
-                stages = [spec["stage"]]
-            return {"spec": spec, "stages": stages or []}
-        return data
-
-    @model_validator(mode="after")
-    def _validate_runtime_hook(self) -> Self:
-        """Validate hook construction and normalize stage override names."""
-        payload = _normalize_runtime_hook_spec(self.spec.model_dump(mode="json"))
-        self.spec = HookSpec.model_validate(payload)
-        _build_checked_hook(self.spec)
-        self.stages = [_training_stage_name(stage) for stage in self.stages]
-        return self
-
-    def stage_values(self) -> list[TrainingStage]:
-        """Return explicit stage overrides as enum values."""
-        return [_training_stage(stage) for stage in self.stages]
-
-
-class MaceSourceOptions(BaseModel):
-    """MACE-only source knobs parsed from the ``source.mace`` block.
-
-    This is the architecture-specific options model referenced in the module
-    docstring: rather than adding MACE-only fields to the shared
-    :class:`SourceSpec`, MACE options live under a namespaced ``source.mace``
-    object and are read out with :meth:`from_source`. It currently exposes the
-    atomic-energy (E0) override, either inline per-element values or a path to a
-    JSON file of them, consumed by ``MACEWrapper.from_checkpoint`` during
-    ``spec run``.
-
-    Examples
-    --------
-    Override E0 values for two elements inline::
-
-        MaceSourceOptions(atomic_energies={1: -13.6, 8: -2043.9})
-
-    Notes
-    -----
-    ``atomic_energies`` and ``atomic_energies_path`` are mutually exclusive; a
-    validator rejects setting both. :class:`TrainingJobSpec` only accepts a
-    ``source.mace`` block when ``source.model == "mace"``.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    atomic_energies: Annotated[
-        dict[int, float] | None,
-        Field(description="Per-element E0 overrides keyed by atomic number."),
-    ] = None
-    atomic_energies_path: Annotated[
-        str | None,
-        Field(description="JSON file containing per-element E0 overrides."),
-    ] = None
-
-    @model_validator(mode="after")
-    def _validate_single_atomic_energy_source(self) -> Self:
-        """Require at most one atomic-energy override source."""
-        if self.atomic_energies is not None and self.atomic_energies_path is not None:
-            raise ValueError(
-                "source.mace accepts only one of atomic_energies or "
-                "atomic_energies_path."
-            )
-        return self
-
-    @classmethod
-    def from_source(cls, source: "SourceSpec") -> "MaceSourceOptions":
-        """Return validated MACE-specific options from a source spec."""
-        raw = (source.model_extra or {}).get("mace", {})
-        return cls.model_validate(raw)
-
-    @property
-    def has_atomic_energy_override(self) -> bool:
-        """Return whether E0 replacement was requested."""
-        return self.atomic_energies is not None or self.atomic_energies_path is not None
-
-
-class SourceSpec(BaseModel):
-    """Where the job's model comes from, plus runtime hooks to attach.
-
-    ``SourceSpec`` is the ``source`` member of :class:`TrainingJobSpec` and the
-    flat, model-agnostic envelope described in the module docstring. ``model``
-    selects the family (``native-checkpoint``, ``mace``, ``aimnet2``, or
-    ``custom``) and the shared fields cover checkpoint location, model id,
-    compile behavior, and optimizer reuse. Architecture-specific knobs are not
-    fields here: ``extra="allow"`` lets them ride along under a namespaced block
-    such as ``source.mace``, parsed by :class:`MaceSourceOptions`. ``hooks`` is a
-    list of :class:`RuntimeHookSpec` attached at execution time.
-
-    Examples
-    --------
-    Fine-tune a supported MACE model by id::
-
-        SourceSpec(model="mace", model_id="small-0b", compile_model=False)
-
-    Notes
-    -----
-    A ``before`` validator accepts a deprecated ``endpoint`` alias for
-    ``model`` and errors if the two disagree. Which fields are required is
-    enforced by :class:`TrainingJobSpec`, not here: e.g. ``native-checkpoint``
-    and ``custom`` require ``checkpoint_path``, ``mace``/``aimnet2`` require
-    ``model_id`` or ``checkpoint_path``, and the ``train`` workflow forbids both
-    ``checkpoint_path`` and ``model_id``.
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    model: Annotated[
-        ModelSource,
-        Field(description="Model family or checkpoint source used to start training."),
-    ]
-    checkpoint_path: Annotated[
-        str | None,
-        Field(description="Native checkpoint root or model checkpoint file."),
-    ] = None
-    model_id: Annotated[
-        str | None,
-        Field(description="Model identifier for supported model wrappers."),
-    ] = None
-    checkpoint_index: Annotated[
-        int,
-        Field(description="Native checkpoint index; -1 means latest."),
-    ] = -1
-    compile_model: Annotated[
-        bool | None,
-        Field(description="Whether the model wrapper should compile the model."),
-    ] = None
-    use_original_loss: Annotated[
-        bool,
-        Field(description="Reuse source checkpoint loss metadata when available."),
-    ] = False
-    use_original_opt_class: Annotated[
-        bool,
-        Field(description="Reuse source checkpoint optimizer classes when available."),
-    ] = False
-    optimizer_lr: Annotated[
-        float | None,
-        Field(description="Learning rate applied to reused optimizer configs."),
-    ] = 1e-5
-    hooks: list[RuntimeHookSpec] = Field(
-        default_factory=list,
-        description=(
-            "Runtime hooks serialized as BaseSpec JSON objects with cls_path, "
-            "timestamp, and constructor keyword fields. These are attached by "
-            "execution code, not stored in "
-            "FineTuningStrategy.to_spec_dict()."
-        ),
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def _accept_endpoint_alias(cls, data: Any) -> Any:
-        """Accept older specs that used ``source.endpoint``."""
-        if isinstance(data, Mapping) and "endpoint" in data:
-            normalized = dict(data)
-            endpoint = normalized.pop("endpoint")
-            if "model" in normalized and normalized["model"] != endpoint:
-                raise ValueError(
-                    "source.model and deprecated source.endpoint disagree."
-                )
-            normalized.setdefault("model", endpoint)
-            return normalized
-        return data
-
-
-def _normalize_runtime_hook_spec(raw: Mapping[str, Any]) -> dict[str, Any]:
-    """Normalize CLI runtime hook spec values before spec loading."""
-    spec = dict(raw)
-    stage = spec.get("stage")
-    if isinstance(stage, int):
-        try:
-            spec["stage"] = TrainingStage(stage)
-        except ValueError as exc:
-            raise ValueError(f"unknown TrainingStage value {stage!r}") from exc
-    elif isinstance(stage, str):
-        try:
-            spec["stage"] = TrainingStage[stage]
-        except KeyError as exc:
-            raise ValueError(f"unknown TrainingStage name {stage!r}") from exc
-    return spec
-
-
-def _build_checked_hook(spec: HookSpec) -> Any:
-    """Build a hook spec and verify it satisfies the runtime hook protocols."""
-    payload = spec.model_dump(mode="json")
-    try:
-        hook_spec = create_model_spec_from_json(payload)
-    except ValueError as exc:
-        raise ValueError(f"spec is not a valid BaseSpec JSON object: {exc}") from exc
-    try:
-        hook = hook_spec.build()
-    except Exception as exc:
-        raise ValueError(
-            f"spec did not instantiate a hook from {spec.cls_path!r}: {exc}"
-        ) from exc
-    if not isinstance(hook, (Hook, CheckpointableHook, TrainingUpdateHook)):
-        raise ValueError(
-            f"spec built {type(hook).__name__}, which does not satisfy "
-            "Hook, CheckpointableHook, or TrainingUpdateHook."
-        )
-    return hook
-
-
-class DatasetSpec(BaseModel):
-    """Training (and optional validation) dataset intent for a job.
-
-    ``DatasetSpec`` is the ``dataset`` member of :class:`TrainingJobSpec`. It
-    records one training source via ``path`` or several via ``paths``, the
-    loader ``format``, an optional ``validation_path``, and a requested
-    ``batch_size``. During ``spec run`` these become a :class:`Dataset` or
-    :class:`MultiDataset` wrapped in a :class:`DataLoader`.
-
-    Examples
-    --------
-    A single-dataset intent::
-
-        DatasetSpec(path="data/domain.zarr", validation_path="data/val.zarr")
-
-    A multi-dataset intent (normalizes to the MultiDataset format)::
-
-        DatasetSpec(paths=["data/a.zarr", "data/b.zarr"])
-
-    Notes
-    -----
-    An ``after`` validator requires at least one of ``path``/``paths`` and
-    normalizes them: a single-element ``paths`` populates ``path``; more than
-    one path clears ``path`` and upgrades the default ``alchemi-zarr`` format to
-    ``alchemi-zarr-multidataset``. Setting ``path`` to a value absent from a
-    populated ``paths`` list is rejected.
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    path: Annotated[
-        str | None,
-        Field(description="Single training dataset path or URI."),
-    ] = None
-    paths: list[str] = Field(
-        default_factory=list,
-        description=(
-            "Training dataset paths or URIs. More than one path indicates a "
-            "MultiDataset-backed workflow."
-        ),
-    )
-    format: Annotated[str, Field(description="Dataset format or loader family.")] = (
-        "alchemi-zarr"
-    )
-    validation_path: Annotated[
-        str | None,
-        Field(description="Optional validation dataset path or URI."),
-    ] = None
-    batch_size: Annotated[
-        int | None,
-        Field(ge=1, description="Requested training batch size."),
-    ] = None
-
-    @model_validator(mode="after")
-    def _validate_dataset_paths(self) -> Self:
-        """Normalize single-dataset and multidataset path intent."""
-        if self.path and self.paths and self.path not in self.paths:
-            raise ValueError(
-                "dataset.path must match one of dataset.paths when both are set."
-            )
-        if not self.path and not self.paths:
-            raise ValueError("dataset requires path or paths.")
-        if len(self.paths) == 1 and self.path is None:
-            self.path = self.paths[0]
-        if len(self.paths) > 1:
-            self.path = None
-            if self.format == "alchemi-zarr":
-                self.format = "alchemi-zarr-multidataset"
-        return self
-
-
-class OutputSpec(BaseModel):
-    """Filesystem destinations for a job's artifacts.
-
-    ``OutputSpec`` is the ``output`` member of :class:`TrainingJobSpec`. The
-    required ``run_dir`` holds logs and artifacts; ``checkpoint_dir`` is where
-    restartable training checkpoints are written, and ``report_path`` optionally
-    persists intent reports. These are recorded intent: writing restart
-    checkpoints still requires a ``CheckpointHook`` in ``source.hooks`` (the
-    report surfaces a warning when ``checkpoint_dir`` is set without one).
-
-    Examples
-    --------
-    ::
-
-        OutputSpec(
-            run_dir="runs/mace-ft",
-            checkpoint_dir="runs/mace-ft/checkpoints",
-        )
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    run_dir: Annotated[str, Field(description="Run directory for logs and artifacts.")]
-    checkpoint_dir: Annotated[
-        str | None,
-        Field(description="Directory for restartable training checkpoints."),
-    ] = None
-    report_path: Annotated[
-        str | None,
-        Field(description="Optional path for saved intent reports."),
-    ] = None
-
-
-class ValidationSpec(BaseModel):
-    """How often CLI-owned validation runs during a job.
-
-    ``ValidationSpec`` is the optional ``validation`` member of
-    :class:`TrainingJobSpec`. It records only the cadence, either
-    ``every_n_epochs`` or ``every_n_steps``; the validation dataset itself comes
-    from ``DatasetSpec.validation_path``. At run time this cadence and that path
-    build the strategy's :class:`ValidationConfig`.
-
-    Examples
-    --------
-    Validate once per epoch::
-
-        ValidationSpec(every_n_epochs=1)
-
-    Notes
-    -----
-    ``every_n_epochs`` and ``every_n_steps`` are mutually exclusive (a validator
-    rejects both). Supplying a ``ValidationSpec`` requires
-    ``dataset.validation_path`` to be set, enforced by :class:`TrainingJobSpec`.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    every_n_epochs: Annotated[
-        int | None,
-        Field(default=None, ge=1, description="Epoch cadence for validation."),
-    ] = None
-    every_n_steps: Annotated[
-        int | None,
-        Field(default=None, ge=1, description="Step cadence for validation."),
-    ] = None
-
-    @model_validator(mode="after")
-    def _validate_single_cadence(self) -> Self:
-        """Require at most one validation cadence field."""
-        if self.every_n_epochs is not None and self.every_n_steps is not None:
-            raise ValueError(
-                "validation accepts only one of every_n_epochs or every_n_steps."
-            )
-        return self
 
 
 class TrainingJobSpec(BaseModel):
@@ -912,20 +445,13 @@ def _default_strategy_spec(
         normalize_weights=False,
         dtype_policy=loss_dtype_policy,
     )
-    loss_fn_spec = create_model_spec(
-        type(loss_fn),
-        components=[loss_component_to_spec(comp) for comp in loss_fn.components],
-        weights=list(loss_fn._weights),
-        normalize_weights=loss_fn.normalize_weights,
-        dtype_policy=loss_fn.dtype_policy,
-    )
     return {
         "optimizer_configs": {"main": [optimizer_config.to_spec().model_dump()]},
         "num_epochs": num_epochs,
         "num_steps": num_steps,
         "epoch_step_modifier": 1.0,
         "devices": [device],
-        "loss_fn_spec": loss_fn_spec.model_dump(),
+        "loss_fn_spec": loss_fn.to_spec().model_dump(),
         "model_specs": {},
         "single_model_input": True,
         "training_fn": "nvalchemi.training.strategy.default_training_fn",
@@ -971,136 +497,17 @@ def _missing_local_paths(job: TrainingJobSpec) -> list[tuple[str, str]]:
     return [
         (field, value)
         for field, value in _local_path_checks(job)
-        if value is not None and not _path_exists(value)
+        if value is not None and not path_exists(value)
     ]
-
-
-def _path_exists(value: str) -> bool:
-    """Return whether a local path exists, skipping URI-like references."""
-    if "://" in value:
-        return True
-    return Path(value).expanduser().exists()
-
-
-def _resolve_distributed_enabled(requested: bool | None) -> bool:
-    """Resolve whether CLI execution should attach distributed runtime hooks."""
-    if requested is not None:
-        return requested
-    return int(os.environ.get("WORLD_SIZE", "1")) > 1
-
-
-def _setup_distributed_manager(enabled: bool) -> Any | None:
-    """Initialize and return the distributed manager when requested."""
-    if not enabled:
-        return None
-    from nvalchemi.distributed import DistributedManager
-
-    if not DistributedManager.is_initialized():
-        DistributedManager.initialize()
-    return DistributedManager()
 
 
 def _build_runtime_hooks(
     job: TrainingJobSpec, *, enable_ddp: bool, ddp_backend: str | None
 ) -> list[Any]:
     """Build runtime hooks declared by the job and CLI execution options."""
-    hooks: list[Any] = []
-    if enable_ddp:
-        hooks.append(DDPHook(backend=ddp_backend))
-    for hook_spec in job.source.hooks:
-        stages = hook_spec.stage_values()
-        if not stages:
-            hooks.append(_build_checked_hook(hook_spec.spec))
-            continue
-        for stage in stages:
-            hook = _build_checked_hook(hook_spec.spec)
-            hook.stage = stage
-            hooks.append(hook)
-    return hooks
-
-
-def _primary_strategy_device(job: TrainingJobSpec) -> torch.device:
-    """Return the first strategy device as a torch device."""
-    devices = strategy_spec._devices_from_spec(job.strategy["devices"])
-    if not devices:
-        raise click.ClickException("strategy.devices must contain at least one device.")
-    return devices[0]
-
-
-def _dataset_device(job: TrainingJobSpec, distributed_manager: Any | None) -> Any:
-    """Return the device used for CLI-constructed datasets."""
-    if distributed_manager is not None:
-        return distributed_manager.device
-    return _primary_strategy_device(job)
-
-
-def _build_dataloader(
-    job: TrainingJobSpec,
-    stack: ExitStack,
-    *,
-    device: Any,
-    batch_size: int | None,
-    shuffle: bool,
-    drop_last: bool,
-    prefetch_factor: int,
-    num_streams: int,
-    use_streams: bool,
-    pin_memory: bool,
-    paths: list[str] | None = None,
-) -> Any:
-    """Build a DataLoader declared by a CLI job spec."""
-    from nvalchemi.data.datapipes import (
-        AtomicDataZarrReader,
-        DataLoader,
-        Dataset,
-        MultiDataset,
+    return build_runtime_hooks(
+        job.source.hooks, enable_ddp=enable_ddp, ddp_backend=ddp_backend
     )
-
-    resolved_paths = (
-        paths
-        if paths is not None
-        else list(job.dataset.paths) or ([job.dataset.path] if job.dataset.path else [])
-    )
-    if not resolved_paths:
-        raise click.ClickException("dataset requires at least one path before run.")
-    if job.dataset.format not in {"alchemi-zarr", "alchemi-zarr-multidataset"}:
-        raise click.ClickException(
-            f"Unsupported dataset.format {job.dataset.format!r}; "
-            "supported formats: alchemi-zarr, alchemi-zarr-multidataset."
-        )
-    datasets = [
-        Dataset(stack.enter_context(AtomicDataZarrReader(path)), device=device)
-        for path in resolved_paths
-    ]
-    dataset = datasets[0] if len(datasets) == 1 else MultiDataset(*datasets)
-    return DataLoader(
-        dataset,
-        batch_size=batch_size or job.dataset.batch_size or 1,
-        shuffle=shuffle,
-        drop_last=drop_last,
-        prefetch_factor=prefetch_factor,
-        num_streams=num_streams,
-        use_streams=use_streams,
-        pin_memory=pin_memory,
-    )
-
-
-def _resolve_validation_cadence(
-    job: TrainingJobSpec,
-    *,
-    every_n_epochs: int | None,
-    every_n_steps: int | None,
-) -> tuple[int | None, int | None]:
-    """Resolve validation cadence from CLI overrides or the job spec."""
-    if every_n_epochs is not None and every_n_steps is not None:
-        raise click.ClickException(
-            "Use only one of --validation-every-epochs or --validation-every-steps."
-        )
-    if every_n_epochs is not None or every_n_steps is not None:
-        return every_n_epochs, every_n_steps
-    if job.validation is not None:
-        return job.validation.every_n_epochs, job.validation.every_n_steps
-    return 1, None
 
 
 def _attach_validation_config(
@@ -1119,32 +526,21 @@ def _attach_validation_config(
     validation_every_steps: int | None,
 ) -> None:
     """Attach CLI validation data to a strategy when configured."""
-    resolved_path = validation_path or job.dataset.validation_path
-    if resolved_path is None:
-        return
-    every_n_epochs, every_n_steps = _resolve_validation_cadence(
-        job,
-        every_n_epochs=validation_every_epochs,
-        every_n_steps=validation_every_steps,
-    )
-    validation_data = _build_dataloader(
+    config = build_validation_config(
         job,
         stack,
         device=device,
         batch_size=batch_size,
-        shuffle=False,
-        drop_last=False,
         prefetch_factor=prefetch_factor,
         num_streams=num_streams,
         use_streams=use_streams,
         pin_memory=pin_memory,
-        paths=[resolved_path],
+        validation_path=validation_path,
+        validation_every_epochs=validation_every_epochs,
+        validation_every_steps=validation_every_steps,
     )
-    strategy.validation_config = ValidationConfig(
-        validation_data=validation_data,
-        every_n_epochs=every_n_epochs,
-        every_n_steps=every_n_steps,
-    )
+    if config is not None:
+        strategy.validation_config = config
 
 
 def _finetuning_kwargs_from_spec(
@@ -1173,34 +569,6 @@ def _finetuning_kwargs_from_spec(
         "trainable_patterns": tuple(spec.get("trainable_patterns", ())),
         "freeze_mode": spec.get("freeze_mode", "requires_grad"),
     }
-
-
-def _build_supported_source_model(source: SourceSpec, *, device: Any) -> Any:
-    """Build a supported model wrapper from source intent."""
-    checkpoint = source.checkpoint_path or source.model_id
-    if checkpoint is None:
-        raise click.ClickException(f"{source.model} execution requires a source model.")
-    compile_model = bool(source.compile_model)
-    if source.model == "mace":
-        from nvalchemi.models.mace import MACEWrapper
-
-        mace_options = MaceSourceOptions.from_source(source)
-        return MACEWrapper.from_checkpoint(
-            checkpoint,
-            device=torch.device(device),
-            compile_model=compile_model,
-            atomic_energies=mace_options.atomic_energies,
-            atomic_energies_path=mace_options.atomic_energies_path,
-        )
-    if source.model == "aimnet2":
-        from nvalchemi.models.aimnet2 import AIMNet2Wrapper
-
-        return AIMNet2Wrapper.from_checkpoint(
-            checkpoint,
-            device=torch.device(device),
-            compile_model=compile_model,
-        )
-    raise click.ClickException(f"Unsupported source model {source.model!r}.")
 
 
 def _ensure_executable_job(job: TrainingJobSpec) -> None:
@@ -1240,11 +608,11 @@ def _build_strategy(
             **_finetuning_kwargs_from_spec(job.strategy, hooks=hooks),
         )
     elif job.source.model in {"mace", "aimnet2"}:
-        model = _build_supported_source_model(
+        model = build_supported_source_model(
             job.source,
             device=distributed_manager.device
             if distributed_manager is not None
-            else _primary_strategy_device(job),
+            else primary_strategy_device(job),
         )
         strategy = FineTuningStrategy.from_spec_dict(
             job.strategy, models=model, hooks=hooks
@@ -1279,8 +647,8 @@ def _run_job(
     validation_every_steps: int | None = None,
 ) -> None:
     """Construct runtime components and execute a CLI job."""
-    distributed_enabled = _resolve_distributed_enabled(distributed)
-    distributed_manager = _setup_distributed_manager(distributed_enabled)
+    distributed_enabled = resolve_distributed_enabled(distributed)
+    distributed_manager = setup_distributed_manager(distributed_enabled)
     hooks = _build_runtime_hooks(
         job, enable_ddp=distributed_enabled, ddp_backend=ddp_backend
     )
@@ -1291,8 +659,8 @@ def _run_job(
         map_location=map_location,
     )
     with ExitStack() as stack:
-        device = _dataset_device(job, distributed_manager)
-        dataloader = _build_dataloader(
+        device = dataset_device(job, distributed_manager)
+        dataloader = build_dataloader(
             job,
             stack,
             device=device,
@@ -1319,24 +687,6 @@ def _run_job(
             validation_every_steps=validation_every_steps,
         )
         strategy.run(dataloader)
-
-
-def _write_or_print(
-    payload: TrainingJobSpec | Mapping[str, Any], output: Path | None
-) -> None:
-    """Write a JSON payload to a file or stdout."""
-    data = (
-        payload.model_dump(mode="json", exclude_none=True)
-        if isinstance(payload, BaseModel)
-        else payload
-    )
-    text = json.dumps(data, indent=2) + "\n"
-    if output is None:
-        click.echo(text, nl=False)
-        return
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(text)
-    console.print(f"[green]Wrote[/] {output}")
 
 
 def _strategy_section(strategy: StrategySpec) -> Table:
@@ -1849,7 +1199,39 @@ def _common_template_options(function: Any) -> Any:
     return function
 
 
-@click.group(context_settings={"max_content_width": 100}, epilog=_MAIN_EPILOG)
+class _TrainingGroup(click.Group):
+    """Training CLI root that resolves the distillation group on demand.
+
+    The distillation recipe CLI lives beside the strategy it drives and pulls
+    in the dynamics and evaluation stack a recipe needs. Importing it only
+    when ``distill`` is looked up, or when the command list is rendered, keeps
+    that stack out of an ordinary training run while ``--help`` stays
+    complete.
+    """
+
+    def _load_distillation(self) -> None:
+        """Attach the distillation group unless it is already registered."""
+        if "distill" in self.commands:
+            return
+        from nvalchemi.training.distillation.cli import distill
+
+        self.add_command(distill)
+
+    def get_command(self, ctx: click.Context, name: str) -> click.Command | None:
+        """Return a registered command, resolving the distillation group by name."""
+        if name == "distill":
+            self._load_distillation()
+        return super().get_command(ctx, name)
+
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        """Return every command name, resolving the distillation group first."""
+        self._load_distillation()
+        return super().list_commands(ctx)
+
+
+@click.group(
+    cls=_TrainingGroup, context_settings={"max_content_width": 100}, epilog=_MAIN_EPILOG
+)
 def main() -> None:
     """Review and scaffold nvalchemi training specifications."""
 
@@ -1913,7 +1295,7 @@ def init_train(
         validation_every_epochs=validation_every_epochs,
         validation_every_steps=validation_every_steps,
     )
-    _write_or_print(payload, output)
+    write_or_print(payload, output)
     _print_template_message(output, "train", "custom")
 
 
@@ -1926,7 +1308,7 @@ def init_train(
 )
 def dump_schema(output: Path | None) -> None:
     """Dump the CLI training job JSON schema."""
-    _write_or_print(TrainingJobSpec.model_json_schema(), output)
+    write_or_print(TrainingJobSpec.model_json_schema(), output)
 
 
 @schema.command("template")
@@ -1994,7 +1376,7 @@ def dump_template(
             compile_model=False if model_source == "mace" else None,
             loss_dtype_policy="strict",
         )
-    _write_or_print(payload, output)
+    write_or_print(payload, output)
 
 
 @init.command("checkpoint")
@@ -2034,7 +1416,7 @@ def init_checkpoint(
         validation_every_epochs=validation_every_epochs,
         validation_every_steps=validation_every_steps,
     )
-    _write_or_print(payload, output)
+    write_or_print(payload, output)
     _print_template_message(output, "finetune", "native-checkpoint")
 
 
@@ -2079,7 +1461,7 @@ def init_mace(
         validation_every_epochs=validation_every_epochs,
         validation_every_steps=validation_every_steps,
     )
-    _write_or_print(payload, output)
+    write_or_print(payload, output)
     _print_template_message(output, "finetune", "mace")
 
 
@@ -2123,7 +1505,7 @@ def init_aimnet2(
         validation_every_epochs=validation_every_epochs,
         validation_every_steps=validation_every_steps,
     )
-    _write_or_print(payload, output)
+    write_or_print(payload, output)
     _print_template_message(output, "finetune", "aimnet2")
 
 
@@ -2164,43 +1546,13 @@ def init_custom(
         validation_every_epochs=validation_every_epochs,
         validation_every_steps=validation_every_steps,
     )
-    _write_or_print(payload, output)
+    write_or_print(payload, output)
     _print_template_message(output, "finetune", "custom")
 
 
 @spec_group.command("run")
 @click.argument("path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option(
-    "--batch-size", type=int, default=None, help="Override dataset.batch_size."
-)
-@click.option(
-    "--shuffle/--no-shuffle",
-    default=True,
-    show_default=True,
-    help="Shuffle the training dataloader when no distributed sampler replaces it.",
-)
-@click.option("--drop-last", is_flag=True, help="Drop the final incomplete batch.")
-@click.option(
-    "--prefetch-factor",
-    type=int,
-    default=2,
-    show_default=True,
-    help="Number of emitted batches to fuse per backend read.",
-)
-@click.option(
-    "--num-streams",
-    type=int,
-    default=4,
-    show_default=True,
-    help="CUDA stream count for dataloader prefetching.",
-)
-@click.option("--pin-memory", is_flag=True, help="Request pinned-memory reads.")
-@click.option(
-    "--use-streams/--no-use-streams",
-    default=True,
-    show_default=True,
-    help="Enable CUDA stream prefetching when CUDA is available.",
-)
+@common_loader_options
 @click.option(
     "--distributed/--no-distributed",
     default=None,
@@ -2217,26 +1569,7 @@ def init_custom(
     default=None,
     help="Checkpoint map_location for native-checkpoint fine-tuning sources.",
 )
-@click.option(
-    "--validation-dataset",
-    "validation_path",
-    default=None,
-    help="Validation dataset path or URI for this run.",
-)
-@click.option(
-    "--validation-every-epochs",
-    "validation_every_epochs",
-    type=int,
-    default=None,
-    help="Run validation every N completed epochs.",
-)
-@click.option(
-    "--validation-every-steps",
-    "validation_every_steps",
-    type=int,
-    default=None,
-    help="Run validation every N optimizer steps.",
-)
+@common_validation_options
 @click.option(
     "--report/--no-report",
     "show_report",
@@ -2296,37 +1629,7 @@ def run_spec(
     help="Training job spec that supplies dataloader and runtime hook intent.",
 )
 @click.option("--checkpoint-index", type=int, default=-1, show_default=True)
-@click.option(
-    "--batch-size", type=int, default=None, help="Override dataset.batch_size."
-)
-@click.option(
-    "--shuffle/--no-shuffle",
-    default=True,
-    show_default=True,
-    help="Shuffle the training dataloader when no distributed sampler replaces it.",
-)
-@click.option("--drop-last", is_flag=True, help="Drop the final incomplete batch.")
-@click.option(
-    "--prefetch-factor",
-    type=int,
-    default=2,
-    show_default=True,
-    help="Number of emitted batches to fuse per backend read.",
-)
-@click.option(
-    "--num-streams",
-    type=int,
-    default=4,
-    show_default=True,
-    help="CUDA stream count for dataloader prefetching.",
-)
-@click.option("--pin-memory", is_flag=True, help="Request pinned-memory reads.")
-@click.option(
-    "--use-streams/--no-use-streams",
-    default=True,
-    show_default=True,
-    help="Enable CUDA stream prefetching when CUDA is available.",
-)
+@common_loader_options
 @click.option(
     "--distributed/--no-distributed",
     default=None,
@@ -2339,26 +1642,7 @@ def run_spec(
     help="Process-group backend forwarded to DDPHook.",
 )
 @click.option("--map-location", default=None, help="Checkpoint map_location.")
-@click.option(
-    "--validation-dataset",
-    "validation_path",
-    default=None,
-    help="Validation dataset path or URI for this resumed run.",
-)
-@click.option(
-    "--validation-every-epochs",
-    "validation_every_epochs",
-    type=int,
-    default=None,
-    help="Run validation every N completed epochs.",
-)
-@click.option(
-    "--validation-every-steps",
-    "validation_every_steps",
-    type=int,
-    default=None,
-    help="Run validation every N optimizer steps.",
-)
+@common_validation_options
 def resume_spec(
     checkpoint_dir: Path,
     spec_path: Path,
@@ -2379,8 +1663,8 @@ def resume_spec(
 ) -> None:
     """Resume a restartable strategy checkpoint with a saved job spec."""
     job = _load_job_spec(spec_path)
-    distributed_enabled = _resolve_distributed_enabled(distributed)
-    distributed_manager = _setup_distributed_manager(distributed_enabled)
+    distributed_enabled = resolve_distributed_enabled(distributed)
+    distributed_manager = setup_distributed_manager(distributed_enabled)
     hooks = _build_runtime_hooks(
         job, enable_ddp=distributed_enabled, ddp_backend=ddp_backend
     )
@@ -2392,8 +1676,8 @@ def resume_spec(
     )
     strategy.distributed_manager = distributed_manager
     with ExitStack() as stack:
-        device = _dataset_device(job, distributed_manager)
-        dataloader = _build_dataloader(
+        device = dataset_device(job, distributed_manager)
+        dataloader = build_dataloader(
             job,
             stack,
             device=device,

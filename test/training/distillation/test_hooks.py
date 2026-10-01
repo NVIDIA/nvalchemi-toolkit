@@ -261,6 +261,23 @@ class TestTeacherLabelHookForcedLabeling:
 
         assert scorer.calls == 1
 
+    def test_a_rebuilt_hook_treats_the_step_it_was_handed_as_labeled(
+        self, device: str
+    ) -> None:
+        """A hook built with ``labeled_step`` skips the adjacent step from its first dispatch."""
+        batch = _make_batch(device)
+        dynamics = _make_dynamics(device)
+        scorer = _RecordingScorer()
+        hook = TeacherLabelHook(scorer, frequency=2, labeled_step=9)
+        ctx = make_dynamics_context(batch, dynamics)
+
+        assert hook.labeled_step == 9
+        hook(dataclasses.replace(ctx, step_count=10), DynamicsStage.AFTER_STEP)
+        assert scorer.calls == 0
+        hook(dataclasses.replace(ctx, step_count=11), DynamicsStage.AFTER_STEP)
+        assert scorer.calls == 1
+        assert hook.labeled_step == 11
+
     def test_a_forced_label_is_never_skipped(self, device: str) -> None:
         """A segment ending one step after a cadence label still gets its frame."""
         batch = _make_batch(device)

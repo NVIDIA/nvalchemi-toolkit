@@ -16,21 +16,17 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import Any, TypeAlias
 
 import torch
 from jaxtyping import Bool, Float
 
-from nvalchemi._typing import BatchIndices
 from nvalchemi.training.losses.composition import (
     BaseLossFunction,
     DTypePolicy,
     ReductionContext,
 )
-from nvalchemi.training.losses.reductions import graph_balanced_mean
-
-if TYPE_CHECKING:
-    from nvalchemi.data.batch import Batch
+from nvalchemi.training.losses.reductions import masked_mean
 
 __all__ = ["AtomicEnergyMatchingLoss"]
 
@@ -185,27 +181,21 @@ class AtomicEnergyMatchingLoss(BaseLossFunction):
     ) -> torch.Tensor:
         """Reduce per-atom squared residuals to a scalar loss.
 
-        Both branches reduce in at least float32: the graph-balanced one gets
-        that from :func:`~nvalchemi.training.losses.reductions.graph_balanced_mean`,
-        the global mean needs the cast itself.
+        :func:`~nvalchemi.training.losses.reductions.masked_mean` takes the
+        global mean over valid entries, or the graph-balanced one when
+        ``normalize_by_atom_count`` is set, in at least float32 either way.
         """
-        if not self.normalize_by_atom_count:
-            acc_dtype = torch.promote_types(residual.dtype, torch.float32)
-            return residual.to(acc_dtype).sum() / valid.sum(dtype=acc_dtype).clamp_min(
-                1.0
-            )
-        batch: Batch | None = kwargs.get("batch")
-        batch_idx: BatchIndices | None = kwargs.get("batch_idx")
-        num_graphs: int | None = kwargs.get("num_graphs")
-        if batch is not None:
-            if batch_idx is None:
-                batch_idx = getattr(batch, "batch_idx", None)
-            if num_graphs is None:
-                num_graphs = getattr(batch, "num_graphs", None)
-        loss, per_sample = graph_balanced_mean(
-            residual, valid, batch_idx, num_graphs, loss_name=type(self).__name__
+        loss, per_sample = masked_mean(
+            residual,
+            valid,
+            graph_balanced=self.normalize_by_atom_count,
+            batch_idx=kwargs.get("batch_idx"),
+            num_graphs=kwargs.get("num_graphs"),
+            batch=kwargs.get("batch"),
+            loss_name=type(self).__name__,
         )
-        self.per_sample_loss = per_sample.detach()
+        if per_sample is not None:
+            self.per_sample_loss = per_sample.detach()
         return loss
 
     def extra_repr(self) -> str:

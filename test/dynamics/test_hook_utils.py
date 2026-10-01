@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from nvalchemi.dynamics.hooks._utils import (
@@ -424,3 +425,15 @@ class TestUtilsCompile:
         wrapped = fn(positions, cell, pbc, batch_idx)
         expected = torch.tensor([[2.0, 7.0, 5.0]], device=device)
         assert torch.allclose(wrapped, expected, atol=1e-5)
+
+
+class TestKbEv:
+    """The Boltzmann constant the hooks package publishes."""
+
+    def test_the_package_exports_the_constant_the_utils_define(self) -> None:
+        """``nvalchemi.dynamics.hooks.KB_EV`` is the eV/K value the temperature hooks use."""
+        from nvalchemi.dynamics import hooks
+
+        assert hooks.KB_EV is KB_EV
+        assert "KB_EV" in hooks.__all__
+        assert KB_EV == pytest.approx(8.617333262e-5)

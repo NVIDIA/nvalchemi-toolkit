@@ -58,6 +58,7 @@ from typing import (
     TYPE_CHECKING,
     Annotated,
     Any,
+    ClassVar,
     Literal,
     TypeAlias,
 )
@@ -1552,6 +1553,12 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         ``status >= exit_status`` are treated as no-ops during
         ``step()`` — their positions and velocities are preserved
         through the integrator. Default is 1.
+    samples_equilibrium : ClassVar[bool]
+        Whether stepping samples an equilibrium ensemble, so that a frame
+        along a trajectory is a draw from a distribution rather than a point
+        on a path to a minimum. ``True`` here and on the integrators;
+        ``False`` on the relaxation optimizers, which descend. A
+        distribution-matching objective reads it to tell the two apart.
     __needs_keys__ : set[str]
         Set of output keys that this dynamics requires from the model.
         Empty by default on ``BaseDynamics``. Subclasses declare their
@@ -1600,6 +1607,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
     __needs_keys__: set[str] = set()
     __provides_keys__: set[str] = set()
+
+    samples_equilibrium: ClassVar[bool] = True
 
     _mutable_fields: tuple[str, ...] = ("positions", "velocities", "cell")
 
