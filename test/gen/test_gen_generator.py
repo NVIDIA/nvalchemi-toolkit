@@ -15,7 +15,7 @@
 """Structural tests for the generative API.
 
 Covers the abstract :class:`~nvalchemi.gen.generator.AtomisticGenerator`
-with its fixed (optional condition →) generate core and
+with its fixed (optional condition ->) generate core and
 :class:`~nvalchemi.gen.stages.GenerationStage` hooks: the function-owns-model
 contract, the optional condition step (resolution order, stage firing
 policy, pass-through without a provider), the defaults chain (driver
@@ -1131,7 +1131,7 @@ class TestCompile:
 
 
 class TestSession:
-    """``with gen:`` — stream, session RNG, and hook lifecycle."""
+    """``with gen:`` -- stream, session RNG, and hook lifecycle."""
 
     def _generator(self, **kwargs) -> AtomisticGenerator:
         """Build a trivial generator with session-related kwargs.
@@ -1245,7 +1245,7 @@ class TestSession:
         assert log == ["enter", "exit"]
 
     def test_session_rng_reproducible_and_advancing(self, device: str) -> None:
-        """Same seed → identical sessions; draws advance within a session."""
+        """Same seed -> identical sessions; draws advance within a session."""
         gen_a = self._generator(seed=11, device=device)
         gen_b = self._generator(seed=11, device=device)
         with gen_a:

@@ -686,7 +686,7 @@ class RigidMoleculeASUBatch(BaseModel):
         Shared ordered formula-unit state. Public construction retains this
         already validated object by identity.
     structure_molecule_ptr : torch.Tensor, int32 ``[P + 1]``
-        Start and end positions of each structure’s independent molecules in
+        Start and end positions of each structure's independent molecules in
         the ASU representation arrays.
     conformer_indices : torch.Tensor, int32 ``[Q]``
         Global conformer-pool indices for each ASU molecule.

@@ -15,8 +15,8 @@
 """Sequential composition of generators and other batch-processing stages.
 
 A :class:`GenerationPipeline` is a thin orchestrator: it folds a
-conditioning input through an ordered list of stages — generators, dynamics
-engines, or any ``Batch -> Batch`` callable — mirroring the dynamics
+conditioning input through an ordered list of stages -- generators, dynamics
+engines, or any ``Batch -> Batch`` callable -- mirroring the dynamics
 ``|`` sugar (:meth:`nvalchemi.dynamics.base.BaseDynamics.__or__` builds a
 ``DistributedPipeline``; here ``AtomisticGenerator.__or__`` builds a
 ``GenerationPipeline``).
@@ -33,8 +33,8 @@ Examples
 Semantics:
 
 * **Stage 1 consumes the user's ``inputs``** (its generating function owns
-  conditioning); every later stage maps Batch → Batch.
-* **1→1 cardinality** per stage: filters may shrink a batch; nothing fans
+  conditioning); every later stage maps Batch -> Batch.
+* **1:1 cardinality** per stage: filters may shrink a batch; nothing fans
   out. An all-false filter can use :meth:`~nvalchemi.data.Batch.empty_like`
   to retain materialized schema and capacities; ordinary empty Batch indexing
   still raises ``IndexError``.
@@ -51,7 +51,7 @@ Semantics:
   the batch between stages.
 * **Sessions and compile**: ``with pipe:`` creates one dedicated CUDA
   stream (when the first AtomisticGenerator stage's resolved device is CUDA)
-  shared by every AtomisticGenerator stage that opts in — sequential stages
+  shared by every AtomisticGenerator stage that opts in -- sequential stages
   serialize on it with no cross-stream sync. :meth:`compile` compiles each
   AtomisticGenerator stage's generating function (non-AtomisticGenerator stages are
   skipped); there is no whole-fold compile, since the Batch
@@ -95,10 +95,10 @@ class GenerationPipeline(BaseModel):
     **Field-contract validation.** Every ``AtomisticGenerator`` stage must declare
     ``required_inputs`` / ``outputs`` (set on the AtomisticGenerator directly
     or defaulted from the generating function's attributes); construction
-    raises otherwise. For each adjacent AtomisticGenerator → AtomisticGenerator link,
+    raises otherwise. For each adjacent AtomisticGenerator -> AtomisticGenerator link,
     the downstream stage's ``required_inputs`` must be covered by the upstream
     stage's ``outputs``: the dynamics link contract
-    (AIMNet2 ``charges`` → Ewald) applied to generation. Authors of custom
+    (AIMNet2 ``charges`` -> Ewald) applied to generation. Authors of custom
     generating functions own keeping their stage's declaration in sync with
     what the function actually writes. Non-AtomisticGenerator stages carry no
     declarations and are not validated (their outputs are unknown at
@@ -112,13 +112,13 @@ class GenerationPipeline(BaseModel):
     entry creates one dedicated CUDA stream (when the first
     :class:`~nvalchemi.gen.generator.AtomisticGenerator` stage's resolved device
     is CUDA) and shares it with every stage that follows the ``_stream``
-    convention — AtomisticGenerator stages with ``dedicated_stream`` set,
+    convention -- AtomisticGenerator stages with ``dedicated_stream`` set,
     and any other stage that accepts a pre-set stream (dynamics engines and
-    fused stages honor it) — then enters each stage's own session.
+    fused stages honor it) -- then enters each stage's own session.
 
     **Stage calling convention.** A stage with a ``run`` method (a dynamics
     engine or a fused stage) is driven to completion with
-    ``stage.run(batch, **kwargs)`` — its own hooks fire inside its loop.
+    ``stage.run(batch, **kwargs)`` -- its own hooks fire inside its loop.
     Any other stage is called as ``stage(batch, **kwargs)``. A dynamics
     stage must carry its own exit criterion (convergence or ``n_steps``);
     the fold offers no step budget of its own.
@@ -238,9 +238,9 @@ class GenerationPipeline(BaseModel):
         Creates one dedicated CUDA stream (when the first AtomisticGenerator
         stage's resolved device is CUDA) and waits it on the caller's current
         stream, shares it with every stage that follows the ``_stream``
-        convention — AtomisticGenerator stages with ``dedicated_stream`` set
+        convention -- AtomisticGenerator stages with ``dedicated_stream`` set
         whose resolved device matches, and any other stage accepting a pre-set
-        stream (dynamics engines and fused stages honor it) — then enters each
+        stream (dynamics engines and fused stages honor it) -- then enters each
         stage's own session. The pipeline never enters
         :func:`torch.inference_mode` itself; generator stages manage their own.
         Stages that provide a ``run`` method can require autograd. If the
@@ -341,7 +341,7 @@ class GenerationPipeline(BaseModel):
         stage_kwargs
             Per-call keyword arguments addressed to stages: a single mapping
             stretches across every stage (for homogeneous pipelines), or a
-            sequence of one mapping (or ``None``) per stage — its length
+            sequence of one mapping (or ``None``) per stage -- its length
             must match the number of stages. Generator stages accept their
             usual call options (``num_samples``, ``rng``, generating-function
             options); a stage with a ``run`` method is driven with
@@ -350,7 +350,7 @@ class GenerationPipeline(BaseModel):
         Returns
         -------
         Any
-            The final stage's output — a :class:`~nvalchemi.data.Batch`,
+            The final stage's output -- a :class:`~nvalchemi.data.Batch`,
             unless the terminal stage is a mapping-less generator (raw
             sample). If a stage yields a zero-graph Batch, remaining stages
             are skipped and it is returned as-is.

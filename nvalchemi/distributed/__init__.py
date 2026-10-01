@@ -31,13 +31,13 @@ def _register_dynamo_subclass() -> None:
     that receive ShardTensor inputs (the ``_promote_positions_to_shardtensor``
     path in :class:`DistributedModel`).
 
-    Done at module import — eager-only callers pay the cost of importing
+    Done at module import -- eager-only callers pay the cost of importing
     the dynamo config module (cheap; it's already loaded in any
     torch-using process).
     """
     try:
         import torch._dynamo.config as _dynamo_config
-    except ImportError:  # pragma: no cover — torch without dynamo is rare
+    except ImportError:  # pragma: no cover -- torch without dynamo is rare
         return
     from nvalchemi.distributed._core.shard_tensor import ShardTensor as _ShardTensor
 
@@ -81,8 +81,8 @@ def autograd_target(t: torch.Tensor) -> torch.Tensor:
 
     Under domain decomposition the framework wraps ``data.positions`` (and
     ``data.charges``) as a :class:`ShardTensor` view of a halo-padded leaf via
-    :meth:`Tensor.as_subclass`. The view is *not* itself in the autograd graph —
-    only the underlying tensor is — so passing the view directly to
+    :meth:`Tensor.as_subclass`. The view is *not* itself in the autograd graph --
+    only the underlying tensor is -- so passing the view directly to
     :func:`torch.autograd.grad` raises "differentiated Tensors appears to not
     have been used in the graph". This helper returns the in-graph leaf instead.
 
@@ -92,7 +92,7 @@ def autograd_target(t: torch.Tensor) -> torch.Tensor:
     Parameters
     ----------
     t : torch.Tensor
-        The tensor to differentiate against — a plain tensor, or a ShardTensor
+        The tensor to differentiate against -- a plain tensor, or a ShardTensor
         view of a halo-padded leaf.
 
     Returns

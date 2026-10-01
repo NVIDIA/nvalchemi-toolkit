@@ -15,7 +15,7 @@
 """Batched generative inference driven by a user-supplied callable.
 
 ``AtomisticGenerator`` (the *driver* throughout this module) wraps your generation
-code — a function, or a callable object holding the trained model — and runs
+code -- a function, or a callable object holding the trained model -- and runs
 a fixed pipeline per call: optionally condition the inputs, generate, and
 return a :class:`~nvalchemi.data.Batch`. Any sampling procedure works
 (diffusion, flow matching, GANs, VAEs, search loops); the callable owns the
@@ -23,7 +23,7 @@ model and does the sampling.
 
 The pipeline per :meth:`AtomisticGenerator.sample` looks like::
 
-    # condition step — only when a condition callable is provided:
+    # condition step -- only when a condition callable is provided:
     BEFORE_CONDITION   hooks  (edit or replace ctx.inputs)
     ctx.inputs = condition(ctx.inputs, num_samples=..., rng=...)
     AFTER_CONDITION    hooks  (replace what the function is called with)
@@ -37,7 +37,7 @@ The pipeline per :meth:`AtomisticGenerator.sample` looks like::
 
 Conditioning is optional: pass ``condition_func``, or set a ``condition``
 attribute on the generating function, to transform inputs before generation.
-It prepares the request — what the procedure is asked to do — it does not
+It prepares the request -- what the procedure is asked to do -- it does not
 constrain what comes out (output constraints live in guidance, rejection
 hooks, or pipeline stages). With neither, the inputs reach the function
 untouched and the ``BEFORE_CONDITION``/``AFTER_CONDITION`` stages do not
@@ -50,7 +50,7 @@ replacing its fields; the driver re-reads the context after each dispatch.
 Hooks run in list order at each stage, and a raising hook aborts the call.
 See the stage enum for what may change where and when each stage fires.
 Hooks reach the procedure via ``ctx.workflow.generator_func``;
-``ctx.model`` is always ``None`` — the driver has no model field.
+``ctx.model`` is always ``None`` -- the driver has no model field.
 
 The defaults chain
 ------------------
@@ -86,25 +86,25 @@ A GAN, one forward pass, returning a batch directly::
 
     gan = AtomisticGenerator(generator_func=gan_generate)
 
-Model-owning procedures — a callable object carries the model (plus
+Model-owning procedures -- a callable object carries the model (plus
 ``device`` and field declarations the driver reads as defaults); the tests
 and examples ship such objects::
 
     gen = AtomisticGenerator(generator_func=GANGenerate(gan_model))
 
-Streaming — one ``sample()`` call per input item; ``None`` means repeated
+Streaming -- one ``sample()`` call per input item; ``None`` means repeated
 unconditional draws (an infinite stream unless capped)::
 
     for batch in gen.stream(None, max_batches=10):
         ...
 
-Composition — sequential pipelines mirror the dynamics ``|`` sugar
+Composition -- sequential pipelines mirror the dynamics ``|`` sugar
 (:class:`~nvalchemi.gen.pipeline.GenerationPipeline`)::
 
     pipe = gen_a | gen_b
     out = pipe(inputs)
 
-Sessions: streams, RNG, and compile — the driver is a context manager.
+Sessions: streams, RNG, and compile -- the driver is a context manager.
 Entering a session (``with gen:``) creates a dedicated CUDA stream when the
 resolved device is CUDA (unless ``dedicated_stream=False``), seeds a
 session-scoped :class:`torch.Generator` (advanced per draw), compiles the
@@ -173,9 +173,9 @@ class _PreparedGeneration:
 class GeneratingFunction(Protocol[InputT, SampleT]):
     """Callable that encapsulates a family-specific generation strategy.
 
-    A :class:`GeneratingFunction` owns everything generation needs —
+    A :class:`GeneratingFunction` owns everything generation needs --
     including the model, when there is one (held as a closure or an
-    attribute of a callable object) — samples from it, and returns the
+    attribute of a callable object) -- samples from it, and returns the
     generated artifact.
 
     Conditioning may live inside the function, or as a ``condition``
@@ -187,7 +187,7 @@ class GeneratingFunction(Protocol[InputT, SampleT]):
     straight through.
 
     ``rng`` is ``None`` unless the driver has a ``seed``, a session, or a
-    per-call ``rng=`` — handle ``None`` (torch sampling ops accept it).
+    per-call ``rng=`` -- handle ``None`` (torch sampling ops accept it).
     Outside a session the resolved RNG is CPU-resident even when generating
     on CUDA; inside a session it lives on the resolved device. When you draw
     on a device, make sure the generator matches it (e.g.
@@ -209,7 +209,7 @@ class GeneratingFunction(Protocol[InputT, SampleT]):
     may carry attributes the :class:`AtomisticGenerator` reads as defaults when
     the driver does not set them explicitly:
 
-    - ``condition`` — a :class:`ConditionFunction` mapping the call's raw
+    - ``condition`` -- a :class:`ConditionFunction` mapping the call's raw
       inputs to the conditioned value the function is then called with
       (e.g. tiling a conditioning :class:`~nvalchemi.data.Batch` so each
       graph gets ``num_samples`` draws). The driver runs it between the
@@ -218,9 +218,9 @@ class GeneratingFunction(Protocol[InputT, SampleT]):
       ``condition_func`` takes precedence over this attribute. There is no
       default condition: functions implement their own per use case, binding
       any extra context in their closure.
-    - ``device`` — a :class:`torch.device` (or parseable device string),
+    - ``device`` -- a :class:`torch.device` (or parseable device string),
       used when the driver's ``device`` is unset.
-    - ``required_inputs`` / ``outputs`` — batch-field declarations,
+    - ``required_inputs`` / ``outputs`` -- batch-field declarations,
       used when the driver does not pass them at construction.
     """
 
@@ -240,14 +240,14 @@ class ConditionFunction(Protocol):
 
     Receives the raw inputs, the resolved ``num_samples``, and the resolved
     ``rng``; returns the conditioned value the generating function is then
-    called with. The return type is the procedure's own — conditioning may
+    called with. The return type is the procedure's own -- conditioning may
     change the type (e.g. a SMILES string becomes a
     :class:`~nvalchemi.data.Batch`). There is no default: procedures
     implement their own per use case.
 
     The job is preparation, not enforcement: conditioning decides what the
     procedure is *asked* to do, not what it must emit. Constraints on the
-    output (e.g. "structures with a carboxyl group") live elsewhere —
+    output (e.g. "structures with a carboxyl group") live elsewhere --
     guidance inside the generating function, rejection via hooks at
     :class:`~nvalchemi.gen.stages.GenerationStage.AFTER_GENERATE` or a
     wrapper generating function, or an explicit stage in a
@@ -271,10 +271,10 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
     condition_func
         Optional :class:`ConditionFunction` run before generation: maps the
         call's raw inputs to the conditioned value the generating function is
-        then called with. It prepares the request — it does not constrain
+        then called with. It prepares the request -- it does not constrain
         what comes out. Takes precedence over the generating function's own
         ``condition`` attribute. When neither is provided, no conditioning
-        happens — the inputs pass through untouched and the
+        happens -- the inputs pass through untouched and the
         ``BEFORE_CONDITION``/``AFTER_CONDITION`` stages do not fire.
     device
         Optional execution device. When unset, the generating function's
@@ -312,11 +312,11 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         ``torch.Generator().manual_seed(seed + step_count)``. A per-call
         ``rng=`` kwarg overrides both.
     step_count
-        Runtime counter of generation calls — incremented in a ``finally``,
+        Runtime counter of generation calls -- incremented in a ``finally``,
         so failed calls count too. Drives hook frequency gating. Excluded from
         serialization.
     compile_generate
-        Compile the generating function with ``torch.compile`` — immediately
+        Compile the generating function with ``torch.compile`` -- immediately
         via :meth:`compile`, or lazily at session entry. Default ``False``.
     compile_kwargs
         Keyword arguments forwarded to ``torch.compile``.
@@ -484,7 +484,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         """Default field declarations from ``generator_func`` attributes when present.
 
         Explicit constructor values always win; declarations stay ``None``
-        (undeclared) when the generating function carries no such attributes —
+        (undeclared) when the generating function carries no such attributes --
         :class:`~nvalchemi.gen.pipeline.GenerationPipeline` validation then
         fails fast on the undeclared stage.
 
@@ -564,7 +564,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         Only the generating function is compiled; hook dispatch runs eagerly
         because it builds data structures and would graph-break anyway. Note
         the boundary: a function returning a :class:`~nvalchemi.data.Batch`
-        builds it through pydantic, which dynamo cannot trace — driver-level
+        builds it through pydantic, which dynamo cannot trace -- driver-level
         compile captures the tensor-pure prefix and breaks at materialization,
         and ``fullgraph=True`` cannot work there at all. For real capture,
         compile the model inside the generating function and leave the driver
@@ -602,8 +602,8 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         stream at entry. Exiting does not synchronize the session stream:
         enqueue a ``wait_stream`` or ``synchronize`` before consuming results
         from a different stream.
-        When no device resolves — the driver has no ``device`` and the
-        generating function declares none — no stream is created, and the
+        When no device resolves -- the driver has no ``device`` and the
+        generating function declares none -- no stream is created, and the
         session owns only the RNG (when :attr:`seed` is set) and hook
         lifecycles.
 
@@ -802,14 +802,14 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         session's CUDA stream, and the ``Batch`` path (hooks, device and field
         checks) when the sample is a :class:`~nvalchemi.data.Batch`. Hooks
         fire at the
-        :class:`~nvalchemi.gen.stages.GenerationStage` points — each stage
-        only when the step it brackets ran — and share one
+        :class:`~nvalchemi.gen.stages.GenerationStage` points -- each stage
+        only when the step it brackets ran -- and share one
         :class:`~nvalchemi.hooks.GenerationContext` for the whole call.
 
         Parameters
         ----------
         inputs
-            The input for this call — a :class:`~nvalchemi.data.Batch`,
+            The input for this call -- a :class:`~nvalchemi.data.Batch`,
             another tensor container, or ``None`` for unconditional
             generation. When a condition step resolved for the call it runs on
             this value first and the generating function receives the
@@ -827,7 +827,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         -------
         Any
             The generating function's output: a
-            :class:`~nvalchemi.data.Batch` on the contract path —
+            :class:`~nvalchemi.data.Batch` on the contract path --
             ``AFTER_GENERATE`` hooks have run (post-filter, so possibly with
             fewer graphs than were sampled), and the device and declared-field
             checks passed. A zero-graph ``Batch`` (built via
@@ -957,7 +957,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
             Each :meth:`sample` result exactly as produced: a
             :class:`~nvalchemi.data.Batch` when the function returns one,
             otherwise the raw sample. A function may signal total rejection
-            with :meth:`~nvalchemi.data.Batch.empty` — that zero-graph batch
+            with :meth:`~nvalchemi.data.Batch.empty` -- that zero-graph batch
             is yielded, so rejection-aware consumers should check
             ``num_graphs == 0``. Retrying rejected draws is the consumer's job.
         """
@@ -979,7 +979,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         Returns
         -------
         Iterator
-            ``self.stream()`` — an unbounded stream of unconditional draws.
+            ``self.stream()`` -- an unbounded stream of unconditional draws.
         """
         return self.stream()
 

@@ -2469,7 +2469,7 @@ def test_reader_close(tmp_path: Path) -> None:
     writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
     writer.write(data)
 
-    # NOT using context manager — this test verifies close() behavior
+    # NOT using context manager -- this test verifies close() behavior
     reader = AtomicDataZarrReader(tmp_path / "test.zarr")
     assert reader._root is not None
 
@@ -4310,9 +4310,9 @@ class TestDataLoaderPrefetch:
         one slot after consuming the oldest chunk.  By the first
         yield, at most ``3 * prefetch_factor`` batch-index lists have
         been pulled from the sampler:
-        - chunk_a (pf) — primed and consumed
-        - chunk_b (pf) — primed, still in flight
-        - next_chunk (pf) — collected and submitted after chunk_a
+        - chunk_a (pf) -- primed and consumed
+        - chunk_b (pf) -- primed, still in flight
+        - next_chunk (pf) -- collected and submitted after chunk_a
         """
         data_list = list(_data_generator(20))
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
@@ -4369,7 +4369,7 @@ class TestZarrStoreBackends:
         store = LocalStore(tmp_path / "test.zarr")
         data_list = list(_data_generator(num_samples))
 
-        # Spy on zarr's internal _put function — this is the function that
+        # Spy on zarr's internal _put function -- this is the function that
         # actually writes bytes to disk via atomic file operations
         with patch("zarr.storage._local._put", wraps=_original_put) as mock_put:
             writer = AtomicDataZarrWriter(store)
@@ -4449,10 +4449,10 @@ class TestZarrStoreBackends:
         mock_fs.async_impl = True
         mock_fs.asynchronous = True
 
-        # _pipe_file is the write method — it should be called for each chunk
+        # _pipe_file is the write method -- it should be called for each chunk
         mock_fs._pipe_file = AsyncMock(return_value=None)
 
-        # _cat_file is the read method — raise FileNotFoundError to indicate empty store
+        # _cat_file is the read method -- raise FileNotFoundError to indicate empty store
         # This allows zarr.open(mode="w") to create a new group
         async def raise_not_found(path, start=None, end=None):
             raise FileNotFoundError(path)
@@ -4647,7 +4647,7 @@ class TestZarrStoreBackends:
 
         keys_after_write = set(store._store_dict.keys())
 
-        # Append more data — this should add/update keys in the store dict
+        # Append more data -- this should add/update keys in the store dict
         for d in data_list[2:]:
             writer.append(d)
 
@@ -4660,7 +4660,7 @@ class TestZarrStoreBackends:
 
 
 # ---------------------------------------------------------------------------
-# TestDatasetCoverage — exercises paths not covered by TestDataset/Prefetch
+# TestDatasetCoverage -- exercises paths not covered by TestDataset/Prefetch
 # ---------------------------------------------------------------------------
 
 

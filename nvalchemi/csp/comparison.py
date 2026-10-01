@@ -52,7 +52,7 @@ _CUDA_TYPED_FILTER_OUTPUT_RESERVE_BYTES = 320 * 1024
 
 @dataclass(frozen=True)
 class DeduplicationResult:
-    """Retained structures, each input’s retained representative, and group
+    """Retained structures, each input's retained representative, and group
     sizes.
 
     All fields are int32 tensors on the comparison device. ``retained_indices``

@@ -38,8 +38,9 @@ def get_default_atomic_volumes() -> dict[int, float]:
     Returns
     -------
     atomic_volumes : dict[int, float]
-        Per-atom volume contributions in Å³, keyed by atomic number. The
-        returned mapping is independent of library state and may be modified.
+        Per-atom volume contributions in cubic angstroms, keyed by atomic
+        number. The returned mapping is independent of library state and may be
+        modified.
     """
     return ATOMIC_VOLUMES.copy()
 
@@ -84,13 +85,14 @@ def estimate_formula_unit_volume(
         Nonempty one-dimensional tensor using ``torch.uint8``, ``torch.int8``,
         ``torch.int16``, ``torch.int32``, or ``torch.int64``.
     atomic_volumes : Mapping[int, float], optional
-        Complete replacement table in Å³ per atom. When omitted, the bundled
-        COD-derived table is used. A custom mapping does not overlay defaults.
+        Complete replacement table in cubic angstroms per atom. When omitted,
+        the bundled COD-derived table is used. A custom mapping does not overlay
+        defaults.
 
     Returns
     -------
     volume : float
-        Estimated formula-unit volume in Å³.
+        Estimated formula-unit volume in cubic angstroms.
 
     Raises
     ------

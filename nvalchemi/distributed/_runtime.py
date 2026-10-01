@@ -473,7 +473,7 @@ def pin_fp32() -> None:
     under reduced-precision fp32 (TF32) the backend can pick a different kernel
     for each and the results separate by far more than fp32 rounding. Also sets
     ``NVIDIA_TF32_OVERRIDE``, which is what reaches ``mp.spawn`` / ``torchrun``
-    workers — they inherit the environment, not the torch flags. Call before the
+    workers -- they inherit the environment, not the torch flags. Call before the
     process builds a CUDA context.
 
     Returns

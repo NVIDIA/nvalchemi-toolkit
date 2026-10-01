@@ -7,7 +7,7 @@
 Distributed runtime utilities
 =============================
 
-General-purpose helpers for running any distributed nvalchemi workflow — DDP
+General-purpose helpers for running any distributed nvalchemi workflow -- DDP
 training, multi-GPU inference, or your own multi-process script. They are
 independent of the spatial :doc:`domain-decomposition API </modules/distributed>`
 and are re-exported from the package root
@@ -135,13 +135,13 @@ Parameter resolvers
 Rather than reading environment variables or ``torch.distributed`` state by hand,
 use these best-practice resolvers. Each returns a sensible value whether the run
 is launched under :class:`~nvalchemi.distributed.DistributedManager`, plain
-``torch.distributed``, ``torchrun`` environment variables, or single-process — so
+``torch.distributed``, ``torchrun`` environment variables, or single-process -- so
 the same code path works in every launch mode.
 
-- :func:`~nvalchemi.distributed.resolve_world_size` — the number of processes.
-- :func:`~nvalchemi.distributed.resolve_global_rank` — this process's global rank
+- :func:`~nvalchemi.distributed.resolve_world_size` -- the number of processes.
+- :func:`~nvalchemi.distributed.resolve_global_rank` -- this process's global rank
   (accepts an explicit override).
-- :func:`~nvalchemi.distributed.collective_device` — the device to place tensors
+- :func:`~nvalchemi.distributed.collective_device` -- the device to place tensors
   on for collectives (CPU for the Gloo backend, the rank-local CUDA device for
   NCCL).
 

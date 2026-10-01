@@ -238,7 +238,7 @@ def _donor(atom: Atom) -> float:
 
 
 def contact_distances(molecules: Sequence[Mol]) -> torch.Tensor:
-    """Construct a CPU float32 all-atom contact-cutoff matrix in Å."""
+    """Construct a CPU float32 all-atom contact-cutoff matrix in angstroms."""
     connected = connected_molecules(molecules)
     atoms = [atom for molecule in connected for atom in molecule.GetAtoms()]
     unsupported: set[str] = set()

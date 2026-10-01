@@ -214,7 +214,7 @@ def test_policy_restoration_copies_normalized_input() -> None:
         ({"+1": 1.0}, ValidationError),
         ({" 1": 1.0}, ValidationError),
         ({"1.0": 1.0}, ValidationError),
-        ({"٢": 1.0}, ValidationError),
+        ({"2e0": 1.0}, ValidationError),
         ({"0": 1.0}, ValidationError),
         ({"231": 1.0}, ValidationError),
         ({14: 1.0, "14": 2.0}, ValidationError),

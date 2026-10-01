@@ -107,7 +107,7 @@ class OptionalDependency(Enum):
     CUEQUIVARIANCE_OPS = (
         "cuequivariance_ops_torch",
         "nvalchemi-toolkit[mace,cu13]",
-        "These cuequivariance CUDA kernels are CUDA-version-specific — select "
+        "These cuequivariance CUDA kernels are CUDA-version-specific -- select "
         "the 'cu12' or 'cu13' dependency group to match your CUDA build, e.g. "
         "`uv sync --extra mace --extra cu13` (or --extra cu12).",
     )

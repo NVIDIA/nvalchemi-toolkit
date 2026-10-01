@@ -126,9 +126,9 @@ class OverlapReliefProgress:
     not count newly sampled rows. ``generated_count`` includes any refill
     completed before the callback, while active and overlap diagnostics describe
     candidates before retirement or refill. ``total_overlap`` is the mean of
-    the active candidates' summed positive contact overlaps, in Å.
+    the active candidates' summed positive contact overlaps, in angstroms.
     ``max_overlap`` is the largest positive contact overlap across those
-    candidates, also in Å.
+    candidates, also in angstroms.
     """
 
     generated_count: int

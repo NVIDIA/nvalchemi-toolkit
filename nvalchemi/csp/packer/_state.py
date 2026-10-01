@@ -32,9 +32,9 @@ class WorkingState:
 
     ``centers`` are fractional row vectors in ``[0, 1)``. ``rotations`` map
     conformer Cartesian coordinates into Cartesian cell coordinates. ``cells``
-    stores lower-triangular row vectors in Å, and ``reference_volumes`` stores
-    volumes in Å³. ``symmetry_ops`` contains indices into the symmetry-operation
-    table.
+    stores lower-triangular row vectors in angstroms, and
+    ``reference_volumes`` stores volumes in cubic angstroms. ``symmetry_ops``
+    contains indices into the symmetry-operation table.
     """
 
     conformer_ids: Tensor

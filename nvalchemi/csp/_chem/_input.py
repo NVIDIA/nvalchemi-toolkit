@@ -31,7 +31,7 @@ from nvalchemi.csp.volume import estimate_formula_unit_volume
 
 
 def _normalize_contact_distances(values: Tensor, num_atoms: int) -> Tensor:
-    """Copy contact distances to symmetric contiguous CPU float32 form in Å."""
+    """Copy contact distances to symmetric contiguous CPU float32 form in angstroms."""
     if not isinstance(values, Tensor):
         raise TypeError("contact_distances must be a torch.Tensor")
     if values.shape != (num_atoms, num_atoms):

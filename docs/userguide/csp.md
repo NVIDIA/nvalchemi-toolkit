@@ -17,7 +17,7 @@ in a crystal. The `nvalchemi.csp` package provides four parts of this search:
   symmetry information. Zarr storage retains these data without writing every
   atom in the cell. Selected structures can be expanded to full-cell Toolkit
   {py:class}`~nvalchemi.data.Batch` objects for physical optimization. Here
-  “compact” describes the storage representation, regardless of cell volume.
+  "compact" describes the storage representation, regardless of cell volume.
 - **Screen similar structures:** `RadialComparisonIndex` compares local atom
   environments to find possible duplicates after optimization. It also accepts
   fully periodic, partially periodic, and nonperiodic structures from other
@@ -44,7 +44,7 @@ GPU, and expand two accepted structures. Install `nvalchemi-toolkit[rdkit]`
 and use an environment with CUDA support.
 
 ```{note}
-The $(1000\text{–}1200)\,\mathrm{\AA}^3$ starting cells are deliberately
+The $(1000\text{-}1200)\,\mathrm{\AA}^3$ starting cells are deliberately
 oversized for one water molecule so the example completes quickly. They are
 unsuitable starting volumes for an ice search.
 ```
@@ -156,31 +156,31 @@ Each molecule can have several input conformers. For a flexible molecule,
 these represent alternative internal geometries that may pack differently.
 The `OverlapReliefPacker` chooses one conformer for each independently placed
 molecule, then keeps its internal coordinates fixed while translating and
-rotating the molecule and changing the cell. With `Z′ > 1`, it can choose
+rotating the molecule and changing the cell. With `Z' > 1`, it can choose
 different conformers for the symmetry-independent copies of a molecule.
 The conformer pool does not rank molecular energies. RDKit can generate the
 conformers, or callers can supply coordinates prepared by another method.
 
-### Choose Z, Z′, and a space group
+### Choose Z, Z', and a space group
 
-`Z` counts formula units in the full conventional cell. `Z′` counts symmetry-independent
+`Z` counts formula units in the full conventional cell. `Z'` counts symmetry-independent
 formula units in its asymmetric unit (ASU). For molecules in general positions,
-the space group must have `Z / Z′` operations. For `Z=2` and `Z′=1`, familiar
-choices include P-1 (group 2) and P2₁ (group 4), each with two operations.
-For `Z=4` and `Z′=1`, four-operation choices include P2₁/c (group 14),
-P2₁2₁2₁ (group 19), and Cc (group 9). With `Z′=2`, two formula units are
+the space group must have `Z / Z'` operations. For `Z=2` and `Z'=1`, familiar
+choices include P-1 (group 2) and P2_1 (group 4), each with two operations.
+For `Z=4` and `Z'=1`, four-operation choices include P2_1/c (group 14),
+P2_1 2_1 2_1 (group 19), and Cc (group 9). With `Z'=2`, two formula units are
 placed independently, so the `OverlapReliefPacker` can choose different
 conformers for their corresponding molecules. The bundled operations use the
-standard P2₁/c setting
-for group 14; P2₁/n is an alternative cell setting of the same group.
+standard P2_1/c setting
+for group 14; P2_1/n is an alternative cell setting of the same group.
 
 Molecules on **special positions** are not supported. Some symmetry operations
 map such a molecule onto itself, so expanding every independent molecule by
 all operations would create duplicate copies. For example, a crystal with one
-centrosymmetric molecule per P-1 cell has `Z=1` and `Z′=1/2`, which this
-integer-`Z′` representation cannot express. To search for such an arrangement,
+centrosymmetric molecule per P-1 cell has `Z=1` and `Z'=1/2`, which this
+integer-`Z'` representation cannot express. To search for such an arrangement,
 use a subgroup in which the molecule occupies a general position and choose
-`Z` and `Z′` for that subgroup. P1 with `Z=Z′=1` represents this example; its
+`Z` and `Z'` for that subgroup. P1 with `Z=Z'=1` represents this example; its
 centrosymmetric conformer retains inversion under periodic repetition. In
 general, a subgroup search does not enforce the omitted symmetry operations.
 
@@ -337,7 +337,7 @@ movement, cell-shape, and progress controls.
 
 `CSPGenerator` allocates independent packing work across an existing process
 group. The application owns process launch and group lifetime. Each process
-supplies the same prepared formula-unit input; scientific settings such as `Z`, `Z′`,
+supplies the same prepared formula-unit input; scientific settings such as `Z`, `Z'`,
 and space-group policy may differ between ranks. Gloo supports CPU packers;
 NCCL supports CUDA packers, usually with one process per GPU.
 
@@ -504,7 +504,7 @@ Let `F` be the number of molecules in one formula unit and `Q` the total ASU
 molecule rows. `structure_molecule_ptr` must start at zero, never decrease,
 end at `Q`, and assign `F * z_prime` rows to each structure. `z` and `z_prime`
 must be positive, `z_prime` must divide `z`, and the space group must be in
-1–230 with `z / z_prime` bundled operations. Rows repeat the formula-molecule
+1-230 with `z / z_prime` bundled operations. Rows repeat the formula-molecule
 order for each independent copy; every conformer index must belong to that
 molecule's pool. The checker verifies these index relationships and raises
 `ValueError` when they fail.
@@ -826,7 +826,7 @@ the Toolkit does not perform that sequence automatically.
 
 ### Deduplicate a relaxed structure pool
 
-After the generate → optimize workflow above, collect relaxed structures
+After the generate -> optimize workflow above, collect relaxed structures
 generated from the same molecular input into a standard Toolkit `Batch`,
 called `batch` below.
 Assume optimization has preserved molecular connectivity: the structures may
@@ -834,7 +834,7 @@ have different geometries, but they share the same molecular topology. Retain
 the molecular-bond matrix as `template_adjacency`, using the **same atom order**
 as `packing_input.atomic_numbers`. ASU expansion records each atom's source
 index, which the type map uses to label relaxed structures even when they have
-different `Z` or `Z′`. Keep that index aligned with its atom during optimization
+different `Z` or `Z'`. Keep that index aligned with its atom during optimization
 and storage. The map checks indices and elements, but cannot establish that a
 loaded Batch came from this particular formula unit. See
 {ref}`csp-source-metadata` for the provenance field.
@@ -860,7 +860,7 @@ packing_input = ...  # Formula-unit input used to generate this search pool.
 template_adjacency = ...  # Boolean bonds in packing_input.atomic_numbers order.
 batch = ...  # Toolkit Batch of optimized trial crystals with ASU source fields.
 
-cutoff = 15.0  # Å
+cutoff = 15.0  # angstroms
 threshold = 0.05  # maximum relative distance mismatch
 
 # 1. Compare local distances without atom types.
@@ -1081,7 +1081,7 @@ packing_input = ...  # The same formula-unit input used for the candidate pool.
 template_adjacency = ...  # Its bonds in packing_input.atomic_numbers order.
 batch = ...  # Toolkit Batch of optimized trial crystals with ASU source fields.
 
-cutoff = 15.0  # Å
+cutoff = 15.0  # angstroms
 threshold = 0.05
 type_map = TopologicalAtomTypeMap(
     packing_input.atomic_numbers, template_adjacency
@@ -1127,7 +1127,7 @@ block with the same `type_map` and `typed_index`.
 The formula-unit input owns its conformer pool, contact distances in
 $\mathrm{\AA}$, component IDs, and volume estimate in $\mathrm{\AA}^3$. An
 ASU batch shares that input and stores each candidate's cell, space group, and
-independent placements. Cell vectors are rows of a 3 × 3 matrix in
+independent placements. Cell vectors are rows of a 3 x 3 matrix in
 $\mathrm{\AA}$. Fractional molecular centers are dimensionless and become
 Cartesian through `fractional @ cell`; rigid
 rotations act on Cartesian molecular displacements. Expansion emits
@@ -1161,7 +1161,7 @@ symmetry:
 | `csp_source_z_prime` | System | Source formula units in the ASU |
 | `csp_source_structure_id` | System | int64 `[run_id, accepted_structure_number]` |
 
-For `Z′ > 1`, ASU atom and molecule indices include every repeated independent
+For `Z' > 1`, ASU atom and molecule indices include every repeated independent
 formula unit. Toolkit Batch selection and cloning preserve aligned fields.
 To type a saved relaxed Batch later, retain the ordered formula-unit atomic
 numbers and bond matrix once alongside the search results and rebuild its

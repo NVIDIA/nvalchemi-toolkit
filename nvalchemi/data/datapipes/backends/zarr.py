@@ -298,7 +298,7 @@ def _get_field_level(key: str) -> str:
 # Policy: merge adjacent sorted physical indices into contiguous ranges when
 # the gap between them is <= *gap_threshold* (defaults to the batch size).
 # This reduces the number of Zarr codec-pipeline / shard-index round trips
-# — the dominant cost for random access — at the expense of reading some
+# -- the dominant cost for random access -- at the expense of reading some
 # unrequested rows ("read amplification").
 #
 # To keep amplification bounded, each merged range is capped so that
@@ -510,22 +510,22 @@ class AtomicDataZarrWriter:
     .. code-block:: text
 
         dataset.zarr/
-        ├── meta/                       # Pointer arrays + masks
-        │   ├── atoms_ptr               # int64 [N+1] — cumulative node counts
-        │   ├── edges_ptr               # int64 [N+1] — cumulative edge counts
-        │   ├── samples_mask            # bool [N] — False = deleted sample
-        │   ├── atoms_mask              # bool [V_total] — False = deleted atom
-        │   └── edges_mask              # bool [E_total] — False = deleted edge
-        │
-        ├── core/                       # AtomicData fields (auto-populated)
-        │   ├── atomic_numbers          # int64 [V_total]
-        │   ├── positions               # float32 [V_total, 3]
-        │   └── ...
-        │
-        ├── custom/                     # User-defined arrays (optional)
-        │   └── <user_key>              # any dtype, any shape
-        │
-        └── .zattrs                     # root metadata
+        +-- meta/                       # Pointer arrays + masks
+        |   +-- atoms_ptr               # int64 [N+1] -- cumulative node counts
+        |   +-- edges_ptr               # int64 [N+1] -- cumulative edge counts
+        |   +-- samples_mask            # bool [N] -- False = deleted sample
+        |   +-- atoms_mask              # bool [V_total] -- False = deleted atom
+        |   `-- edges_mask              # bool [E_total] -- False = deleted edge
+        |
+        +-- core/                       # AtomicData fields (auto-populated)
+        |   +-- atomic_numbers          # int64 [V_total]
+        |   +-- positions               # float32 [V_total, 3]
+        |   `-- ...
+        |
+        +-- custom/                     # User-defined arrays (optional)
+        |   `-- <user_key>              # any dtype, any shape
+        |
+        `-- .zattrs                     # root metadata
 
     Parameters
     ----------
@@ -2031,17 +2031,17 @@ class AtomicDataZarrReader(Reader):
     .. code-block:: text
 
         dataset.zarr/
-        ├── meta/                       # Pointer arrays + masks
-        │   ├── atoms_ptr               # int64 [N+1] — cumulative node counts
-        │   ├── edges_ptr               # int64 [N+1] — cumulative edge counts
-        │   └── samples_mask            # bool [N] — False = deleted sample
-        │
-        ├── core/                       # AtomicData fields
-        │   ├── atomic_numbers          # int64 [V_total]
-        │   ├── positions               # float32 [V_total, 3]
-        │   └── ...
-        │
-        └── custom/                     # User-defined arrays (optional)
+        +-- meta/                       # Pointer arrays + masks
+        |   +-- atoms_ptr               # int64 [N+1] -- cumulative node counts
+        |   +-- edges_ptr               # int64 [N+1] -- cumulative edge counts
+        |   `-- samples_mask            # bool [N] -- False = deleted sample
+        |
+        +-- core/                       # AtomicData fields
+        |   +-- atomic_numbers          # int64 [V_total]
+        |   +-- positions               # float32 [V_total, 3]
+        |   `-- ...
+        |
+        `-- custom/                     # User-defined arrays (optional)
 
     Parameters
     ----------
@@ -2051,7 +2051,7 @@ class AtomicDataZarrReader(Reader):
         or a dict for in-memory buffer storage.
     pin_memory : bool, default=False
         If True, place tensors in pinned (page-locked) memory for faster
-        async CPU→GPU transfers.
+        async CPU->GPU transfers.
     include_index_in_metadata : bool, default=True
         If True, include sample index in the metadata dict.
     fields : Sequence[str] | None, default=None

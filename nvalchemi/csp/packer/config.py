@@ -73,11 +73,11 @@ class OverlapReliefConfig(BaseModel):
         Checks also occur at iteration zero and at candidate expiry.
     overlap_tolerance : float, default=0.05
         Largest positive overlap allowed between atoms in different molecular
-        copies, in Å.
+        copies, in angstroms.
     max_step : float, default=0.3
-        Upper bound in Å on the small-rotation estimate of per-atom movement
-        used to scale one rigid update. A finite rotation can move an atom
-        slightly farther.
+        Upper bound in angstroms on the small-rotation estimate of per-atom
+        movement used to scale one rigid update. A finite rotation can move an
+        atom slightly farther.
     step_scale : float, default=0.12
         Scale applied to numerical clash-removal forces and torques; these are
         not physical model forces.
@@ -89,14 +89,14 @@ class OverlapReliefConfig(BaseModel):
         Strength of compression when a cell exceeds its sampled reference
         volume.
     min_cell_height : float, default=3.8
-        Minimum perpendicular cell height for initial sampling, in Å.
-        Relaxation separately rejects proposed cells below 2.5 Å.
+        Minimum perpendicular cell height for initial sampling, in angstroms.
+        Relaxation separately rejects proposed cells below 2.5 angstroms.
     max_axis_ratio : float, default=10.0
         Largest cell-axis length ratio allowed during initial sampling.
     cell_oversample_factor : float, default=1.5
         Multiplier for the number of initial cell trials.
     cell_volume_range : tuple[float, float], optional
-        Inclusive initial conventional-cell volume range, in Å³.
+        Inclusive initial conventional-cell volume range, in cubic angstroms.
     cell_volume_scale_range : tuple[float, float], optional
         Initial volume multipliers applied to formula-unit volume times ``z``.
         Supply exactly one of the two volume ranges.

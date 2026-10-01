@@ -434,7 +434,7 @@ class RDKitConformerConfig(BaseModel):
         Nonnegative RDKit random seed. ``None`` leaves RDKit's random seed unset.
     prune_rms_thresh : float, default=-1.0
         Discard a newly generated conformer if its heavy-atom geometry is too
-        similar to one already retained. The threshold is RMSD in Å; ``-1``
+        similar to one already retained. The threshold is RMSD in angstroms; ``-1``
         disables this pruning.
     embed_force_tol : float, default=0.05
         ETKDG embedding cleanup tolerance passed to RDKit.
@@ -551,7 +551,7 @@ def build_contact_distance_matrix(
     Returns
     -------
     torch.Tensor, shape ``[A, A]``, dtype ``torch.float32``
-        Owned symmetric contact cutoffs in Å. Entry ``[i, j]`` defines overlap
+        Owned symmetric contact cutoffs in angstroms. Entry ``[i, j]`` defines overlap
         between atoms ``i`` and ``j`` in different molecular copies; distances
         within one rigid molecule are not measured against this matrix.
         ``OverlapReliefPacker`` may accept residual overlap up to
@@ -570,7 +570,7 @@ def build_contact_distance_matrix(
     Notes
     -----
     Defaults begin with van der Waals radius sums and apply the strongest
-    symmetric donor/acceptor reduction, capped at 0.90 Å. The rules include
+    symmetric donor/acceptor reduction, capped at 0.90 angstroms. The rules include
     hydrogen, halogen, chalcogen, phosphorus, silicon, and boron cases. Known
     element radii are built in; using RDKit's periodic-table fallback emits a
     ``RuntimeWarning``. These experimental chemistry rules and values may
@@ -579,8 +579,8 @@ def build_contact_distance_matrix(
     Examples
     --------
     This methanol input has carbon and oxygen atoms; its implicit hydrogens
-    have no separate rows in the matrix. The C–O entry applies to atoms in
-    different copies, not to the C–O bond inside one methanol molecule.
+    have no separate rows in the matrix. The C-O entry applies to atoms in
+    different copies, not to the C-O bond inside one methanol molecule.
 
     >>> from rdkit import Chem
     >>> molecule = Chem.MolFromSmiles("CO")
@@ -616,14 +616,14 @@ def build_molecular_packing_input(
         :func:`generate_conformers_from_smiles` adds explicit hydrogens before
         embedding.
     contact_distances : torch.Tensor, shape ``[A, A]``, optional
-        Custom atom-pair contact cutoffs in Å. Accepted structures may fall
+        Custom atom-pair contact cutoffs in angstroms. Accepted structures may fall
         below these distances by the configured overlap tolerance. When
         omitted, experimental topology-derived contact rules are used.
         Supplied values are copied, converted to float32, checked for
         positivity and symmetry, and symmetrized within tolerance.
     formula_unit_volume : float, optional
-        Positive formula-unit volume in Å³. When omitted, the Toolkit atomic
-        volume estimate is used.
+        Positive formula-unit volume in cubic angstroms. When omitted, the Toolkit
+        atomic volume estimate is used.
     component_index : torch.Tensor, int32 ``[F]``, optional
         Contiguous component IDs, one per molecule. Defaults to ``0..F-1``;
         repeated IDs can group molecules that belong to the same component.

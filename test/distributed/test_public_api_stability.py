@@ -23,7 +23,7 @@ internal namespace silently breaks downstream code; deleting one without
 a deprecation cycle does too.
 
 This test asserts the canonical names resolve to objects (lazy or
-eager). It is *the* stability boundary — if you intentionally rename
+eager). It is *the* stability boundary -- if you intentionally rename
 or remove a name, update :data:`EXPECTED_PUBLIC_NAMES`.
 """
 
@@ -47,7 +47,7 @@ EXPECTED_PUBLIC_NAMES: frozenset[str] = frozenset(
         "autograd_target",
         "pin_fp32",
         "reshard_by_destination",
-        # Top layer — declarative spec types a model author names in a wrapper's
+        # Top layer -- declarative spec types a model author names in a wrapper's
         # ``distribution_spec``.
         "AdapterRegistry",
         "AdapterStatus",
@@ -69,7 +69,7 @@ EXPECTED_PUBLIC_NAMES: frozenset[str] = frozenset(
         "PythonAdapter",
         "Reduce",
         "trace_and_validate",
-        # Middle layer — intent vocabulary, re-exported here for convenience
+        # Middle layer -- intent vocabulary, re-exported here for convenience
         # (canonical home: ``nvalchemi.distributed.helpers``).
         "Scope",
         "current_dd_context",
@@ -93,20 +93,20 @@ EXPECTED_PUBLIC_NAMES: frozenset[str] = frozenset(
     }
 )
 
-# The bottom layer (``nvalchemi.distributed.ops``) — communication mechanism
-# only. The intent vocabulary (``refresh_neighbors`` / ``system_sum`` / …) lives
+# The bottom layer (``nvalchemi.distributed.ops``) -- communication mechanism
+# only. The intent vocabulary (``refresh_neighbors`` / ``system_sum`` / ...) lives
 # one layer up in ``nvalchemi.distributed.helpers``; the declarative spec types
 # (adapters / ``DistributionSpec`` / ``GraphPadder`` family) at the top in
-# ``nvalchemi.distributed``. This module never re-exports those upward layers —
+# ``nvalchemi.distributed``. This module never re-exports those upward layers --
 # it is the stability boundary for the raw primitives.
 EXPECTED_OPS_NAMES: frozenset[str] = frozenset(
     {
-        # halo exchange — eager
+        # halo exchange -- eager
         "halo_forward_exchange",
         "halo_reverse_exchange",
         "particle_halo_padding_autograd",
         "pad_field",
-        # halo — compile / fixed-shape static ops
+        # halo -- compile / fixed-shape static ops
         "halo_forward_static_op",
         "halo_scatter_correct_static_op",
         "halo_forward_static_from_meta",
@@ -218,7 +218,7 @@ def test_ops_dunder_all_matches() -> None:
 
 def test_ops_star_import_is_clean() -> None:
     """``from nvalchemi.distributed.ops import *`` exposes exactly
-    ``__all__`` — no private leakage, no missing name."""
+    ``__all__`` -- no private leakage, no missing name."""
     ns: dict[str, object] = {}
     exec("from nvalchemi.distributed.ops import *", ns)  # noqa: S102
     exported = {k for k in ns if not k.startswith("__")}
@@ -227,14 +227,14 @@ def test_ops_star_import_is_clean() -> None:
 
 def test_no_core_import_needed_for_byo() -> None:
     """An author can pull adapters, the spec types, halo primitives, and a
-    storage policy from the *public* surface alone — zero ``_core``
+    storage policy from the *public* surface alone -- zero ``_core``
     imports."""
-    from nvalchemi.distributed import (  # noqa: F401  — public
+    from nvalchemi.distributed import (  # noqa: F401  -- public
         DistributionSpec,
         MLIPSpec,
         OpAdapter,
     )
-    from nvalchemi.distributed.ops import (  # noqa: F401  — public
+    from nvalchemi.distributed.ops import (  # noqa: F401  -- public
         HaloStoragePolicy,
         ShardTensor,
         halo_forward_exchange,
