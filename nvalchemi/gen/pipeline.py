@@ -21,8 +21,8 @@ engines, or any ``Batch -> Batch`` callable — mirroring the dynamics
 ``DistributedPipeline``; here ``AtomisticGenerator.__or__`` builds a
 ``GenerationPipeline``).
 
-Example
--------
+Examples
+--------
 ::
 
     pipe = gen_a | gen_b | optimizer
@@ -219,19 +219,17 @@ class GenerationPipeline(BaseModel):
         return self
 
     def _infer_device(self) -> torch.device | None:
-        """Infer the session device from the first AtomisticGenerator stage.
-
-        Resolves the stage's device chain (``device`` field, then the
-        generating function's ``device`` attribute).
+        """Read the bound device from the first AtomisticGenerator stage.
 
         Returns
         -------
         torch.device | None
-            The device, or ``None`` when no AtomisticGenerator stage can provide one.
+            The construction-bound device, or ``None`` when the first
+            AtomisticGenerator stage is unmanaged or no such stage exists.
         """
         for stage in self.stages:
             if isinstance(stage, AtomisticGenerator):
-                return stage._infer_device()
+                return stage.device
         return None
 
     def __enter__(self) -> GenerationPipeline:
@@ -280,7 +278,7 @@ class GenerationPipeline(BaseModel):
                 if isinstance(stage, AtomisticGenerator):
                     if stage.dedicated_stream and (
                         self._stream is None
-                        or stage._infer_device() in (None, self._stream.device)
+                        or stage.device in (None, self._stream.device)
                     ):
                         stage._stream = self._stream
                     stage.__enter__()

@@ -589,10 +589,6 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         self._compiled_generate = torch.compile(self.generator_func, **merged)
         return self
 
-    def _infer_device(self) -> torch.device | None:
-        """Return the execution device bound at construction, or None."""
-        return self.device
-
     def __enter__(self) -> AtomisticGenerator:
         """Enter a generation session.
 
@@ -628,7 +624,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                 # generation produces no autograd history inside a session
                 stack.enter_context(torch.inference_mode())
             if self._stream is None:
-                device = self._infer_device()
+                device = self.device
                 if (
                     device is not None
                     and device.type == "cuda"
@@ -640,7 +636,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                     self._stream_ctx = torch.cuda.stream(self._stream)
                     stack.enter_context(self._stream_ctx)
             if self.seed is not None and self._session_rng is None:
-                device = self._infer_device()
+                device = self.device
                 rng_device = (
                     device if device is not None and device.type == "cuda" else "cpu"
                 )
@@ -744,7 +740,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
             if self._session_rng is not None:
                 rng = self._session_rng
             elif self.seed is not None:
-                device = self._infer_device()
+                device = self.device
                 rng = torch.Generator(
                     device=device if device is not None else "cpu"
                 ).manual_seed(self.seed + ctx.step_count)
@@ -877,7 +873,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
             ctx.batch = ctx.sample
             self._call_hooks(GenerationStage.AFTER_GENERATE, None)
             batch = ctx.batch
-            device = self._infer_device()
+            device = self.device
             if (
                 device is not None
                 and not torch.compiler.is_compiling()
