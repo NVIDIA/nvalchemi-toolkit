@@ -344,9 +344,11 @@ class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
     convergence_hook : ConvergenceHook or dict, optional
         Convergence criterion.
     cell_force_scale : float
-        Multiplier on the atom count normalizing stress-derived cell forces;
-        raise it to move the cell less per step.  Fixed once state is
-        allocated.  Default 1.0.
+        Fixed once state is allocated — unlike ``FIRE2VariableCell``'s
+        ``cell_force_scale``, which is a plain mutable attribute read every
+        step; the two share a name and purpose but not a mutability
+        contract.  Multiplier on the atom count normalizing stress-derived
+        cell forces; raise it to move the cell less per step.  Default 1.0.
     **kwargs
         Forwarded to :class:`~nvalchemi.dynamics.base.BaseDynamics`.
 
