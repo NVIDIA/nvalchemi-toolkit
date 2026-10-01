@@ -906,6 +906,34 @@ class TestNEBRun:
                     getattr(standalone_batch, field),
                 )
 
+    @pytest.mark.parametrize("endpoint_status", [1, 2])
+    def test_runs_on_interpolated_completed_endpoints(
+        self, endpoint_status: int, device: str
+    ) -> None:
+        """Endpoint completion must not prevent newly interpolated images moving."""
+        endpoints = _bands(device)
+        endpoints.positions[:, 1] = 1.0
+        endpoints.status = torch.full(
+            (endpoints.num_graphs, 1), endpoint_status, dtype=torch.long, device=device
+        )
+        initial = endpoints[[0]]
+        final = endpoints[[2]]
+        bands = interpolate_paths(initial, final, 3)
+        positions = bands.positions.clone()
+        bands.velocities = torch.zeros_like(bands.positions)
+
+        result = NEB(
+            model=_CompilerFriendlyModel().to(device).eval(),
+            fmax=1.0e-6,
+            n_steps=2,
+            optimizer_kwargs={"device_type": device},
+        ).run(bands)
+
+        assert result.positions[1, 1] < positions[1, 1]
+        torch.testing.assert_close(result.positions[[0, 2]], positions[[0, 2]])
+        assert torch.all(initial.status == endpoint_status)
+        assert torch.all(final.status == endpoint_status)
+
     def test_compile_executes_strategy(self, device: str) -> None:
         torch.compiler.reset()
         try:

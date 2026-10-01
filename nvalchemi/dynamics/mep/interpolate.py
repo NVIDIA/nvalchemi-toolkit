@@ -43,6 +43,7 @@ _STALE_FIELDS = frozenset(
         "velocities",
         "momenta",
         "kinetic_energies",
+        "status",
     }
 )
 
