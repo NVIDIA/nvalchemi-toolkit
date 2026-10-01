@@ -139,6 +139,7 @@ class LoggingHook:
     stage : enum.Enum, optional
         Dynamics stage at which to log. Default
         :attr:`~nvalchemi.dynamics.base.DynamicsStage.AFTER_STEP`.
+        Logging at ``ON_GRADUATE`` still respects ``frequency``.
     by_group : bool, optional
         Write one row per group instead of one row per graph. Group logging
         requires the batch to have a group layout and expects tensor-valued
@@ -301,6 +302,9 @@ class LoggingHook:
     @torch.compiler.disable
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Log scalar observables for the current step."""
+        # Graduation dispatch bypasses the engine's normal frequency gate.
+        if stage == DynamicsStage.ON_GRADUATE and ctx.step_count % self.frequency != 0:
+            return
         self._log(ctx.batch, ctx.step_count, ctx)
 
     # ------------------------------------------------------------------

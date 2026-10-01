@@ -32,7 +32,12 @@ from pydantic import (
 )
 
 from nvalchemi._serialization import SerializableClass
-from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, FusedStage
+from nvalchemi.dynamics.base import (
+    BaseDynamics,
+    ConvergenceHook,
+    DynamicsStage,
+    FusedStage,
+)
 from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
 from nvalchemi.dynamics.mep.hooks import (
     ClimbingImageSelectionHook,
@@ -534,6 +539,7 @@ class NEB(DynamicsStrategy):
                 [
                     diagnostics_hook,
                     LoggingHook(
+                        stage=DynamicsStage.ON_GRADUATE,
                         backend="csv",
                         frequency=self.diagnostics_frequency,
                         log_path=self.diagnostics_log_path,

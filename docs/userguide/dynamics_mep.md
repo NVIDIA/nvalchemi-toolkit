@@ -337,7 +337,7 @@ only needed once you have more than one stage, e.g. climbing-image NEB (see
 below). The example uses {py:class}`~nvalchemi.dynamics.optimizers.fire2.FIRE2`.
 
 ```python
-from nvalchemi.dynamics import ConvergenceHook
+from nvalchemi.dynamics import ConvergenceHook, DynamicsStage
 from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
 from nvalchemi.dynamics.optimizers.fire2 import FIRE2
 from nvalchemi.dynamics.mep.hooks import (
@@ -357,6 +357,7 @@ force_hook = NEBForceHook(
 freeze = FreezeAtomsHook(mask_key="neb_fixed_node_mask")
 diagnostics = PathDiagnosticsHook(energy_stats_hook=energy_stats)
 logger = LoggingHook(
+    stage=DynamicsStage.AFTER_STEP,
     backend="csv",
     log_path="neb_diagnostics.csv",
     by_group=True,
@@ -419,10 +420,15 @@ The NEB path hooks, in the order they must be registered:
    Accepts a `frequency` to throttle recomputation on long runs.
 6. **{py:class}`~nvalchemi.dynamics.hooks.LoggingHook`** (optional, pairs with
    step 5): reads `diagnostics.get_diagnostics()` through `custom_scalars`
-   callbacks and writes per-path rows to CSV. This is exactly how `NEB` wires
+   callbacks and writes per-path rows to CSV. This is how `NEB` wires
    `diagnostics_log_path`: both this hook and `PathDiagnosticsHook` should
    share the same `frequency`/`diagnostics_frequency` so the CSV rows line up
    with the diagnostics they log.
+
+The manual single-stage example logs at `AFTER_STEP`. The `NEB` strategy
+logs at `ON_GRADUATE` so scheduled rows see status after stage-budget
+transitions. Both retain the configured frequency. Finishing between logging
+intervals does not produce an extra row.
 
 All of these hooks require the enclosing workflow to be constructed with
 `by_group=True` (each `group_layout` group is one path) and raise

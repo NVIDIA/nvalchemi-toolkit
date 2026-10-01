@@ -590,7 +590,7 @@ class TestNEBConfiguration:
         assert first_diagnostics.frequency == 5
         assert first_logger.frequency == first_diagnostics.frequency
         assert first_logger.by_group is True
-        assert first_logger.stage is DynamicsStage.AFTER_STEP
+        assert first_logger.stage is DynamicsStage.ON_GRADUATE
         assert set(first_logger.custom_scalars or {}) == {
             "fmax",
             "energy_barrier",
@@ -1041,6 +1041,43 @@ class TestNEBRun:
             torch.isfinite(torch.tensor(float(rows[0][name])))
             for name in ("fmax", "energy_barrier", "path_length")
         )
+
+    @pytest.mark.parametrize(
+        ("frequency", "climbing_steps", "expected_steps", "last_status"),
+        [(5, 4, [0, 5], 2), (5, 2, [0], 1)],
+    )
+    def test_csv_reports_budget_status_at_logging_interval(
+        self,
+        tmp_path: Path,
+        frequency: int,
+        climbing_steps: int,
+        expected_steps: list[int],
+        last_status: int,
+    ) -> None:
+        """Scheduled rows see budget transitions without extra completion rows."""
+        log_path = tmp_path / "budget.csv"
+        bands = _bands()
+        bands.positions[:, 1] = 1.0
+        result = NEB(
+            model=_CompilerFriendlyModel().eval(),
+            fmax=1.0e-12,
+            n_steps=10,
+            climbing=ClimbingImageConfig(
+                max_regular_steps=1,
+                max_climbing_steps=climbing_steps,
+            ),
+            diagnostics_log_path=log_path,
+            diagnostics_frequency=frequency,
+        ).run(bands)
+        with log_path.open(newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        assert torch.all(result.status == 2)
+        assert [int(float(row["step"])) for row in rows] == expected_steps
+        assert float(rows[-1]["status"]) == last_status
+        if last_status == 2:
+            assert float(rows[-1]["fmax"]) == pytest.approx(
+                result.forces.norm(dim=-1).max().item()
+            )
 
     @pytest.mark.parametrize(
         ("climbing", "exit_status"),
