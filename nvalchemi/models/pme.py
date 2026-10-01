@@ -69,7 +69,7 @@ from torch import nn
 
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models._derivatives import _DerivativeRequest, _reject_derivative_request
+from nvalchemi.models._derivatives import DerivativeNotSupported, _DerivativeRequest
 from nvalchemi.models._utils import cell_cache_needs_update
 from nvalchemi.models.base import (
     BaseModelMixin,
@@ -467,16 +467,20 @@ class PMEModelWrapper(nn.Module, BaseModelMixin):
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
         """Validate PME's local differentiable-energy capability."""
         if self.hybrid_forces:
-            _reject_derivative_request(
-                self,
-                request,
-                "PME second-order derivatives require hybrid_forces=False",
+            raise DerivativeNotSupported(
+                model_name=type(self).__name__,
+                operation=request.operation,
+                execution=request.execution,
+                strategy=request.strategy,
+                reason="PME second-order derivatives require hybrid_forces=False",
             )
         if self.slab_correction:
-            _reject_derivative_request(
-                self,
-                request,
-                "PME second-order derivatives do not support slab_correction=True",
+            raise DerivativeNotSupported(
+                model_name=type(self).__name__,
+                operation=request.operation,
+                execution=request.execution,
+                strategy=request.strategy,
+                reason="PME second-order derivatives do not support slab_correction=True",
             )
 
     @property

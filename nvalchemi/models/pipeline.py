@@ -59,8 +59,8 @@ from nvalchemi._typing import (
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.hooks import Hook, NeighborListHook
 from nvalchemi.models._derivatives import (
+    DerivativeNotSupported,
     _DerivativeRequest,
-    _reject_derivative_request,
     _temporary_model_config,
 )
 from nvalchemi.models._ops.neighbor_filter import prepare_neighbors_for_model
@@ -798,18 +798,22 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
     def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
         """Validate one local derivative request across pipeline steps."""
         if request.execution != "local":
-            _reject_derivative_request(
-                self,
-                request,
-                "distributed second-order derivatives are not supported",
+            raise DerivativeNotSupported(
+                model_name=type(self).__name__,
+                operation=request.operation,
+                execution=request.execution,
+                strategy=request.strategy,
+                reason="distributed second-order derivatives are not supported",
             )
         for group_index, group in enumerate(self.groups):
             for step_index, step in enumerate(group.steps):
                 if isinstance(step.model, PipelineModelWrapper):
-                    _reject_derivative_request(
-                        self,
-                        request,
-                        "nested PipelineModelWrapper at "
+                    raise DerivativeNotSupported(
+                        model_name=type(self).__name__,
+                        operation=request.operation,
+                        execution=request.execution,
+                        strategy=request.strategy,
+                        reason="nested PipelineModelWrapper at "
                         f"group[{group_index}].step[{step_index}] does not support "
                         "derivative requests; flatten the pipeline before requesting "
                         "derivatives",
@@ -817,10 +821,12 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
 
         plan = self._build_derivative_plan()
         if not plan:
-            _reject_derivative_request(
-                self,
-                request,
-                "the pipeline has no energy-producing step",
+            raise DerivativeNotSupported(
+                model_name=type(self).__name__,
+                operation=request.operation,
+                execution=request.execution,
+                strategy=request.strategy,
+                reason="the pipeline has no energy-producing step",
             )
 
         for step in plan:
@@ -834,10 +840,12 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
                 strategy=request.strategy,
             )
             if child_request.execution != "local":
-                _reject_derivative_request(
-                    step.model,
-                    child_request,
-                    "distributed second-order derivatives are not supported",
+                raise DerivativeNotSupported(
+                    model_name=type(step.model).__name__,
+                    operation=child_request.operation,
+                    execution=child_request.execution,
+                    strategy=child_request.strategy,
+                    reason="distributed second-order derivatives are not supported",
                 )
             step.model._validate_derivative_request(child_request)
 

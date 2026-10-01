@@ -73,8 +73,8 @@ from nvalchemi._optional import OptionalDependency
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models._derivatives import (
+    DerivativeNotSupported,
     _DerivativeRequest,
-    _reject_derivative_request,
 )
 from nvalchemi.models.base import (
     BaseModelMixin,
@@ -680,10 +680,12 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             # separate Hessian-row batch even for one physical system, but
             # ``cuequivariance::uniform_1d`` has no vmap batching rule and
             # PyTorch cannot generate a fallback for this operator.
-            _reject_derivative_request(
-                self,
-                request,
-                "cuEquivariance operator cuequivariance::uniform_1d does not "
+            raise DerivativeNotSupported(
+                model_name=type(self).__name__,
+                operation=request.operation,
+                execution=request.execution,
+                strategy=request.strategy,
+                reason="cuEquivariance operator cuequivariance::uniform_1d does not "
                 "provide the batching rule required by dense strategy='vmap'; "
                 "use strategy='loop'",
             )

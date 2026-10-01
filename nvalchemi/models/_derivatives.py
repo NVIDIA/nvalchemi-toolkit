@@ -22,7 +22,7 @@ from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from functools import partial
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Literal, NoReturn, Self
+from typing import TYPE_CHECKING, Any, Literal, Self
 
 import torch
 from torch import Tensor
@@ -103,32 +103,6 @@ class DerivativeNotSupported(NotImplementedError):
             ),
             (),
         )
-
-
-def _reject_derivative_request(
-    model: object,
-    request: _DerivativeRequest,
-    reason: str,
-) -> NoReturn:
-    """Raise the common contextual error for an unsupported derivative.
-
-    Parameters
-    ----------
-    model : object
-        Wrapper rejecting the request.  Its class name is included in the
-        public error to identify the unsupported model boundary.
-    request : _DerivativeRequest
-        Context and operation being rejected.
-    reason : str
-        Configuration-specific explanation of the rejection.
-    """
-    raise DerivativeNotSupported(
-        model_name=type(model).__name__,
-        operation=request.operation,
-        execution=request.execution,
-        strategy=request.strategy,
-        reason=reason,
-    )
 
 
 _CONFIG_OVERRIDE_UNSET = object()
@@ -616,10 +590,12 @@ def _prepare_derivative_graph(
         raise TypeError(f"batch must be a Batch, got {type(batch).__name__}")
 
     if request.execution != "local":
-        _reject_derivative_request(
-            model,
-            request,
-            "distributed second-order derivatives are not supported",
+        raise DerivativeNotSupported(
+            model_name=type(model).__name__,
+            operation=request.operation,
+            execution=request.execution,
+            strategy=request.strategy,
+            reason="distributed second-order derivatives are not supported",
         )
     model._validate_derivative_request(request)
 

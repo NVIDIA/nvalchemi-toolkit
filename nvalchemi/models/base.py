@@ -29,13 +29,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models._derivatives import (
+    DerivativeNotSupported,
     HessianOperator,
     _attach_hessian_blocks,
     _dense_hessian_blocks,
     _DerivativeRequest,
     _position_gradient,
     _prepare_derivative_graph,
-    _reject_derivative_request,
     _validate_hessian_vector,
     _ValidatedDenseHessianRequest,
 )
@@ -550,10 +550,12 @@ class BaseModelMixin(abc.ABC):
         DerivativeNotSupported
             Always, unless a wrapper that supports derivatives overrides it.
         """
-        _reject_derivative_request(
-            self,
-            request,
-            "the wrapper does not support second-order derivatives",
+        raise DerivativeNotSupported(
+            model_name=type(self).__name__,
+            operation=request.operation,
+            execution=request.execution,
+            strategy=request.strategy,
+            reason="the wrapper does not support second-order derivatives",
         )
 
     def _derivative_energy(self, data: Batch) -> torch.Tensor:
