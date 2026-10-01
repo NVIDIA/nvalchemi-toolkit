@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import warnings
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
@@ -38,6 +39,7 @@ from nvalchemi.dynamics.integrators.nve import NVE
 from nvalchemi.dynamics.optimizers.fire import FIRE
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 from nvalchemi.dynamics.sinks import HostMemory
+from nvalchemi.hooks import DynamicsContext
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training import (
     EnergyMSELoss,
@@ -54,6 +56,7 @@ from nvalchemi.training.distillation import (
     TeacherLabelHook,
     nonfinite_divergence,
 )
+from nvalchemi.training.distillation.hooks import _DivergenceHook
 from nvalchemi.training.distillation.scoring import TeacherLabels
 from nvalchemi.training.distillation.strategy import _relaxation_lifecycle
 from test.training.conftest import _build_demo_model
@@ -139,6 +142,23 @@ def _diverge_as_floats(batch: Batch) -> torch.Tensor:
 def _diverge_as_list(batch: Batch) -> list[bool]:
     """Divergence predicate returning a list instead of a tensor."""
     return [False] * batch.num_graphs
+
+
+def _diverge_first_on_host(batch: Batch) -> torch.Tensor:
+    """Divergence predicate judging on the host, flagging the first graph, wherever the batch lives."""
+    flags = torch.zeros(batch.num_graphs, dtype=torch.bool)
+    flags[0] = True
+    return flags
+
+
+def _record_divergence(device: str) -> tuple[_DivergenceHook, Batch]:
+    """Run the divergence hook once over three structures on *device*."""
+    batch = _build_propagator_batch(_INITIAL_ELEMENT, 3, base_seed=500).to(device)
+    batch["status"] = torch.zeros(3, 1, dtype=torch.long, device=batch.device)
+    hook = _DivergenceHook(_diverge_first_on_host)
+    ctx = DynamicsContext(batch=batch, workflow=SimpleNamespace(exit_status=1))
+    hook(ctx, DynamicsStage.AFTER_STEP)
+    return hook, batch
 
 
 def _make_sized_dataset(sizes: list[int]) -> InMemoryDataset:
@@ -1422,6 +1442,25 @@ class TestRelaxationDivergence:
             strategy.run()
 
 
+class TestDivergenceVerdictDevice:
+    def test_the_verdict_is_recorded_on_the_batch_device(self) -> None:
+        """The record the other routes read lives where the batch does."""
+        hook, batch = _record_divergence("cpu")
+
+        assert hook.diverged is not None
+        assert hook.diverged.device == batch.device
+        assert hook.diverged.tolist() == [True, False, False]
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_a_host_verdict_is_accepted_for_a_batch_on_the_device(self) -> None:
+        """A predicate judging on the host freezes the graph of a batch on the accelerator."""
+        hook, batch = _record_divergence("cuda")
+
+        assert hook.diverged is not None
+        assert hook.diverged.device == batch.device
+        assert batch.status.view(-1).tolist() == [1, 0, 0]
+
+
 class TestNonfiniteDivergence:
     def test_a_non_finite_position_flags_its_graph_alone(self) -> None:
         """One NaN coordinate marks the graph holding it and no other."""
@@ -1467,7 +1506,11 @@ class TestTeacherLabelHookExitStatus:
             exit_status=1,
         )
 
-        hook._label_frame(self._make_statused_batch(), 0)
+        hook._label_frame(
+            self._make_statused_batch(),
+            0,
+            dynamics=FIRE(_build_demo_model(), dt=0.1),
+        )
 
         assert sink.drain().num_graphs == 2
 
@@ -1479,7 +1522,11 @@ class TestTeacherLabelHookExitStatus:
             sink=sink,
         )
 
-        hook._label_frame(self._make_statused_batch(), 0)
+        hook._label_frame(
+            self._make_statused_batch(),
+            0,
+            dynamics=FIRE(_build_demo_model(), dt=0.1),
+        )
 
         assert sink.drain().num_graphs == 3
 

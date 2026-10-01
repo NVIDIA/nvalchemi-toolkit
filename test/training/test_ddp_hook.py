@@ -35,46 +35,17 @@ from torch.utils.data import (
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.hooks._context import HookContext, TrainContext
-from nvalchemi.training import TrainingStage
+from nvalchemi.training import OptimizerConfig, TrainingStage
 from nvalchemi.training.hooks import DDPHook
 from nvalchemi.training.strategy import TrainingStrategy
 from test.training.conftest import (
     _build_baseline_strategy_kwargs,
     _build_batch,
     _build_dataset,
+    _build_demo_model,
+    _FakeManager,
+    _RecordingDDP,
 )
-
-
-class _FakeManager:
-    """Structural distributed manager used by hook tests."""
-
-    def __init__(self, *, world_size: int = 2, rank: int = 0) -> None:
-        self.world_size = world_size
-        self.rank = rank
-        self.global_rank = rank
-        self.local_rank = rank
-        self.initialized = world_size > 1
-        self.device = torch.device("cpu")
-        self.broadcast_buffers = False
-        self.find_unused_parameters = False
-
-    def is_initialized(self) -> bool:
-        return self.initialized
-
-
-class _FakeDDP(torch.nn.Module):
-    """Small DDP stand-in that records constructor kwargs."""
-
-    calls: list[dict[str, Any]] = []
-
-    def __init__(self, module: torch.nn.Module, **kwargs: Any) -> None:
-        super().__init__()
-        self.module = module
-        self.kwargs = kwargs
-        type(self).calls.append(kwargs)
-
-    def forward(self, *args: Any, **kwargs: Any) -> Any:
-        return self.module(*args, **kwargs)
 
 
 class _CustomDistributedSampler(Sampler[int]):
@@ -161,6 +132,20 @@ class _ContextCaptureHook:
         self.contexts.append(ctx)
 
 
+class _WrappedKeysProbe:
+    """Record which models a DDPHook reports as wrapped at every forward pass."""
+
+    frequency = 1
+    stage = TrainingStage.BEFORE_FORWARD
+
+    def __init__(self, ddp: DDPHook) -> None:
+        self.ddp = ddp
+        self.seen: list[frozenset[str]] = []
+
+    def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:  # noqa: ARG002
+        self.seen.append(self.ddp.wrapped_keys)
+
+
 class _OptimizerParamHook:
     """Assert optimizers are constructed after DDP wrapping."""
 
@@ -174,7 +159,7 @@ class _OptimizerParamHook:
         assert isinstance(ctx, TrainContext)
         assert ctx.models is not None
         model = ctx.models["main"]
-        self.saw_wrapped_model = isinstance(model, _FakeDDP)
+        self.saw_wrapped_model = isinstance(model, _RecordingDDP)
         model_param_ids = {id(param) for param in model.parameters()}
         optimizer_param_ids = {
             id(param)
@@ -273,9 +258,9 @@ def _run_ddp_worker(
 
 
 @pytest.fixture(autouse=True)
-def _reset_fake_ddp() -> None:
-    """Reset fake DDP call history before every test."""
-    _FakeDDP.calls.clear()
+def _reset_recording_ddp() -> None:
+    """Reset the data-parallel stand-in's counters before every test."""
+    _RecordingDDP.reset()
 
 
 class TestDistributedManagerField:
@@ -329,7 +314,7 @@ class TestDDPHookWrapping:
     def test_wraps_before_optimizer_construction_and_restores(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _FakeDDP)
+        monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _RecordingDDP)
         ddp = DDPHook(find_unused_parameters=True, broadcast_buffers=False)
         recorder = _OptimizerParamHook()
         strategy = _make_strategy(
@@ -343,7 +328,7 @@ class TestDDPHookWrapping:
 
         assert recorder.saw_wrapped_model
         assert strategy.models["main"] is original
-        assert _FakeDDP.calls == [
+        assert _RecordingDDP.calls == [
             {
                 "find_unused_parameters": True,
                 "broadcast_buffers": False,
@@ -351,10 +336,64 @@ class TestDDPHookWrapping:
             }
         ]
 
+    def test_wrapped_keys_name_the_models_while_they_are_wrapped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _RecordingDDP)
+        ddp = DDPHook()
+        probe = _WrappedKeysProbe(ddp)
+        strategy = _make_strategy(
+            distributed_manager=_FakeManager(),
+            hooks=[ddp, probe],
+            num_steps=1,
+        )
+        assert ddp.wrapped_keys == frozenset()
+
+        strategy.run([_build_batch()])
+
+        assert probe.seen == [frozenset({"main"})]
+        assert ddp.wrapped_keys == frozenset()
+
+    def test_wrapped_keys_follow_model_keys(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from test.training.test_strategy import dict_demo_training_fn
+
+        monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _RecordingDDP)
+        ddp = DDPHook(model_keys=("teacher",))
+        probe = _WrappedKeysProbe(ddp)
+        strategy = _make_strategy(
+            models={"student": _build_demo_model(), "teacher": _build_demo_model()},
+            optimizer_configs={
+                "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+            },
+            training_fn=dict_demo_training_fn,
+            distributed_manager=_FakeManager(),
+            hooks=[ddp, probe],
+            num_steps=1,
+        )
+
+        strategy.run([_build_batch()])
+
+        assert probe.seen == [frozenset({"teacher"})]
+
+    def test_wrapped_keys_stay_empty_on_a_single_process(self) -> None:
+        ddp = DDPHook()
+        probe = _WrappedKeysProbe(ddp)
+        strategy = _make_strategy(
+            distributed_manager=_FakeManager(world_size=1),
+            hooks=[ddp, probe],
+            num_steps=1,
+        )
+
+        strategy.run([_build_batch()])
+
+        assert probe.seen == [frozenset()]
+
     def test_defaults_to_manager_ddp_flags(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _FakeDDP)
+        monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _RecordingDDP)
         manager = _FakeManager()
         manager.find_unused_parameters = True
         manager.broadcast_buffers = True
@@ -366,7 +405,7 @@ class TestDDPHookWrapping:
 
         strategy.run([_build_batch()])
 
-        assert _FakeDDP.calls == [
+        assert _RecordingDDP.calls == [
             {
                 "find_unused_parameters": True,
                 "broadcast_buffers": True,
@@ -374,8 +413,33 @@ class TestDDPHookWrapping:
             }
         ]
 
+    def test_named_models_train_on_one_device_per_rank(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from test.training.test_strategy import dict_demo_training_fn
+
+        monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _RecordingDDP)
+        student = _build_demo_model()
+        teacher = _build_demo_model()
+        strategy = _make_strategy(
+            models={"student": student, "teacher": teacher},
+            optimizer_configs={
+                "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+            },
+            training_fn=dict_demo_training_fn,
+            devices=[torch.device("cpu"), torch.device("cpu")],
+            distributed_manager=_FakeManager(),
+            hooks=[DDPHook()],
+            num_steps=1,
+        )
+
+        strategy.run([_build_batch()])
+
+        assert strategy.step_count == 1
+        assert len(_RecordingDDP.calls) == 1
+
     def test_unknown_model_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _FakeDDP)
+        monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _RecordingDDP)
         strategy = _make_strategy(
             distributed_manager=_FakeManager(),
             hooks=[DDPHook(model_keys=("missing",))],
@@ -403,7 +467,7 @@ class TestDDPHookDataloaderMutation:
     def test_strategy_setup_uses_workflow_dataloader(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _FakeDDP)
+        monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _RecordingDDP)
         manager = _FakeManager(rank=1)
         loader = DataLoader(
             _build_dataset(n_batches=4),
@@ -622,7 +686,7 @@ class TestDDPHookDataloaderMutation:
 
 
 def test_single_process_ddp_hook_is_noop(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _FakeDDP)
+    monkeypatch.setattr(torch.nn.parallel, "DistributedDataParallel", _RecordingDDP)
     strategy = _make_strategy(
         distributed_manager=_FakeManager(world_size=1),
         hooks=[DDPHook()],
@@ -631,7 +695,7 @@ def test_single_process_ddp_hook_is_noop(monkeypatch: pytest.MonkeyPatch) -> Non
 
     strategy.run([_build_batch()])
 
-    assert _FakeDDP.calls == []
+    assert _RecordingDDP.calls == []
 
 
 def test_torch_distributed_sampler_epoch_is_preserved() -> None:

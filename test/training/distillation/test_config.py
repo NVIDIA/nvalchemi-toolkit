@@ -191,6 +191,33 @@ class TestOnPolicySettings:
         assert rebuilt.probe is False
         assert rebuilt == settings
 
+    def test_rank_seed_stride_is_a_setting_a_recipe_carries(self) -> None:
+        """``rank_seed_stride`` defaults to the prime stride and round-trips."""
+        assert OnPolicySettings(**_make_settings_kwargs()).rank_seed_stride == 1_000_003
+        settings = OnPolicySettings(**_make_settings_kwargs(rank_seed_stride=17))
+
+        rebuilt = OnPolicySettings.model_validate(settings.model_dump(mode="json"))
+
+        assert rebuilt.rank_seed_stride == 17
+        assert rebuilt == settings
+
+    def test_require_wrapped_student_is_a_setting_a_recipe_carries(self) -> None:
+        """``require_wrapped_student`` defaults on and round-trips through JSON."""
+        assert OnPolicySettings(**_make_settings_kwargs()).require_wrapped_student
+        settings = OnPolicySettings(
+            **_make_settings_kwargs(require_wrapped_student=False)
+        )
+
+        rebuilt = OnPolicySettings.model_validate(settings.model_dump(mode="json"))
+
+        assert rebuilt.require_wrapped_student is False
+        assert rebuilt == settings
+
+    def test_a_non_positive_rank_seed_stride_is_rejected(self) -> None:
+        """A zero stride would put every rank on one seed stream."""
+        with pytest.raises(ValidationError):
+            OnPolicySettings(**_make_settings_kwargs(rank_seed_stride=0))
+
     def test_a_torch_device_is_read_back_as_its_name(self) -> None:
         """``replay_device`` is a string setting a recipe can carry as it stands."""
         settings = OnPolicySettings(

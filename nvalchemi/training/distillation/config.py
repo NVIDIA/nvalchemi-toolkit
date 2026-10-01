@@ -421,11 +421,20 @@ class OnPolicySettings(BaseModel):
         policy instance is passed to :class:`OnPolicyConfig` instead. Default
         ``"fifo"``.
     replay_device : str | None, optional
-        Device the replay buffer keeps frames on. Default ``None`` uses the
+        Device the replay buffer keeps frames on. An index-less ``cuda`` means
+        this rank's current CUDA device. Default ``None`` uses the
         device the reference dataset emits its batches on, or host memory when
         there is no reference dataset.
     seed : int, optional
         Base seed of every segment's mixture sampler. Default ``0``.
+    rank_seed_stride : int, optional
+        Seed offset between neighboring ranks on a multi-rank launch. Rank
+        ``r`` adds ``r * rank_seed_stride`` to its seeds. Default
+        ``1_000_003``.
+    require_wrapped_student : bool, optional
+        Whether a multi-rank run refuses to start unless the ``SETUP`` stage
+        replaced the student with a wrapper that owns it, as a ``DDPHook``
+        does. Default ``True``.
     fmax : float | None, optional
         Max force norm below which a generated trajectory counts as finished.
         Setting it turns on the trajectory lifecycle of a relaxation run, in
@@ -478,6 +487,28 @@ class OnPolicySettings(BaseModel):
     ``seed`` of replicate runs by at least
     ``num_steps // training_steps_per_segment``, because the sampler adds the
     segment index to it. See :ref:`training-distillation-api`.
+
+    On a multi-rank launch, each rank adds ``rank * rank_seed_stride`` to
+    ``seed`` and, through
+    :meth:`~nvalchemi.dynamics.BaseDynamics.seed_offset`, to every
+    ``random_seed`` that ``dynamics`` and its sub-stages expose. Ranks
+    therefore draw from the reference dataset independently and apply
+    different thermostat noise to the structures they were dealt. Both
+    streams add a step counter to their seed, so the stride has to stay above
+    every counter the run reaches; the default, ``1_000_003``, does so for a
+    run whose counters stay below it. Set a different stride when a replicate
+    launch's seeds would land on another rank's stride. A stage that holds
+    randomness the offset cannot move, such as a :class:`torch.Generator`
+    with no integer ``random_seed``, is named in a warning, and the caller
+    must give it a rank-distinct seed.
+
+    A multi-rank run also checks that the ``SETUP`` stage replaced the student
+    with a gradient-synchronizing wrapper. A wrapper that works in place, such
+    as FSDP2's ``fully_shard`` or hook-based synchronization, leaves the
+    student object unchanged and fails that check.
+    ``require_wrapped_student=False`` waives the check for such a wrapper, and
+    keeping the ranks' students in step then becomes the caller's
+    responsibility.
     """
 
     replay_ratio: Annotated[
@@ -558,7 +589,9 @@ class OnPolicySettings(BaseModel):
                 "Device the replay buffer keeps frames on, named as a string. "
                 "None uses the device the reference dataset emits its batches "
                 "on, so the mixture collates on one device, or host memory when "
-                "the run has no reference dataset."
+                "the run has no reference dataset. An index-less 'cuda' names "
+                "the device this rank has made current, which under a launcher "
+                "is the one it pinned this rank to."
             ),
         ),
     ] = None
@@ -574,6 +607,35 @@ class OnPolicySettings(BaseModel):
             ),
         ),
     ] = 0
+    rank_seed_stride: Annotated[
+        int,
+        Field(
+            default=1_000_003,
+            gt=0,
+            description=(
+                "Seed-space distance between neighboring ranks: rank r moves "
+                "seed, and every random_seed the propagator exposes, by "
+                "r * rank_seed_stride. Both streams add a step counter to the "
+                "base seed, so keep it above the run's step count. Set a "
+                "different stride when a replicate launch's seeds would land "
+                "on another rank's stride."
+            ),
+        ),
+    ] = 1_000_003
+    require_wrapped_student: Annotated[
+        bool,
+        Field(
+            default=True,
+            description=(
+                "Whether a multi-rank run refuses to start unless the SETUP "
+                "stage replaced models['student'] with a wrapper owning it, "
+                "the way a DDPHook does. False skips that check with a warning "
+                "for wrappers working in place (FSDP2 fully_shard, hook-based "
+                "gradient synchronization) and leaves keeping the ranks' "
+                "students in step to the caller."
+            ),
+        ),
+    ] = True
     fmax: Annotated[
         float | None,
         Field(
@@ -710,8 +772,10 @@ class OnPolicyConfig(OnPolicySettings):
         Scorer that labels generated frames. A custom scorer that declares
         ``label_fields`` lets the fields it writes be known before the run.
     initial_structures : InitialStructuresSource
-        Structures the generated trajectories start from, served from a
-        position that a restart resumes. Pass an
+        Structures the generated trajectories start from. They are served
+        from one position that backfills and restarts share. A multi-rank
+        launch deals them out strided, every ``world_size``-th structure to
+        each rank. Pass an
         :class:`~nvalchemi.training.distillation.InitialStructures`, any other
         object that implements the protocol, or a bare dataset, which is
         wrapped in an ``InitialStructures``.
@@ -948,9 +1012,10 @@ class OnPolicyConfig(OnPolicySettings):
             default=None,
             description=(
                 "Predicate over the live frame returning one boolean per graph, "
-                "set where the trajectory diverged; the lifecycle freezes and "
-                "retires those graphs uncaptured. None flags non-finite "
-                "positions or forces. Runtime-only: no recipe names it."
+                "set where the trajectory diverged; the lifecycle moves the "
+                "verdict onto the batch's device, then freezes and retires "
+                "those graphs uncaptured. None flags non-finite positions or "
+                "forces. Runtime-only: no recipe names it."
             ),
         ),
     ] = None

@@ -1705,6 +1705,41 @@ class TestAtomicDataZarrReaderIntrospection:
         assert schema["site_values"] == FieldSchema("sites", torch.float32, (2,))
         assert schema["metadata_values"] == FieldSchema("metadata", torch.float32, (1,))
 
+    def test_custom_fields_read_their_rows_from_axis_zero_whatever_their_name(
+        self, tmp_path: Path
+    ) -> None:
+        """A custom edge field named like an index keeps its rows first, and the store stays healthy."""
+        data_list = list(_data_generator(3))
+        total_edges = sum(data.neighbor_list.shape[0] for data in data_list)
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+        writer.add_custom(
+            "bond_index", torch.zeros(total_edges, 2, dtype=torch.long), "edge"
+        )
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            schema = reader.schema()
+            reader.check_integrity()
+        assert schema["bond_index"] == FieldSchema("edge", torch.int64, (2,))
+        assert schema["neighbor_list"] == FieldSchema("edge", torch.int64, (2,))
+
+    def test_check_integrity_still_names_a_torn_built_in_beside_a_custom_field(
+        self, tmp_path: Path
+    ) -> None:
+        """Reading custom rows from axis 0 does not loosen the check on built-in fields."""
+        data_list = list(_data_generator(3))
+        total_edges = sum(data.neighbor_list.shape[0] for data in data_list)
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+        writer.add_custom(
+            "bond_index", torch.zeros(total_edges, 2, dtype=torch.long), "edge"
+        )
+        root = zarr.open(tmp_path / "test.zarr", mode="r+")
+        neighbor_list = root["core"]["neighbor_list"]
+        neighbor_list.resize((neighbor_list.shape[0] - 1, 2))
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            with pytest.raises(ValueError, match="neighbor_list holds"):
+                reader.check_integrity()
+
     def test_check_integrity_passes_on_a_healthy_store(self, tmp_path: Path) -> None:
         """A store the writer completed, custom levels included, is consistent."""
         writer = AtomicDataZarrWriter(tmp_path / "test.zarr")

@@ -51,15 +51,20 @@ _PREDICTION_KEYS = frozenset(BaseDynamics._OUTPUT_KEY_TO_BATCH_ATTR.values())
 """Batch fields a propagator overwrites with the propagated model's predictions."""
 
 
-def _run_local_keys() -> frozenset[str]:
+def _run_local_keys(dynamics: BaseDynamics) -> frozenset[str]:
     """Return the fields of a live frame that mean nothing outside its run.
 
-    The set is read at call time rather than at import time, because
-    :meth:`~nvalchemi.dynamics.base.BaseDynamics.register_bookkeeping_key` grows
-    the bookkeeping registry as stages are built. For example, a fused stage
-    registers one step counter per sub-stage.
+    The bookkeeping part is read from *dynamics* at call time through
+    :meth:`~nvalchemi.dynamics.base.BaseDynamics.bookkeeping_keys`, which
+    walks the composition, because
+    :meth:`~nvalchemi.dynamics.base.BaseDynamics.register_bookkeeping_key`
+    grows the registries as stages are built. For example, a fused stage
+    registers one step counter per sub-stage, and keeps a ``reprime_pending``
+    flag of its own. A hook therefore reads the propagator it is registered
+    on, and belongs on the root of a composition so that root's own keys are
+    included.
     """
-    return _NEIGHBOR_KEYS | _PREDICTION_KEYS | frozenset(BaseDynamics._bookkeeping_keys)
+    return _NEIGHBOR_KEYS | _PREDICTION_KEYS | dynamics.bookkeeping_keys()
 
 
 def _score_and_attach(scorer: TeacherScorer, frame: Batch) -> TeacherLabels:
@@ -87,7 +92,7 @@ def _score_and_attach(scorer: TeacherScorer, frame: Batch) -> TeacherLabels:
     return labels
 
 
-def _strip_replay_frame(frames: Batch) -> Batch:
+def _strip_replay_frame(frames: Batch, dynamics: BaseDynamics) -> Batch:
     """Reduce *frames* to the replay-frame contract, in place.
 
     A frame captured from the propagator carries run-local fields: the
@@ -101,13 +106,15 @@ def _strip_replay_frame(frames: Batch) -> Batch:
     ----------
     frames : Batch
         Frames to strip, mutated in place.
+    dynamics : BaseDynamics
+        Propagator that wrote *frames*, whose bookkeeping keys are dropped.
 
     Returns
     -------
     Batch
         The same object, holding nothing run-local.
     """
-    dropped = _run_local_keys()
+    dropped = _run_local_keys(dynamics)
     for key in dropped:
         if key in frames:
             del frames[key]
@@ -257,7 +264,12 @@ class TeacherLabelHook:
 
     @torch.compiler.disable
     def _label_frame(
-        self, batch: Batch, step_count: int, *, forced: bool = False
+        self,
+        batch: Batch,
+        step_count: int,
+        *,
+        dynamics: BaseDynamics,
+        forced: bool = False,
     ) -> None:
         """Label the graphs of *batch* that are still moving, once per step.
 
@@ -271,10 +283,11 @@ class TeacherLabelHook:
         work from the step count, because the batch never received the label
         fields.
 
-        *forced* marks an out-of-band call that labels a frame the cadence did
-        not land on, such as the last frame of an on-policy segment. The
-        adjacency rule never skips a forced call, and the dynamics registry
-        never makes one.
+        *dynamics* is the propagator that wrote *batch*; the copy handed to
+        the sink drops its bookkeeping. *forced* marks an out-of-band call
+        that labels a frame the cadence did not land on, such as the last
+        frame of an on-policy segment. The adjacency rule never skips a forced
+        call, and the dynamics registry never makes one.
         """
         if (
             not forced
@@ -299,23 +312,28 @@ class TeacherLabelHook:
             )
         ):
             return
-        frame = batch if active is None else self._captured_frame(batch, active)
+        frame = (
+            batch if active is None else self._captured_frame(batch, dynamics, active)
+        )
         labels = _score_and_attach(self.teacher_scorer, frame)
         if self._teacher_fields is None:
             self._teacher_fields = tuple(sorted(labels))
         self._labeled_step = step_count
         if self.sink is None or stored:
             return
-        self.sink.write(frame if active is not None else self._captured_frame(batch))
+        self.sink.write(
+            frame if active is not None else self._captured_frame(batch, dynamics)
+        )
         self._stored = (step_count, active)
 
     def _captured_frame(
-        self, batch: Batch, active: torch.Tensor | None = None
+        self, batch: Batch, dynamics: BaseDynamics, active: torch.Tensor | None = None
     ) -> Batch:
         """Return a copy of *batch* holding nothing run-local.
 
-        The copy leaves out every run-local field, and the live batch keeps
-        the neighbor tensors and predictions the next step reads. An edge
+        The copy leaves out every run-local field, read from *dynamics*, and
+        the live batch keeps the neighbor tensors and predictions the next
+        step reads. An edge
         group left empty is removed too, so a store never records edges that
         no array backs. *active*, when given, narrows the copy to the graphs
         still moving, for a lifecycle that graduates graphs out of the batch.
@@ -324,7 +342,7 @@ class TeacherLabelHook:
         stored frame would otherwise carry the step's autograd graph into the
         first training pass.
         """
-        dropped = _run_local_keys()
+        dropped = _run_local_keys(dynamics)
         with torch.no_grad():
             frame = (
                 batch.clone(drop=dropped)
@@ -336,7 +354,7 @@ class TeacherLabelHook:
 
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:  # noqa: ARG002
         """Label the frame the propagator has just resolved."""
-        self._label_frame(ctx.batch, ctx.step_count)
+        self._label_frame(ctx.batch, ctx.step_count, dynamics=ctx.workflow)
 
 
 class _DivergenceHook:
@@ -364,8 +382,10 @@ class _DivergenceHook:
     Parameters
     ----------
     divergence : Callable[[Batch], Bool[torch.Tensor, "G"]], optional
-        Predicate flagging the diverged graphs of the live frame. Default
-        :func:`nonfinite_divergence`.
+        Predicate flagging the diverged graphs of the live frame. Its verdict
+        is moved onto the batch's device before it is recorded, so a predicate
+        that judges on the host is accepted for a frame on an accelerator.
+        Default :func:`nonfinite_divergence`.
 
     Raises
     ------
@@ -393,7 +413,7 @@ class _DivergenceHook:
         self._diverged = None
 
     def _flags(self, batch: Batch) -> Bool[torch.Tensor, "G"]:
-        """Evaluate the predicate on *batch* and check that it returns one boolean per graph."""
+        """Evaluate the predicate on *batch* and return its one-boolean-per-graph verdict on the batch's device."""
         flags = self.divergence(batch)
         if not isinstance(flags, torch.Tensor):
             raise TypeError(
@@ -406,7 +426,7 @@ class _DivergenceHook:
                 f"shape={tuple(flags.shape)!r} of dtype {flags.dtype!r}, expected "
                 f"({batch.num_graphs},) of torch.bool."
             )
-        return flags
+        return flags.to(batch.device)
 
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:  # noqa: ARG002
         """Record the predicate's verdict and migrate the flagged graphs to the exit status."""

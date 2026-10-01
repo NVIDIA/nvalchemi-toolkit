@@ -190,7 +190,8 @@ class DDPHook(BaseModel):
     ``drop_last`` are inferred from the manager and dataloader before user
     ``sampler_kwargs`` are applied. Only dataloaders exposing a ``sampler``
     attribute are rewritten; arbitrary iterables are left as caller-managed
-    inputs.
+    inputs. Once the stage has run, :attr:`wrapped_keys` names the models the
+    hook replaced.
     """
 
     model_keys: Annotated[
@@ -287,6 +288,19 @@ class DDPHook(BaseModel):
     _manager: DistributedManager | None = PrivateAttr(default=None)
     _strategy: Any | None = PrivateAttr(default=None)
     _is_wrapped: bool = PrivateAttr(default=False)
+
+    @property
+    def wrapped_keys(self) -> frozenset[str]:
+        """Names of the strategy models this hook has replaced with a wrapper.
+
+        Empty before the ``SETUP`` stage runs, on a single-process world, and
+        again after :meth:`close` restores the originals. A model that was
+        already a :class:`~torch.nn.parallel.DistributedDataParallel` when the
+        stage ran is left alone and is not listed. A workflow that depends on
+        a model's gradients being synchronized reads this instead of
+        inspecting the model it finds in the strategy.
+        """
+        return frozenset(self._original_models)
 
     def prepare_strategy(self, strategy: TrainingStrategy) -> None:
         """Prepare rank/device state before the strategy moves models."""
