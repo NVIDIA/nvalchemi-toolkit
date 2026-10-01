@@ -1463,6 +1463,16 @@ class _CommunicationMixin:
         ------
         TypeError
             If either ``self`` or ``other`` is not a ``BaseDynamics`` instance.
+
+        Notes
+        -----
+        **Known limitation — retained composition.**  ``self`` and ``other``
+        become the new ``FusedStage``'s sub-stages by reference, and their
+        ``_enclosing_hooks`` is repointed at that stage's ``hooks``.  If you
+        keep ``self`` or ``other`` around and run them standalone afterward,
+        their hook-dependent behavior reads the fused stage's hooks instead
+        of their own — see :meth:`FusedStage.__add__` for the full
+        explanation.  Not fixed here; tracked separately.
         """
         # FusedStage is defined later in this file
         if not isinstance(self, BaseDynamics):
@@ -3209,6 +3219,19 @@ class FusedStage(BaseDynamics):
         super().__init__(model=model, **kwargs)
 
         self.sub_stages = sub_stages
+        # KNOWN LIMITATION — retained composition: this is a live
+        # back-pointer onto the *same* sub-stage objects (not copies), and
+        # `+` builds its new FusedStage over those same objects. So
+        # `f2 = f1 + c` repoints every sub-stage of `f1` at `f2.hooks`,
+        # silently changing `f1`'s own hook-dependent behavior (e.g.
+        # LBFGSVariableCell._reference_cells scanning `_enclosing_hooks` for
+        # an AlignCellHook) even though `f1` itself was never reassigned.
+        # Before composing via `+` was possible, deriving a stage never
+        # mutated the stage it was derived from; retaining and continuing to
+        # run the original after deriving `f2` does now. Not fixed here —
+        # tracked separately together with stage nesting and hook/optimizer-
+        # state ownership, since a real fix changes how hooks are scoped
+        # across composition, not just this assignment.
         for _, dynamics in sub_stages:
             dynamics._enclosing_hooks = self.hooks
 
@@ -4162,6 +4185,19 @@ class FusedStage(BaseDynamics):
         preserves that intent but does **not** compile eagerly.  Call
         ``.compile()`` explicitly or enter the context manager to trigger
         compilation.
+
+        **Known limitation — retained composition.**  This reuses ``self``'s
+        existing sub-stage objects rather than copying them, and the
+        returned ``FusedStage`` repoints every one of those sub-stages'
+        ``_enclosing_hooks`` at its own ``hooks`` (see
+        ``FusedStage.__init__``).  If you keep running ``self`` *after*
+        deriving a new stage from it, ``self``'s own hook-dependent behavior
+        can silently change — e.g. a sub-stage's
+        ``AlignCellHook``-on-``self`` detection now sees the derived stage's
+        (possibly empty) hook list instead.  Treat a ``FusedStage`` as
+        consumed once you have composed a new stage from it; this is a
+        known gap tracked for a future fix alongside stage nesting and
+        hook/optimizer-state ownership, not something resolved here.
         """
         if not isinstance(other, BaseDynamics):
             raise TypeError(

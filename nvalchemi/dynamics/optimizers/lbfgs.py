@@ -410,6 +410,14 @@ class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
         """Aligned cells of the last *n* systems, for the chart.  Never writes *batch*."""
         # Own hooks, or those of an enclosing FusedStage: both run at
         # BEFORE_STEP, before this stage's first pre_update.
+        #
+        # KNOWN LIMITATION: `_enclosing_hooks` is a live back-pointer set by
+        # FusedStage.__init__ (nvalchemi/dynamics/base.py).  Deriving a new
+        # stage via `+` from a FusedStage this optimizer belongs to repoints
+        # `_enclosing_hooks` at the *new* stage's (possibly empty) hooks, so
+        # if you keep running the original stage afterward, an AlignCellHook
+        # registered on it can stop being found here even though it is still
+        # registered — see FusedStage.__add__ for the full explanation.
         align_hooks = [
             h
             for h in (*self.hooks, *self._enclosing_hooks)
