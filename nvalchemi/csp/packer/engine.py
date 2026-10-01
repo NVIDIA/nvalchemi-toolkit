@@ -42,7 +42,7 @@ from nvalchemi.csp.packer.result import (
     PackingResult,
     PackingStopReason,
 )
-from nvalchemi.data.level_storage import resolve_device
+from nvalchemi.data import resolve_device
 
 __all__ = ["OverlapReliefPacker"]
 

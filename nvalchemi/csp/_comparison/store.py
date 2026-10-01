@@ -25,8 +25,7 @@ import torch
 from torch import Tensor
 
 from nvalchemi.csp._comparison.descriptor import build_descriptor_tiles
-from nvalchemi.data import Batch
-from nvalchemi.data.level_storage import _resolve_device
+from nvalchemi.data import Batch, resolve_device
 
 _TYPE_PAD = torch.iinfo(torch.int32).min
 
@@ -557,7 +556,7 @@ def build_descriptor_stores(
     if not requested_modes:
         return {}
 
-    device = _resolve_device(torch.device(device))
+    device = resolve_device(torch.device(device))
     free_bytes_at_start = None
     if device.type == "cuda":
         free_bytes_at_start = available_cuda_bytes(device)

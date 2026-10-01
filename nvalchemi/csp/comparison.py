@@ -35,8 +35,7 @@ from nvalchemi.csp._comparison.store import (
     workspace_reserve,
 )
 from nvalchemi.csp._validation import finite_nonnegative
-from nvalchemi.data import Batch
-from nvalchemi.data.level_storage import _resolve_device
+from nvalchemi.data import Batch, resolve_device
 
 __all__ = [
     "RadialComparisonIndex",
@@ -553,7 +552,7 @@ class RadialComparisonIndex:
         target_device = torch.device(device) if device is not None else batch.device
         if target_device.type not in ("cpu", "cuda"):
             raise ValueError("device must be a CPU or CUDA device")
-        target_device = _resolve_device(target_device)
+        target_device = resolve_device(target_device)
         limit = 256 if target_device.type == "cuda" else 64
         default_block = limit
         if structure_block_size is None:

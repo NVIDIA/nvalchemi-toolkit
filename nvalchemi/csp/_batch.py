@@ -22,13 +22,10 @@ from typing import TYPE_CHECKING
 import torch
 from torch import Tensor
 
+from nvalchemi.data import resolve_device
 from nvalchemi.data.atomic_data import _default_mass_table
 from nvalchemi.data.batch import Batch
-from nvalchemi.data.level_storage import (
-    LevelSchema,
-    MultiLevelStorage,
-    resolve_device,
-)
+from nvalchemi.data.level_storage import LevelSchema, MultiLevelStorage
 
 if TYPE_CHECKING:
     from nvalchemi.csp.data import RigidMoleculeASUBatch
