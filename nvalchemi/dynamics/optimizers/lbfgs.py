@@ -189,6 +189,11 @@ class _LBFGSMixin:
     kwargs :meth:`_extra_state_kwargs` supplies.
     """
 
+    # ``post_update`` below is unconditionally ``pass``, so a FusedStage
+    # sub-stage never needs the masked save/restore dance around it — see
+    # ``BaseDynamics._post_update_is_noop`` and ``_masked_post_update``.
+    _post_update_is_noop = True
+
     def __init__(
         self,
         model: BaseModelMixin,

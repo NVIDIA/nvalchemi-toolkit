@@ -1592,6 +1592,16 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     # Hooks of the enclosing FusedStage, if any; set (live) by FusedStage.
     _enclosing_hooks: Sequence[Hook] = ()
 
+    #: Set ``True`` on a subclass whose ``post_update`` is unconditionally a
+    #: no-op (reads nothing, writes nothing) to let
+    #: :meth:`_masked_post_update` skip its save/blend-back of every mutable
+    #: field and state tensor — work whose only purpose is undoing changes
+    #: ``post_update`` never makes.  A subclass that sets this to ``True``
+    #: while giving ``post_update`` a real body silently applies that body
+    #: to every graph instead of only the masked ones; the flag is a
+    #: correctness promise, not something inferred automatically.
+    _post_update_is_noop: bool = False
+
     _bookkeeping_keys: dict[str, Callable[[int, torch.device], torch.Tensor]] = {
         "status": lambda n, dev: torch.zeros(n, 1, dtype=torch.long, device=dev),
         "system_id": lambda n, dev: torch.full(
@@ -2660,7 +2670,18 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
         Uses the same static-shape save/blend strategy as
         :meth:`_masked_pre_update` — see that method for the rationale.
+
+        When :attr:`_post_update_is_noop` is set, the save/blend-back is
+        skipped entirely: ``post_update`` is still called (so a subclass
+        that violates the flag's contract is still *invoked*, just not
+        correctly masked), but there is nothing to restore because nothing
+        is expected to change.  This only affects ``_masked_post_update``;
+        :meth:`_masked_pre_update` always does the full save/restore.
         """
+        if self._post_update_is_noop:
+            with torch.no_grad():
+                self.post_update(batch)
+            return
         with torch.no_grad():
             node_mask = mask[batch.batch_idx]
             saved = self._save_mutable_fields(batch)

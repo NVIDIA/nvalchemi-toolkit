@@ -123,6 +123,20 @@ class _Record:
         self.cells.append(ctx.batch.cell.detach().clone())
 
 
+class _CountingHook:
+    """Hook that just counts how many times it fired at one stage."""
+
+    frequency = 1
+
+    def __init__(self, stage):
+        self.stage = stage
+        self.count = 0
+
+    def __call__(self, ctx, stage):
+        del ctx, stage
+        self.count += 1
+
+
 # ---------------------------------------------------------------------------
 # Relaxation
 # ---------------------------------------------------------------------------
@@ -618,6 +632,79 @@ class TestFusedStageMasking:
             assert torch.equal(value, untouched[key]), key
 
 
+# ---------------------------------------------------------------------------
+# _post_update_is_noop: masked post_update skips save/restore entirely
+# ---------------------------------------------------------------------------
+
+
+class TestMaskedPostUpdateSkip:
+    """``post_update`` is an unconditional no-op for both LBFGS classes, so
+    ``_masked_post_update`` should skip the save/blend-back dance that
+    ``_masked_pre_update`` still needs.
+    """
+
+    def test_flag_is_set_on_both_classes(self):
+        assert LBFGS._post_update_is_noop is True
+        assert LBFGSVariableCell._post_update_is_noop is True
+
+    def test_save_restore_helpers_are_not_called(self):
+        dynamics, batch = _warm_lbfgs()
+        mask = torch.tensor([True, False])
+        with (
+            patch.object(dynamics, "_save_mutable_fields") as save_fields,
+            patch.object(dynamics, "_save_state_fields") as save_state,
+            patch.object(dynamics, "_restore_unmasked_fields") as restore_fields,
+            patch.object(dynamics, "_restore_unmasked_state") as restore_state,
+            patch.object(dynamics, "post_update", wraps=dynamics.post_update) as post,
+        ):
+            dynamics._masked_post_update(batch, mask)
+        save_fields.assert_not_called()
+        save_state.assert_not_called()
+        restore_fields.assert_not_called()
+        restore_state.assert_not_called()
+        post.assert_called_once_with(batch)
+
+    def test_masked_post_update_changes_nothing(self):
+        # post_update is a real no-op, so skipping save/restore must be
+        # observationally identical to running it: nothing should change.
+        dynamics, batch = _warm_lbfgs()
+        state = {k: v.clone() for k, v in dynamics._state}
+        positions = batch.positions.detach().clone()
+        dynamics._masked_post_update(batch, torch.tensor([True, False]))
+        assert torch.equal(batch.positions, positions)
+        for key, value in dynamics._state:
+            assert torch.equal(value, state[key]), key
+
+    def test_pre_update_masking_is_unaffected(self):
+        # The flag only short-circuits _masked_post_update; _masked_pre_update
+        # must still fully save and restore unmasked rows.
+        dynamics, batch = _warm_lbfgs()
+        iteration = dynamics._state.iteration.clone()
+        untouched = _rows(dynamics, 1)
+        dynamics._masked_pre_update(batch, torch.tensor([True, False]))
+        assert int(dynamics._state.iteration[0]) == int(iteration[0]) + 1
+        assert int(dynamics._state.iteration[1]) == int(iteration[1])
+        for key, value in _rows(dynamics, 1).items():
+            assert torch.equal(value, untouched[key]), key
+
+    def test_fused_stage_still_dispatches_post_update_hooks(self):
+        # The skip lives inside _masked_post_update; BEFORE/AFTER_POST_UPDATE
+        # hooks are dispatched by FusedStage.step() around that call and must
+        # still fire once per step regardless of the fast path.
+        lbfgs = LBFGS(model=_make_model())
+        before_hook = _CountingHook(DynamicsStage.BEFORE_POST_UPDATE)
+        after_hook = _CountingHook(DynamicsStage.AFTER_POST_UPDATE)
+        lbfgs.register_hook(before_hook)
+        lbfgs.register_hook(after_hook)
+        fused = lbfgs + FIRE2(model=_make_model(), dt=0.05)
+        batch = _make_batch(2)
+        batch["status"] = torch.tensor([[0], [1]])
+        batch["fmax"] = torch.full((2, 1), float("inf"))
+        fused.step(batch)
+        assert before_hook.count == 1
+        assert after_hook.count == 1
+
+
 class TestLevelMask:
     def test_uniform_level_returns_mask(self):
         dynamics = FIRE2(model=_make_model(), dt=0.05)
@@ -798,6 +885,33 @@ class TestCompile:
             trimmed.stress = torch.zeros(3, 3, 3)
         _ = trimmed.batch_idx
         _compile(dynamics._masked_pre_update)(trimmed, mask)
+
+    @pytest.mark.parametrize("variable_cell", [False, True])
+    def test_masked_post_update_fullgraph(self, variable_cell):
+        # _post_update_is_noop's branch is on a plain Python bool class
+        # attribute, not a tensor, so it must not break fullgraph tracing.
+        if variable_cell:
+            batch = _cell_batch([None, None, None])
+            batch.stress = torch.zeros(3, 3, 3)
+            dynamics = LBFGSVariableCell(model=_make_model(needs_stress=True))
+        else:
+            batch = _make_batch(3)
+            dynamics = LBFGS(model=_make_model())
+        batch.forces = torch.randn_like(batch.positions)
+        mask = torch.tensor([True, False, True])
+
+        dynamics._ensure_state_initialized(batch)
+        dynamics._warm_state_levels()
+        self._assert_warm(dynamics)
+        _ = batch.batch_idx
+        state_before = {k: v.clone() for k, v in dynamics._state}
+        positions_before = batch.positions.detach().clone()
+
+        _compile(dynamics._masked_post_update)(batch, mask)
+
+        assert torch.equal(batch.positions, positions_before)
+        for key, value in dynamics._state:
+            assert torch.equal(value, state_before[key]), key
 
     @pytest.mark.parametrize("cell", [None, _SKEW])
     def test_align_cell_hook_fullgraph(self, cell):
