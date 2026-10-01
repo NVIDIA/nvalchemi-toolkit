@@ -176,6 +176,46 @@ class TestBatchGroupLayout:
         if original_layout is not None:
             assert batch.group_layout is original_layout
 
+    @pytest.mark.parametrize("preallocated", [False, True])
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    def test_zero_preserves_capacity_and_builds_empty_layout(
+        self, preallocated: bool, device: str
+    ) -> None:
+        """Allocated label rows must not become groups after zeroing a batch."""
+        if device == "cuda" and not torch.cuda.is_available():
+            pytest.skip("CUDA is not available")
+        batch = _batch().index_select([0, 1, 2]).to(device)
+        batch.set_group_layout(torch.tensor([0, 0, 1], device=device))
+        if preallocated:
+            batch = Batch.empty(
+                num_systems=6,
+                num_nodes=12,
+                num_edges=0,
+                template=batch,
+                device=device,
+            )
+        else:
+            assert batch.group_layout.num_groups == 2
+        capacity = batch.system_capacity
+        labels = batch.group_idx
+        positions = batch.positions
+
+        for _ in range(2):
+            batch.zero()
+            layout = batch.group_layout
+
+            assert batch.num_graphs == 0
+            assert batch.system_capacity == capacity
+            assert batch.group_idx is labels
+            assert batch.positions is positions
+            assert layout.num_groups == 0
+            assert layout.group_idx.numel() == 0
+            assert layout.graph_rank.numel() == 0
+            assert layout.node_to_group.numel() == 0
+            assert layout.num_graphs_per_group.numel() == 0
+            assert layout.group_ptr.tolist() == [0]
+            assert layout.device == batch.device
+
     def test_append_rebases_group_idx(self):
         batch = _batch()
         batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1]))

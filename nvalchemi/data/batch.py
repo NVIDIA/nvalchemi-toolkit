@@ -1502,7 +1502,8 @@ class Batch(DataMixin):
 
         Zeros all leaf data tensors while preserving the allocated storage
         capacity.  After calling ``zero()``, ``num_graphs`` returns 0 but
-        ``system_capacity`` remains unchanged.
+        ``system_capacity`` remains unchanged. Group-label storage is retained,
+        while :attr:`group_layout` describes zero occupied graphs and groups.
 
         This method is used to reset pre-allocated communication buffers
         (created via :meth:`empty`) between pipeline steps without
@@ -1527,7 +1528,7 @@ class Batch(DataMixin):
         for group in self._storage.groups.values():
             group._data.apply_(lambda x: x.zero_())
 
-            if hasattr(group, "_num_kept"):
+            if isinstance(group, UniformLevelStorage):
                 object.__setattr__(group, "_num_kept", 0)
 
             if hasattr(group, "segment_lengths"):

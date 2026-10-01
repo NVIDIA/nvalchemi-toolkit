@@ -142,6 +142,12 @@ class GroupLayout:
             raise ValueError("Batch has no group_idx; call set_group_layout() first")
 
         raw_group_idx = batch.group_idx
+        if (
+            raw_group_idx.ndim == 1
+            and getattr(batch._system_group, "_num_kept", None) is not None
+        ):
+            # Allocated rows beyond the occupied graphs do not belong to a group.
+            raw_group_idx = raw_group_idx[: batch.num_graphs]
         if raw_group_idx.ndim != 1 or raw_group_idx.shape[0] != batch.num_graphs:
             raise ValueError(
                 "group_idx must have shape "
