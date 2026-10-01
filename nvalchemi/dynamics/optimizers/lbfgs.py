@@ -53,6 +53,7 @@ import torch
 
 from nvalchemi.data import Batch
 from nvalchemi.dynamics._ops._bridge import _make_two_level_state_batch, _state_level
+from nvalchemi.dynamics._ops.cell_align import cell_alignment_offenders
 from nvalchemi.dynamics._ops.lbfgs import (
     LBFGSCellState,
     LBFGSState,
@@ -89,13 +90,6 @@ _CELL_PER_SYSTEM = (
     "ref_cell", "ref_cell_inv", "kappa", "phi", "phi_inv", "d_phi",
     "cell_dof_a", "cell_dof_b", "cell_force_a", "cell_force_b",
 )  # fmt: skip
-# Must match nvalchemiops.dynamics.optimizers.lbfgs._check_cell_is_aligned's
-# `atol` default.  lbfgs_prepare_cell_state() (what we call) doesn't check
-# alignment itself; it calls _lbfgs_set_reference_cell(), which calls that
-# private function with its default atol=1e-10.  No public constant is
-# exported for this, so the two values are only kept in sync by this
-# comment — bump both if nvalchemiops' default ever changes.
-_ALIGN_ATOL = 1e-10
 
 
 def _build_state(
@@ -451,10 +445,13 @@ class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
             if aligned is not None:
                 cell = aligned[1]
         cell = cell[-n:]
-        skew = torch.triu(cell, 1).abs().amax(dim=(1, 2))
-        bad = torch.nonzero(skew > _ALIGN_ATOL).flatten()
+        # Same criterion AlignCellHook uses to decide whether a cell needs
+        # realigning at all, so a cell it considers already-aligned can
+        # never fail here, and vice versa — see cell_alignment_offenders.
+        bad = torch.nonzero(cell_alignment_offenders(cell)).flatten()
         if bad.numel():
             systems = (bad + batch.num_graphs - n).tolist()
+            skew = torch.triu(cell[bad], 1).abs().amax(dim=(1, 2))
             fix = (
                 "AlignCellHook aligns only periodic systems; set pbc for "
                 "these, or align their cells before the run."
@@ -464,7 +461,8 @@ class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
             )
             raise ValueError(
                 f"LBFGSVariableCell: cell for system(s) {systems} is not "
-                f"aligned (upper off-diagonal up to {skew.max().item():.3e}). " + fix
+                f"aligned (upper off-diagonal up to {skew.max().item():.3e}, "
+                "or left-handed). " + fix
             )
         return cell
 

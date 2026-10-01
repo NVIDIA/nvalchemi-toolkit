@@ -24,6 +24,10 @@ Functions
 align_cell
     Align periodic cells to lower-triangular form and rotate positions
     to preserve fractional coordinates.
+cell_alignment_offenders
+    Per-system check for whether a cell is already in ``align_cell``'s
+    canonical form; the one shared criterion both :class:`AlignCellHook`
+    and :class:`LBFGSVariableCell` use so they can't disagree.
 """
 
 from __future__ import annotations
@@ -35,7 +39,11 @@ from nvalchemiops.dynamics.utils import align_cell as _align_cell
 
 from nvalchemi.dynamics._ops._bridge import _mat_type, _vec_type
 
-__all__ = ["align_cell"]
+__all__ = ["align_cell", "ALIGN_ATOL", "cell_alignment_offenders"]
+
+# Must match nvalchemiops.dynamics.optimizers.lbfgs._check_cell_is_aligned's
+# `atol` default — not dtype-dependent there, so not here either.
+ALIGN_ATOL = 1e-10
 
 
 # ---------------------------------------------------------------------------
@@ -157,3 +165,46 @@ def align_cell(
         transform.copy_(torch.eye(3, dtype=cell.dtype, device=cell.device))
     _align_cell_op(positions, cell, transform, batch_idx)
     return transform
+
+
+def cell_alignment_offenders(
+    cell: torch.Tensor, atol: float = ALIGN_ATOL
+) -> torch.Tensor:
+    r"""Per-system bool: ``True`` where *cell* is not already aligned.
+
+    "Aligned" means exactly what :func:`align_cell` would leave unchanged:
+    the strict upper triangle is (numerically) zero *and* the cell is
+    right-handed (positive determinant).  Checking only the triangle is not
+    enough — the kernel's canonical output always has a non-negative
+    diagonal (``a``, ``b sin gamma``, ``c3`` are lengths/sqrt terms by
+    construction), so a matrix that is already triangular but left-handed
+    (e.g. ``diag(-5, 5, 5)``, determinant :math:`-125`) would still be
+    flipped by :func:`align_cell`, even though its upper triangle is
+    trivially zero.  A non-positive determinant also catches degenerate
+    (zero-volume) cells, which :func:`align_cell` leaves untouched but which
+    are never a valid reference cell regardless.
+
+    This is the one criterion :class:`~nvalchemi.dynamics.hooks.AlignCellHook`
+    (to decide whether calling :func:`align_cell` would be a no-op) and
+    :meth:`~nvalchemi.dynamics.optimizers.lbfgs.LBFGSVariableCell._reference_cells`
+    (to validate an admitted cell) both use, so the two can never disagree
+    about what counts as aligned — a cell the hook decides to skip can never
+    fail admission, and vice versa.
+
+    Parameters
+    ----------
+    cell : torch.Tensor
+        Per-system cell matrices ``[M, 3, 3]``.
+    atol : float, optional
+        Absolute tolerance on the strict-upper-triangle entries.  Default
+        matches ``nvalchemiops``' own (dtype-independent) check.
+
+    Returns
+    -------
+    torch.Tensor
+        Boolean ``[M]``; ``True`` where the system needs realignment.
+    """
+    skew = torch.triu(cell, 1).abs().amax(dim=(-2, -1))
+    not_triangular = skew > atol
+    not_right_handed = torch.linalg.det(cell) <= 0
+    return not_triangular | not_right_handed

@@ -33,6 +33,7 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.data.level_storage import SegmentedLevelStorage
 from nvalchemi.dynamics import ConvergenceHook, DynamicsStage
 from nvalchemi.dynamics._ops._bridge import _state_level
+from nvalchemi.dynamics._ops.cell_align import align_cell
 from nvalchemi.dynamics.base import _level_mask
 from nvalchemi.dynamics.hooks import AlignCellHook, FreezeAtomsHook
 from nvalchemi.dynamics.hooks.cell_align import _aligned_periodic
@@ -55,6 +56,20 @@ from nvalchemi.hooks.periodic import WrapPeriodicHook
 from .conftest import _make_atomic_data, _make_batch, _make_model, _MockSampler
 
 _SKEW = torch.tensor([[5.0, 1.0, 0.0], [0.0, 5.0, 0.0], [0.3, 0.2, 5.0]])
+
+
+def _already_aligned_nontrivial_cell() -> torch.Tensor:
+    """A genuinely lower-triangular, non-diagonal cell.
+
+    Unlike a trivial ``k*I`` cell (which align_cell reproduces exactly even
+    on re-alignment, since every intermediate angle/length is exact), this
+    one picks up a few ULP of rounding if run back through align_cell —
+    exactly what a needs_align mask bug would expose for an "already
+    aligned" system sharing a batch with one that needs realigning.
+    """
+    cell = _SKEW.clone().unsqueeze(0)
+    align_cell(torch.zeros(1, 3, dtype=cell.dtype), cell)
+    return cell[0]
 
 
 def _forces(dynamics, batch):
@@ -359,6 +374,37 @@ class TestLBFGSVariableCellAlignment:
         batch = _cell_batch([None, _SKEW])
         with pytest.raises(ValueError, match=r"system\(s\) \[1\].*AlignCellHook\(\)"):
             self._dynamics()._init_state(batch)
+
+    def test_near_triangular_float32_cell_is_aligned_not_rejected(self):
+        # A float32 cell with a small upper-triangle entry: well above
+        # ALIGN_ATOL (1e-10) so AlignCellHook must still fix it, but far
+        # below float32 rounding noise so a dtype-scaled "close enough"
+        # tolerance would wrongly skip it — leaving it to fail the
+        # reference-cell admission check below, which uses the same
+        # ALIGN_ATOL.  The hook and the check must never disagree.
+        near_triangular = 5.0 * torch.eye(3)
+        near_triangular[0, 1] = 1e-6
+        batch = _cell_batch([near_triangular])
+        assert batch.cell.dtype == torch.float32
+        dynamics = self._dynamics(hooks=[AlignCellHook()])
+        dynamics._init_state(batch)  # must not raise
+        assert _aligned(dynamics._state.ref_cell)
+
+    def test_refill_onto_near_triangular_float32_cell(self):
+        near_triangular = 5.0 * torch.eye(3)
+        near_triangular[0, 1] = 1e-6
+        record = _Record(DynamicsStage.BEFORE_PRE_UPDATE)
+        dynamics = self._dynamics(
+            hooks=[AlignCellHook(), record],
+            sampler=_MockSampler([_cell_data(4, 51, near_triangular)]),
+        )
+        batch = _cell_batch([None, None])
+        batch["status"] = torch.zeros(2, 1, dtype=torch.long)
+        dynamics.step(batch)
+        batch.status[0] = 1
+        result = dynamics.refill_check(batch, exit_status=1)  # must not raise
+        dynamics.step(result)
+        assert _aligned(result.cell)
 
     def test_skew_without_pbc_raises_despite_hook(self):
         batch = _cell_batch([_SKEW, _SKEW], pbc=False)
@@ -965,6 +1011,37 @@ class TestCompile:
             torch.testing.assert_close(compiled[1], batch.cell)
         else:
             torch.testing.assert_close(compiled[1], eager[1])
+
+    def test_align_cell_hook_fullgraph_all_aligned_is_bit_identical(self):
+        # The compiled path is branchless (no eager early return), so it
+        # must still preserve an already-aligned cell exactly via the
+        # per-system needs_align mask, not just approximately — the whole
+        # point is no ULP-level nudging on every step.  A non-trivial
+        # (non-diagonal) aligned cell, since align_cell reproduces a
+        # trivial k*I cell exactly anyway.
+        aligned = _already_aligned_nontrivial_cell()
+        batch = _cell_batch([aligned, aligned])
+        positions_before = batch.positions.detach().clone()
+        cell_before = batch.cell.clone()
+        compiled = _compile(_aligned_periodic)(batch)
+        assert torch.equal(compiled[0], positions_before)
+        assert torch.equal(compiled[1], cell_before)
+
+    def test_align_cell_hook_fullgraph_mixed_batch_preserves_aligned_system(self):
+        batch = _cell_batch([_already_aligned_nontrivial_cell(), _SKEW])
+        positions_before = batch.positions.detach().clone()
+        cell_before = batch.cell.clone()
+        compiled = _compile(_aligned_periodic)(batch)
+        sys0_atoms = batch.batch_idx == 0
+        assert torch.equal(compiled[0][sys0_atoms], positions_before[sys0_atoms])
+        assert torch.equal(compiled[1][0], cell_before[0])
+        assert not torch.equal(compiled[1][1], cell_before[1])
+
+    def test_align_cell_hook_fullgraph_left_handed(self):
+        cell = torch.diag(torch.tensor([-5.0, 5.0, 5.0]))
+        batch = _cell_batch([cell])
+        compiled = _compile(_aligned_periodic)(batch)
+        assert torch.linalg.det(compiled[1]).item() > 0
 
 
 # ---------------------------------------------------------------------------
