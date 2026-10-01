@@ -298,7 +298,7 @@ def _get_field_level(key: str) -> str:
 # Policy: merge adjacent sorted physical indices into contiguous ranges when
 # the gap between them is <= *gap_threshold* (defaults to the batch size).
 # This reduces the number of Zarr codec-pipeline / shard-index round trips
-# — the dominant cost for random access — at the expense of reading some
+# -- the dominant cost for random access -- at the expense of reading some
 # unrequested rows ("read amplification").
 #
 # To keep amplification bounded, each merged range is capped so that
@@ -523,22 +523,22 @@ class AtomicDataZarrWriter:
     .. code-block:: text
 
         dataset.zarr/
-        ├── meta/                       # Pointer arrays + masks
-        │   ├── atoms_ptr               # int64 [N+1] — cumulative node counts
-        │   ├── edges_ptr               # int64 [N+1] — cumulative edge counts
-        │   ├── samples_mask            # bool [N] — False = deleted sample
-        │   ├── atoms_mask              # bool [V_total] — False = deleted atom
-        │   └── edges_mask              # bool [E_total] — False = deleted edge
-        │
-        ├── core/                       # AtomicData fields (auto-populated)
-        │   ├── atomic_numbers          # int64 [V_total]
-        │   ├── positions               # float32 [V_total, 3]
-        │   └── ...
-        │
-        ├── custom/                     # User-defined arrays (optional)
-        │   └── <user_key>              # any dtype, any shape
-        │
-        └── .zattrs                     # root metadata
+        +-- meta/                       # Pointer arrays + masks
+        |   +-- atoms_ptr               # int64 [N+1] -- cumulative node counts
+        |   +-- edges_ptr               # int64 [N+1] -- cumulative edge counts
+        |   +-- samples_mask            # bool [N] -- False = deleted sample
+        |   +-- atoms_mask              # bool [V_total] -- False = deleted atom
+        |   `-- edges_mask              # bool [E_total] -- False = deleted edge
+        |
+        +-- core/                       # AtomicData fields (auto-populated)
+        |   +-- atomic_numbers          # int64 [V_total]
+        |   +-- positions               # float32 [V_total, 3]
+        |   `-- ...
+        |
+        +-- custom/                     # User-defined arrays (optional)
+        |   `-- <user_key>              # any dtype, any shape
+        |
+        `-- .zattrs                     # root metadata
 
     Parameters
     ----------
@@ -1684,7 +1684,30 @@ class AtomicDataZarrWriter:
             new_root.attrs["levels"] = levels_metadata
 
     def _append_batch(self, data: Batch) -> None:
-        """Append one batch after validating custom-store compatibility."""
+        """Append one batch to an existing store.
+
+        Parameters
+        ----------
+        data : Batch
+            Batch whose samples and fields are appended to the store.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the Zarr store does not exist.
+        ValueError
+            If custom levels, pointers, required fields, or field layouts do
+            not match the existing store.
+
+        Notes
+        -----
+        Custom-level and existing root-custom fields are materialized and
+        validated before any target array is resized. A zero-sample batch is a
+        no-op. For a nonempty batch, built-in atom and edge pointer tails
+        offset the incoming pointers; arrays and masks are then extended, and
+        ``num_samples`` is updated last as the store's append commit marker.
+        Built-in field conversion and assignment retain their legacy behavior.
+        """
         if not self._store_exists():
             raise FileNotFoundError(f"Zarr store does not exist at {self._store}")
         if data.num_graphs == 0:
@@ -1883,10 +1906,12 @@ class AtomicDataZarrWriter:
             root_custom_appends[key] = array
 
         old_num_samples = int(root.attrs["num_samples"])
-        old_atoms_ptr = torch.from_numpy(meta_group["atoms_ptr"][:]).to(torch.long)
-        old_edges_ptr = torch.from_numpy(meta_group["edges_ptr"][:]).to(torch.long)
-        new_atoms_ptr = data.level_ptr("atoms").to(torch.long)[1:] + old_atoms_ptr[-1]
-        new_edges_ptr = data.level_ptr("edges").to(torch.long)[1:] + old_edges_ptr[-1]
+        # Only the pointer tails are needed to offset the incoming batch.
+        # Custom level pointers below follow the same persisted-prefix rule.
+        old_atoms_total = int(meta_group["atoms_ptr"][-1])
+        old_edges_total = int(meta_group["edges_ptr"][-1])
+        new_atoms_ptr = data.level_ptr("atoms").to(torch.long)[1:] + old_atoms_total
+        new_edges_ptr = data.level_ptr("edges").to(torch.long)[1:] + old_edges_total
         self._extend_array(meta_group["atoms_ptr"], self._to_numpy(new_atoms_ptr))
         self._extend_array(meta_group["edges_ptr"], self._to_numpy(new_edges_ptr))
         self._extend_array(
@@ -1894,11 +1919,11 @@ class AtomicDataZarrWriter:
         )
         self._extend_array(
             meta_group["atoms_mask"],
-            np.ones(int(new_atoms_ptr[-1] - old_atoms_ptr[-1]), dtype=bool),
+            np.ones(int(new_atoms_ptr[-1]) - old_atoms_total, dtype=bool),
         )
         self._extend_array(
             meta_group["edges_mask"],
-            np.ones(int(new_edges_ptr[-1] - old_edges_ptr[-1]), dtype=bool),
+            np.ones(int(new_edges_ptr[-1]) - old_edges_total, dtype=bool),
         )
 
         # Preserve the legacy built-in append route. Custom fields above are
@@ -2019,17 +2044,17 @@ class AtomicDataZarrReader(Reader):
     .. code-block:: text
 
         dataset.zarr/
-        ├── meta/                       # Pointer arrays + masks
-        │   ├── atoms_ptr               # int64 [N+1] — cumulative node counts
-        │   ├── edges_ptr               # int64 [N+1] — cumulative edge counts
-        │   └── samples_mask            # bool [N] — False = deleted sample
-        │
-        ├── core/                       # AtomicData fields
-        │   ├── atomic_numbers          # int64 [V_total]
-        │   ├── positions               # float32 [V_total, 3]
-        │   └── ...
-        │
-        └── custom/                     # User-defined arrays (optional)
+        +-- meta/                       # Pointer arrays + masks
+        |   +-- atoms_ptr               # int64 [N+1] -- cumulative node counts
+        |   +-- edges_ptr               # int64 [N+1] -- cumulative edge counts
+        |   `-- samples_mask            # bool [N] -- False = deleted sample
+        |
+        +-- core/                       # AtomicData fields
+        |   +-- atomic_numbers          # int64 [V_total]
+        |   +-- positions               # float32 [V_total, 3]
+        |   `-- ...
+        |
+        `-- custom/                     # User-defined arrays (optional)
 
     Parameters
     ----------
@@ -2039,9 +2064,13 @@ class AtomicDataZarrReader(Reader):
         or a dict for in-memory buffer storage.
     pin_memory : bool, default=False
         If True, place tensors in pinned (page-locked) memory for faster
-        async CPU→GPU transfers.
+        async CPU->GPU transfers.
     include_index_in_metadata : bool, default=True
         If True, include sample index in the metadata dict.
+    fields : Sequence[str] | None, default=None
+        Optional ordered selection of fields returned for each sample. When
+        provided, every name must exist in the store. The selection is copied
+        to an immutable tuple and applied before chunk-locality planning.
 
     Attributes
     ----------
@@ -2062,6 +2091,7 @@ class AtomicDataZarrReader(Reader):
         *,
         pin_memory: bool = False,
         include_index_in_metadata: bool = True,
+        fields: Sequence[str] | None = None,
     ) -> None:
         """Initialize the reader with a Zarr store.
 
@@ -2075,6 +2105,11 @@ class AtomicDataZarrReader(Reader):
             If True, place tensors in pinned (page-locked) memory.
         include_index_in_metadata : bool, default=True
             If True, include sample index in the metadata dict.
+        fields : Sequence[str] | None, default=None
+            Optional ordered selection of fields returned for each sample.
+            ``None`` returns every stored field. An explicit selection is
+            copied to an immutable tuple and applied before chunk-locality
+            planning.
 
         Raises
         ------
@@ -2082,7 +2117,16 @@ class AtomicDataZarrReader(Reader):
             If the Zarr store does not exist (for filesystem paths).
         ValueError
             If the store is missing required groups (meta, core).
+            If ``fields`` is empty, contains an empty name, or contains
+            duplicate names.
+        TypeError
+            If ``fields`` is not a non-string sequence of strings.
+        KeyError
+            If any selected field is absent from the store.
         """
+        self._selected_fields = self._validate_fields(fields)
+        self._missing_selected_fields: tuple[str, ...] = ()
+
         super().__init__(
             pin_memory=pin_memory,
             include_index_in_metadata=include_index_in_metadata,
@@ -2106,6 +2150,114 @@ class AtomicDataZarrReader(Reader):
         # Load cached state from the store
         self.refresh()
 
+    @staticmethod
+    def _validate_fields(fields: Sequence[str] | None) -> tuple[str, ...] | None:
+        """Validate and freeze an optional ordered field projection.
+
+        Parameters
+        ----------
+        fields : sequence of str or None
+            Requested array names. None retains the reader's all-fields
+            behavior.
+
+        Returns
+        -------
+        tuple of str or None
+            Immutable selected names in caller order, or None when no
+            projection was requested.
+
+        Raises
+        ------
+        TypeError
+            If ``fields`` is a string, bytes, a non-sequence, or contains a
+            non-string item.
+        ValueError
+            If the sequence is empty or contains an empty or duplicate name.
+
+        Notes
+        -----
+        Array existence is checked against the open store during
+        :meth:`refresh`, not during this syntactic validation.
+        """
+        if fields is None:
+            return None
+        if isinstance(fields, (str, bytes)) or not isinstance(fields, Sequence):
+            raise TypeError(
+                "fields must be a Sequence of strings, not a string or bytes"
+            )
+
+        selected = tuple(fields)
+        if not selected:
+            raise ValueError("fields must contain at least one field name")
+        if any(not isinstance(name, str) for name in selected):
+            raise TypeError("fields must contain only strings")
+        if any(not name for name in selected):
+            raise ValueError("field names must not be empty")
+        if len(set(selected)) != len(selected):
+            raise ValueError("fields must not contain duplicate names")
+        return selected
+
+    def _require_selected_fields(self) -> None:
+        """Ensure every selected field is present in the refreshed store.
+
+        Raises
+        ------
+        KeyError
+            If the most recent :meth:`refresh` found a selected name absent
+            from all stored field arrays.
+
+        Notes
+        -----
+        The missing-name tuple is refreshed when :meth:`refresh` reloads the
+        store. This check prevents reads from returning a partial projection.
+        """
+        if self._missing_selected_fields:
+            missing = ", ".join(repr(name) for name in self._missing_selected_fields)
+            raise KeyError(
+                f"Selected field(s) are missing from the Zarr store: {missing}"
+            )
+
+    def _available_field_names(self) -> set[str]:
+        """Collect stored array names from every field level.
+
+        Returns
+        -------
+        set of str
+            Names present in the core, legacy custom, and registered custom
+            level groups.
+
+        Notes
+        -----
+        The set validates requested names. Full field metadata remains
+        available independently of a reader's selected read projection.
+        """
+        return {key for key, _, _ in self._field_entries()}
+
+    def _get_field_names(self) -> list[str]:
+        """Return the field names exposed by this reader.
+
+        Returns
+        -------
+        list of str
+            Selected names in caller order, or names discovered by the base
+            reader when no projection was specified.
+
+        Raises
+        ------
+        KeyError
+            If the selected projection contains a field missing at the most
+            recent refresh.
+
+        Notes
+        -----
+        An explicit selection is returned without reading a sample. With no
+        selection, field discovery is delegated to the base reader.
+        """
+        if self._selected_fields is None:
+            return super()._get_field_names()
+        self._require_selected_fields()
+        return list(self._selected_fields)
+
     def refresh(self) -> None:
         """Reload cached pointer arrays, masks, and metadata from the store.
 
@@ -2119,6 +2271,8 @@ class AtomicDataZarrReader(Reader):
             If the reader has been closed.
         ValueError
             If a versioned custom-level layout is malformed.
+        KeyError
+            If any selected field is absent from the refreshed store.
         """
         if self._root is None:
             raise RuntimeError("Cannot refresh a closed reader.")
@@ -2308,6 +2462,13 @@ class AtomicDataZarrReader(Reader):
         self._level_schema = level_schema
         self._level_ptrs = level_ptrs
         self._metadata_revision += 1
+
+        if self._selected_fields is not None:
+            available_fields = self._available_field_names()
+            self._missing_selected_fields = tuple(
+                name for name in self._selected_fields if name not in available_fields
+            )
+            self._require_selected_fields()
 
     @property
     def field_levels(self) -> dict[str, str]:
@@ -2606,7 +2767,40 @@ class AtomicDataZarrReader(Reader):
         fields: Sequence[tuple[str, str, Any]],
         level_ptrs: Mapping[str, torch.Tensor],
     ) -> list[dict[str, torch.Tensor]]:
-        """Load fragmented samples using one orthogonal selection per field."""
+        """Read a fragmented sample batch with orthogonal field selections.
+
+        Parameters
+        ----------
+        normalized_indices : sequence of int
+            Logical sample indices after negative-index normalization, in
+            caller order.
+        sorted_order : sequence of int
+            Permutation listing caller positions in ascending physical order.
+        sorted_physical : sequence of int
+            Physical sample indices in the order described by ``sorted_order``.
+        fields : sequence of tuple
+            Selected field name, level, and open Zarr array for each read.
+        level_ptrs : mapping from str to Tensor
+            Cached prefix pointers for built-in atom and edge levels and any
+            registered segmented or product custom levels.
+
+        Returns
+        -------
+        list of dict of str to Tensor
+            CPU tensor dictionaries in caller order, including repeated sample
+            indices.
+
+        Notes
+        -----
+        Atom, edge, and segmented or product fields gather ragged ranges from
+        their level pointers with one orthogonal selection per field when rows
+        are present; empty ranges use an empty slice. Product-level segments
+        are reshaped to their parent-axis dimensions, while uniform and system
+        fields gather one physical sample row. Blocks are split into samples,
+        and stored global ``neighbor_list`` atom indices are shifted to
+        sample-local coordinates. The field list has already been restricted
+        to the requested projection, if any.
+        """
         data_by_sorted: list[dict[str, torch.Tensor]] = [{} for _ in sorted_order]
         pointer_ranges: dict[str, tuple[list[int], list[int], np.ndarray]] = {}
         for _key, level, _arr in fields:
@@ -2631,6 +2825,8 @@ class AtomicDataZarrReader(Reader):
                     count = end - start
                     tensor = block[offset : offset + count]
                     if key == "neighbor_list" and level == "edge":
+                        # Stored indices address the global atom array; each
+                        # returned sample uses atom indices starting at zero.
                         tensor = tensor - int(self._atoms_ptr[sorted_physical[i]])
                     tensor = self._reshape_product(
                         tensor, level, sorted_physical[i], level_ptrs
@@ -2652,12 +2848,10 @@ class AtomicDataZarrReader(Reader):
     def _load_many_samples(
         self, indices: Sequence[int]
     ) -> list[dict[str, torch.Tensor]]:
-        """Load raw data for multiple samples in requested order.
+        """Load raw data for several samples in the requested order.
 
-        Contiguous physical samples are read as ranges so each Zarr array is
-        opened once and sliced once per range. The range tensors are then
-        split back into per-sample dictionaries. The base ``Reader`` attaches
-        metadata and optional pinned memory.
+        Logical indices are resolved through the active-sample mask and only
+        selected fields participate in read planning.
 
         Parameters
         ----------
@@ -2673,17 +2867,35 @@ class AtomicDataZarrReader(Reader):
         ------
         RuntimeError
             If the reader has been closed.
+        KeyError
+            If a field in the active projection is missing from the store.
         IndexError
             If any requested index is out of range.
+
+        Notes
+        -----
+        Physical rows are sorted to improve chunk locality. Up to four merged
+        runs are loaded as slices; more fragmented batches use
+        :meth:`_read_many_orthogonal`. Both paths restore caller order and
+        shift stored global ``neighbor_list`` atom indices to sample-local
+        indices. The base ``Reader`` attaches metadata and optional pinned
+        memory after this method returns.
         """
         if self._root is None:
             raise RuntimeError("Cannot read from a closed reader.")
+
+        self._require_selected_fields()
 
         normalized_indices = [self._resolve_logical_index(index) for index in indices]
         if not normalized_indices:
             return []
 
         fields = self._field_entries()
+        if self._selected_fields is not None:
+            # Keep schema and integrity introspection over the full store;
+            # only the arrays in the sample read plan are projected.
+            fields_by_name = {key: (key, level, array) for key, level, array in fields}
+            fields = [fields_by_name[name] for name in self._selected_fields]
 
         level_ptrs = {
             "atom": self._atoms_ptr,

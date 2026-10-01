@@ -4,6 +4,11 @@
 
 ### Added
 
+- Add `nvalchemi.csp` modules for molecular crystal-structure prediction
+  applications, including random rigid-molecule packing, atom-bounded radial
+  matching, and greedy de-duplication for `Batch` and loader-backed pools,
+  with caller-defined priority, confirmation before discarding, an optional
+  conservative pre-screen, and self- and cross-pool match iteration.
 - Add local Hessian-vector products, reusable Hessian operators, and in-place
   dense Hessians for AIMNet2, MACE, Ewald/PME, and flat pipelines, with `Batch`
   and Zarr persistence.
