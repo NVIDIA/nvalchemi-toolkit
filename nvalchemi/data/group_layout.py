@@ -73,9 +73,9 @@ class GroupLayout:
     """Derived mappings between node, graph, and group.
 
     A group is a contiguous collection of one or more graphs that are treated
-    as a single logical unit for operations such as selection, updates, or
-    convergence checks. Examples include the images along one NEB path and
-    members of an ensemble that are processed together.
+    as a single logical unit for updates or convergence checks. Examples include
+    the images along one NEB path and members of an ensemble that are processed
+    together.
     This grouping is independent of the internal node-, edge-, and
     system-level storage groups used by :class:`Batch`.
 
@@ -299,55 +299,6 @@ class GroupLayout:
             )
         return group_values.to(device=self.device)[self.group_idx]
 
-    def graph_mask(self, group_mask: Tensor) -> Tensor:
-        """Broadcast a boolean group mask to its member graphs.
-
-        Parameters
-        ----------
-        group_mask : torch.Tensor
-            Boolean mask over groups, shape ``[G]``.
-
-        Returns
-        -------
-        torch.Tensor
-            Boolean mask over graphs, shape ``[B]``.
-
-        Raises
-        ------
-        TypeError
-            If ``group_mask`` is not a boolean tensor.
-        ValueError
-            If ``group_mask`` does not have shape ``[G]``.
-        """
-        group_mask = self._validate_mask(group_mask, self.num_groups, "group")
-        return group_mask[self.group_idx]
-
-    def selected_group_idx(self, group_mask: Tensor) -> Tensor:
-        """Build local group indices for graphs in selected groups.
-
-        Parameters
-        ----------
-        group_mask : torch.Tensor
-            Boolean mask over groups, shape ``[G]``.
-
-        Returns
-        -------
-        torch.Tensor
-            Dense, zero-based group indices for the selected graphs, shape
-            ``[B_selected]``. Selected groups retain their original order.
-
-        Raises
-        ------
-        TypeError
-            If ``group_mask`` is not a boolean tensor.
-        ValueError
-            If ``group_mask`` does not have shape ``[G]``.
-        """
-        group_mask = self._validate_mask(group_mask, self.num_groups, "group")
-        dense_group_idx = group_mask.to(dtype=torch.long).cumsum(0) - 1
-        selected_graphs = self.graph_mask(group_mask)
-        return dense_group_idx[self.group_idx[selected_graphs]]
-
     def _validate_mask(self, mask: Tensor, size: int, cardinality: str) -> Tensor:
         if not isinstance(mask, Tensor):
             raise TypeError(f"{cardinality}_mask must be a torch.Tensor")
@@ -358,53 +309,3 @@ class GroupLayout:
                 f"{cardinality}_mask must have shape ({size},), got {tuple(mask.shape)}"
             )
         return mask.to(device=self.device)
-
-
-def _select_groups(
-    batch: Batch,
-    group_mask: Tensor,
-) -> Batch:
-    """Select complete groups from a batch into a new batch and rebase their local indices.
-
-    Parameters
-    ----------
-    batch : Batch
-        Grouped batch to select from.
-    group_mask : torch.Tensor
-        Boolean mask over groups, shape ``[G]``.
-
-    Returns
-    -------
-    Batch
-        Tight batch containing the selected complete groups. An all-false mask
-        returns a zero-graph batch with the same schema.
-    """
-    layout = batch.group_layout
-    graph_mask = layout.graph_mask(group_mask)
-    selected_group_idx = layout.selected_group_idx(group_mask)
-
-    if not torch.any(graph_mask):
-        # Empty group selections must be tight; empty_like preserves buffer capacity.
-        empty_idx = torch.empty(0, dtype=torch.int32, device=batch.device)
-        storage = batch._storage.select(empty_idx)
-        # Rebind every selected level to one cloned schema, as index_select does.
-        schema = batch._storage.attr_map.clone()
-        storage.attr_map = schema
-        for group in storage.groups.values():
-            group.attr_map = schema
-        selected = type(batch)._construct(
-            device=batch.device,
-            keys=(
-                {name: fields.copy() for name, fields in batch.keys.items()}
-                if batch.keys
-                else None
-            ),
-            storage=storage,
-            data_class=batch._data_class,
-        )
-        _ = selected.group_layout
-        return selected
-
-    selected = batch.index_select(graph_mask)
-    selected.set_group_layout(selected_group_idx)
-    return selected

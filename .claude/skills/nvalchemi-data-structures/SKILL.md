@@ -248,8 +248,8 @@ of one NEB path). Use `batch.set_group_layout(group_idx)` to assign integer
 labels per graph, normalized to dense zero-based IDs. Read the derived
 `batch.group_layout`, a cached `GroupLayout` with `graph_rank`, `node_to_group`,
 `group_ptr`, `num_graphs_per_group`, and mask/broadcast helpers `reduce_all`,
-`reduce_any`, `broadcast`, `graph_mask`, and `selected_group_idx`. The cache
-invalidates when `group_idx` is reassigned or graph membership changes, but not
+`reduce_any`, and `broadcast`. The cache invalidates when `group_idx` is reassigned
+or graph membership changes, but not
 after in-place changes such as `batch.group_idx[3] = 2`. Call
 `batch.set_group_layout(batch.group_idx)` to validate and rebuild it. `append()`
 requires both batches grouped or both ungrouped and rebases labels. `put()`

@@ -22,7 +22,6 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch, GroupLayout
-from nvalchemi.data.group_layout import _select_groups
 
 
 def _batch() -> Batch:
@@ -87,30 +86,6 @@ class TestBatchGroupLayout:
         assert layout.reduce_all(graph_mask).tolist() == [True, False]
         assert layout.reduce_any(graph_mask).tolist() == [True, True]
         assert layout.broadcast(torch.tensor([7, 9])).tolist() == [7, 7, 9, 9, 9]
-        assert layout.graph_mask(torch.tensor([False, True])).tolist() == [
-            False,
-            False,
-            True,
-            True,
-            True,
-        ]
-        assert layout.selected_group_idx(torch.tensor([False, True])).tolist() == [
-            0,
-            0,
-            0,
-        ]
-
-    def test_select_groups_rebases_nonadjacent_groups(self):
-        batch = _batch()
-        batch.set_group_layout(torch.tensor([0, 0, 1, 2, 2]))
-
-        selected = _select_groups(batch, torch.tensor([True, False, True]))
-
-        assert selected.num_graphs == 4
-        assert selected.num_nodes == 8
-        assert selected.group_idx.tolist() == [0, 0, 1, 1]
-        assert selected.group_layout.num_graphs_per_group.tolist() == [2, 2]
-        assert batch.group_idx.tolist() == [0, 0, 1, 2, 2]
 
     def test_index_select_preserves_selected_group_labels(self):
         batch = _batch()
@@ -138,18 +113,6 @@ class TestBatchGroupLayout:
         assert selected.group_idx.tolist() == [0, 1, 0, 1, 1]
         with pytest.raises(ValueError, match="same group must be contiguous"):
             selected.set_group_layout(selected.group_idx)
-
-    def test_select_groups_returns_grouped_empty_batch(self):
-        batch = _batch()
-        batch.set_group_layout(torch.tensor([0, 0, 1, 2, 2]))
-
-        selected = _select_groups(batch, torch.tensor([False, False, False]))
-
-        assert selected.num_graphs == 0
-        assert selected.num_nodes == 0
-        assert selected.num_edges == 0
-        assert selected.group_idx.numel() == 0
-        assert selected.group_layout.num_groups == 0
 
     @pytest.mark.parametrize(
         "operation", ["clone", "to", "cpu", "cuda", "index_select"]

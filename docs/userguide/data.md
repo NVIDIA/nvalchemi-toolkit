@@ -108,8 +108,8 @@ lazily builds and caches a
 {py:class}`~nvalchemi.data.group_layout.GroupLayout`, mapping between graph,
 node, and group cardinalities (`graph_rank`, `node_to_group`, `group_ptr`,
 `num_graphs_per_group`), plus mask/broadcast helpers `reduce_all`,
-`reduce_any`, `broadcast`, `graph_mask`, and `selected_group_idx`. The cache
-invalidates automatically when `group_idx` is reassigned or graph membership
+`reduce_any`, and `broadcast`. The cache invalidates automatically when
+`group_idx` is reassigned or graph membership
 mutates (selection, `zero`, `defrag`, ...). The derived metadata is a snapshot
 taken when `group_layout` is first accessed. In-place changes such as
 `batch.group_idx[3] = 2` cannot be detected; call

@@ -6,7 +6,7 @@
 
 - Add `GroupLayout` and `Batch.group_layout` for treating contiguous graphs as
   logical groups, with graph/node mappings, group cardinalities, reductions,
-  broadcasts, selection, cache invalidation, and grouped-batch append support.
+  broadcasts, cache invalidation, and grouped-batch append support.
 - Add support for PEFT fine-tuning within `FineTuningStrategy`, including
   LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
   and base-model fingerprint checks for PEFT checkpoint loading.
