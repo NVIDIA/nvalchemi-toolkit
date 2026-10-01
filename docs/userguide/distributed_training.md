@@ -236,6 +236,22 @@ Whichever sampler is in play, call
 let {py:class}`~nvalchemi.training.TrainingStrategy` call it during training, so
 distributed samplers reshuffle deterministically from epoch to epoch.
 
+## On-policy distillation
+
+Distillation scales through the same manager and `DDPHook`, both offline and
+on-policy. The on-policy segment loop, which alternates generating frames with
+the student and training on them, adds the sharding its generation phase needs.
+Each rank propagates its own shard of the initial structures that trajectories
+start from, labels the generated frames with its own teacher replica, and fills
+its own replay buffer and mixed loader. The student's gradient all-reduce is
+therefore the only per-step training traffic between ranks; setup and
+validation add small collectives, and the frozen teacher never joins one. The
+offline path does not enforce the hook, though. A multi-rank offline
+launch without a `DDPHook` trains every rank on the whole store independently,
+and reports a `global_step_count` inflated by the world size. See
+{doc}`/modules/training/distillation` for the sharding rules, the seeding
+contract, and the single-node and multi-node launch runbook.
+
 ## API details
 
 This guide covers the training-facing surface of the manager. For the complete

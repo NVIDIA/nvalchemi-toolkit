@@ -306,6 +306,24 @@ class TestOrderedStructureSamplerShard:
         with pytest.raises(ValueError, match="leaves rank=1 empty"):
             sampler.probe()
 
+    def test_an_unsharded_sampler_reports_the_whole_world_as_rank_zero(self) -> None:
+        """Before a deal, the sampler owns every row as the one rank of one."""
+        sampler = OrderedStructureSampler(_make_dataset())
+
+        assert (sampler.rank, sampler.world_size) == (0, 1)
+        assert sampler.rows == tuple(range(len(_SIZES)))
+
+    def test_a_shard_publishes_the_rank_and_world_it_was_dealt_for(self) -> None:
+        """The deal is readable without going through state_dict."""
+        sampler = OrderedStructureSampler(_make_dataset())
+
+        sampler.shard(1, 2)
+
+        assert (sampler.rank, sampler.world_size) == (1, 2)
+        assert sampler.rows == tuple(range(1, len(_SIZES), 2))
+        assert sampler.state_dict()["rank"] == sampler.rank
+        assert sampler.state_dict()["world_size"] == sampler.world_size
+
     def test_installing_a_shard_reopens_the_sampler(self) -> None:
         """A rerun restarts the pass, so the sampler opens at its first row again."""
         sampler = OrderedStructureSampler(_make_dataset())

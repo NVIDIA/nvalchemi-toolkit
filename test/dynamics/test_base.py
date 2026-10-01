@@ -31,10 +31,13 @@ from nvalchemi.dynamics.base import (
     BaseDynamics,
     ConvergenceHook,
     DynamicsStage,
+    FusedStage,
     requires_grad_ctx,
 )
 from nvalchemi.dynamics.demo import DemoDynamics
+from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin
 from nvalchemi.hooks import DynamicsContext, Hook
+from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # -----------------------------------------------------------------------------
@@ -2070,6 +2073,201 @@ class TestStepSystemLevelFieldMasking:
         # Graduated samples' energy must be restored to their original values
         assert batch.energy[1].item() == pytest.approx(20.0)
         assert batch.energy[2].item() == pytest.approx(30.0)
+
+
+class _GeneratorStage(BaseDynamics):
+    """Stage drawing its noise from a torch.Generator and exposing no seed."""
+
+    def __init__(self, model: BaseModelMixin, **kwargs: object) -> None:
+        """Hold the generator no integer seed stands for."""
+        super().__init__(model=model, **kwargs)
+        self.generator = torch.Generator().manual_seed(1234)
+
+
+class _ReadOnlySeedStage(BaseDynamics):
+    """Stage publishing its seed through a getter-only property."""
+
+    def __init__(self, model: BaseModelMixin, **kwargs: object) -> None:
+        """Hold the seed behind a name nothing can assign to."""
+        super().__init__(model=model, **kwargs)
+        self._seed = 7
+
+    @property
+    def random_seed(self) -> int:
+        """Return the seed the offset can read but not move."""
+        return self._seed
+
+
+class _RankKeyedStages(BaseDynamics):
+    """Stage composing others in a rank-keyed mapping, as a pipeline does."""
+
+    def __init__(self, model: BaseModelMixin, stages: dict[int, BaseDynamics]) -> None:
+        """Hold *stages* under the name the walk reads a mapping from."""
+        super().__init__(model=model)
+        self.stages = stages
+
+
+class TestBookkeepingKeys:
+    """Tests for BaseDynamics.bookkeeping_keys."""
+
+    def setup_method(self) -> None:
+        """Build the demo model every dynamics under test wraps."""
+        self.model = DemoModelWrapper(DemoModel())
+
+    def test_a_bare_dynamics_reports_the_base_registry(self) -> None:
+        """The engine's own bookkeeping is status and system_id, plus registrations."""
+        dynamics = BaseDynamics(model=self.model)
+
+        keys = dynamics.bookkeeping_keys()
+
+        assert {"status", "system_id"} <= keys
+        assert keys == frozenset(BaseDynamics._bookkeeping_keys)
+
+    def test_a_fused_stage_adds_its_own_key_and_its_sub_stages_counters(self) -> None:
+        """reprime_pending lives on FusedStage alone; the counters on the base registry."""
+        fused = DemoDynamics(self.model, n_steps=1) + DemoDynamics(
+            self.model, n_steps=2
+        )
+
+        keys = fused.bookkeeping_keys()
+
+        assert "reprime_pending" in keys
+        assert {"n_steps_counter_0", "n_steps_counter_1"} <= keys
+        assert "reprime_pending" not in BaseDynamics._bookkeeping_keys
+
+    def test_a_key_registered_on_a_sub_stage_class_is_reached_from_the_root(
+        self,
+    ) -> None:
+        """A subclass registry the base never sees is still part of the composition."""
+
+        class _Marked(DemoDynamics):
+            pass
+
+        _Marked.register_bookkeeping_key(
+            "marker", lambda n, dev: torch.zeros(n, 1, dtype=torch.long, device=dev)
+        )
+        fused = DemoDynamics(self.model, n_steps=1) + _Marked(self.model, n_steps=1)
+
+        assert "marker" in fused.bookkeeping_keys()
+        assert "marker" not in BaseDynamics._bookkeeping_keys
+        assert "marker" not in DemoDynamics(self.model, n_steps=1).bookkeeping_keys()
+
+    def test_the_result_is_a_frozenset_read_at_call_time(self) -> None:
+        """A registration made after one read shows in the next."""
+
+        class _Late(DemoDynamics):
+            pass
+
+        dynamics = _Late(self.model, n_steps=1)
+        before = dynamics.bookkeeping_keys()
+        _Late.register_bookkeeping_key(
+            "late", lambda n, dev: torch.zeros(n, 1, dtype=torch.long, device=dev)
+        )
+
+        assert isinstance(before, frozenset)
+        assert "late" not in before
+        assert "late" in dynamics.bookkeeping_keys()
+
+
+class TestSeedOffset:
+    """Tests for BaseDynamics.seed_offset and NVTLangevin.random_seed."""
+
+    def setup_method(self) -> None:
+        """Build the demo model every dynamics under test wraps."""
+        self.model = DemoModelWrapper(DemoModel())
+
+    def _langevin(self, seed: int = 7) -> NVTLangevin:
+        """Return a Langevin integrator seeded with *seed*."""
+        return NVTLangevin(
+            self.model, dt=0.1, temperature=300.0, friction=0.1, random_seed=seed
+        )
+
+    def test_the_langevin_seed_is_read_and_set_through_random_seed(self) -> None:
+        """The public property fronts the seed the O step adds step_count to."""
+        dynamics = self._langevin(seed=7)
+
+        dynamics.random_seed = 12
+
+        assert dynamics.random_seed == 12
+        assert dynamics._random_seed == 12
+
+    def test_a_stochastic_integrator_is_offset_and_nothing_is_reported(self) -> None:
+        """One seeded stage moves by the offset and leaves nothing unreached."""
+        dynamics = self._langevin(seed=7)
+
+        assert dynamics.seed_offset(1_000) == ()
+        assert dynamics.random_seed == 1_007
+
+    def test_a_fused_stage_offsets_every_seeded_sub_stage(self) -> None:
+        """The fused root holds no seed; the thermostat drawing the noise does."""
+        thermostat = self._langevin(seed=7)
+        fused = DemoDynamics(self.model, n_steps=1) + thermostat
+
+        assert isinstance(fused, FusedStage)
+        assert fused.seed_offset(1_000) == ()
+        assert not hasattr(fused, "random_seed")
+        assert thermostat.random_seed == 1_007
+
+    def test_one_integrator_composed_twice_is_offset_once(self) -> None:
+        """Two sub-stages that are one object take one offset, not two."""
+        thermostat = self._langevin(seed=7)
+
+        assert (thermostat + thermostat).seed_offset(1_000) == ()
+
+        assert thermostat.random_seed == 1_007
+
+    def test_a_negated_offset_restores_every_seed_exactly(self) -> None:
+        """Integer seeds make the round trip exact, so a driver can undo its offset."""
+        thermostat = self._langevin(seed=7)
+        fused = DemoDynamics(self.model, n_steps=1) + thermostat
+
+        fused.seed_offset(1_000_003)
+        fused.seed_offset(-1_000_003)
+
+        assert thermostat.random_seed == 7
+
+    def test_a_deterministic_dynamics_is_not_reported(self) -> None:
+        """A stage exposing neither a seed nor a generator has no stream to move."""
+        assert DemoDynamics(self.model, n_steps=1).seed_offset(1_000) == ()
+
+    def test_a_generator_stage_without_a_seed_is_named(self) -> None:
+        """Randomness the offset cannot reach is reported by the stage's class name."""
+        dynamics = _GeneratorStage(self.model)
+
+        assert dynamics.seed_offset(1_000) == ("_GeneratorStage",)
+
+    def test_a_generator_stage_beside_a_seeded_one_is_the_only_stage_named(
+        self,
+    ) -> None:
+        """One seed found in the tree does not stand for the stages beside it."""
+        thermostat = self._langevin(seed=7)
+        fused = _GeneratorStage(self.model, n_steps=1) + thermostat
+
+        assert fused.seed_offset(1_000) == ("_GeneratorStage",)
+        assert thermostat.random_seed == 1_007
+
+    def test_a_read_only_seed_is_named_and_left_alone(self) -> None:
+        """A getter-only random_seed cannot be moved, so the stage is reported."""
+        dynamics = _ReadOnlySeedStage(self.model)
+
+        assert dynamics.seed_offset(1_000) == ("_ReadOnlySeedStage",)
+        assert dynamics.random_seed == 7
+
+    def test_a_zero_offset_changes_nothing_and_still_reports(self) -> None:
+        """A driver probes what it cannot reach without moving what it can."""
+        thermostat = self._langevin(seed=7)
+        fused = _GeneratorStage(self.model, n_steps=1) + thermostat
+
+        assert fused.seed_offset(0) == ("_GeneratorStage",)
+        assert thermostat.random_seed == 7
+
+    def test_a_rank_keyed_stage_mapping_is_walked(self) -> None:
+        """Stages held in a mapping, the way a pipeline keys them, are reached."""
+        thermostat = self._langevin(seed=7)
+        composed = _RankKeyedStages(self.model, {0: thermostat})
+
+        assert composed.seed_offset(1_000) == ()
+        assert thermostat.random_seed == 1_007
 
 
 if __name__ == "__main__":

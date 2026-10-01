@@ -19,12 +19,13 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import warnings
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence, Sized
 from contextlib import contextmanager, nullcontext
 from typing import TYPE_CHECKING, Annotated, Any
 
 import torch
 from pydantic import Field, PrivateAttr, model_validator
+from torch import distributed as dist
 
 from nvalchemi._serialization import _dtype_deserialize, _import_cls
 from nvalchemi._typing import ModelOutputs
@@ -33,6 +34,9 @@ from nvalchemi.data.datapipes.dataset import (
     dataset_device,
     same_device,
 )
+from nvalchemi.data.datapipes.samplers import distributed_shard
+from nvalchemi.data.level_storage import resolve_device
+from nvalchemi.distributed import collective_device
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.dynamics.structure_sampler import WithinBudget
 from nvalchemi.models.base import BaseModelMixin
@@ -45,6 +49,7 @@ from nvalchemi.training.distillation.config import (
     ResizableSink,
     _check_sole_migrator,
     _check_structure_status,
+    _propagator_tree,
 )
 from nvalchemi.training.distillation.hooks import (
     TeacherLabelHook,
@@ -70,8 +75,17 @@ from nvalchemi.training.distillation.scoring import (
     signal_fields,
     signal_for_field,
 )
-from nvalchemi.training.distillation.seeding import InitialStructures
-from nvalchemi.training.distributed import get_rank, get_world_size
+from nvalchemi.training.distillation.seeding import (
+    InitialStructures,
+    InitialStructuresSource,
+)
+from nvalchemi.training.distributed import (
+    all_reduce,
+    all_reduce_flags,
+    get_rank,
+    get_world_size,
+)
+from nvalchemi.training.hooks.ddp import DDPHook
 from nvalchemi.training.losses.composition import loss_target_keys
 from nvalchemi.training.runtime import (
     eval_configured_models,
@@ -79,6 +93,7 @@ from nvalchemi.training.runtime import (
     freeze_unconfigured_models,
     move_to_devices,
     train_configured_models,
+    unwrap_model,
 )
 from nvalchemi.training.strategy import TrainingStrategy
 
@@ -86,6 +101,7 @@ if TYPE_CHECKING:
     from torch.optim.lr_scheduler import LRScheduler
 
     from nvalchemi.data.batch import Batch
+    from nvalchemi.dynamics.base import BaseDynamics
     from nvalchemi.dynamics.sinks import DataSink
     from nvalchemi.hooks import TrainContext
     from nvalchemi.training import ValidationConfig
@@ -101,6 +117,9 @@ _REQUIRED_MODELS = frozenset({"student", "teacher"})
 
 _PREDICTION_KEY_PREFIX = "predicted_"
 """Prefix the stock training function publishes every student output under."""
+
+_SEED_OK, _SEED_EMPTY, _SEED_FAILED = 0, 1, 2
+"""Verdict codes a rank reports on its initial batch: seeded, empty shard, or failed build."""
 
 
 def default_distillation_fn(
@@ -291,6 +310,55 @@ def _relaxation_lifecycle(
         dynamics.hooks.remove(criterion)
         dynamics.hooks.remove(divergence)
         dynamics.hooks.remove(capture)
+
+
+@contextmanager
+def _rank_local_propagator_seed(dynamics: BaseDynamics, offset: int) -> Iterator[None]:
+    """Temporarily move a stochastic propagator's RNG onto this rank's own stream.
+
+    A counter-based thermostat draws its noise from ``seed + step_count`` and
+    the atom index. Without an offset, ranks stepping in lockstep would apply
+    the same kicks to their different structures, and identical kicks to
+    replicas of one geometry. :meth:`~nvalchemi.dynamics.BaseDynamics.seed_offset`
+    moves every ``random_seed`` in the composition, because a
+    ``FIRE(...) + NVTLangevin(...)`` root exposes no seed of its own. The
+    seeds are integers, so the negated offset on exit restores them exactly.
+
+    Parameters
+    ----------
+    dynamics : BaseDynamics
+        Propagator whose ``random_seed``, and every sub-stage's, is offset on
+        entry and restored on exit. Randomness the offset cannot reach is
+        left untouched here and is reported by
+        :meth:`DistillationStrategy._warn_shared_propagator_streams`.
+    offset : int
+        Amount added to every seed found. Zero leaves the propagator untouched.
+
+    Yields
+    ------
+    None
+        Control while the propagator draws from this rank's stream.
+    """
+    dynamics.seed_offset(offset)
+    try:
+        yield
+    finally:
+        dynamics.seed_offset(-offset)
+
+
+def _structure_count(structures: InitialStructuresSource) -> int | None:
+    """Return how many rows *structures* holds, or ``None`` if it reports no count.
+
+    A source that publishes its dataset, as
+    :class:`~nvalchemi.training.distillation.InitialStructures` does, is
+    counted through that dataset. Another source is counted through ``len()``
+    when it defines one. A streaming source with neither is left uncounted,
+    and the world-size checks that need the count are skipped for it.
+    """
+    dataset = getattr(structures, "dataset", None)
+    if dataset is not None:
+        return len(dataset)
+    return len(structures) if isinstance(structures, Sized) else None
 
 
 def _propagates_student(propagator_model: object, student: BaseModelMixin) -> bool:
@@ -614,6 +682,7 @@ class DistillationStrategy(TrainingStrategy):
     _scorer: InProcessTeacherScorer | None = PrivateAttr(default=None)
     _teacher_fields: tuple[str, ...] = PrivateAttr(default=())
     _warned_label_seam: bool = PrivateAttr(default=False)
+    _warned_unwrapped_student: bool = PrivateAttr(default=False)
     _replay_buffer: ReplayBuffer | None = PrivateAttr(default=None)
     _validated_step: int | None = PrivateAttr(default=None)
 
@@ -637,6 +706,56 @@ class DistillationStrategy(TrainingStrategy):
                 "validation and must not be cleared."
             )
         return self._scorer
+
+    @property
+    def structure_shard(self) -> tuple[int, ...]:
+        """Rows of the initial structures this rank propagates from.
+
+        Once :meth:`run` has installed this rank's shard on the source, the
+        rows are read from the source, which publishes them with the ``rank``
+        and ``world_size`` they were dealt for, as
+        :class:`~nvalchemi.dynamics.OrderedStructureSampler` does. Before
+        that, they are dealt here from the launcher's rank and world size
+        through the same :func:`~nvalchemi.data.datapipes.distributed_shard`
+        the sampler uses. The property therefore means the same thing before
+        and after a run.
+
+        Returns
+        -------
+        tuple[int, ...]
+            Indices into ``on_policy.initial_structures.dataset``, in dataset
+            order. Empty for an offline strategy, and for a source that
+            publishes neither its rows nor a count.
+
+        See Also
+        --------
+        nvalchemi.dynamics.OrderedStructureSampler.shard :
+            How the rows are dealt, and the shard-local position the deal
+            resets.
+        """
+        if self.on_policy is None:
+            return ()
+        structures = self.on_policy.initial_structures
+        rank = get_rank(self.distributed_manager)
+        world_size = get_world_size(self.distributed_manager)
+        installed = (
+            getattr(structures, "rank", None),
+            getattr(structures, "world_size", None),
+        )
+        if installed == (rank, world_size):
+            return tuple(getattr(structures, "rows", ()))
+        total = _structure_count(structures)
+        if total is None:
+            return ()
+        return tuple(
+            distributed_shard(
+                list(range(total)),
+                num_replicas=world_size,
+                rank=rank,
+                drop_last=False,
+                pad=False,
+            )
+        )
 
     @model_validator(mode="before")
     @classmethod
@@ -935,7 +1054,7 @@ class DistillationStrategy(TrainingStrategy):
         """
         if probe is None:
             return
-        dropped = _run_local_keys()
+        dropped = _run_local_keys(self.on_policy.dynamics)
         unmixable = sorted(
             name for name in _frame_schema(probe) if name.partition(".")[2] in dropped
         )
@@ -1081,10 +1200,11 @@ class DistillationStrategy(TrainingStrategy):
         ------
         ValueError
             If *dataloader* is ``None`` in offline mode or supplied in on-policy
-            mode, if the on-policy loop is entered on more than one rank, if a
-            segment's loader produces no batches, if the propagator already
-            carries a status-migrating criterion or a sampler of its own, or if
-            the configured criterion migrates off a status no initial structure
+            mode, if a multi-rank launch has fewer initial structures than
+            ranks or leaves the student unsynchronized, if a segment's loader
+            produces no batches, if the propagator already carries a
+            status-migrating criterion or a sampler of its own, or if the
+            configured criterion migrates off a status no initial structure
             carries.
 
         Warns
@@ -1095,7 +1215,9 @@ class DistillationStrategy(TrainingStrategy):
             train on the frames already generated. Also once per segment
             boundary that retires trajectories the ``divergence`` predicate
             flagged, by default those whose positions or forces stopped
-            being finite.
+            being finite. Also if a multi-rank run cannot deal its initial
+            structures out in equal shares, or if its propagator holds
+            randomness that the rank offsets cannot separate.
 
         Notes
         -----
@@ -1112,15 +1234,33 @@ class DistillationStrategy(TrainingStrategy):
         A propagator model that merely composes the student is held in
         evaluation mode for the whole loop. Every mode is restored on exit.
         Generated frames are staged on ``reference_dataset``'s device unless
-        ``replay_device`` names another. The loop is single-process: it
-        refuses to start on more than one rank rather than regenerate the same
-        frames on every rank. Splitting a built-in propagator's run into
-        segments is exact, because ``run`` never resets ``step_count`` and the
-        Langevin thermostat's generator is keyed on it. The progress of a
+        ``replay_device`` names another. Splitting a built-in propagator's run
+        into segments is exact, because ``run`` never resets ``step_count`` and
+        the Langevin thermostat's generator is keyed on it. The progress of a
         segment that exits early is read from ``dynamics.step_count``. A
         :class:`~nvalchemi.dynamics.FusedStage` pays its priming forward pass
-        once per segment. See :ref:`training-distillation-api` for the mixture
-        and schema contract.
+        once per segment.
+
+        Across ranks, the loop is data-parallel. Each rank propagates its own
+        strided shard of ``initial_structures``, labels the generated frames
+        with its own teacher replica, and fills its own replay buffer. The
+        reference dataset stays replicated, and every rank draws from all of it
+        under a rank-offset ``seed``. The same offset moves every
+        ``random_seed`` that the propagator and its sub-stages expose, through
+        :meth:`~nvalchemi.dynamics.BaseDynamics.seed_offset`. A stage that
+        holds randomness the offset cannot move is named in a warning. The
+        student's gradient all-reduce, installed by a
+        :class:`~nvalchemi.training.hooks.DDPHook`, is the only per-step
+        training traffic between ranks. Setup adds small collectives, which
+        check the shards and the replay placement, and validation all-reduces
+        its metrics. The teacher never joins a collective. Every rank runs the
+        same number of segments and batches, so the ranks reach each
+        all-reduce together. A launch with fewer initial structures than ranks
+        is refused before any segment runs, and so is one whose student
+        nothing wraps, unless ``require_wrapped_student=False`` waives that
+        check for a wrapper that works in place. See
+        :ref:`training-distillation-api` for the mixture and schema contract
+        and the scale-out runbook.
 
         Relaxation runs are the reason a segment can exit early, and
         ``OnPolicyConfig.fmax`` turns such a run into a lifecycle. For the
@@ -1172,14 +1312,19 @@ class DistillationStrategy(TrainingStrategy):
         with strategy_context:
             self._prepare_setup_hooks()
             self._validate_runtime_devices()
-            self._validate_single_process()
+            self._validate_structure_shards(config)
+            self._warn_unequal_structure_shards(config)
+            self._warn_shared_propagator_streams(config)
             self.models = move_to_devices(self.models, self.devices)
             propagator_model = config.dynamics.model
             if propagator_model is not self.models["student"] and isinstance(
                 propagator_model, torch.nn.Module
             ):
                 propagator_model.to(self.devices[0])
+            unsynchronized = self.models["student"]
             self._run_setup_hooks()
+            self._validate_synchronized_student(config, unsynchronized)
+            replay_device = self._resolve_replay_device(config)
             target_step_count = self._resolve_target_step_count(None)
             if self.step_count >= target_step_count:
                 return
@@ -1194,22 +1339,22 @@ class DistillationStrategy(TrainingStrategy):
                     get_rank(self.distributed_manager),
                     get_world_size(self.distributed_manager),
                 )
-                state = _to_device(
-                    config.initial_structures.initial_batch(), primary_device
-                )
+                state = self._seed_initial_state(config, primary_device)
                 if self._replay_buffer is None:
                     self._replay_buffer = ReplayBuffer(
                         capacity=config.replay_capacity,
                         eviction=config.replay_eviction,
                         admission=config.replay_admission,
-                        device=self._resolve_replay_device(config),
+                        device=replay_device,
                     )
                 buffer = self._replay_buffer
+                # Compare against the student module, not a DDPHook's wrapper.
+                student = unwrap_model(self.models["student"])
                 propagator_model = config.dynamics.model
                 held_propagator = (
                     evaluating(propagator_model)
                     if isinstance(propagator_model, torch.nn.Module)
-                    and propagator_model is not self.models["student"]
+                    and propagator_model is not student
                     else nullcontext()
                 )
                 # Only a lifecycle stores graduated graphs by another route;
@@ -1233,6 +1378,9 @@ class DistillationStrategy(TrainingStrategy):
                             ),
                             eval_configured_models(self.models, self.optimizer_configs),
                             held_propagator,
+                            _rank_local_propagator_seed(
+                                config.dynamics, self._rank_seed_offset(config)
+                            ),
                         ):
                             while self.step_count < target_step_count:
                                 if state is not None:
@@ -1275,25 +1423,331 @@ class DistillationStrategy(TrainingStrategy):
             finally:
                 self._restore_requires_grad_filter()
 
-    def _validate_single_process(self) -> None:
-        """Reject a multi-rank launch, whose segment loaders the loop does not shard.
+    def _validate_structure_shards(self, config: OnPolicyConfig) -> None:
+        """Reject initial structures too few to give every rank at least one.
 
-        The world size is read at run time rather than at construction, for
-        two reasons. A launcher has initialized the process group by then. An
-        offline strategy built by the same script is also free to be
-        distributed.
+        This is the pre-check every rank runs alone and reaches the same
+        verdict on, before any collective: it needs only the structure count
+        and the world size, which every rank reads identically. The sampler's
+        own empty-shard refusal cannot play that part, because it is raised
+        only on the rank whose shard came up empty, while its peers go on to
+        the first collective and block there. A source that reports no count
+        is checked later by :meth:`_seed_initial_state`, which reduces the
+        verdict across the world instead. The world size is read at run time,
+        after a launcher has initialized the process group. An offline
+        strategy built by the same script distributes freely.
+
+        Parameters
+        ----------
+        config : OnPolicyConfig
+            Configuration of the loop about to start.
+
+        Raises
+        ------
+        ValueError
+            If the initial structures hold fewer rows than there are ranks.
         """
         world_size = get_world_size(self.distributed_manager)
         if world_size == 1:
             return
+        num_structures = _structure_count(config.initial_structures)
+        if num_structures is None:
+            return
+        if num_structures < world_size:
+            raise ValueError(
+                "Every rank propagates its own share of the initial structures, "
+                "so there has to be at least one for each; got "
+                f"{num_structures!r} structures on {world_size!r} ranks. Start "
+                "from more structures, or launch fewer ranks."
+            )
+
+    def _seed_initial_state(
+        self, config: OnPolicyConfig, device: torch.device
+    ) -> Batch:
+        """Draw this rank's first batch, and require every rank to have one.
+
+        :meth:`_validate_structure_shards` can only check a source that reports
+        how many rows it holds. A source that deals its own shards is checked
+        here instead, by what its ``shard()`` actually left this rank. An empty
+        shard surfaces as the ``ValueError`` a source raises when it has
+        nothing to serve; any other exception the build raises is caught as
+        well, because a rank that left before the exchange would leave its
+        peers blocking in it. Each rank's verdict, a batch, an empty shard, or
+        a failed build, is reduced across the world as one code per rank, the
+        way :func:`~nvalchemi.training.distributed.all_reduce_flags` reduces a
+        flag, before any rank reaches the first gradient collective. A rank
+        whose build failed then raises its own exception, so the cause
+        surfaces where it happened, and every other rank raises a refusal
+        naming the ranks that stopped the run.
+
+        Parameters
+        ----------
+        config : OnPolicyConfig
+            Configuration of the loop about to start, already sharded.
+        device : torch.device
+            Device the run trains on, which the seeded batch is moved to.
+
+        Returns
+        -------
+        Batch
+            Initial batch of this rank's shard.
+
+        Raises
+        ------
+        ValueError
+            If any rank's shard seeded nothing, and no rank's build failed for
+            another reason.
+        RuntimeError
+            If another rank's build raised something other than an empty
+            shard. That rank raises the exception itself.
+        Exception
+            Whatever this rank's own build raised, once the verdict has been
+            exchanged.
+        """
+        world_size = get_world_size(self.distributed_manager)
+        if world_size == 1:
+            return _to_device(config.initial_structures.initial_batch(), device)
+        state: Batch | None = None
+        failure: Exception | None = None
+        try:
+            state = _to_device(config.initial_structures.initial_batch(), device)
+        except Exception as exc:
+            failure = exc
+        seeded = 0 if state is None else state.num_graphs
+        if failure is not None and not isinstance(failure, ValueError):
+            verdict = _SEED_FAILED
+        elif seeded == 0:
+            verdict = _SEED_EMPTY
+        else:
+            verdict = _SEED_OK
+        verdicts = torch.zeros(
+            world_size, dtype=torch.int64, device=collective_device()
+        )
+        verdicts[get_rank(self.distributed_manager)] = verdict
+        verdicts = all_reduce(verdicts, self.distributed_manager, op=dist.ReduceOp.MAX)
+        if not bool(verdicts.any()):
+            return state
+        if verdict == _SEED_FAILED:
+            failure.add_note(
+                "Raised after the initial-batch verdict was exchanged across "
+                f"{world_size!r} ranks; every rank stops here."
+            )
+            raise failure
+        failed = (verdicts == _SEED_FAILED).nonzero().flatten().tolist()
+        empty = (verdicts == _SEED_EMPTY).nonzero().flatten().tolist()
+        if failed:
+            raise RuntimeError(
+                f"Ranks {failed!r} of {world_size!r} failed to build an initial "
+                "batch"
+                + (
+                    f", and ranks {empty!r} were dealt a shard that seeded nothing"
+                    if empty
+                    else ""
+                )
+                + f"; this rank seeded {seeded!r} structures. Every rank stops "
+                "here, before the first collective, and the failing ranks raise "
+                "the cause. Fix it there and relaunch."
+            )
         raise ValueError(
-            "On-policy distillation runs on one process: each rank would build "
-            "its segment loader from its own replay buffer and an unsharded "
-            "reference dataset, so the ranks would train on generated frames no "
-            "rank shares and on the same reference samples; got "
-            f"world_size={world_size!r}. Run the segment loop on one process, or "
-            "distill offline: label the dataset with label_dataset and train the "
-            "store with a DDPHook, which shards it as usual."
+            f"Ranks {empty!r} of {world_size!r} were dealt a shard that seeded "
+            f"nothing; this rank seeded {seeded!r} structures. Every rank "
+            "propagates its own shard of the initial structures, so there has to "
+            "be at least one for each. Provide at least one structure for each "
+            "rank: start from more structures, deal them out evenly in a source "
+            "that shards itself, or launch fewer ranks."
+        ) from failure
+
+    def _warn_unequal_structure_shards(self, config: OnPolicyConfig) -> None:
+        """Report initial structures the world cannot deal out in equal shares.
+
+        Every rank draws the same number of replay samples per batch from a
+        buffer that holds only its own trajectories, and DDP averages the
+        gradients evenly. A frame from a shorter shard is therefore drawn more
+        often. The check needs only the structure count and the world size, so
+        every rank reaches the same verdict without a collective.
+
+        Parameters
+        ----------
+        config : OnPolicyConfig
+            Configuration of the loop about to start.
+
+        Warns
+        -----
+        UserWarning
+            If the initial structures do not divide evenly across the ranks.
+        """
+        world_size = get_world_size(self.distributed_manager)
+        if world_size == 1:
+            return
+        num_structures = _structure_count(config.initial_structures)
+        if num_structures is None:
+            return
+        smallest, remainder = divmod(num_structures, world_size)
+        if remainder == 0:
+            return
+        warnings.warn(
+            "The initial structures do not divide evenly across the world: "
+            f"{num_structures!r} structures dealt across {world_size!r} ranks "
+            f"leave {smallest + 1!r} on {remainder!r} of them and {smallest!r} on "
+            "the rest. Every rank draws the same number of replay samples per "
+            "batch from a buffer holding only its own trajectories, and the "
+            "gradients are averaged rank by rank, so a frame from a shorter "
+            "shard reaches the optimizer with up to "
+            f"{(smallest + 1) / smallest:.2f}x the weight of one from a longer "
+            f"shard. Size the dataset as a whole multiple of {world_size!r} to "
+            "weight every generated frame alike.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    def _warn_shared_propagator_streams(self, config: OnPolicyConfig) -> None:
+        """Report the propagator randomness that the rank offsets cannot separate.
+
+        This warns rather than raises. A propagator that is deterministic in
+        the stages :meth:`~nvalchemi.dynamics.BaseDynamics.seed_offset` cannot
+        reach is correct, and nothing here can tell it apart from one that
+        hides randomness there. A zero offset asks the engine what it cannot
+        move without moving anything. The verdict concerns the whole world,
+        not this rank alone, so rank zero reports it too. It is reported
+        before any segment is generated or any teacher pass is paid for.
+
+        Parameters
+        ----------
+        config : OnPolicyConfig
+            Configuration of the loop about to start.
+
+        Warns
+        -----
+        UserWarning
+            If a stage holds randomness the offset cannot move, or if nothing
+            in the composition exposes an integer ``random_seed`` at all.
+        """
+        if get_world_size(self.distributed_manager) == 1:
+            return
+        unmoved = config.dynamics.seed_offset(0)
+        seeded = any(
+            isinstance(getattr(node, "random_seed", None), int)
+            for node in _propagator_tree(config.dynamics)
+        )
+        if unmoved:
+            warnings.warn(
+                "Part of this run's propagator stays on the shared random "
+                f"stream: {sorted(set(unmoved))!r} hold randomness that "
+                "seed_offset cannot move, a torch.Generator with no integer "
+                "random_seed or a random_seed without a setter. Every rank "
+                "draws the same stream in those stages. Ranks seeded with "
+                "replicas of one structure then generate the same trajectories, "
+                "which the teacher labels once per rank. Seed those generators "
+                "from the global rank yourself, or expose the seed as a settable "
+                "integer random_seed the loop can offset.",
+                UserWarning,
+                stacklevel=2,
+            )
+        elif not seeded:
+            warnings.warn(
+                "This run's propagator noise could not be moved onto per-rank "
+                f"streams: {type(config.dynamics).__name__!r} exposes no integer "
+                "random_seed, and neither does anything it composes. A "
+                "deterministic propagator has no stream to separate and can "
+                "ignore this. One that keeps its randomness elsewhere has to be "
+                "given a rank-distinct seed by the caller, or every rank applies "
+                "the same noise to the structures it was dealt.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    def _validate_synchronized_student(
+        self, config: OnPolicyConfig, unsynchronized: BaseModelMixin
+    ) -> None:
+        """Reject a multi-rank run whose student nothing keeps in step.
+
+        The on-policy loop needs this where plain data-parallel training does
+        not: each rank generates its frames from its own copy of the student,
+        so a student whose gradients are not synchronized drifts into a
+        private replica on every rank, each rank trains and generates from a
+        different policy, and only rank zero's is checkpointed.
+
+        Called after the ``SETUP`` stage, which is where a
+        :class:`~nvalchemi.training.hooks.DDPHook` replaces the models it is
+        given with wrappers. When the strategy carries a ``DDPHook``, the
+        check reads :attr:`~nvalchemi.training.hooks.DDPHook.wrapped_keys`
+        and passes when ``"student"`` is among them. Failing that, with or
+        without a ``DDPHook``, it passes when the stage put something else in
+        the student's place and that object owns the student, as
+        :func:`~nvalchemi.training.runtime.unwrap_model` reads ownership, so a
+        hand-rolled or FSDP wrapper passes too, even beside a ``DDPHook`` that
+        was given other models. That fallback compares against
+        the module registered before the stage rather than only unwrapping the
+        one registered afterwards; otherwise a bare student that happens to
+        hold a submodule named ``module`` would pass as wrapped. The model the
+        propagator holds plays no part in either path. A wrapper that works in
+        place leaves nothing to compare, so ``require_wrapped_student=False``
+        waives the check with a one-time warning, and gradient synchronization
+        becomes the caller's responsibility.
+
+        Parameters
+        ----------
+        config : OnPolicyConfig
+            Configuration whose ``require_wrapped_student`` governs the check.
+        unsynchronized : BaseModelMixin
+            The module registered as ``models["student"]`` before the ``SETUP``
+            stage ran.
+
+        Raises
+        ------
+        ValueError
+            If nothing has taken ownership of the student to synchronize its
+            gradients.
+
+        Warns
+        -----
+        UserWarning
+            Once per strategy, when the check is waived on a multi-rank world.
+        """
+        world_size = get_world_size(self.distributed_manager)
+        if world_size == 1:
+            return
+        if not config.require_wrapped_student:
+            if not self._warned_unwrapped_student:
+                self._warned_unwrapped_student = True
+                warnings.warn(
+                    "Install an in-place wrapper (FSDP2 fully_shard, hook-based "
+                    "gradient sync) on the student; synchronizing its gradients "
+                    "is the caller's responsibility. require_wrapped_student=False "
+                    "skips the check that the SETUP stage replaced "
+                    f"models['student'] with a wrapper owning it, on {world_size!r} "
+                    "ranks. Without a wrapper, every rank trains and generates "
+                    "from a private student, and only rank zero's is checkpointed.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            return
+        student = self.models["student"]
+        ddp_hooks = [hook for hook in self.hooks if isinstance(hook, DDPHook)]
+        wrapped = frozenset().union(*(hook.wrapped_keys for hook in ddp_hooks))
+        if "student" in wrapped:
+            return
+        if student is not unsynchronized and unwrap_model(student) is unsynchronized:
+            return
+        observed = (
+            "the same object that was handed over"
+            if student is unsynchronized
+            else f"a {type(student).__name__!r} that does not own the one handed over"
+        )
+        if ddp_hooks:
+            observed = (
+                "not among the models the DDPHook wrapped, which are "
+                f"{sorted(wrapped)!r}, and {observed}"
+            )
+        raise ValueError(
+            f"After the SETUP stage, models['student'] is {observed}, on "
+            f"{world_size!r} ranks. A multi-rank segment loop trains one student "
+            "from every rank's own frames, so its gradients have to be "
+            "synchronized. Without that, each rank trains and generates from a "
+            "private student, and only rank zero's is checkpointed. Add a DDPHook "
+            "to hooks, which wraps every optimizer-configured model at setup and "
+            "leaves the frozen teacher out of the all-reduce, or set "
+            "require_wrapped_student=False for a wrapper that works in place."
         )
 
     def _close_interrupted_segment(self) -> None:
@@ -1351,7 +1805,7 @@ class DistillationStrategy(TrainingStrategy):
             replay_ratio=config.replay_ratio,
             batch_size=config.batch_size,
             num_batches=training_steps,
-            seed=config.seed,
+            seed=config.seed + self._rank_seed_offset(config),
         )
         self._set_sampler_epoch(loader)
         primary_device = self.devices[0]
@@ -1451,7 +1905,9 @@ class DistillationStrategy(TrainingStrategy):
             return
         frames = _to_device(sink.drain(), self.devices[0])
         _score_and_attach(config.teacher_scorer, frames)
-        buffer.extend(_strip_replay_frame(frames).to(buffer.device or "cpu"))
+        buffer.extend(
+            _strip_replay_frame(frames, config.dynamics).to(buffer.device or "cpu")
+        )
 
     def _backfill_segment(
         self,
@@ -1598,13 +2054,94 @@ class DistillationStrategy(TrainingStrategy):
         because the two sources are collated before the strategy moves the
         batch. That device is measured from a batch when no declaration
         settles it. A run with no reference dataset leaves the frames in host
-        memory.
+        memory. The device is measured here rather than at construction,
+        because a launcher pins the process to its device only after the
+        datasets are built, and a ``SETUP`` hook may move a reference dataset
+        onto this rank's device.
+
+        An index-less ``replay_device`` is resolved through
+        :func:`nvalchemi.data.resolve_device` to this process's current
+        device. Under a launcher, that is the device the launcher pinned this
+        rank to. Resolving it turns the caller's "this rank's GPU" into a
+        concrete device, which the concentration check and the mixture's
+        device comparison can work with, just as a storage records its own
+        device. A device measured from the reference dataset is already
+        concrete and is used as measured.
+
+        Warns
+        -----
+        UserWarning
+            If, on a multi-rank world, any rank resolves an indexed
+            accelerator other than the device it trains on.
         """
         if config.replay_device is not None:
-            return config.replay_device
-        if self.reference_dataset is None:
+            device = resolve_device(config.replay_device)
+        elif self.reference_dataset is None:
             return None
-        return dataset_device(self.reference_dataset)
+        else:
+            device = dataset_device(self.reference_dataset)
+        self._warn_concentrated_replay_device(device)
+        return device
+
+    def _warn_concentrated_replay_device(self, device: torch.device) -> None:
+        """Report a world that stages every rank's replay frames on one accelerator.
+
+        Datasets are built before a launcher pins the process. A reference
+        dataset on an indexed device therefore emits there in every process,
+        and the buffer follows it, because a mixed batch is collated before the
+        strategy moves it. The world's buffers then pile onto one GPU sized for
+        a single rank's ``replay_capacity``. Every path that resolves the
+        device hands over an indexed one, and a rank-local dataset resolves to
+        this rank's own device, which ``same_device`` matches against
+        ``devices[0]`` however that entry is spelled. Each rank
+        contributes the one bit it can see, whether it stages somewhere other
+        than its own device, through
+        :func:`~nvalchemi.training.distributed.all_reduce_flags`. The
+        collective runs on every rank of a multi-rank world rather than behind
+        a guard, so every rank joins it and reports the world's verdict.
+
+        Parameters
+        ----------
+        device : torch.device
+            Device the buffer is about to stage its frames on.
+
+        Warns
+        -----
+        UserWarning
+            If, on a multi-rank world, any rank stages its replay frames on an
+            indexed accelerator other than its own device.
+        """
+        world_size = get_world_size(self.distributed_manager)
+        if world_size == 1:
+            return
+        elsewhere = device.type != "cpu" and not same_device(device, self.devices[0])
+        concentrated = all_reduce_flags(elsewhere, self.distributed_manager)
+        if not bool(concentrated.any()):
+            return
+        warnings.warn(
+            "A rank of this world stages its replay buffer and collates its "
+            "mixture on an indexed accelerator that is not the device every rank "
+            f"trains on; this rank stages on {device!s}. A reference dataset put "
+            "on an indexed device before the launcher pinned the process emits "
+            "there in every process, and the generated frames follow it, because "
+            "a mixed batch is collated before it is moved. That GPU then holds "
+            f"{world_size!r} replay buffers of replay_capacity frames each. Size "
+            f"replay_capacity for {world_size!r} buffers, or open the reference "
+            "dataset per rank: keep it in host memory, or move it onto this "
+            "rank's device once the launcher has pinned the process.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    def _rank_seed_offset(self, config: OnPolicyConfig) -> int:
+        """Return the offset separating this rank's seeded streams from its neighbors'.
+
+        Both seeded streams add a counter to their base seed, so neighboring
+        ranks sit a whole ``rank_seed_stride`` apart rather than one. The offset
+        is keyed on the global rank, because node-local ranks repeat across
+        nodes.
+        """
+        return get_rank(self.distributed_manager) * config.rank_seed_stride
 
     def _capture_segment(
         self,
@@ -1622,7 +2159,10 @@ class DistillationStrategy(TrainingStrategy):
         nothing when the cadence did land on that step.
         """
         label_hook._label_frame(
-            state, max(config.dynamics.step_count - 1, 0), forced=True
+            state,
+            max(config.dynamics.step_count - 1, 0),
+            dynamics=config.dynamics,
+            forced=True,
         )
         if label_hook.sink is not None and len(label_hook.sink) > 0:
             buffer.extend(label_hook.sink.drain())

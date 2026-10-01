@@ -32,6 +32,7 @@ from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
 
 from nvalchemi.training._stages import TrainingStage
 from nvalchemi.training.hooks.update import TrainingUpdateHook
+from nvalchemi.training.runtime import unwrap_model
 
 if TYPE_CHECKING:
     import torch
@@ -40,11 +41,6 @@ if TYPE_CHECKING:
 
 
 __all__ = ["EMAHook"]
-
-
-def _unwrap_model(m: nn.Module) -> nn.Module:
-    """Returns a nested module if it exists, otherwise no-op"""
-    return m.module if hasattr(m, "module") else m
 
 
 def _module_tensors(module: nn.Module) -> dict[str, torch.Tensor]:
@@ -261,7 +257,7 @@ class EMAHook(BaseModel, TrainingUpdateHook):
                 f"available keys in TrainContext.models: {available}"
             ) from exc
 
-        self._averaged_model = self._build_averaged_model(_unwrap_model(source))
+        self._averaged_model = self._build_averaged_model(unwrap_model(source))
         # in the event there are user-defined methods that need
         # to re-patch effects that are not included in the deepcopy
         modify_ema_methods = getattr(
@@ -270,7 +266,7 @@ class EMAHook(BaseModel, TrainingUpdateHook):
         if callable(modify_ema_methods):
             modify_ema_methods()
         if self._pending_averaged_state is not None:
-            source_tensors = _module_tensors(_unwrap_model(source))
+            source_tensors = _module_tensors(unwrap_model(source))
             self._averaged_model.load_state_dict(
                 self._pending_averaged_state,
                 strict=self._pending_averaged_state_load != "partial",
@@ -309,7 +305,7 @@ class EMAHook(BaseModel, TrainingUpdateHook):
                 # Apply the actual EMA update only after an eligible optimizer step.
                 self._ensure_initialized(ctx)
                 source = ctx.models[self.model_key]
-                self.get_averaged_model().update_parameters(_unwrap_model(source))
+                self.get_averaged_model().update_parameters(unwrap_model(source))
                 self.num_updates += 1
                 self._publish_averaged_model(ctx)
             case _:

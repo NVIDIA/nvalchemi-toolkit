@@ -28,7 +28,7 @@ from nvalchemi.data.datapipes import (
     Reader,
 )
 from nvalchemi.data.group_layout import GroupLayout
-from nvalchemi.data.level_storage import LevelSchema
+from nvalchemi.data.level_storage import LevelSchema, resolve_device
 from nvalchemi.data.transforms import Compose
 
 __all__ = [
@@ -37,6 +37,7 @@ __all__ = [
     "Batch",
     "LevelSchema",
     "GroupLayout",
+    "resolve_device",
     # Datapipes
     "Reader",
     "AtomicDataZarrReader",

@@ -263,6 +263,16 @@ class OrderedStructureSampler:
         return self._rows
 
     @property
+    def rank(self) -> int:
+        """Rank whose shard :attr:`rows` holds; ``0`` until :meth:`shard` runs."""
+        return self._rank
+
+    @property
+    def world_size(self) -> int:
+        """Ranks the dataset was dealt across; ``1`` until :meth:`shard` runs."""
+        return self._world_size
+
+    @property
     def next_row(self) -> int:
         """Position in :attr:`rows` of the next structure served."""
         return self._next_row

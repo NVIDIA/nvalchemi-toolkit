@@ -51,7 +51,7 @@ from __future__ import annotations
 import sys
 import warnings
 from collections import OrderedDict
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager, nullcontext
 from enum import Enum
 from typing import (
@@ -1997,6 +1997,103 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             "a store dropped them; a cell has to be carried explicitly, because "
             "nothing fills one in for an aperiodic structure."
         )
+
+    def _composed_stages(self) -> Iterator[BaseDynamics]:
+        """Yield this dynamics and every stage it composes, each exactly once.
+
+        A :class:`FusedStage` keeps its integrators in ``sub_stages``, and a
+        composition keyed by rank keeps its stages in a ``stages`` mapping.
+        Stages are compared by identity, so one integrator reached through two
+        sub-stages is yielded once.
+        """
+        seen: list[BaseDynamics] = []
+        pending: list[BaseDynamics] = [self]
+        while pending:
+            stage = pending.pop()
+            if any(stage is visited for visited in seen):
+                continue
+            seen.append(stage)
+            yield stage
+            pending.extend(sub for _, sub in getattr(stage, "sub_stages", ()))
+            stages = getattr(stage, "stages", ())
+            pending.extend(stages.values() if isinstance(stages, Mapping) else stages)
+
+    def bookkeeping_keys(self) -> frozenset[str]:
+        """Return the bookkeeping fields this dynamics and its sub-stages keep on a batch.
+
+        Every stage carries its class's registry, grown by
+        :meth:`register_bookkeeping_key`. A :class:`FusedStage` declares a key
+        of its own beside the base registry, and a subclass may register keys
+        on its own class that the base registry never sees, so the union is
+        taken over the whole composition. Read it at call time: registration
+        happens as stages are built.
+
+        Returns
+        -------
+        frozenset[str]
+            Batch field names that carry propagator bookkeeping, such as
+            ``status`` and ``system_id``, and mean nothing outside the run
+            that wrote them.
+
+        Examples
+        --------
+        >>> from nvalchemi.dynamics import BaseDynamics
+        >>> sorted(BaseDynamics(model=model).bookkeeping_keys())  # doctest: +SKIP
+        ['status', 'system_id']
+        """
+        keys: set[str] = set()
+        for stage in self._composed_stages():
+            keys.update(stage._bookkeeping_keys)
+        return frozenset(keys)
+
+    def seed_offset(self, offset: int) -> tuple[str, ...]:
+        """Add *offset* to every ``random_seed`` in this dynamics and its sub-stages.
+
+        A stochastic integrator such as :class:`~nvalchemi.dynamics.NVTLangevin`
+        exposes its seed as an integer ``random_seed`` property. Every stage
+        reached through :class:`FusedStage` sub-stages is offset on its own, so
+        a composition whose root holds no seed still moves the thermostat that
+        draws its noise. Data-parallel drivers call this with a rank-keyed
+        offset so ranks stepping in lockstep apply different noise, and call it
+        again with the negated offset to put the seeds back.
+
+        Parameters
+        ----------
+        offset : int
+            Amount added to every seed found. Zero leaves every seed as it is
+            and still reports the stages that could not be offset.
+
+        Returns
+        -------
+        tuple[str, ...]
+            Class names of the stages that hold randomness this call could not
+            offset: a stage whose ``random_seed`` has no setter, or one that
+            holds a :class:`torch.Generator` and exposes no integer
+            ``random_seed``. A stage exposing neither is taken as deterministic
+            and is not reported.
+
+        Examples
+        --------
+        >>> from nvalchemi.dynamics import NVTLangevin
+        >>> dynamics = NVTLangevin(model, dt=1.0, temperature=300.0, friction=0.01, random_seed=7)  # doctest: +SKIP
+        >>> dynamics.seed_offset(1_000)  # doctest: +SKIP
+        ()
+        >>> dynamics.random_seed  # doctest: +SKIP
+        1007
+        """
+        unmoved: list[str] = []
+        for stage in self._composed_stages():
+            seed = getattr(stage, "random_seed", None)
+            if isinstance(seed, int) and not isinstance(seed, bool):
+                try:
+                    stage.random_seed = seed + offset
+                except AttributeError:
+                    unmoved.append(type(stage).__name__)
+            elif any(
+                isinstance(value, torch.Generator) for value in vars(stage).values()
+            ):
+                unmoved.append(type(stage).__name__)
+        return tuple(unmoved)
 
     # ------------------------------------------------------------------
     # Per-system integrator state management

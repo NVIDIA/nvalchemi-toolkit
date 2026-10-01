@@ -59,7 +59,7 @@ from nvalchemi.training.distillation import (
 from nvalchemi.training.distillation._attach import _attach_teacher_labels
 from nvalchemi.training.distillation.scoring import TeacherLabels
 from nvalchemi.training.distillation.strategy import _to_device
-from test.training.conftest import _build_demo_model
+from test.training.conftest import _build_demo_model, _FakeManager
 from test.training.distillation.conftest import (
     _ATOMS_PER_SYSTEM,
     _INITIAL_ELEMENT,
@@ -464,15 +464,6 @@ class _ExplodingHook:
         self.calls += 1
         if self.calls == 2:
             raise RuntimeError("boom")
-
-
-class _FixedWorldManager:
-    """Distributed manager reporting a fixed world size and rank."""
-
-    def __init__(self, world_size: int) -> None:
-        """Report *world_size* ranks, always as rank zero."""
-        self.world_size = world_size
-        self.rank = 0
 
 
 class _RecordingValidationHook:
@@ -1315,13 +1306,13 @@ class TestOnPolicyValidationContract:
                 ),
             )
 
-    def test_a_multi_rank_launch_is_rejected(self) -> None:
-        """Each rank would train on its own replay buffer and the same reference samples."""
+    def test_a_multi_rank_launch_without_gradient_sync_is_rejected(self) -> None:
+        """An unwrapped student leaves every rank training a policy of its own."""
         strategy = _make_on_policy_strategy(
-            num_steps=2, distributed_manager=_FixedWorldManager(world_size=2)
+            num_steps=2, distributed_manager=_FakeManager(world_size=2)
         )
 
-        with pytest.raises(ValueError, match="runs on one process"):
+        with pytest.raises(ValueError, match="gradients have to be synchronized"):
             strategy.run()
 
         assert strategy.step_count == 0
@@ -1329,7 +1320,7 @@ class TestOnPolicyValidationContract:
     def test_a_single_rank_launch_runs(self) -> None:
         """The guard reads the world size rather than the presence of a manager."""
         strategy = _make_on_policy_strategy(
-            num_steps=2, distributed_manager=_FixedWorldManager(world_size=1)
+            num_steps=2, distributed_manager=_FakeManager(world_size=1)
         )
 
         strategy.run()

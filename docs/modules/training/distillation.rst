@@ -491,12 +491,8 @@ only the trajectory. Installing the rank shard resets the sampler to the front
 of its rows, so the second call generates from the same structures again, not
 from whatever the first call left over.
 
-The loop is single-process. The rank shard is installed on the structure
-sampler, but each rank would build its segment loader from its own replay
-buffer and an unsharded reference dataset, so the loop refuses to start on more
-than one rank rather than train ranks on generated frames no rank shares and on
-the same reference samples. Offline distillation over a labeled store
-distributes through ``DDPHook`` as usual.
+Under a ``DDPHook`` the loop runs data-parallel. Each rank propagates its own
+shard of the initial structures; see :ref:`distillation-scaling-out`.
 
 Generated frames are drained to host memory and then staged on the reference
 dataset's own device, so a GPU-resident reference dataset and the replay buffer
@@ -654,6 +650,140 @@ zeros and ``system_id`` numbers the lifecycle graduates and backfills on.
 Distribution-matching objectives are defined on equilibrium ensembles, which a
 relaxation path is not. Pointwise energy, force, and atomic-energy matching
 distill a relaxation path exactly as they distill a trajectory.
+
+.. _distillation-scaling-out:
+
+Scaling out: multi-GPU and multi-node
+-------------------------------------
+
+On-policy distillation scales as synchronous data parallelism. The teacher is
+frozen and only runs forward passes, so a teacher that fits on one accelerator
+is *replicated* onto every rank, while the student is trained data-parallel.
+Each rank generates its own trajectories, labels them with its own teacher
+replica, and fills its own replay buffer. The only per-step training traffic
+between ranks is the student's gradient all-reduce. Setup adds small
+collectives, which check the shards and the replay placement, and validation
+all-reduces its metrics. The teacher never joins a collective. The script is
+the single-process one plus a :class:`~nvalchemi.training.hooks.DDPHook`,
+launched with one process per GPU:
+
+.. code-block:: python
+
+   strategy = DistillationStrategy(
+       models={"student": student, "teacher": teacher},
+       optimizer_configs={
+           "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+       },
+       loss_fn=(
+           EnergyMSELoss(target_key="teacher_energy")
+           + ForceMSELoss(target_key="teacher_forces")
+       ),
+       num_steps=10_000,
+       devices=[torch.device("cuda")],
+       hooks=[
+           DDPHook(),
+           CheckpointHook("runs/distill/checkpoints", epoch_interval=1),
+       ],
+       reference_dataset=labeled_store,
+       on_policy=OnPolicyConfig(
+           dynamics=propagator,
+           teacher_scorer=scorer,
+           initial_structures=InitialStructures(structure_store),
+           replay_ratio=0.5,
+           training_steps_per_segment=32,
+       ),
+   )
+   strategy.run()
+
+.. code-block:: bash
+
+   # One node, one process per GPU.
+   torchrun --standalone --nproc_per_node=8 distill.py
+
+   # Four nodes, run on each of them.
+   torchrun --nnodes=4 --nproc_per_node=8 --rdzv_backend=c10d \
+       --rdzv_id=distill --rdzv_endpoint=$HOST:29500 distill.py
+
+``DDPHook`` wraps every optimizer-configured model, so it wraps the student and
+never the teacher, and it pins each rank to its node-local device. The segment
+loop adds the sharding that the generation phase needs. The initial structures
+are dealt out strided: rank ``r`` takes every ``world_size``-th row, starting
+at row ``r``. They must therefore hold at least one structure per rank, and are
+best sized as a whole multiple of the world size. A set that does not divide
+evenly triggers a warning. Every rank draws the same number of replay samples
+from a replay buffer that holds only its own trajectories, so the frames of a
+shorter shard are drawn more often. The deal balances the number of rows, not
+the work, so sort the dataset by atom count when structure sizes vary. The rows
+a rank owns are public as
+:attr:`~nvalchemi.training.distillation.DistillationStrategy.structure_shard`,
+and every backfill on that rank draws from them alone.
+
+Each rank offsets the mixture sampler's ``OnPolicyConfig.seed``, and every
+``random_seed`` that the propagator and its sub-stages expose, by its global
+rank times ``rank_seed_stride``. The propagator side goes through
+:meth:`~nvalchemi.dynamics.BaseDynamics.seed_offset`, which walks the fused
+sub-stages and reports what it cannot move. Both streams add a step counter to
+their seed, so the stride has to stay above every counter the run reaches. The
+default, the prime ``1_000_003``, does so for a run whose counters stay below
+it. Set a different stride when a replicate launch's seeds would land on another
+rank's stride. A stage that holds randomness the offset cannot move, such as a
+:class:`torch.Generator` with no integer ``random_seed``, is named in a warning
+from every rank, and the caller must give it a rank-distinct seed. This matters
+most when the initial structures are replicas of one geometry, because sharding
+then separates nothing.
+
+A multi-rank launch whose student nothing wraps is refused. The check is only
+that *something* owns ``models["student"]`` after setup, so a wrapper of your
+own passes it just as ``DDPHook`` does. A wrapper that works in place, such as
+FSDP2's ``fully_shard`` or hook-based gradient synchronization, leaves nothing
+for the check to find. For such a wrapper, ``require_wrapped_student=False``
+waives the check with a one-time warning, and keeping the ranks' students in
+step becomes your responsibility.
+
+The reference dataset is *not* sharded. Every rank draws from all of it with
+replacement, so ranks share reference samples, while the generated frames and
+the teacher passes that label them are partitioned. Each rank's replay buffer
+is staged on the reference dataset's device. Keep that dataset in host memory,
+or let it emit lazily: a :class:`~nvalchemi.data.datapipes.dataset.Dataset`
+opened with no ``device``, or with an index-less ``"cuda"``, draws its first
+batch after ``DDPHook`` has pinned the rank, so the batch lands on that rank's
+GPU. Staging the dataset eagerly on a GPU before the pin concentrates the whole
+world's replay buffers on that one GPU, and every rank warns about it. Moving
+the dataset onto ``ctx.workflow.devices[0]`` in a ``TrainingStage.SETUP`` hook
+places it correctly. An index-less ``replay_device`` names the device this rank
+has made current.
+
+Multi-node runs take the same code path with a larger world. Sharding keys on
+the global rank, and device placement on the node-local rank. The ``c10d``
+rendezvous above is what lets one command run on every node. Validation runs on
+every rank and all-reduces its metrics, so never guard it behind a rank check.
+:class:`~nvalchemi.training.hooks.CheckpointHook` writes from global rank zero
+only.
+
+A restart resumes the optimizer state and the counters, reseeds every rank's
+trajectories from that rank's shard, and refills the replay buffer from
+scratch, so budget the first segments after a restart as cold. A restart needs
+no device bookkeeping:
+:meth:`~nvalchemi.training.TrainingStrategy.restore_checkpoint` loads onto the
+live ``devices``, and ``run()`` re-homes the optimizer state after the hook has
+pinned the rank.
+
+Every rank runs the same number of segments, and the same number of batches per
+segment, which keeps the ranks arriving at each all-reduce together. An update
+orchestrator that vetoes optimizer steps unevenly across ranks would
+desynchronize them. A stalled rank blocks its peers for the process group's
+default timeout. ``DDPHook`` exposes no timeout setting, so to bound the wait,
+initialize the process group yourself with ``timeout=``.
+
+The world *divides* the generation work. A segment's total frame count and
+teacher cost equal the single-process run's, with each rank contributing
+``1/world_size`` of them. ``generation_steps``, ``label_frequency``, and
+``replay_capacity`` are per rank. At a fixed ``replay_capacity``, each rank's
+buffer therefore spans ``world_size`` times as many segments, and every mixed
+batch grows staler as the world grows. Raise ``generation_steps`` or the
+structure count with the world, or lower ``replay_capacity`` by the world size,
+but not both.
+
 
 Losses
 ------

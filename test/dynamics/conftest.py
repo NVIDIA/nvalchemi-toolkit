@@ -43,7 +43,8 @@ def make_dynamics_context(
     batch : Batch
         Batch to expose through the context.
     dynamics : BaseDynamics
-        Dynamics instance providing step, model, rank, and convergence state.
+        Dynamics instance providing step, model, rank, and convergence state,
+        and exposed as the context's ``workflow`` as the engine does.
     converged : torch.Tensor | None, optional
         Explicit converged graph indices. When ``None``, use
         ``dynamics._last_converged``.
@@ -65,6 +66,7 @@ def make_dynamics_context(
         model=dynamics.model,
         converged_mask=mask,
         global_rank=dynamics.global_rank,
+        workflow=dynamics,
     )
 
 
