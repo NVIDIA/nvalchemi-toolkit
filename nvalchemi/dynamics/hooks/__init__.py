@@ -37,7 +37,7 @@ Hooks are organized into the following modules:
    * - :mod:`freeze`
      - Freeze selected atoms by category during dynamics.
    * - :mod:`cell_align`
-     - Align periodic cells to upper-triangular form for variable-cell optimization.
+     - Align periodic cells to lower-triangular form for variable-cell optimization.
    * - :mod:`nvalchemi.hooks.physicsnemo_profiling`
      - PyTorch profiler trace capture through PhysicsNeMo.
 

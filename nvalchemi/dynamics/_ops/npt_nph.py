@@ -897,7 +897,7 @@ def stress_to_cell_force(
     volume : torch.Tensor
         Per-system cell volume ``[M]``, same dtype.
     keep_aligned : bool, optional
-        If True, enforce upper-triangular symmetry on the cell force.
+        If True, enforce lower-triangular symmetry on the cell force.
         Default True.
 
     Returns

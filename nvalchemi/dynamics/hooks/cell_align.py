@@ -16,9 +16,9 @@
 Cell alignment hook for variable-cell optimization.
 
 Provides :class:`AlignCellHook`, which aligns periodic simulation cells to
-upper-triangular (right-handed) form before the first optimizer step, and
-:func:`_align_atomic_data_cell`, a standalone utility for aligning a single
-:class:`~nvalchemi.data.AtomicData` instance.
+lower-triangular (right-handed) form before the first optimizer step, and
+:func:`_aligned_periodic`, the standalone alignment implementation it shares
+with :meth:`~nvalchemi.dynamics.optimizers.lbfgs.LBFGSVariableCell._reference_cells`.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ class AlignCellHook:
     r"""Align periodic cells before the first variable-cell FIRE2 or L-BFGS step.
 
     Transforms each periodic system's cell matrix to the standard
-    upper-triangular (right-handed) form:
+    lower-triangular (right-handed) form:
 
     .. math::
 

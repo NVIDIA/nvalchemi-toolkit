@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-PyTorch binding for cell alignment to upper-triangular form.
+PyTorch binding for cell alignment to lower-triangular form.
 
 Wraps :func:`nvalchemiops.dynamics.utils.align_cell` as a
 ``torch.library.custom_op``, enabling correct behaviour under
@@ -22,7 +22,7 @@ Wraps :func:`nvalchemiops.dynamics.utils.align_cell` as a
 Functions
 ---------
 align_cell
-    Align periodic cells to upper-triangular form and rotate positions
+    Align periodic cells to lower-triangular form and rotate positions
     to preserve fractional coordinates.
 """
 
@@ -52,7 +52,7 @@ def _align_cell_op(
     transform: torch.Tensor,
     batch_idx: torch.Tensor,
 ) -> None:
-    """Align cells to upper-triangular form and transform positions in-place.
+    """Align cells to lower-triangular form and transform positions in-place.
 
     Parameters
     ----------
@@ -60,7 +60,7 @@ def _align_cell_op(
         Atomic positions ``[N, 3]``, float32 or float64.
     cell : torch.Tensor
         Per-system cell matrices ``[M, 3, 3]``, same dtype.  Overwritten
-        with the aligned (upper-triangular) cells.
+        with the aligned (lower-triangular) cells.
     transform : torch.Tensor
         Per-system rotation matrices ``[M, 3, 3]``, same dtype.  Must be
         initialized to identity on entry: the kernel leaves degenerate
@@ -115,10 +115,10 @@ def align_cell(
     *,
     transform: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Align periodic cells to upper-triangular form and rotate positions.
+    """Align periodic cells to lower-triangular form and rotate positions.
 
     This is a one-time preprocessing step before variable-cell optimization.
-    The cell is transformed to the standard upper-triangular form, and
+    The cell is transformed to the standard lower-triangular form, and
     positions are rotated to maintain their fractional coordinates.
 
     Parameters
@@ -127,7 +127,7 @@ def align_cell(
         Atomic positions ``[N, 3]``, float32 or float64.  Modified in-place.
     cell : torch.Tensor
         Per-system cell matrices ``[M, 3, 3]``, same dtype.  Overwritten
-        with aligned (upper-triangular) cells.
+        with aligned (lower-triangular) cells.
     batch_idx : torch.Tensor, optional
         Per-atom system index ``[N]``, int32.  If ``None``, all atoms are
         assumed to belong to a single system.

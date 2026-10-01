@@ -41,8 +41,8 @@ from test.dynamics.conftest import make_dynamics_context
 # ---------------------------------------------------------------------------
 
 
-def _upper_triangular(cell: torch.Tensor, atol: float = 1e-5) -> bool:
-    """Check whether a [M, 3, 3] cell tensor is upper-triangular."""
+def _lower_triangular(cell: torch.Tensor, atol: float = 1e-5) -> bool:
+    """Check whether a [M, 3, 3] cell tensor is lower-triangular."""
     # Lower triangle elements: (1,0), (2,0), (2,1) should be zero
     return (
         cell[:, 0, 1].abs().max() < atol
@@ -61,7 +61,7 @@ def _make_rotated_cell(
     dtype: torch.dtype = torch.float64,
     device: str = "cpu",
 ) -> torch.Tensor:
-    """Build a triclinic cell from lattice parameters (not upper-triangular).
+    """Build a triclinic cell from lattice parameters (not lower-triangular).
 
     Returns shape ``[1, 3, 3]``.
     """
@@ -72,7 +72,7 @@ def _make_rotated_cell(
     cos_a, cos_b, cos_g = math.cos(alpha_r), math.cos(beta_r), math.cos(gamma_r)
     sin_g = math.sin(gamma_r)
 
-    # Standard triclinic in upper-triangular form first
+    # Standard triclinic in lower-triangular form first
     ax = a
     bx = b * cos_g
     by = b * sin_g
@@ -86,7 +86,7 @@ def _make_rotated_cell(
         device=device,
     )
 
-    # Apply an arbitrary rotation so the cell is NOT upper-triangular
+    # Apply an arbitrary rotation so the cell is NOT lower-triangular
     angle = math.radians(37.0)
     cos_t, sin_t = math.cos(angle), math.sin(angle)
     rot = torch.tensor(
@@ -145,8 +145,8 @@ class TestAlignCellOp:
     """Tests for the ``align_cell`` PyTorch custom op."""
 
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-    def test_already_upper_triangular_is_noop(self, dtype, device: str) -> None:
-        """An already upper-triangular cell should remain unchanged."""
+    def test_already_lower_triangular_is_noop(self, dtype, device: str) -> None:
+        """An already lower-triangular cell should remain unchanged."""
         cell = torch.tensor(
             [[[5.0, 0.0, 0.0], [2.0, 6.0, 0.0], [1.0, 0.5, 7.0]]],
             dtype=dtype,
@@ -161,7 +161,7 @@ class TestAlignCellOp:
 
         align_cell(positions, cell)
 
-        assert _upper_triangular(cell)
+        assert _lower_triangular(cell)
         # Lattice parameters should be preserved
         assert torch.allclose(
             torch.linalg.norm(cell[0], dim=-1),
@@ -170,18 +170,18 @@ class TestAlignCellOp:
         )
 
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-    def test_rotated_cell_becomes_upper_triangular(self, dtype, device: str) -> None:
-        """A rotated triclinic cell should be aligned to upper-triangular form."""
+    def test_rotated_cell_becomes_lower_triangular(self, dtype, device: str) -> None:
+        """A rotated triclinic cell should be aligned to lower-triangular form."""
         cell = _make_rotated_cell(dtype=dtype, device=device)
         positions = torch.randn(4, 3, dtype=dtype, device=device)
 
-        # Before: not upper-triangular
-        assert not _upper_triangular(cell, atol=0.1)
+        # Before: not lower-triangular
+        assert not _lower_triangular(cell, atol=0.1)
 
         align_cell(positions, cell)
 
-        # After: upper-triangular
-        assert _upper_triangular(cell, atol=1e-4 if dtype == torch.float32 else 1e-8)
+        # After: lower-triangular
+        assert _lower_triangular(cell, atol=1e-4 if dtype == torch.float32 else 1e-8)
 
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
     def test_lattice_parameters_preserved(self, dtype, device: str) -> None:
@@ -236,7 +236,7 @@ class TestAlignCellOp:
 
         align_cell(positions, cell, batch_idx)
 
-        assert _upper_triangular(cell, atol=1e-8)
+        assert _lower_triangular(cell, atol=1e-8)
 
     def test_in_place_mutation(self, device: str) -> None:
         """Verify positions and cell tensors are modified in-place."""
@@ -306,7 +306,7 @@ class TestAlignCellOpTransform:
         )
 
     def test_identity_when_already_aligned(self, device: str) -> None:
-        """An already upper-triangular cell gets the identity transform."""
+        """An already lower-triangular cell gets the identity transform."""
         dtype = torch.float64
         cell = torch.tensor(
             [[[5.0, 0.0, 0.0], [2.0, 6.0, 0.0], [1.0, 0.5, 7.0]]],
@@ -355,7 +355,7 @@ class TestAlignCellHook:
         assert hook.frequency == 5
 
     def test_aligns_rotated_cell(self, device: str) -> None:
-        """Hook aligns a rotated cell to upper-triangular form."""
+        """Hook aligns a rotated cell to lower-triangular form."""
         dtype = torch.float64
         batch = _make_periodic_batch(dtype=dtype, device=device)
         dynamics = _make_dynamics()
@@ -368,7 +368,7 @@ class TestAlignCellHook:
         ctx = _make_ctx(batch, dynamics)
         hook(ctx, DynamicsStage.BEFORE_STEP)
 
-        assert _upper_triangular(batch.cell, atol=1e-8)
+        assert _lower_triangular(batch.cell, atol=1e-8)
 
     def test_aligns_only_active_graphs(self, device: str) -> None:
         """Leave cells and atoms in inactive substages unchanged."""
@@ -383,7 +383,7 @@ class TestAlignCellHook:
 
         AlignCellHook()(ctx, DynamicsStage.BEFORE_STEP)
 
-        assert _upper_triangular(batch.cell[:1], atol=1e-8)
+        assert _lower_triangular(batch.cell[:1], atol=1e-8)
         assert torch.allclose(batch.cell[1], cell_before[1])
         assert torch.allclose(
             batch.positions[batch.batch_idx == 1],
@@ -406,7 +406,7 @@ class TestAlignCellHook:
 
         AlignCellHook()(ctx, DynamicsStage.BEFORE_STEP)
 
-        assert _upper_triangular(batch.cell[:1], atol=1e-8)
+        assert _lower_triangular(batch.cell[:1], atol=1e-8)
         assert torch.allclose(batch.cell[1], cell_before[1])
         assert torch.allclose(
             batch.positions[batch.batch_idx == 1],
@@ -472,7 +472,7 @@ class TestAlignCellHook:
         ctx = _make_ctx(batch, _make_dynamics())
         hook(ctx, DynamicsStage.BEFORE_STEP)
 
-        assert _upper_triangular(batch.cell, atol=1e-8)
+        assert _lower_triangular(batch.cell, atol=1e-8)
         assert not torch.allclose(batch.forces, forces_before)
         assert not torch.allclose(batch.stress, stress_before)
 
@@ -503,4 +503,4 @@ class TestAlignCellHook:
         ctx = _make_ctx(batch, _make_dynamics())
         hook(ctx, DynamicsStage.BEFORE_STEP)  # should not raise
 
-        assert _upper_triangular(batch.cell, atol=1e-8)
+        assert _lower_triangular(batch.cell, atol=1e-8)

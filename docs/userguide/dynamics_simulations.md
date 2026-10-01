@@ -92,15 +92,19 @@ with LBFGS(
 ```
 
 - `LBFGSVariableCell` needs tensile-positive `stress` and aligned cells: a cell
-  is "aligned" when it is upper-triangular (`a` along x, `b` in the xy-plane; see
-  {py:class}`~nvalchemi.dynamics.hooks.AlignCellHook`). On admission, the
-  optimizer snapshots each system's aligned cell as its reference chart; every
-  later step's cell is checked against that reference and must still be
-  upper-triangular, or a `ValueError` is raised. Install `AlignCellHook()`
-  (`frequency=1`), as for `FIRE2VariableCell`, on the optimizer or its
-  `FusedStage` so it re-aligns the cell before every step. If you don't install
-  the hook, you are responsible for ensuring every cell handed to the optimizer
-  is already upper-triangular on every step, not just at admission.
+  is "aligned" when it is lower-triangular (`a` along x, `b` in the xy-plane; see
+  {py:class}`~nvalchemi.dynamics.hooks.AlignCellHook`). On admission (and again
+  on refill, for a system newly added to an inflight batch), the optimizer
+  validates the incoming cell and snapshots it as that system's reference
+  chart — raising a `ValueError` right there if it isn't lower-triangular.
+  This check runs only at admission/refill, not on every step: once a system
+  is running, nothing re-validates its cell before `pre_update`, so a cell
+  that drifts out of alignment afterward (no `AlignCellHook`, or one with
+  `frequency` other than 1) is silently used against a now-stale reference
+  chart instead of raising. Install `AlignCellHook()` (`frequency=1`), as for
+  `FIRE2VariableCell`, on the optimizer or its `FusedStage` so every step's
+  cell is re-aligned *before* it would otherwise drift — this is what keeps
+  the contract true in practice, not a runtime guard that enforces it.
 - Do not edit positions between steps (e.g. `WrapPeriodicHook`); L-BFGS builds
   its quasi-Newton direction from `s = x_k - x_{k-1}`, so any out-of-band edit
   (such as wrapping coordinates back into the cell) introduces a spurious jump
