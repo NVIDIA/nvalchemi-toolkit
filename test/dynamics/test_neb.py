@@ -33,6 +33,7 @@ from nvalchemi.dynamics import (
     DynamicsStage,
     FusedStage,
 )
+from nvalchemi.dynamics.base import BaseDynamics
 from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
 from nvalchemi.dynamics.mep import (
     NEB,
@@ -113,6 +114,26 @@ class _NoOpHook:
 
     def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         """Observe a dynamics stage without changing state."""
+
+
+class _CustomOptimizer(BaseDynamics):
+    """Minimal optimizer for configuration and serialization tests."""
+
+    __needs_keys__ = {"forces"}
+    __provides_keys__ = {"positions"}
+
+    def __init__(
+        self, model: BaseModelMixin, learning_rate: float = 0.01, **kwargs: Any
+    ) -> None:
+        """Forward shared stage settings and store the custom step size."""
+        super().__init__(model=model, **kwargs)
+        self.learning_rate = learning_rate
+
+    def pre_update(self, batch: Batch) -> None:
+        """Provide the required pre-update interface for construction tests."""
+
+    def post_update(self, batch: Batch) -> None:
+        """Leave positions unchanged after force evaluation."""
 
 
 def _model(device: str = "cpu") -> DemoModelWrapper:
@@ -394,18 +415,50 @@ class TestNEBConfiguration:
         )
 
     def test_fire2_explicit_kwargs_override_neb_defaults(self) -> None:
+        kwargs = {"dt": 0.02, "maxstep": 0.03}
         strategy = NEB(
             model=_model(),
-            optimizer_kwargs={"dt": 0.02, "maxstep": 0.03},
+            optimizer_kwargs=kwargs,
         )
 
         assert strategy.optimizer_kwargs["dt"] == 0.02
         assert strategy.optimizer_kwargs["maxstep"] == 0.03
         assert strategy.optimizer_kwargs["dt"] != _NEB_FIRE2_DEFAULTS["dt"]
         assert strategy.optimizer_kwargs["maxstep"] != _NEB_FIRE2_DEFAULTS["maxstep"]
+        stage = strategy.build_engine().sub_stages[0][1]
+        assert stage._dt_init == 0.02
+        assert stage.maxstep == 0.03
+        assert stage.delaystep == _NEB_FIRE2_DEFAULTS["delaystep"]
         assert (
             strategy.optimizer_kwargs["delaystep"] == _NEB_FIRE2_DEFAULTS["delaystep"]
         )
+        assert kwargs == {"dt": 0.02, "maxstep": 0.03}
+
+    @pytest.mark.parametrize("kwargs", [{}, {"learning_rate": 0.02}])
+    def test_custom_optimizer_round_trips_and_receives_kwargs(
+        self, kwargs: dict[str, float]
+    ) -> None:
+        """Custom optimizer classes and parameters survive JSON serialization."""
+        strategy = NEB(
+            model=_model(),
+            optimizer=_CustomOptimizer,
+            optimizer_kwargs=kwargs,
+        )
+        restored = NEB.from_spec_dict(
+            json.loads(json.dumps(strategy.to_spec_dict())), model=strategy.model
+        )
+        engine = restored.build_engine()
+        stage = engine.sub_stages[0][1]
+        assert isinstance(stage, _CustomOptimizer)
+        assert stage.learning_rate == kwargs.get("learning_rate", 0.01)
+        assert restored.optimizer_kwargs == kwargs
+        assert stage.by_group
+        assert not _freeze_hook(engine).zero_velocities
+
+    def test_rejects_optimizer_outside_dynamics_interface(self) -> None:
+        """Unrelated classes fail before constructing an engine."""
+        with pytest.raises(TypeError, match="BaseDynamics subclass"):
+            NEB(model=_model(), optimizer=object)
 
     def test_default_neighbor_hooks_are_generated_by_model(self) -> None:
         generated = _NoOpHook()

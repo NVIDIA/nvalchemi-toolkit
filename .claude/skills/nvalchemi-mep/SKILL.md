@@ -124,7 +124,10 @@ Other fields: `endpoint_mode` (`"fixed"` default, or `"relaxed"`),
 `diagnostics_frequency`, `optimizer_kwargs`, `convergence_hook`,
 `regular_convergence_hook`, `neighbor_hooks`, `compile`, `compile_kwargs`.
 
-- `optimizer` must be `FIRE2` (the only supported optimizer).
+- `optimizer` defaults to `FIRE2` and accepts `BaseDynamics` subclasses
+  supporting fixed-cell, group-aware `FusedStage` updates. FIRE2's NEB defaults
+  are filled in `optimizer_kwargs` during validation, preserving explicit
+  values. Other optimizers use their own defaults.
 - `optimizer_kwargs` is forwarded to every internal optimizer stage (for
   example `dt`, `maxstep`). It must not contain `model`, `hooks`, `by_group`,
   `convergence_hook`, or `n_steps`; `NEB` sets these per stage and raises

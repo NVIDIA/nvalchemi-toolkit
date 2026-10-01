@@ -32,7 +32,7 @@ from pydantic import (
 )
 
 from nvalchemi._serialization import SerializableClass
-from nvalchemi.dynamics.base import ConvergenceHook, FusedStage
+from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, FusedStage
 from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
 from nvalchemi.dynamics.mep.hooks import (
     ClimbingImageSelectionHook,
@@ -191,8 +191,9 @@ class NEB(DynamicsStrategy):
     optimizer: SerializableClass = Field(
         default=FIRE2,
         description=(
-            "Optimizer class used by internal stages. Only FIRE2 is currently "
-            "supported."
+            "Optimizer class used by internal stages. Must subclass BaseDynamics "
+            "and support fixed-cell, group-aware updates through the FusedStage "
+            "contract."
         ),
     )
     optimizer_kwargs: dict[str, Any] = Field(
@@ -448,15 +449,13 @@ class NEB(DynamicsStrategy):
         }
 
     @model_validator(mode="after")
-    def _validate_configuration(self) -> NEB:
-        """Validate cross-field constraints and supported runtime types."""
+    def _validate_optimizer(self) -> NEB:
+        """Validate the optimizer class and apply its NEB defaults."""
+        if not issubclass(self.optimizer, BaseDynamics):
+            raise TypeError("optimizer must be a BaseDynamics subclass")
         if self.optimizer is FIRE2:
             for name, value in _NEB_FIRE2_DEFAULTS.items():
                 self.optimizer_kwargs.setdefault(name, value)
-        else:
-            raise NotImplementedError(
-                f"Unsupported NEB optimizer: {self.optimizer.__qualname__}"
-            )
         return self
 
     def _build_convergence_hook(

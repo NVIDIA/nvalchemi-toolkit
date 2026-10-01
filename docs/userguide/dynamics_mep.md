@@ -123,8 +123,8 @@ Key fields:
 | `spring` | `0.1` | Constant spring force, or a custom {py:class}`~nvalchemi.dynamics.mep.SpringConfig` |
 | `method` | `"improved_tangent"` | Named method, custom Warp `NEBMethod`, or callable `TorchNEBMethod` |
 | `climbing` | `None` | `None` runs regular NEB only; set a `ClimbingImageConfig` to enable climbing-image NEB |
-| `optimizer` | `FIRE2` | Optimizer driving each image; only `FIRE2` is currently supported |
-| `optimizer_kwargs` | NEB-tuned defaults for the optimizer | Overrides forwarded to each optimizer stage, taking precedence over the tuned defaults |
+| `optimizer` | `FIRE2` | `BaseDynamics` subclass supporting fixed-cell, group-aware updates |
+| `optimizer_kwargs` | `{}` | Arguments forwarded to each optimizer stage; unspecified parameters use NEB-tuned defaults for `FIRE2`, or the custom optimizer's own defaults |
 | `fmax` | `0.05` | Force threshold for the final (or only) stage |
 | `n_steps` | `None` | Limit on the total number of optimization steps; `None` for no fixed limit |
 | `convergence_hook` | `None` | Custom `ConvergenceHook` for the final (or only) stage; takes precedence over `fmax` |
@@ -142,6 +142,18 @@ settings such as `dt` or `maxstep`. `NEB` sets `model`, `hooks`, `by_group`,
 `convergence_hook`, and `n_steps` itself for each stage, so passing any of
 them in `optimizer_kwargs` raises `ValueError`. Use the corresponding `NEB`
 fields instead.
+
+`optimizer` accepts an optimizer class derived from
+{py:class}`~nvalchemi.dynamics.BaseDynamics` that supports fixed-cell,
+group-aware updates through {py:class}`~nvalchemi.dynamics.FusedStage`.
+Each path is one update unit, and `pre_update` / `post_update` consume the
+projected NEB forces in `batch.forces`. Regular and climbing stages use
+separate optimizer instances and history.
+
+FIRE2 is the default. Its NEB-tuned parameters are applied to
+`optimizer_kwargs` during validation, with explicit values taking precedence.
+Other optimizer classes use their own defaults.
+Inspect `neb.optimizer_kwargs` to see the arguments forwarded to the optimizer.
 
 `NEBForceHook` always publishes `neb_fixed_node_mask`, a Boolean node mask
 marking fixed endpoints and any `fixed_atom_indices`. It zeroes the physical
