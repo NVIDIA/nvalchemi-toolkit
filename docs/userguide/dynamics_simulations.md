@@ -112,7 +112,7 @@ with LBFGS(
   curvature pairs. `FreezeAtomsHook` is supported because it restores frozen
   atoms to the same position every step, so their contribution to `s` is
   always zero rather than a fictitious jump.
-- The first step after admission moves the largest-force atom by `maxstep`.
+- The first step after admission moves the largest-force atom by at most `maxstep`.
 - The cell reference is captured when a system is admitted. Under `FusedStage`, a
   system entering the stage later keeps it; this stays correct but can take more
   steps if another stage has since changed the cell shape.
