@@ -88,6 +88,9 @@ the rotation and translation for each graph. Pass `cell` and `pbc` for periodic
 graphs; the function then uses minimum-image positions and translation without
 rotating the cell.
 
+For alignment at each NEB step, implement a custom hook using
+{py:func}`~nvalchemi.dynamics.mep.align_batch_positions`.
+
 {py:func}`~nvalchemi.dynamics.mep.prepare_idpp_targets` +
 {py:class}`~nvalchemi.dynamics.mep.IDPPModel` relax the path against target
 pairwise distances (IDPP,
