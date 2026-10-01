@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from contextlib import contextmanager, nullcontext
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeAlias, runtime_checkable
 
@@ -636,6 +636,13 @@ class TeacherScorer(Protocol):
     or one whose signals are its own, must declare ``label_fields``. The
     protocol will not grow required members.
 
+    Label precision is the scorer's decision. A consumer calls :meth:`label`
+    inside the ambient autocast region, meaning whatever autocast state is in
+    force at the call site, and opens no region of its own. An implementation
+    used in a mixed-precision workflow therefore sets its own autocast mode.
+    :class:`InProcessTeacherScorer` disables autocast unless its ``autocast``
+    setting says otherwise.
+
     See Also
     --------
     InProcessTeacherScorer : Scorer that evaluates a teacher in this process.
@@ -699,9 +706,10 @@ class InProcessTeacherScorer:
     ``active_outputs`` to the outputs the requested signals need, builds and
     afterwards restores whatever neighbor list the teacher requires — or, on
     request, consumes the one the batch already carries — picks the grad mode
-    the teacher's autograd outputs need, detaches every result, and normalizes
-    each signal to its canonical shape. The batch is left exactly as it was
-    found, so a scorer can be called mid-training on a live batch.
+    the teacher's autograd outputs need, runs the pass under its ``autocast``
+    setting, detaches every result, and normalizes each signal to its
+    canonical shape. The batch is left exactly as it was found, so a scorer
+    can be called mid-training on a live batch.
 
     Each signal is a :class:`TeacherSignal` mapping one teacher output to one
     batch field at one level. The built-in ones (:data:`BUILTIN_SIGNALS`) are
@@ -740,6 +748,20 @@ class InProcessTeacherScorer:
         raises rather than falling back. Whether the list holds each pair once
         or twice is not recorded on the batch, so a reused list must match the
         teacher's ``half_list`` by construction. Default ``"rebuild"``.
+    autocast : bool | torch.dtype | None, optional
+        Autocast mode for the scoring pass. The ambient autocast region is
+        whatever autocast state is in force where :meth:`label` is called,
+        such as a caller's AMP region. ``False`` disables autocast for the
+        pass, so an ambient region never reaches the teacher. ``None`` leaves
+        the ambient state untouched, so the teacher runs under the caller's
+        region when one is open. ``True`` or a floating-point ``torch.dtype``
+        enables autocast for the pass, whether or not an ambient region is
+        open: a dtype sets the autocast dtype, and ``True`` keeps the autocast
+        dtype in force for the device, which is the device default when no
+        region is open and the ambient region's dtype when one is. *dtype*
+        applies after this setting: the teacher produces each label at the
+        precision this mode gives, and *dtype*, when set, then casts it.
+        Default ``False``.
 
     Raises
     ------
@@ -749,7 +771,8 @@ class InProcessTeacherScorer:
         model output the teacher does not declare, gives a custom spec no
         model output, requests ``"embeddings"`` from a teacher that publishes
         no node-embedding shape, *dtype* is not a floating-point dtype,
-        *neighbor_list* is neither ``"rebuild"`` nor ``"reuse"``, or *teacher*
+        *neighbor_list* is neither ``"rebuild"`` nor ``"reuse"``, *autocast*
+        is neither ``None``, a bool, nor a floating-point dtype, or *teacher*
         is a composition planning more than one neighbor-list source.
 
     Examples
@@ -786,6 +809,15 @@ class InProcessTeacherScorer:
     ``requires_grad`` on ``positions`` and the teacher's autograd inputs is
     restored after each call, as is every field a composed teacher writes onto
     the batch to wire one stage into the next.
+
+    Label precision is the scorer's decision. Every consumer in the package
+    calls :meth:`label` inside the ambient autocast region and opens none of
+    its own, so the *autocast* setting decides which autocast mode the teacher
+    runs under. The default disables autocast, so a label taken during a
+    mixed-precision training or generation phase equals the one
+    :func:`~nvalchemi.training.distillation.label_dataset` writes offline.
+    Inside a caller's region, ``True`` and a dtype differ: ``True`` enables
+    autocast at the region's dtype, whereas a dtype pins the pass to itself.
     """
 
     def __init__(
@@ -795,6 +827,7 @@ class InProcessTeacherScorer:
         *,
         dtype: torch.dtype | None = None,
         neighbor_list: NeighborListPolicy = "rebuild",
+        autocast: bool | torch.dtype | None = False,
     ) -> None:
         """Validate the requested signals against the teacher's declared outputs."""
         requested = list(signals)
@@ -851,6 +884,16 @@ class InProcessTeacherScorer:
             raise ValueError(
                 f"neighbor_list must be 'rebuild' or 'reuse'; got {neighbor_list!r}."
             )
+        if not (
+            autocast is None
+            or isinstance(autocast, bool)
+            or (isinstance(autocast, torch.dtype) and autocast.is_floating_point)
+        ):
+            raise ValueError(
+                "autocast must be False to disable autocast for the scoring pass, "
+                "None to leave the caller's autocast state in force, or True or a "
+                f"floating-point dtype to enable it; got {autocast!r}."
+            )
         planned = _planned_neighbor_sources(teacher)
         if planned > 1:
             raise ValueError(
@@ -866,6 +909,7 @@ class InProcessTeacherScorer:
         self.label_fields = signal_fields(specs.values())
         self.dtype = dtype
         self.neighbor_list = neighbor_list
+        self.autocast = autocast
         self._required_outputs = required
         evaluate = getattr(teacher, "eval", None)
         if callable(evaluate):
@@ -904,6 +948,7 @@ class InProcessTeacherScorer:
                 evaluating(self.teacher)
                 if isinstance(self.teacher, torch.nn.Module)
                 else nullcontext(),
+                self._autocast_scope(batch.device.type),
                 _isolated_neighbors(batch, config.neighbor_config, self.neighbor_list),
                 _isolated_fields(batch),
             ):
@@ -914,6 +959,14 @@ class InProcessTeacherScorer:
             self.teacher.set_config("active_outputs", previous_active)
             _restore_grad_flags(batch, grad_flags)
         return labels
+
+    def _autocast_scope(self, device_type: str) -> AbstractContextManager[Any]:
+        """Return the autocast context :attr:`autocast` selects for *device_type*."""
+        if self.autocast is None:
+            return nullcontext()
+        if isinstance(self.autocast, torch.dtype):
+            return torch.autocast(device_type=device_type, dtype=self.autocast)
+        return torch.autocast(device_type=device_type, enabled=self.autocast)
 
     def _forward_labels(self, batch: Batch) -> TeacherLabels:
         """Run the teacher forward pass and collect its detached signals."""
@@ -984,7 +1037,7 @@ class InProcessTeacherScorer:
     def _finalize(
         self, spec: TeacherSignal, value: torch.Tensor, batch: Batch
     ) -> TeacherLabels:
-        """Detach *value*, normalize and cast it, and spread it over *spec*'s fields.
+        """Normalize *value* and spread it, detached and cast, over *spec*'s fields.
 
         Raises
         ------
@@ -1011,9 +1064,9 @@ class InProcessTeacherScorer:
             produced = {spec.field: produced}
         return {
             field: (
-                tensor.to(self.dtype)
+                tensor.detach().to(self.dtype)
                 if self.dtype is not None and tensor.is_floating_point()
-                else tensor,
+                else tensor.detach(),
                 spec.level,
             )
             for field, tensor in produced.items()

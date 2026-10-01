@@ -93,6 +93,16 @@ class _InitialStructuresSpec(BaseModel):
             description="Total structures the initial batch may hold.",
         ),
     ] = None
+    recycle: Annotated[
+        bool,
+        Field(
+            default=False,
+            description=(
+                "Whether the source starts again from its first row once the "
+                "last one has been served, instead of reporting itself exhausted."
+            ),
+        ),
+    ] = False
 
     model_config = ConfigDict(extra="forbid")
 
@@ -101,13 +111,14 @@ class InitialStructures(OrderedStructureSampler):
     """An :class:`~nvalchemi.dynamics.OrderedStructureSampler` that a recipe can name.
 
     The sampler is the loop's reference :class:`InitialStructuresSource`. This
-    subclass adds :meth:`to_spec_dict` and :meth:`from_spec_dict`. They name
-    the sampler by the store its dataset reads and by the budgets declared on
-    it, so :class:`~nvalchemi.training.distillation.OnPolicyConfig` can be
-    written to a recipe and rebuilt from one. A streaming source has no stable
-    position to serialize, so it omits both methods and stays runtime-only.
-    Writing a recipe from a config that holds such a source raises an error
-    that names it.
+    subclass adds :meth:`to_spec_dict` and :meth:`from_spec_dict`. They
+    describe the sampler by the store its dataset reads, the budgets declared
+    on it, and whether it recycles its rows. An
+    :class:`~nvalchemi.training.distillation.OnPolicyConfig` holding it can
+    therefore be written to a recipe and rebuilt from one. A streaming source
+    has no stable position to serialize, so it omits both methods and stays
+    runtime-only. Writing a recipe from a config that holds such a source
+    raises an error that names it.
 
     Examples
     --------
@@ -124,10 +135,10 @@ class InitialStructures(OrderedStructureSampler):
         Returns
         -------
         dict[str, Any]
-            The store the structures are read from and the budgets the caller
-            declared. The position is run state and belongs in a restart
-            bundle instead. The rank shard is set by the launcher and belongs
-            in neither.
+            The store the structures are read from, the budgets the caller
+            declared, and ``recycle``. The position is run state and belongs
+            in a restart bundle instead. The rank shard is set by the launcher
+            and belongs in neither.
 
         Raises
         ------
@@ -144,6 +155,7 @@ class InitialStructures(OrderedStructureSampler):
             "max_atoms": self.max_atoms,
             "max_edges": self.max_edges,
             "max_batch_size": self.max_batch_size,
+            "recycle": self.recycle,
         }
 
     @classmethod
@@ -177,4 +189,5 @@ class InitialStructures(OrderedStructureSampler):
             max_atoms=validated.max_atoms,
             max_edges=validated.max_edges,
             max_batch_size=validated.max_batch_size,
+            recycle=validated.recycle,
         )

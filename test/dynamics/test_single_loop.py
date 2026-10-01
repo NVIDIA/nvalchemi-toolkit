@@ -1241,6 +1241,132 @@ class TestFusedStage:
         assert batch.n_steps_counter_0.view(-1).tolist() == [0, 1]
 
 
+class _GraduationRecorder:
+    """Record every ON_GRADUATE mask handed to this hook."""
+
+    stage = DynamicsStage.ON_GRADUATE
+    frequency = 1
+
+    def __init__(self) -> None:
+        self.masks: list[list[bool]] = []
+
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:  # noqa: ARG002
+        self.masks.append(ctx.graduated_mask.tolist())
+
+
+class _MidStepGraduationHook:
+    """Move graph 0 to *target* at *stage* on step 1, once priming has passed."""
+
+    frequency = 1
+
+    def __init__(self, stage: DynamicsStage, target: int) -> None:
+        self.stage = stage
+        self.target = target
+
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:  # noqa: ARG002
+        if ctx.step_count == 1:
+            ctx.batch.status.view(-1)[0] = self.target
+
+
+class TestFusedStageOnGraduate:
+    """ON_GRADUATE dispatch inside FusedStage, at both levels."""
+
+    def test_a_criterion_graduation_is_reported_once_at_both_levels(self) -> None:
+        """The step a graph converges out, sub-stage and fused hooks see it once."""
+        dynamics = BaseDynamics(
+            model=NonConservativeDemoModel(),
+            convergence_hook=ConvergenceHook(
+                criteria={"key": "energy_change", "threshold": 0.5}
+            ),
+        )
+        sub_recorder = _GraduationRecorder()
+        dynamics.register_hook(sub_recorder)
+        fused = FusedStage(sub_stages=[(0, dynamics)])
+        fused_recorder = _GraduationRecorder()
+        fused.register_hook(fused_recorder)
+
+        batch = create_batch_with_status(n_graphs=2)
+        batch.status = torch.tensor([0, 0])
+        batch.energy_change = torch.ones(2)
+        fused.step(batch)
+        batch.energy_change = torch.tensor([0.0, 1.0])
+        fused.step(batch)
+        fused.step(batch)
+
+        expected = [[False, False], [True, False], [False, False]]
+        assert sub_recorder.masks == expected
+        assert fused_recorder.masks == expected
+        assert batch.status.view(-1).tolist() == [fused.exit_status, 0]
+
+    def test_a_step_budget_graduation_is_reported_on_its_own_step(self) -> None:
+        """The budget migrates after AFTER_STEP, and ON_GRADUATE still sees it."""
+        dynamics = BaseDynamics(model=NonConservativeDemoModel(), n_steps=2)
+        fused = FusedStage(sub_stages=[(0, dynamics)])
+        recorder = _GraduationRecorder()
+        fused.register_hook(recorder)
+
+        batch = create_batch_with_status(n_graphs=2)
+        batch.status = torch.tensor([0, 0])
+        for _ in range(3):
+            fused.step(batch)
+
+        assert recorder.masks == [[False, False], [True, True], [False, False]]
+
+    @pytest.mark.parametrize(
+        "stage",
+        [DynamicsStage.AFTER_COMPUTE, DynamicsStage.AFTER_POST_UPDATE],
+        ids=["after_compute", "after_post_update"],
+    )
+    def test_a_sub_stage_hook_graduation_before_after_step_is_reported_once(
+        self, stage: DynamicsStage
+    ) -> None:
+        """A status change at an earlier boundary shows in that step's mask at both levels."""
+        dynamics = BaseDynamics(model=NonConservativeDemoModel())
+        fused = FusedStage(sub_stages=[(0, dynamics)])
+        sub_recorder, fused_recorder = _GraduationRecorder(), _GraduationRecorder()
+        dynamics.register_hook(_MidStepGraduationHook(stage, fused.exit_status))
+        dynamics.register_hook(sub_recorder)
+        fused.register_hook(fused_recorder)
+
+        batch = create_batch_with_status(n_graphs=2)
+        batch.status = torch.tensor([0, 0])
+        for _ in range(3):
+            fused.step(batch)
+
+        expected = [[False, False], [True, False], [False, False]]
+        assert sub_recorder.masks == expected
+        assert fused_recorder.masks == expected
+        assert batch.status.view(-1).tolist() == [fused.exit_status, 0]
+
+    def test_a_sub_stage_sees_only_the_graphs_it_owned(self) -> None:
+        """The sub-stage mask is restricted to the graphs it held at step start."""
+        first = BaseDynamics(model=NonConservativeDemoModel(), n_steps=1)
+        second = BaseDynamics(model=NonConservativeDemoModel(), n_steps=1)
+        first_recorder, second_recorder = _GraduationRecorder(), _GraduationRecorder()
+        first.register_hook(first_recorder)
+        second.register_hook(second_recorder)
+        fused = FusedStage(sub_stages=[(0, first), (1, second)])
+
+        batch = create_batch_with_status(n_graphs=2)
+        batch.status = torch.tensor([0, 1])
+        fused.step(batch)
+
+        assert first_recorder.masks == [[False, False]]
+        assert second_recorder.masks == [[False, True]]
+
+    def test_no_dispatch_without_a_listening_hook(self) -> None:
+        """A fused stage without ON_GRADUATE hooks builds no such context."""
+        dynamics = BaseDynamics(model=NonConservativeDemoModel(), n_steps=1)
+        fused = FusedStage(sub_stages=[(0, dynamics)])
+        batch = create_batch_with_status(n_graphs=2)
+        batch.status = torch.tensor([0, 0])
+        with patch.object(fused, "_build_context", wraps=fused._build_context) as build:
+            fused.step(batch)
+        assert all(
+            call.kwargs.get("graduated_mask") is None for call in build.call_args_list
+        )
+
+
 # -----------------------------------------------------------------------------
 # TestFusedStageDeviceValidation
 # -----------------------------------------------------------------------------

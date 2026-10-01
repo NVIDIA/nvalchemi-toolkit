@@ -27,7 +27,7 @@ from nvalchemi.data.datapipes import (
     InMemoryDataset,
     Reader,
 )
-from nvalchemi.data.level_storage import LevelSchema
+from nvalchemi.data.level_storage import LevelSchema, resolve_device
 from nvalchemi.data.transforms import Compose
 
 __all__ = [
@@ -35,6 +35,7 @@ __all__ = [
     "AtomicData",
     "Batch",
     "LevelSchema",
+    "resolve_device",
     # Datapipes
     "Reader",
     "AtomicDataZarrReader",

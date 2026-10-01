@@ -41,6 +41,7 @@ loop is broken into discrete stages, enumerated by
 | `AFTER_POST_UPDATE` | After the second half-step completes |
 | `AFTER_STEP` | At the very end of a step, after all operations |
 | `ON_CONVERGE` | After convergence evaluation; for fused sub-stages, runs at the hook’s configured interval |
+| `ON_GRADUATE` | After `ON_CONVERGE`; `ctx.graduated_mask` marks the systems whose status reached `exit_status` this step. Dispatched whenever a hook listens and the batch carries a `status` column, so the mask may be all `False` |
 
 When a batch is newly admitted, **ON_ADMISSION** hooks fire before force
 priming and before the first step. Admission is reset for every new `run()` and
@@ -66,6 +67,10 @@ Each step then proceeds through these stages in order:
    sub-stage's convergence mask as `ctx.converged_mask`, and must inspect it to
    determine which systems converged. Converged systems in a multi-stage
    pipeline then migrate to the next stage.
+7. **ON_GRADUATE** hooks fire, when any are registered and the batch carries a
+   `status` column. A system graduates on the step its status reaches
+   `exit_status`, whatever changed it, and `ctx.graduated_mask` marks the
+   systems that graduated during this step.
 
 `run(batch, n_steps)` calls `step()` in a loop until all systems converge or
 `n_steps` is reached. Every hook declares which
