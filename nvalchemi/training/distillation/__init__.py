@@ -21,7 +21,10 @@ from nvalchemi.training.distillation.config import (
     OnPolicySettings,
     ResizableSink,
 )
-from nvalchemi.training.distillation.hooks import TeacherLabelHook
+from nvalchemi.training.distillation.hooks import (
+    TeacherLabelHook,
+    nonfinite_divergence,
+)
 from nvalchemi.training.distillation.labeling import label_dataset
 from nvalchemi.training.distillation.losses import AtomicEnergyMatchingLoss
 from nvalchemi.training.distillation.replay import (
@@ -85,6 +88,7 @@ __all__ = [
     "build_mixed_loader",
     "default_distillation_fn",
     "label_dataset",
+    "nonfinite_divergence",
     "scorer_fields",
     "signal_fields",
     "signal_for_field",

@@ -187,7 +187,7 @@ class ConvergedSnapshotHook:
     def _write_converged(self, batch: Batch, mask: torch.Tensor | None) -> None:
         """Write converged samples to the configured sink.
 
-        Neighbor data is stripped before writing because its K-dimension
+        Neighbor data is left out of the written copy because its K-dimension
         can vary between adaptive rebuilds, causing shape mismatches when
         the sink later concatenates snapshots into a single Batch.
 
@@ -208,15 +208,7 @@ class ConvergedSnapshotHook:
         # mutate the live batch object.
         indices = torch.nonzero(mask, as_tuple=True)[0]
         _ = batch.batch_ptr  # trigger lazy init for SegmentedLevelStorage
-        sub_batch = batch.index_select(indices)
-        # Strip ephemeral neighbor data before writing to avoid
-        # variable-width concatenation failures in the sink.
-        for key in self._NEIGHBOR_KEYS:
-            try:
-                del sub_batch[key]
-            except (KeyError, IndexError):
-                pass
-        self.sink.write(sub_batch)
+        self.sink.write(batch.index_select(indices, drop=self._NEIGHBOR_KEYS))
 
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Write converged samples to the configured sink."""

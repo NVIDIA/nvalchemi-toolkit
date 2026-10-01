@@ -148,8 +148,8 @@ its logger.
 
 The hook system supports multiple **task categories** through stage enums:
 
-- **Dynamics**: {py:class}`~nvalchemi.dynamics.base.DynamicsStage` — 10
-  lifecycle stages from `ON_ADMISSION` through `ON_CONVERGE`
+- **Dynamics**: {py:class}`~nvalchemi.dynamics.base.DynamicsStage` — 11
+  lifecycle stages from `ON_ADMISSION` through `ON_GRADUATE`
 - **Custom pipelines**: Any custom `Enum` type — the hook system accepts arbitrary
   enum types via the `Enum` fallback
 

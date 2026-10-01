@@ -16,10 +16,11 @@
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 import warnings
-from collections.abc import Iterable, Mapping, Sequence
-from contextlib import nullcontext
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager, nullcontext
 from typing import TYPE_CHECKING, Annotated, Any
 
 import torch
@@ -33,13 +34,27 @@ from nvalchemi.data.datapipes.dataset import (
     same_device,
 )
 from nvalchemi.dynamics.sinks import HostMemory
+from nvalchemi.dynamics.structure_sampler import WithinBudget
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training import TrainingStage
 from nvalchemi.training import _spec_utils as strategy_spec
 from nvalchemi.training import _strategy_validation as strategy_validation
 from nvalchemi.training.distillation._attach import _attach_teacher_labels
-from nvalchemi.training.distillation.config import OnPolicyConfig, ResizableSink
-from nvalchemi.training.distillation.hooks import TeacherLabelHook, _run_local_keys
+from nvalchemi.training.distillation.config import (
+    OnPolicyConfig,
+    ResizableSink,
+    _check_sole_migrator,
+    _check_structure_status,
+)
+from nvalchemi.training.distillation.hooks import (
+    TeacherLabelHook,
+    _ConvergedFrameHook,
+    _DivergenceHook,
+    _run_local_keys,
+    _score_and_attach,
+    _strip_replay_frame,
+    nonfinite_divergence,
+)
 from nvalchemi.training.distillation.replay import (
     _SCHEMA_REMEDY,
     ReplayBuffer,
@@ -55,6 +70,7 @@ from nvalchemi.training.distillation.scoring import (
     signal_fields,
     signal_for_field,
 )
+from nvalchemi.training.distillation.seeding import InitialStructures
 from nvalchemi.training.distributed import get_rank, get_world_size
 from nvalchemi.training.losses.composition import loss_target_keys
 from nvalchemi.training.runtime import (
@@ -164,6 +180,117 @@ def _set_rebuild_overrides(
             )
         forwarded[name] = value
     return forwarded
+
+
+@dataclasses.dataclass(frozen=True)
+class _RelaxationLifecycle:
+    """Machinery a relaxation segment loop drives between its segments."""
+
+    capture: _ConvergedFrameHook
+    structures: InitialStructures
+    divergence: _DivergenceHook
+
+
+@contextmanager
+def _relaxation_lifecycle(
+    config: OnPolicyConfig, state: Batch, label_hook: TeacherLabelHook | None = None
+) -> Iterator[_RelaxationLifecycle | None]:
+    """Install the convergence machinery of a relaxation run on the propagator.
+
+    The config's :attr:`~OnPolicyConfig.convergence_criterion` is installed on
+    the propagator in two roles. As a registered ``AFTER_STEP`` hook, it
+    migrates the status of converged graphs, which freezes them. The
+    propagator reports that migration at ``ON_GRADUATE``, where the capture
+    hook stores the frame, and the segment boundary reads the migrated
+    status. As the propagator's ``convergence_hook``, it is the detector that
+    ends a chunk early once every graph has converged. A detector the
+    propagator was built with is restored on exit.
+
+    The criterion must be the only status migrator. A looser migrator would
+    graduate a structure before this criterion accepts it, and neither capture
+    route would store it. The config rejects such a migrator at construction,
+    and the check runs again here for a hook registered since then. The
+    lifecycle must also be the only source of refills, because a mid-segment
+    refill compacts the surviving graphs and invalidates the divergence hook's
+    per-graph record.
+
+    A graph diverges when the config's :attr:`~OnPolicyConfig.divergence`
+    predicate flags it; by default, when its state is no longer finite. A
+    divergence hook registered after the criterion calls the predicate once
+    per step, freezes each flagged graph at ``exit_status`` without capturing
+    it, and records the verdict. The capture hook and the segment boundary
+    read that record and never call the predicate themselves. The segment
+    boundary then retires a diverged graph like a converged one.
+
+    Parameters
+    ----------
+    config : OnPolicyConfig
+        Segment-loop configuration, holding the criterion.
+    state : Batch
+        Initial batch, already carrying the bookkeeping
+        :meth:`~nvalchemi.training.distillation.InitialStructures.initial_batch`
+        stamped on it.
+    label_hook : TeacherLabelHook | None, optional
+        Labeling hook of the run's path route. The capture hook asks it which
+        graphs it stored and skips a graph whose final frame it stored on the
+        step the graph graduated. Default ``None``.
+
+    Yields
+    ------
+    _RelaxationLifecycle | None
+        The machinery the segment loop drives, or ``None`` for a config that
+        manages no lifecycle.
+
+    Raises
+    ------
+    ValueError
+        If the propagator already carries a status-migrating criterion, if it
+        carries a sampler of its own, or if the configured criterion migrates
+        off a status no initial structure carries.
+    """
+    criterion = config.convergence_criterion
+    if criterion is None:
+        yield None
+        return
+    dynamics = config.dynamics
+    _check_sole_migrator(dynamics, criterion)
+    if dynamics.sampler is not None:
+        raise ValueError(
+            "The relaxation lifecycle owns the refill as well as graduation, "
+            "so the propagator must carry no sampler of its own; got "
+            f"{type(dynamics.sampler).__name__!r}. A propagator that refills "
+            "inside run reorders the batch mid-segment, so the capture hook "
+            "would store the wrong structures and lose the minima. Give "
+            "OnPolicyConfig.initial_structures the same budget instead, which "
+            "backfills from the same dataset at the segment boundary, and "
+            "leave the propagator's sampler unset."
+        )
+    _check_structure_status(state, criterion)
+    divergence = _DivergenceHook(config.divergence or nonfinite_divergence)
+    capture = _ConvergedFrameHook(
+        sink=HostMemory(capacity=state.num_graphs),
+        divergence=divergence,
+        path=label_hook,
+    )
+    detector = dynamics.convergence_hook
+    # Registered ahead of the labeling hook, so a graph that converges or
+    # diverges on this step graduates before the path route reads its status:
+    # no converged graph is stored twice, and no diverged one at all.
+    dynamics.register_hook(criterion)
+    dynamics.register_hook(divergence)
+    dynamics.register_hook(capture)
+    dynamics.convergence_hook = criterion
+    try:
+        yield _RelaxationLifecycle(
+            capture=capture,
+            structures=config.initial_structures,
+            divergence=divergence,
+        )
+    finally:
+        dynamics.convergence_hook = detector
+        dynamics.hooks.remove(criterion)
+        dynamics.hooks.remove(divergence)
+        dynamics.hooks.remove(capture)
 
 
 def _propagates_student(propagator_model: object, student: BaseModelMixin) -> bool:
@@ -334,7 +461,11 @@ class DistillationStrategy(TrainingStrategy):
     holds the very module the optimizer updates, so every segment generates
     from a fresher policy than the last. That is what makes the data
     on-policy, and it is why the propagator's model is checked for object
-    identity with ``models["student"]`` at construction.
+    identity with ``models["student"]`` at construction. For a relaxation
+    propagator, set ``OnPolicyConfig.fmax``. Converged structures are then
+    stored once, graduate out of the batch at the segment boundary, and are
+    replaced by fresh initial structures. The buffer therefore keeps filling
+    with structures that are still moving.
 
     Raises
     ------
@@ -352,10 +483,10 @@ class DistillationStrategy(TrainingStrategy):
         holds neither the student nor a model composing it, if
         ``replay_ratio`` and ``reference_dataset`` disagree (a ratio below
         ``1`` requires a reference dataset and a ratio of ``1`` rejects one),
-        if ``reference_dataset`` is empty, if ``replay_device`` or the
-        reference dataset's fields cannot be mixed with generated frames, or if
-        the propagator's scorer and the reference dataset do not carry the same
-        teacher fields.
+        if ``reference_dataset`` is empty or emits on an accelerator the run
+        does not train on, if ``replay_device`` or the reference dataset's
+        fields cannot be mixed with generated frames, or if the propagator's
+        scorer and the reference dataset do not carry the same teacher fields.
 
     Examples
     --------
@@ -385,8 +516,10 @@ class DistillationStrategy(TrainingStrategy):
 
     Notes
     -----
-    Labeling runs with autocast disabled, and labels are cast to ``label_dtype``
-    when one is given. By default it is inferred as the student's first
+    Label precision is the scorer's decision. The strategy's own scorer is an
+    :class:`~nvalchemi.training.distillation.InProcessTeacherScorer`, which
+    disables autocast. It casts labels to ``label_dtype`` when one is given.
+    By default the label dtype is inferred as the student's first
     floating-point parameter dtype, never below single precision, so a
     ``bfloat16`` or ``float16`` student gets float32 labels and needs
     ``dtype_policy="prediction_to_target"`` on its loss terms; a float64 student
@@ -724,16 +857,44 @@ class DistillationStrategy(TrainingStrategy):
                 "reference set the mixture draws from, or set replay_ratio=1 to "
                 "train on generated frames alone."
             )
-        # One probe answers both the device and the schema question.
+        # One probe batch serves the device and schema checks alike.
         probe = (
             None
             if self.reference_dataset is None
             else self.reference_dataset.load_batches([[0]])[0]
         )
+        self._validate_reference_device(probe)
         self._validate_mixture_device(probe)
         self._validate_reference_schema(probe)
         self._validate_generation_signals()
         return self
+
+    def _validate_reference_device(self, probe: Batch | None) -> None:
+        """Reject a reference dataset emitting on an accelerator the run does not train on.
+
+        Parameters
+        ----------
+        probe : Batch | None
+            One batch already drawn from ``reference_dataset``. A composed
+            dataset, or a store opened without a device, is measured by the
+            device of this batch. ``None`` when there is no reference dataset.
+        """
+        if self.reference_dataset is None:
+            return
+        reference_device = dataset_device(self.reference_dataset, probe)
+        primary = self.devices[0]
+        if reference_device.type == "cpu" or same_device(reference_device, primary):
+            return
+        raise ValueError(
+            "A segment's mixture is collated on the reference dataset's own "
+            "device before the strategy moves it, so a reference dataset that "
+            "emits on an accelerator has to emit on the device the run trains "
+            f"on; got a reference dataset emitting on {reference_device!s} and "
+            f"devices[0]={primary!s}. A Zarr-backed Dataset resolves an unset "
+            "device to CUDA whenever one is visible — open it as "
+            f"Dataset(..., device={str(primary)!r}) to follow the run, or leave "
+            "it in host memory."
+        )
 
     def _validate_mixture_device(self, probe: Batch | None) -> None:
         """Reject a staging device the reference dataset cannot be collated with.
@@ -857,9 +1018,10 @@ class DistillationStrategy(TrainingStrategy):
         untouched, so pre-labeling a batch that later reaches :meth:`run` costs
         one teacher pass; a batch carrying only some of them is re-scored in
         full, since a partial set was written for a different signal set. The
-        teacher runs with autocast disabled, so the labels match what
-        :func:`~nvalchemi.training.distillation.label_dataset` persisted
-        wherever the store returns the label dtype.
+        scorer is called inside whatever autocast region the training loop
+        holds open. The strategy's own scorer disables autocast, so the labels
+        match what :func:`~nvalchemi.training.distillation.label_dataset`
+        persisted wherever the store returns the label dtype.
 
         Parameters
         ----------
@@ -874,9 +1036,7 @@ class DistillationStrategy(TrainingStrategy):
         """
         if not self._missing_teacher_fields(batch):
             return False
-        with torch.autocast(device_type=batch.device.type, enabled=False):
-            labels = self.teacher_scorer.label(batch)
-        _attach_teacher_labels(batch, labels)
+        _attach_teacher_labels(batch, self.teacher_scorer.label(batch))
         return True
 
     def _missing_teacher_fields(self, batch: Batch) -> list[str]:
@@ -902,6 +1062,15 @@ class DistillationStrategy(TrainingStrategy):
         at ``replay_ratio``, and each batch goes through the ordinary
         per-batch stages.
 
+        For relaxation propagators, whose trajectories end, an
+        ``OnPolicyConfig.fmax`` threshold adds a fourth phase between
+        generation and training: *graduate and backfill*. Converged structures
+        are stored once, as the minimum they reached. They then leave the
+        batch and are replaced by fresh initial structures while the source
+        still holds any. Generation stops once the source runs dry and the last
+        trajectory finishes. The remaining steps train on the frames already
+        in the buffer.
+
         Parameters
         ----------
         dataloader : Iterable[Batch] | None, optional
@@ -912,8 +1081,21 @@ class DistillationStrategy(TrainingStrategy):
         ------
         ValueError
             If *dataloader* is ``None`` in offline mode or supplied in on-policy
-            mode, if the on-policy loop is entered on more than one rank, or if a
-            segment's loader produces no batches.
+            mode, if the on-policy loop is entered on more than one rank, if a
+            segment's loader produces no batches, if the propagator already
+            carries a status-migrating criterion or a sampler of its own, or if
+            the configured criterion migrates off a status no initial structure
+            carries.
+
+        Warns
+        -----
+        UserWarning
+            If a lifecycle-managed run runs out of trajectories and initial
+            structures before reaching ``num_steps``. The remaining steps then
+            train on the frames already generated. Also once per segment
+            boundary that retires trajectories the ``divergence`` predicate
+            flagged, by default those whose positions or forces stopped
+            being finite.
 
         Notes
         -----
@@ -939,6 +1121,20 @@ class DistillationStrategy(TrainingStrategy):
         :class:`~nvalchemi.dynamics.FusedStage` pays its priming forward pass
         once per segment. See :ref:`training-distillation-api` for the mixture
         and schema contract.
+
+        Relaxation runs are the reason a segment can exit early, and
+        ``OnPolicyConfig.fmax`` turns such a run into a lifecycle. For the
+        duration of the loop, the criterion is registered ahead of the labeling
+        hook and installed as the propagator's convergence detector. A
+        converged structure is captured once, on the step its ``status``
+        reaches ``exit_status``, and left out of every later path capture. At
+        the segment boundary, initial structures are drawn to fill the room the
+        graduates freed. A budgeted
+        :class:`~nvalchemi.training.distillation.InitialStructures` draws them
+        from the rows it has not served yet. An unbudgeted one draws them only
+        with ``recycle=True``; otherwise the batch narrows. Once no trajectory
+        is left and no initial structure remains to start one, the loop warns
+        and trains on the buffer it has until ``num_steps``.
         """
         if self.on_policy is None:
             if dataloader is None:
@@ -1009,12 +1205,6 @@ class DistillationStrategy(TrainingStrategy):
                         device=self._resolve_replay_device(config),
                     )
                 buffer = self._replay_buffer
-                label_hook = TeacherLabelHook(
-                    config.teacher_scorer,
-                    sink=_segment_sink(config, state.num_graphs),
-                    frequency=config.label_frequency,
-                )
-                config.dynamics.register_hook(label_hook)
                 propagator_model = config.dynamics.model
                 held_propagator = (
                     evaluating(propagator_model)
@@ -1022,38 +1212,56 @@ class DistillationStrategy(TrainingStrategy):
                     and propagator_model is not self.models["student"]
                     else nullcontext()
                 )
-                try:
-                    # Freeze the teacher for both phases and keep the student in
-                    # eval mode outside the training phase. A composition holding
-                    # the student is not in models, so it is held separately.
-                    with (
-                        freeze_unconfigured_models(self.models, self.optimizer_configs),
-                        eval_configured_models(self.models, self.optimizer_configs),
-                        held_propagator,
-                    ):
-                        while self.step_count < target_step_count:
-                            state = config.dynamics.run(
-                                state, n_steps=config.generation_steps
-                            )
-                            self._capture_segment(config, state, label_hook, buffer)
-                            training_steps = min(
-                                config.training_steps_per_segment,
-                                target_step_count - self.step_count,
-                            )
-                            with train_configured_models(
+                # Only a lifecycle stores graduated graphs by another route;
+                # a propagator that manages its own keeps every frame here.
+                label_hook = TeacherLabelHook(
+                    config.teacher_scorer,
+                    frequency=config.label_frequency,
+                    exit_status=None
+                    if config.convergence_criterion is None
+                    else config.dynamics.exit_status,
+                )
+                with _relaxation_lifecycle(config, state, label_hook) as lifecycle:
+                    config.dynamics.register_hook(label_hook)
+                    try:
+                        # Freeze the teacher for both phases and keep the student in
+                        # eval mode outside the training phase. A composition holding
+                        # the student is not in models, so it is held separately.
+                        with (
+                            freeze_unconfigured_models(
                                 self.models, self.optimizer_configs
-                            ):
-                                training_started = self._train_segment(
-                                    config,
-                                    buffer,
-                                    training_steps=training_steps,
-                                    target_step_count=target_step_count,
-                                    training_started=training_started,
-                                    flat_opts=flat_opts,
-                                    flat_scheds=flat_scheds,
+                            ),
+                            eval_configured_models(self.models, self.optimizer_configs),
+                            held_propagator,
+                        ):
+                            while self.step_count < target_step_count:
+                                if state is not None:
+                                    state = self._generate_segment(
+                                        config,
+                                        state,
+                                        label_hook,
+                                        lifecycle,
+                                        buffer,
+                                        target_step_count,
+                                    )
+                                training_steps = min(
+                                    config.training_steps_per_segment,
+                                    target_step_count - self.step_count,
                                 )
-                finally:
-                    config.dynamics.hooks.remove(label_hook)
+                                with train_configured_models(
+                                    self.models, self.optimizer_configs
+                                ):
+                                    training_started = self._train_segment(
+                                        config,
+                                        buffer,
+                                        training_steps=training_steps,
+                                        target_step_count=target_step_count,
+                                        training_started=training_started,
+                                        flat_opts=flat_opts,
+                                        flat_scheds=flat_scheds,
+                                    )
+                    finally:
+                        config.dynamics.hooks.remove(label_hook)
 
                 if self._last_batch is not None:
                     self._update_hook_snapshot(loss_out=None)
@@ -1174,6 +1382,211 @@ class DistillationStrategy(TrainingStrategy):
         self._run_hooks(TrainingStage.AFTER_EPOCH, self._last_batch)
         self._validation_checkpoint(TrainingStage.AFTER_EPOCH)
         return training_started
+
+    def _generate_segment(
+        self,
+        config: OnPolicyConfig,
+        state: Batch,
+        label_hook: TeacherLabelHook,
+        lifecycle: _RelaxationLifecycle | None,
+        buffer: ReplayBuffer,
+        target_step_count: int,
+    ) -> Batch | None:
+        """Propagate one segment, store what it produced, and refill the batch.
+
+        Parameters
+        ----------
+        config : OnPolicyConfig
+            Segment-loop configuration.
+        state : Batch
+            Batch this segment propagates from.
+        label_hook : TeacherLabelHook
+            Hook labeling and capturing the frames along the path.
+        lifecycle : _RelaxationLifecycle | None
+            Convergence machinery, or ``None`` when none is managed.
+        buffer : ReplayBuffer
+            Buffer the segment's frames are stored in.
+        target_step_count : int
+            Training step the run ends at, named by the exhaustion warning.
+
+        Returns
+        -------
+        Batch | None
+            The batch the next segment propagates from, or ``None`` once every
+            trajectory has finished and no initial structure is left to start a
+            fresh one from. That case warns once.
+        """
+        # Sized per segment because a refill changes the trajectory count. The
+        # converged route keeps its own host sink, one frame per graph.
+        label_hook.sink = _segment_sink(config, state.num_graphs)
+        if lifecycle is not None:
+            lifecycle.capture.sink = HostMemory(capacity=state.num_graphs)
+        state = config.dynamics.run(state, n_steps=config.generation_steps)
+        self._capture_segment(config, state, label_hook, buffer)
+        if lifecycle is None:
+            return state
+        self._capture_converged(config, lifecycle, buffer)
+        refilled = self._backfill_segment(config, lifecycle, state)
+        if refilled is None:
+            self._warn_generation_exhausted(config, target_step_count, state)
+        return refilled
+
+    def _capture_converged(
+        self,
+        config: OnPolicyConfig,
+        lifecycle: _RelaxationLifecycle,
+        buffer: ReplayBuffer,
+    ) -> None:
+        """Label the structures that converged this segment and store them.
+
+        Converged frames are captured without teacher labels, at the step each
+        structure reached its minimum. Here the teacher labels all of the
+        segment's graduates in one pass, under the same guards the path route
+        uses. The frames are then stripped to the replay-frame contract, so
+        they match the schema the path frames froze the buffer with. Finally
+        they are moved to the buffer's own device.
+        """
+        sink = lifecycle.capture.sink
+        if len(sink) == 0:
+            return
+        frames = _to_device(sink.drain(), self.devices[0])
+        _score_and_attach(config.teacher_scorer, frames)
+        buffer.extend(_strip_replay_frame(frames).to(buffer.device or "cpu"))
+
+    def _backfill_segment(
+        self,
+        config: OnPolicyConfig,
+        lifecycle: _RelaxationLifecycle,
+        state: Batch,
+    ) -> Batch | None:
+        """Graduate the finished structures and backfill fresh ones in their place.
+
+        A trajectory finishes in one of two ways. It converges and the
+        criterion freezes it, or it diverges and the lifecycle freezes it on
+        the step the divergence predicate flagged it. This method counts the
+        diverged ones from the divergence hook's record and warns about them.
+        It then draws initial structures
+        to fill the room the graduates freed: at most as many structures as
+        graduated, within the atoms they held. The draw is also bounded by
+        their edges, but only when the source declared ``max_edges``, because
+        a dataset's stored edge count is not the neighbor list a propagator
+        rebuilds. The propagator's per-structure state follows the membership
+        change. The run restamps its bookkeeping over the appended rows and
+        keeps only the ``system_id`` the source assigned. A structure stored
+        with the ``status`` it once graduated on therefore still moves.
+
+        Returns
+        -------
+        Batch | None
+            The refilled batch, or ``None`` once nothing is left to propagate.
+        """
+        dynamics = config.dynamics
+        status = state["status"].view(-1)[: state.num_graphs]
+        graduated = status >= dynamics.exit_status
+        if not bool(graduated.any()):
+            return state
+        flagged_graphs = lifecycle.divergence.diverged
+        diverged = (
+            0 if flagged_graphs is None else int((graduated & flagged_graphs).sum())
+        )
+        if diverged:
+            predicate = lifecycle.divergence.divergence
+            flagged = (
+                "their positions or forces stopped being finite"
+                if predicate is nonfinite_divergence
+                else f"the divergence predicate {predicate!r} flagged them"
+            )
+            warnings.warn(
+                f"{diverged} of {state.num_graphs} generated trajectories "
+                f"diverged: {flagged}. The lifecycle froze them on that step "
+                "without storing that frame. They are now dropped from the "
+                "batch and replaced from the initial structures. A diverging "
+                "student is extrapolating; shorten the propagator's step, or "
+                "register a MaxForceClampHook on it.",
+                UserWarning,
+                stacklevel=2,
+            )
+        structures = lifecycle.structures
+        edges_per_graph = state.num_edges_per_graph
+        fresh = structures.draw(
+            limit=int(graduated.sum()),
+            fits=WithinBudget(
+                atoms=int(state.num_nodes_per_graph[graduated].sum()),
+                edges=int(edges_per_graph[graduated].sum())
+                if getattr(structures, "max_edges", None) is not None
+                and edges_per_graph.numel() > 0
+                else None,
+            ),
+            on_miss="skip",
+        )
+        lifecycle.divergence.reset()
+        survivors = torch.where(~graduated)[0]
+        refilled = state.index_select(survivors) if survivors.numel() > 0 else None
+        if fresh:
+            appended = type(state).from_data_list(fresh, device=state.device)
+            if refilled is None:
+                refilled = appended
+            else:
+                refilled.append(appended)
+        # As refill_check does: the state rows follow the membership change,
+        # and stale converged indices must not reach the next step's context.
+        dynamics._sync_state_to_batch(
+            survivors, len(fresh), state if refilled is None else refilled
+        )
+        dynamics._last_converged = None
+        if refilled is None:
+            return None
+        # Appending keeps only the keys both sides hold, so every bookkeeping
+        # column except system_id is rebuilt, keeping the survivors' values.
+        kept = survivors.numel()
+        for key, default_fn in dynamics._bookkeeping_keys.items():
+            if key == "system_id":
+                continue
+            column = default_fn(refilled.num_graphs, refilled.device)
+            if kept > 0 and key in state:
+                carried = state[key][survivors]
+                column[:kept] = carried.unsqueeze(-1) if carried.dim() == 1 else carried
+            refilled[key] = column
+        return refilled
+
+    def _warn_generation_exhausted(
+        self, config: OnPolicyConfig, target_step_count: int, finished: Batch
+    ) -> None:
+        """Announce that the run trains on what it has already generated.
+
+        *finished* is the batch whose last trajectories graduated. Every one of
+        them did, so its atoms and edges are the room the final backfill had
+        to fill.
+        """
+        structures = config.initial_structures
+        if structures.exhausted:
+            remedy = (
+                "Pass initial_structures=InitialStructures(dataset, recycle=True) "
+                "to keep generating from the front of the rows this rank owns, or "
+                "start from more structures — an unbudgeted source is propagated "
+                "whole, so more of them lengthen the run by widening the initial "
+                "batch rather than by backfilling it."
+            )
+        else:
+            freed = f"{int(finished.num_nodes_per_graph.sum())!r} atoms"
+            if getattr(structures, "max_edges", None) is not None:
+                freed += f" and {int(finished.num_edges_per_graph.sum())!r} edges"
+            remedy = (
+                f"The source still holds rows, but none of them fits the {freed} "
+                "the finished trajectories freed. Widen the source's budget, "
+                "which sets the initial batch and with it the room a graduation "
+                "frees."
+            )
+        warnings.warn(
+            "Every generated trajectory has finished and the initial structures "
+            "have nothing left to start a fresh one from, so generation stopped "
+            f"after {config.dynamics.step_count} propagator steps with "
+            f"{len(self._replay_buffer)} frames in the replay buffer; the "
+            f"remaining {target_step_count - self.step_count} training steps "
+            f"draw from that buffer. {remedy}",
+            UserWarning,
+            stacklevel=2,
+        )
 
     def _resolve_replay_device(
         self, config: OnPolicyConfig

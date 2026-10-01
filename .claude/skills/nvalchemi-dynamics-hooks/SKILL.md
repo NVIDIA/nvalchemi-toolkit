@@ -79,7 +79,14 @@ class DynamicsContext(HookContext):
     step_count: int = 0
     converged_mask: torch.Tensor | None = None
     active_graph_mask: torch.Tensor | None = None
+    graduated_mask: torch.Tensor | None = None   # ON_GRADUATE only
 ```
+
+`ctx.active_graph_mask` marks the active graphs, those whose status is below
+`exit_status`, as they were at the start of the step. A hook that must see a
+status change made earlier in the same step (for example one registered after
+a `ConvergenceHook`) reads the current status with
+`BaseDynamics.active_graph_mask(ctx.batch, ctx.workflow.exit_status)`.
 
 Access batch data via `ctx.batch` and dynamics step info via `ctx.step_count`.
 
@@ -89,8 +96,8 @@ Access batch data via `ctx.batch` and dynamics step info via `ctx.step_count`.
 
 ### Dynamics — `DynamicsStage`
 
-Dynamics exposes 10 lifecycle stages. `ON_ADMISSION` fires once when a
-batch is admitted, while the remaining 9 stages fire within each `step()`:
+Dynamics exposes 11 lifecycle stages. `ON_ADMISSION` fires once when a
+batch is admitted, while the remaining 10 stages fire within each `step()`:
 
 ```text
 ON_ADMISSION (-1)  ← once before force priming and the first step
@@ -100,6 +107,7 @@ BEFORE_STEP (0)
   BEFORE_POST_UPDATE (5) →  post_update()  →  AFTER_POST_UPDATE (6)
 AFTER_STEP (7)
 ON_CONVERGE (8)   ← BaseDynamics: if detected; fused sub-stage: frequency-eligible steps
+ON_GRADUATE (9)   ← whenever a hook listens; ctx.graduated_mask = graphs that reached exit_status
 ```
 
 **Stage selection guidelines (dynamics):**
@@ -112,6 +120,7 @@ ON_CONVERGE (8)   ← BaseDynamics: if detected; fused sub-stage: frequency-elig
 | Wrap positions after velocity update | `DynamicsStage.AFTER_POST_UPDATE` |
 | Instrument timing / profiling | `DynamicsStage.BEFORE_STEP` |
 | React to convergence | `DynamicsStage.ON_CONVERGE` |
+| Capture or account for a graph leaving the engine | `DynamicsStage.ON_GRADUATE` |
 
 `ON_ADMISSION` is reset for every new `run()` and for managed membership
 changes such as refill or pipeline communication. In `FusedStage`, it runs
@@ -148,6 +157,17 @@ independently per sub-stage. Fused sub-stages evaluate convergence every step;
 registered `ON_CONVERGE` hooks run when allowed by `hook.frequency` and must
 inspect `ctx.converged_mask`. `BaseDynamics.step()` calls them only when
 convergence is detected.
+
+`ON_GRADUATE` reports graduation: a graph graduates on the step its status
+reaches `exit_status`, whether a criterion, a step budget, or another hook
+changed it. The stage fires after `ON_CONVERGE` (in `FusedStage`, also after
+the step-budget migration), and `ctx.graduated_mask` marks the graphs that
+graduated during the step. In a `FusedStage` it fires at both levels: first on
+each sub-stage, restricted to the graphs that sub-stage owned, then on the
+fused stage. It ignores `hook.frequency` and is dispatched on every step on
+which a hook is registered for it and the batch carries a `status` column, so
+the mask may be all `False`; read it rather than assume a graph graduated.
+`DomainParallel` does not dispatch it.
 
 ---
 

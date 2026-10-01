@@ -86,7 +86,7 @@ from __future__ import annotations
 import contextlib
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from typing import Any, Literal, TypeAlias
 
 import numpy as np
@@ -1056,8 +1056,8 @@ class BaseLevelStorage(ABC):
     def __len__(self) -> int: ...
 
     @abstractmethod
-    def select(self, idx: IndexType) -> BaseLevelStorage:
-        """Return a new container with only the selected samples."""
+    def select(self, idx: IndexType, *, drop: Collection[str] = ()) -> BaseLevelStorage:
+        """Return a container of only the selected samples, without *drop* keys."""
 
     @abstractmethod
     def update_at(self, key: str, value: Tensor, idx: IndexType) -> None:
@@ -1159,9 +1159,15 @@ class BaseLevelStorage(ABC):
         """Return a shallow copy (tensors are **not** cloned)."""
         return self.__class__(self._data, device=self.device, validate=False)
 
-    def clone(self) -> BaseLevelStorage:
-        """Return a deep copy including an independent attr_map clone."""
-        cloned = {k: _clone_tensor(v) for k, v in self._data.items()}
+    def clone(self, *, drop: Collection[str] = ()) -> BaseLevelStorage:
+        """Return a deep copy including an independent attr_map clone.
+
+        Parameters
+        ----------
+        drop : Collection[str], optional
+            Keys left out of the copy instead of being cloned. Default ``()``.
+        """
+        cloned = {k: _clone_tensor(v) for k, v in self._data.items() if k not in drop}
         return self.__class__(
             cloned,
             device=self.device,
@@ -1263,13 +1269,18 @@ class UniformLevelStorage(BaseLevelStorage):
         if not self._data.is_empty() and len(value) != len(self):
             raise ValueError(f"Length mismatch: {len(value)} vs {len(self)}")
 
-    def select(self, idx: IndexType) -> UniformLevelStorage:
+    def select(
+        self, idx: IndexType, *, drop: Collection[str] = ()
+    ) -> UniformLevelStorage:
         """Select a subset of samples by index.
 
         Parameters
         ----------
         idx : int, slice, or Tensor
             Index specification.
+        drop : Collection[str], optional
+            Keys left out of the selection instead of being copied. Default
+            ``()``.
 
         Returns
         -------
@@ -1280,7 +1291,8 @@ class UniformLevelStorage(BaseLevelStorage):
         elif not isinstance(idx, slice):
             idx = self._prepare_index(idx)
 
-        selected_td = self._data[idx]
+        data = self._data.exclude(*drop) if drop else self._data
+        selected_td = data[idx]
         return self.__class__(selected_td, device=self.device, validate=False)
 
     def _prepare_index(self, idx: Any) -> Tensor:
@@ -1597,9 +1609,9 @@ class UniformLevelStorage(BaseLevelStorage):
         super().to_device(device, non_blocking=non_blocking)
         return self
 
-    def clone(self) -> UniformLevelStorage:
-        """Return a deep copy; copies _num_kept if set (e.g. after defrag)."""
-        out = super().clone()
+    def clone(self, *, drop: Collection[str] = ()) -> UniformLevelStorage:
+        """Return a deep copy minus *drop*; copies _num_kept if set (e.g. after defrag)."""
+        out = super().clone(drop=drop)
         if getattr(self, "_num_kept", None) is not None:
             object.__setattr__(out, "_num_kept", self._num_kept)
         return out
@@ -1976,13 +1988,18 @@ class SegmentedLevelStorage(BaseLevelStorage):
             return self.segment_lengths[idx]
         return self.segment_lengths[to_tensor(idx).to(device=self.device)]
 
-    def select(self, idx: IndexType) -> SegmentedLevelStorage:
+    def select(
+        self, idx: IndexType, *, drop: Collection[str] = ()
+    ) -> SegmentedLevelStorage:
         """Select a subset of segments.
 
         Parameters
         ----------
         idx : int, slice, or Tensor
             Segment-level index.
+        drop : Collection[str], optional
+            Keys left out of the selection instead of being copied. The
+            segment lengths are selected regardless. Default ``()``.
 
         Returns
         -------
@@ -1990,7 +2007,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
         """
         element_idx = self._expand_idx(idx)
         segment_lengths = self._select_segment_lengths(idx)
-        selected_td = self._data[element_idx.to(device=self.device)]
+        data = self._data.exclude(*drop) if drop else self._data
+        selected_td = data[element_idx.to(device=self.device)]
         return self.__class__(
             selected_td,
             device=self.device,
@@ -2049,9 +2067,19 @@ class SegmentedLevelStorage(BaseLevelStorage):
         self._batch_ptr_np = None
         return self
 
-    def clone(self) -> SegmentedLevelStorage:
-        """Return a deep copy with independent tensors, segment info, and attr_map."""
-        cloned_data = {k: _clone_tensor(self._data[k]) for k in self._data.keys()}
+    def clone(self, *, drop: Collection[str] = ()) -> SegmentedLevelStorage:
+        """Return a deep copy with independent tensors, segment info, and attr_map.
+
+        Parameters
+        ----------
+        drop : Collection[str], optional
+            Keys left out of the copy instead of being cloned. The segment
+            lengths, batch index, and batch pointer are cloned regardless.
+            Default ``()``.
+        """
+        cloned_data = {
+            k: _clone_tensor(self._data[k]) for k in self._data.keys() if k not in drop
+        }
         cloned_seg = _clone_tensor(self.segment_lengths)
         cloned_bidx = (
             _clone_tensor(self._batch_idx) if self._batch_idx is not None else None
@@ -2682,13 +2710,18 @@ class MultiLevelStorage:
 
     # -- Selection / cloning ------------------------------------------------
 
-    def select(self, idx: IndexType) -> MultiLevelStorage:
+    def select(
+        self, idx: IndexType, *, drop: Collection[str] = ()
+    ) -> MultiLevelStorage:
         """Select a subset of samples across all groups.
 
         Parameters
         ----------
         idx : IndexType
             Sample-level index specification.
+        drop : Collection[str], optional
+            Keys left out of every group's selection instead of being copied.
+            Default ``()``.
 
         Returns
         -------
@@ -2697,7 +2730,7 @@ class MultiLevelStorage:
         if isinstance(idx, int):
             idx = slice(idx, idx + 1)
         return self.__class__(
-            groups={k: v.select(idx) for k, v in self.groups.items()},
+            groups={k: v.select(idx, drop=drop) for k, v in self.groups.items()},
             attr_map=self.attr_map,
             validate=False,
         )
@@ -2730,10 +2763,17 @@ class MultiLevelStorage:
             group.to_device(device, non_blocking=non_blocking)
         return self
 
-    def clone(self) -> MultiLevelStorage:
-        """Return a deep copy with independent groups and attr_map."""
+    def clone(self, *, drop: Collection[str] = ()) -> MultiLevelStorage:
+        """Return a deep copy with independent groups and attr_map.
+
+        Parameters
+        ----------
+        drop : Collection[str], optional
+            Keys left out of every group's copy instead of being cloned.
+            Default ``()``.
+        """
         return self.__class__(
-            groups={n: g.clone() for n, g in self.groups.items()},
+            groups={n: g.clone(drop=drop) for n, g in self.groups.items()},
             validate=False,
             attr_map=self.attr_map.clone(),
             device=self.device,

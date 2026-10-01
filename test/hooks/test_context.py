@@ -94,8 +94,14 @@ class TestDynamicsContext:
         assert ctx.step_count == 0
         assert ctx.converged_mask is None
         assert ctx.active_graph_mask is None
+        assert ctx.graduated_mask is None
         assert ctx.model is None
         assert ctx.global_rank == 0
+
+    def test_graduated_mask_is_carried(self):
+        mask = torch.tensor([True, False])
+        ctx = DynamicsContext(batch=MagicMock(), graduated_mask=mask)
+        assert ctx.graduated_mask is mask
 
 
 class TestTrainContext:

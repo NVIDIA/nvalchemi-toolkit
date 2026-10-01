@@ -33,7 +33,7 @@ Performance advantages over the Pydantic-based ``nvalchemi.data.batch.Batch``:
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from typing import Any, TypeAlias
 
 import numpy as np
@@ -1682,6 +1682,8 @@ class Batch(DataMixin):
     def index_select(
         self,
         idx: int | slice | Tensor | list[int] | np.ndarray | Sequence[int],
+        *,
+        drop: Iterable[str] = (),
     ) -> Batch:
         """Select a subset of graphs by index.
 
@@ -1692,11 +1694,18 @@ class Batch(DataMixin):
         ----------
         idx : int, slice, Tensor, list[int], np.ndarray, or Sequence[int]
             Graph-level index specification.
+        drop : Iterable[str], optional
+            Keys to leave out of the selection, at whichever level each is
+            stored. A dropped key is never copied, so a caller saves the copy
+            of a field it would delete anyway. A key the batch does not carry
+            is ignored. A level whose keys are all dropped keeps its
+            cardinality. Default ``()`` copies every key.
 
         Returns
         -------
         Batch
         """
+        dropped = frozenset(drop)
         idx_list = self._normalize_index(idx)
         idx_tensor = torch.tensor(idx_list, dtype=torch.int32, device=self.device)
 
@@ -1706,7 +1715,7 @@ class Batch(DataMixin):
         offset_diff: Tensor | None = None
         if atoms is not None:
             old_offsets = atoms.batch_ptr[idx_tensor]
-            new_atoms = atoms.select(idx_tensor)
+            new_atoms = atoms.select(idx_tensor, drop=dropped)
             new_atoms._lazy_init_batch_ptr()
             new_offsets = new_atoms._batch_ptr[:-1]
             offset_diff = old_offsets - new_offsets
@@ -1716,7 +1725,7 @@ class Batch(DataMixin):
             if group is None:
                 continue
             if isinstance(group, SegmentedLevelStorage):
-                new_group = group.select(idx_tensor)
+                new_group = group.select(idx_tensor, drop=dropped)
                 if (
                     group_name == "edges"
                     and "neighbor_list" in new_group
@@ -1729,7 +1738,7 @@ class Batch(DataMixin):
                         "neighbor_list"
                     ] - correction.unsqueeze(1)
             else:
-                new_group = group.select(idx_tensor)
+                new_group = group.select(idx_tensor, drop=dropped)
             new_groups[group_name] = new_group
 
         new_schema = self._storage.attr_map.clone()
@@ -1742,7 +1751,7 @@ class Batch(DataMixin):
         )
         return Batch._construct(
             device=self.device,
-            keys={k: v.copy() for k, v in self.keys.items()} if self.keys else None,
+            keys={k: v - dropped for k, v in self.keys.items()} if self.keys else None,
             storage=new_storage,
             data_class=self._data_class,
         )
@@ -2997,19 +3006,29 @@ class Batch(DataMixin):
         new.device = new._storage.device
         return new
 
-    def clone(self) -> Batch:
+    def clone(self, *, drop: Iterable[str] = ()) -> Batch:
         """Return a deep copy.
 
         Overrides :meth:`DataMixin.clone` for performance.
+
+        Parameters
+        ----------
+        drop : Iterable[str], optional
+            Keys to leave out of the copy, at whichever level each is stored.
+            A dropped key is never cloned, so a caller saves the clone of a
+            field it would delete anyway. A key the batch does not carry is
+            ignored. A level whose keys are all dropped keeps its cardinality.
+            Default ``()`` copies every key.
 
         Returns
         -------
         Batch
         """
+        dropped = frozenset(drop)
         return Batch._construct(
             device=self.device,
-            keys={k: v.copy() for k, v in self.keys.items()} if self.keys else None,
-            storage=self._storage.clone(),
+            keys={k: v - dropped for k, v in self.keys.items()} if self.keys else None,
+            storage=self._storage.clone(drop=dropped),
             data_class=self._data_class,
         )
 
