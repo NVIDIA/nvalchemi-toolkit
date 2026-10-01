@@ -26,6 +26,7 @@ import torch
 import warp as wp
 
 from nvalchemi.data import Batch
+from nvalchemi.data.batch import _BUILTIN_LEVELS
 from nvalchemi.data.level_storage import (
     LevelSchema,
     MultiLevelStorage,
@@ -101,7 +102,7 @@ def _make_two_level_state_batch(
     Batch
         Tensors are stored by reference.
     """
-    if level_name in ("atoms", "edges", "system"):
+    if level_name in _BUILTIN_LEVELS:
         raise ValueError(
             f"level_name {level_name!r} collides with a built-in level; pick a "
             "name of the optimizer's own"
