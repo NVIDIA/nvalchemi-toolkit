@@ -17,14 +17,16 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeAlias, runtime_checkable
 
 import torch
 
+from nvalchemi._typing import Forces, NodePositions
 from nvalchemi.data.batch import Batch
+from nvalchemi.models._utils import hessian_vector_product
 from nvalchemi.models.base import ModelConfig, NeighborConfig, NeighborListFormat
 from nvalchemi.neighbors import compute_neighbors
 from nvalchemi.training.runtime import evaluating
@@ -42,6 +44,7 @@ __all__ = [
     "TeacherLabels",
     "TeacherScorer",
     "TeacherSignal",
+    "hessian_vector_product",
     "scorer_fields",
     "signal_fields",
     "signal_for_field",
@@ -63,6 +66,9 @@ NeighborListPolicy: TypeAlias = Literal["rebuild", "reuse"]
 
 _NEIGHBOR_LIST_POLICIES: frozenset[str] = frozenset({"rebuild", "reuse"})
 """The two values of :data:`NeighborListPolicy`."""
+
+_HVP_PROBE_FIELD = "teacher_hvp_probe"
+"""Field holding the direction a stored Hessian-vector product was taken along."""
 
 _TEACHER_FIELD_PREFIX = "teacher_"
 """Namespace every teacher field lives in, clear of a batch's own fields."""
@@ -196,6 +202,9 @@ BUILTIN_SIGNALS: Mapping[str, TeacherSignal] = MappingProxyType(
         "embeddings": TeacherSignal(
             "embeddings", None, "teacher_node_embeddings", "node"
         ),
+        "hessian": TeacherSignal(
+            "hessian", None, "teacher_hvp", "node", extra_fields=(_HVP_PROBE_FIELD,)
+        ),
     }
 )
 """Built-in teacher signals by name; a scorer takes these names or a :class:`TeacherSignal`."""
@@ -203,7 +212,7 @@ BUILTIN_SIGNALS: Mapping[str, TeacherSignal] = MappingProxyType(
 SUPPORTED_SIGNALS: frozenset[str] = frozenset(BUILTIN_SIGNALS)
 """Names of the built-in signals, the strings :class:`InProcessTeacherScorer` resolves."""
 
-_DERIVED_SIGNALS: frozenset[str] = frozenset({"embeddings"})
+_DERIVED_SIGNALS: frozenset[str] = frozenset({"embeddings", "hessian"})
 """Built-in signals the scorer derives outside the forward pass, by name."""
 
 _DENSE_NEIGHBOR_KEYS = frozenset(
@@ -699,6 +708,39 @@ def scorer_fields(scorer: TeacherScorer) -> tuple[str, ...] | None:
     return None
 
 
+def _as_scorer(
+    model: TeacherScorer | BaseModelMixin,
+    signals: Sequence[str],
+    dtype: torch.dtype | None = None,
+) -> Any:
+    """Return *model* as a scorer, wrapping a bare model in an in-process one.
+
+    A supplied scorer is checked against the batch fields that the requested
+    signals are read from, not against the signal names it declares, because it
+    may publish under fields of its own. A scorer whose fields cannot be
+    determined is let through. A bare model is wrapped in an
+    :class:`InProcessTeacherScorer` with the scorer's defaults, so it labels
+    with autocast disabled; *dtype* applies only to that wrapped model.
+
+    Raises
+    ------
+    ValueError
+        If a supplied scorer declares fields that omit one the *signals* are
+        read from.
+    """
+    if isinstance(model, TeacherScorer):
+        fields = scorer_fields(model)
+        required = signal_fields(signals)
+        missing = None if fields is None else sorted(set(required) - set(fields))
+        if missing:
+            raise ValueError(
+                f"Scorer must publish the fields {list(required)!r} this evaluation "
+                f"reads; got {list(fields)!r}, missing {missing!r}."
+            )
+        return model
+    return InProcessTeacherScorer(model, signals, dtype=dtype)
+
+
 class InProcessTeacherScorer:
     """Score a batch with a teacher model loaded in the current process.
 
@@ -716,12 +758,15 @@ class InProcessTeacherScorer:
     requested by name: ``energy`` to ``teacher_energy`` ``(B, 1)`` and
     ``stress`` to ``teacher_stress`` ``(B, 3, 3)`` at system level;
     ``forces`` to ``teacher_forces`` ``(V, 3)``, ``atomic_energies`` to
-    ``teacher_atomic_energies`` ``(V,)``, and ``embeddings`` (from
+    ``teacher_atomic_energies`` ``(V,)``, ``embeddings`` (from
     :meth:`~nvalchemi.models.base.BaseModelMixin.compute_embeddings`) to
-    ``teacher_node_embeddings`` ``(V, D)`` at node level. Any other teacher
-    output is requested as a :class:`TeacherSignal` of its own. The resolved
-    specs are published as ``signal_specs`` and the fields they write as
-    ``label_fields``.
+    ``teacher_node_embeddings`` ``(V, D)``, and ``hessian`` (from
+    :meth:`label_hvp`) to ``teacher_hvp`` ``(V, 3)`` at node level. The
+    ``hessian`` signal is the teacher's Hessian-vector product, the product of
+    its energy Hessian with a random probe direction; that direction is
+    written to ``teacher_hvp_probe``. Any other teacher output is requested as
+    a :class:`TeacherSignal` of its own. The resolved specs are published as
+    ``signal_specs`` and the fields they write as ``label_fields``.
 
     Parameters
     ----------
@@ -762,6 +807,11 @@ class InProcessTeacherScorer:
         applies after this setting: the teacher produces each label at the
         precision this mode gives, and *dtype*, when set, then casts it.
         Default ``False``.
+    probe_seed : int | None, optional
+        Seed of the generator the ``hessian`` probe direction is drawn from.
+        Default ``None`` draws from the global RNG, a fresh direction per
+        labeling. A call to :meth:`label` can override it for that labeling
+        alone; see the Notes.
 
     Raises
     ------
@@ -770,7 +820,8 @@ class InProcessTeacherScorer:
         :class:`TeacherSignal`, gives two specs one name or one field, names a
         model output the teacher does not declare, gives a custom spec no
         model output, requests ``"embeddings"`` from a teacher that publishes
-        no node-embedding shape, *dtype* is not a floating-point dtype,
+        no node-embedding shape, requests ``"hessian"`` from a teacher that
+        declares no ``energy`` output, *dtype* is not a floating-point dtype,
         *neighbor_list* is neither ``"rebuild"`` nor ``"reuse"``, *autocast*
         is neither ``None``, a bool, nor a floating-point dtype, or *teacher*
         is a composition planning more than one neighbor-list source.
@@ -818,6 +869,15 @@ class InProcessTeacherScorer:
     :func:`~nvalchemi.training.distillation.label_dataset` writes offline.
     Inside a caller's region, ``True`` and a dtype differ: ``True`` enables
     autocast at the region's dtype, whereas a dtype pins the pass to itself.
+
+    Forward-pass signals share one teacher pass. ``embeddings`` adds a second
+    pass, and ``hessian`` adds an energy-only pass plus two backward passes, so
+    a Hessian label costs roughly three to four times an energy-and-force
+    label. Each redrawn probe is a new objective. Leave ``probe_seed`` unset
+    wherever coverage of the Hessian comes from redrawing, as in training and
+    offline labeling. Pin it wherever a number is compared across passes, as
+    :class:`~nvalchemi.training.distillation.DistillationStrategy` does per
+    validation batch through the call-time ``probe_seed`` of :meth:`label`.
     """
 
     def __init__(
@@ -828,6 +888,7 @@ class InProcessTeacherScorer:
         dtype: torch.dtype | None = None,
         neighbor_list: NeighborListPolicy = "rebuild",
         autocast: bool | torch.dtype | None = False,
+        probe_seed: int | None = None,
     ) -> None:
         """Validate the requested signals against the teacher's declared outputs."""
         requested = list(signals)
@@ -878,6 +939,12 @@ class InProcessTeacherScorer:
                 "Teacher must publish a ``node_embeddings`` shape to serve the "
                 f"``embeddings`` signal; got {sorted(_node_embedding_shapes(teacher))!r}."
             )
+        if "hessian" in specs and "energy" not in declared:
+            raise ValueError(
+                "The ``hessian`` signal differentiates the teacher's energy "
+                "twice, so the teacher must declare an ``energy`` output; got "
+                f"outputs={sorted(declared)!r}."
+            )
         if dtype is not None and not dtype.is_floating_point:
             raise ValueError(f"dtype must be a floating-point dtype; got {dtype!r}.")
         if neighbor_list not in _NEIGHBOR_LIST_POLICIES:
@@ -910,12 +977,13 @@ class InProcessTeacherScorer:
         self.dtype = dtype
         self.neighbor_list = neighbor_list
         self.autocast = autocast
+        self.probe_seed = probe_seed
         self._required_outputs = required
         evaluate = getattr(teacher, "eval", None)
         if callable(evaluate):
             evaluate()
 
-    def label(self, batch: Batch) -> TeacherLabels:
+    def label(self, batch: Batch, *, probe_seed: int | None = None) -> TeacherLabels:
         """Return the requested teacher signals for *batch*.
 
         Parameters
@@ -924,6 +992,10 @@ class InProcessTeacherScorer:
             Batch to score. Restored to its incoming state before returning,
             including neighbor tensors, any pre-existing embeddings, and any
             field the teacher writes while scoring.
+        probe_seed : int | None, optional
+            Seed of this labeling's ``hessian`` probe direction, in place of
+            the scorer's own ``probe_seed``, which is left as it is. Default
+            ``None`` uses the scorer's setting.
 
         Returns
         -------
@@ -940,11 +1012,10 @@ class InProcessTeacherScorer:
             teacher's format reads, or one stamped with another cutoff.
         """
         config = self.teacher.model_config
-        previous_active = set(config.active_outputs)
         grad_flags = _snapshot_grad_flags(batch, config)
         try:
-            self.teacher.set_config("active_outputs", set(self._required_outputs))
             with (
+                self.teacher.narrowed_outputs(self._required_outputs),
                 evaluating(self.teacher)
                 if isinstance(self.teacher, torch.nn.Module)
                 else nullcontext(),
@@ -955,8 +1026,9 @@ class InProcessTeacherScorer:
                 labels = self._forward_labels(batch) if self._required_outputs else {}
                 if "embeddings" in self.signals:
                     labels.update(self._embedding_labels(batch))
+                if "hessian" in self.signals:
+                    labels.update(self._hessian_labels(batch, probe_seed))
         finally:
-            self.teacher.set_config("active_outputs", previous_active)
             _restore_grad_flags(batch, grad_flags)
         return labels
 
@@ -967,6 +1039,78 @@ class InProcessTeacherScorer:
         if isinstance(self.autocast, torch.dtype):
             return torch.autocast(device_type=device_type, dtype=self.autocast)
         return torch.autocast(device_type=device_type, enabled=self.autocast)
+
+    def label_hvp(self, batch: Batch, probe: NodePositions) -> Forces:
+        """Return the teacher's Hessian-vector product along *probe*.
+
+        The teacher's energy is differentiated twice with respect to the
+        positions of *batch*. The pass is narrowed to the energy and runs under
+        the same ``autocast`` setting and the same neighbor-list and field
+        isolation as :meth:`label`. The batch is left as it was found,
+        including a composed teacher's wired intermediates and swapped
+        autograd leaves.
+
+        Parameters
+        ----------
+        batch : Batch
+            Batch to differentiate the teacher's energy on.
+        probe : NodePositions
+            Probe direction of shape ``(V, 3)``, matching the batch's positions.
+
+        Returns
+        -------
+        Forces
+            Detached Hessian-vector product of shape ``(V, 3)``, cast to
+            ``dtype`` when one is configured.
+
+        Raises
+        ------
+        RuntimeError
+            If the teacher returns no energy, or is not twice differentiable
+            with respect to positions.
+
+        Examples
+        --------
+        >>> import torch
+        >>> from nvalchemi.training.distillation import InProcessTeacherScorer
+        >>> scorer = InProcessTeacherScorer(teacher, ["hessian"])  # doctest: +SKIP
+        >>> probe = torch.randn_like(batch.positions)  # doctest: +SKIP
+        >>> scorer.label_hvp(batch, probe).shape  # doctest: +SKIP
+        torch.Size([12, 3])
+
+        Notes
+        -----
+        One product costs one forward and two backward passes. A Hutchinson
+        average over ``k`` probes takes ``k`` calls. That average is left to the
+        caller, because the loss consumes one materialized target per batch.
+        """
+        config = self.teacher.model_config
+        grad_flags = _snapshot_grad_flags(batch, config)
+        try:
+            with (
+                self.teacher.narrowed_outputs({"energy"}),
+                self._autocast_scope(batch.device.type),
+                _isolated_neighbors(batch, config.neighbor_config, self.neighbor_list),
+                _isolated_fields(batch),
+            ):
+                positions = batch.positions
+                with torch.enable_grad():
+                    positions.requires_grad_(True)
+                    outputs = self.teacher(batch)
+                    energy = outputs.get("energy")
+                    if energy is None:
+                        produced = sorted(
+                            key for key, value in outputs.items() if value is not None
+                        )
+                        raise RuntimeError(
+                            "Teacher returned no 'energy' output for the 'hessian' "
+                            f"signal; got outputs {produced!r}. Declare energy among "
+                            "the teacher's outputs, or drop the 'hessian' signal."
+                        )
+                    value = hessian_vector_product(energy, positions, probe)
+        finally:
+            _restore_grad_flags(batch, grad_flags)
+        return self._cast(value)
 
     def _forward_labels(self, batch: Batch) -> TeacherLabels:
         """Run the teacher forward pass and collect its detached signals."""
@@ -993,29 +1137,8 @@ class InProcessTeacherScorer:
         return labels
 
     def _embedding_labels(self, batch: Batch) -> TeacherLabels:
-        """Compute node embeddings without leaving them attached to *batch*.
-
-        Pre-existing embeddings are cleared first, so the ``node_embeddings``
-        read back is the teacher's rather than a stale value already on the
-        batch, and are restored into the level they came from: ``del`` drops
-        the key from every level, after which :meth:`Batch.__setitem__` would
-        route it by the attribute registry rather than the incoming layout.
-        """
-        saved_levels = {
-            key: level
-            for level, fields in batch.level_keys.items()
-            for key in _EMBEDDING_KEYS & fields
-        }
-        saved_values = {key: batch[key] for key in saved_levels}
-        for key in saved_levels:
-            del batch[key]
-        saved_tracked = {
-            level: names & _EMBEDDING_KEYS
-            for level, names in (batch.keys or {}).items()
-        }
-        for level in saved_tracked:
-            batch.keys[level] -= _EMBEDDING_KEYS
-        try:
+        """Compute node embeddings without leaving them attached to *batch*."""
+        with batch.without_keys(*_EMBEDDING_KEYS):
             with torch.no_grad():
                 self.teacher.compute_embeddings(batch)
             if "node_embeddings" not in batch:
@@ -1025,33 +1148,66 @@ class InProcessTeacherScorer:
                 )
             spec = self.signal_specs["embeddings"]
             return self._finalize(spec, batch["node_embeddings"].clone(), batch)
-        finally:
-            for key in _EMBEDDING_KEYS:
-                if key in batch:
-                    del batch[key]
-            for key, value in saved_values.items():
-                _restore_at_level(batch, key, value, saved_levels[key])
-            for level, names in saved_tracked.items():
-                batch.keys[level] = (batch.keys[level] - _EMBEDDING_KEYS) | names
+
+    def _hessian_labels(self, batch: Batch, probe_seed: int | None) -> TeacherLabels:
+        """Draw a probe and return the teacher's product with it, probe included.
+
+        The probe is standard normal, on the batch's device and dtype. It comes
+        from the global random stream unless *probe_seed*, or failing that the
+        scorer's ``probe_seed``, seeds a generator of its own. The probe
+        travels with the product because the loss compares two products taken
+        along one direction.
+        """
+        spec = self.signal_specs["hessian"]
+        probe = self._draw_probe(
+            batch.positions, self.probe_seed if probe_seed is None else probe_seed
+        )
+        product = self.label_hvp(batch, probe)
+        return self._finalize(
+            spec, {spec.field: product, _HVP_PROBE_FIELD: probe}, batch
+        )
+
+    def _draw_probe(self, positions: NodePositions, seed: int | None) -> NodePositions:
+        """Return a standard-normal direction shaped like *positions*, from *seed*."""
+        if seed is None:
+            return torch.randn_like(positions)
+        generator = torch.Generator(device=positions.device)
+        generator.manual_seed(seed)
+        return torch.randn(
+            positions.shape,
+            generator=generator,
+            dtype=positions.dtype,
+            device=positions.device,
+        )
 
     def _finalize(
-        self, spec: TeacherSignal, value: torch.Tensor, batch: Batch
+        self,
+        spec: TeacherSignal,
+        value: torch.Tensor | Mapping[str, torch.Tensor],
+        batch: Batch,
     ) -> TeacherLabels:
         """Normalize *value* and spread it, detached and cast, over *spec*'s fields.
+
+        A producer that has already spread its output over the fields, as the
+        Hessian path does with its probe, passes the mapping in place of the
+        raw tensor and skips ``normalize``.
 
         Raises
         ------
         RuntimeError
-            If ``normalize`` returns a mapping whose keys differ from
-            :attr:`TeacherSignal.fields`, or returns a single tensor for a
-            signal that declares companion fields.
+            If the produced mapping's keys differ from
+            :attr:`TeacherSignal.fields`, or ``normalize`` returns a single
+            tensor for a signal that declares companion fields.
         """
-        value = value.detach()
-        produced = value if spec.normalize is None else spec.normalize(value, batch)
+        if isinstance(value, Mapping):
+            produced = value
+        else:
+            value = value.detach()
+            produced = value if spec.normalize is None else spec.normalize(value, batch)
         if isinstance(produced, Mapping):
             if set(produced) != set(spec.fields):
                 raise RuntimeError(
-                    f"Teacher signal {spec.name!r} normalize must produce exactly "
+                    f"Teacher signal {spec.name!r} must produce exactly "
                     f"{list(spec.fields)!r}; got {sorted(produced)!r}."
                 )
         elif spec.extra_fields:
@@ -1063,11 +1219,13 @@ class InProcessTeacherScorer:
         else:
             produced = {spec.field: produced}
         return {
-            field: (
-                tensor.detach().to(self.dtype)
-                if self.dtype is not None and tensor.is_floating_point()
-                else tensor.detach(),
-                spec.level,
-            )
+            field: (self._cast(tensor), spec.level)
             for field, tensor in produced.items()
         }
+
+    def _cast(self, value: torch.Tensor) -> torch.Tensor:
+        """Detach *value* and cast it to ``dtype`` when it is floating point."""
+        value = value.detach()
+        if self.dtype is not None and value.is_floating_point():
+            value = value.to(self.dtype)
+        return value

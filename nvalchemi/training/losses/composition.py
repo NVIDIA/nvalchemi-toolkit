@@ -166,6 +166,20 @@ def loss_component_to_spec(component: BaseLossFunction) -> BaseSpec:
     return create_model_spec(type(component), **kwargs)
 
 
+def _loss_weight_to_spec(weight: Any) -> Any:
+    """Serialize a composed-loss weight schedule while leaving scalars unchanged."""
+    if not isinstance(weight, LossWeightSchedule):
+        return weight
+    spec = weight.to_spec()
+    if not isinstance(spec, BaseSpec):
+        raise ValueError(
+            f"Loss weight schedule {type(weight).__name__}.to_spec() must "
+            "return a BaseSpec-derived spec, got "
+            f"{type(spec).__name__}."
+        )
+    return spec
+
+
 def assert_same_shape(
     pred: torch.Tensor,
     target: torch.Tensor,
@@ -816,6 +830,34 @@ class ComposedLossFunction(nn.Module):
         names = _component_names(tuple(self.components))
         effective = self.current_weight(step=step, epoch=epoch)
         return dict(zip(names, effective, strict=True))
+
+    def to_spec(self) -> BaseSpec:
+        """Serialize the composition to a spec that rebuilds it.
+
+        Returns
+        -------
+        BaseSpec
+            JSON-ready spec naming this class. It holds the leaf components
+            from :func:`loss_component_to_spec`, the flattened weights,
+            ``normalize_weights``, and ``dtype_policy``. Every
+            :class:`LossWeightSchedule` weight is serialized through its own
+            ``to_spec``. ``spec.build()`` returns an equivalent composition.
+
+        Raises
+        ------
+        ValueError
+            If a weight schedule's ``to_spec`` returns something other than a
+            :class:`BaseSpec`.
+        TypeError
+            If a component is not a leaf :class:`BaseLossFunction`.
+        """
+        return create_model_spec(
+            type(self),
+            components=[loss_component_to_spec(comp) for comp in self.components],
+            weights=[_loss_weight_to_spec(weight) for weight in self._weights],
+            normalize_weights=self.normalize_weights,
+            dtype_policy=self.dtype_policy,
+        )
 
     def requires_eval_grad(self) -> bool:
         """Whether evaluating this loss needs autograd enabled.

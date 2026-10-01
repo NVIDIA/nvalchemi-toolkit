@@ -33,7 +33,7 @@ Hooks are organized into the following modules:
    * - :mod:`safety`
      - Numerical safety guards (NaN detection, force clamping).
    * - :mod:`monitors`
-     - Long-running diagnostic monitors (energy drift).
+     - Long-running diagnostic monitors (energy drift, conservation series).
    * - :mod:`freeze`
      - Freeze selected atoms by category during dynamics.
    * - :mod:`cell_align`
@@ -43,15 +43,23 @@ Hooks are organized into the following modules:
 
 All hooks implement the :class:`~nvalchemi.hooks.Hook` protocol and accept
 a :class:`~nvalchemi.hooks.DynamicsContext` plus a stage enum in their
-``__call__`` method.
+``__call__`` method. The package also publishes ``KB_EV``, the Boltzmann
+constant in eV/K that the temperature-reading hooks convert kinetic energies
+with, for code that reduces energies by ``k_B T``.
 """
 
 from __future__ import annotations
 
+from nvalchemi.dynamics.hooks._utils import KB_EV, kinetic_energy_per_graph
 from nvalchemi.dynamics.hooks.cell_align import AlignCellHook
 from nvalchemi.dynamics.hooks.freeze import FreezeAtomsHook
 from nvalchemi.dynamics.hooks.logging import LoggingHook
-from nvalchemi.dynamics.hooks.monitors import EnergyDriftMonitorHook
+from nvalchemi.dynamics.hooks.monitors import (
+    EnergyDriftMonitorHook,
+    StabilityMetrics,
+    StabilityMonitor,
+    total_momentum,
+)
 from nvalchemi.dynamics.hooks.safety import (
     MaxForceClampHook,
     NaNDetectorHook,
@@ -62,6 +70,7 @@ from nvalchemi.hooks.physicsnemo_profiling import TorchProfilerHook
 from nvalchemi.hooks.stage_timing import StageTimingHook
 
 __all__ = [
+    "KB_EV",
     "AlignCellHook",
     "ConvergedSnapshotHook",
     "EnergyDriftMonitorHook",
@@ -70,9 +79,13 @@ __all__ = [
     "MaxForceClampHook",
     "NaNDetectorHook",
     "SnapshotHook",
+    "StabilityMetrics",
+    "StabilityMonitor",
     "StageTimingHook",
     "TorchProfilerHook",
+    "kinetic_energy_per_graph",
     "nonfinite_graph_mask",
+    "total_momentum",
 ]
 
 _REMOVED_PROFILER_HOOKS = {"ProfilerHook"}

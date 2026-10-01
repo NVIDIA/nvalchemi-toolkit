@@ -138,6 +138,76 @@ class TestCheckpointHookCadence:
         assert first.step_count == 2
         assert second.step_count == 4
 
+    def test_save_at_end_writes_the_step_a_budget_off_the_cadence_ends_on(
+        self,
+        tmp_path: Path,
+        baseline_strategy_kwargs: dict[str, Any],
+        dataset: list[Any],
+    ) -> None:
+        """A 5-step budget on a 2-step cadence saves steps 2, 4, and then 5."""
+        hook = CheckpointHook(
+            tmp_path, step_interval=2, save_at_end=True, async_save=False
+        )
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "num_epochs": None,
+                "num_steps": 5,
+                "hooks": [hook],
+            }
+        )
+
+        strategy.run(dataset)
+
+        assert hook.last_checkpoint_index == 2
+        assert load_checkpoint(tmp_path, checkpoint_index=2)["strategy"].step_count == 5
+
+    def test_save_at_end_writes_no_second_copy_of_a_step_the_cadence_saved(
+        self,
+        tmp_path: Path,
+        baseline_strategy_kwargs: dict[str, Any],
+        dataset: list[Any],
+    ) -> None:
+        """A 4-step budget on a 2-step cadence ends on a saved step and adds nothing."""
+        hook = CheckpointHook(
+            tmp_path, step_interval=2, save_at_end=True, async_save=False
+        )
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "num_epochs": None,
+                "num_steps": 4,
+                "hooks": [hook],
+            }
+        )
+
+        strategy.run(dataset)
+
+        assert hook.last_checkpoint_index == 1
+        assert not (tmp_path / "models" / "main" / "checkpoints" / "2.pt").exists()
+
+    def test_the_end_is_not_saved_by_default(
+        self,
+        tmp_path: Path,
+        baseline_strategy_kwargs: dict[str, Any],
+        dataset: list[Any],
+    ) -> None:
+        """Without save_at_end the cadence alone decides, as before."""
+        hook = CheckpointHook(tmp_path, step_interval=2, async_save=False)
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "num_epochs": None,
+                "num_steps": 5,
+                "hooks": [hook],
+            }
+        )
+
+        strategy.run(dataset)
+
+        assert hook.last_checkpoint_index == 1
+        assert load_checkpoint(tmp_path, checkpoint_index=1)["strategy"].step_count == 4
+
     def test_epoch_interval_saves_completed_epoch_state(
         self,
         tmp_path: Path,

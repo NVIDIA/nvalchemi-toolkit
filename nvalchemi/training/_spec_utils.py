@@ -20,14 +20,15 @@ import importlib
 import warnings
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Protocol, runtime_checkable
 
 import torch
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from nvalchemi._serialization import _extract_init_kwargs_from_attrs
 from nvalchemi.data.datapipes.backends.zarr import AtomicDataZarrReader
 from nvalchemi.data.datapipes.dataset import BatchDatasetProtocol, Dataset
+from nvalchemi.data.datapipes.multidataset import MultiDataset
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.training._spec import (
     BaseSpec,
@@ -307,6 +308,27 @@ def _models_from_spec_and_overrides(
     return merged
 
 
+def _refuse_runtime_overrides(
+    strategy_cls: type, runtime_overrides: Mapping[str, Any]
+) -> None:
+    """Raise when runtime overrides reach a ``from_spec_dict`` that takes none.
+
+    :meth:`~nvalchemi.training.strategy.TrainingStrategy.load_checkpoint` and
+    :meth:`~nvalchemi.training.strategy.TrainingStrategy.from_checkpoint_dict`
+    forward extra keyword arguments, the runtime overrides, verbatim to the
+    strategy class's ``from_spec_dict``. A subclass can therefore be handed
+    live objects that no spec carries. A class that accepts none refuses a
+    non-empty mapping by name rather than dropping it, so a misspelled keyword
+    fails loudly.
+    """
+    if runtime_overrides:
+        raise TypeError(
+            f"from_spec_dict: got runtime overrides {sorted(runtime_overrides)!r}, "
+            f"but {strategy_cls.__name__}.from_spec_dict accepts none. Drop them, "
+            "or rebuild with a strategy class whose from_spec_dict takes them."
+        )
+
+
 def _single_model_input_from_spec(raw: Any) -> bool | None:
     """Return serialized call mode or ``None`` for legacy specs."""
     if raw is None:
@@ -319,13 +341,43 @@ def _single_model_input_from_spec(raw: Any) -> bool | None:
     return raw
 
 
+@runtime_checkable
+class SpecSerializable(Protocol):
+    """Collaborator a spec names by its class and rebuilds through its own spec.
+
+    A spec that references an object it cannot describe itself writes the
+    object's ``to_spec_dict`` block beside its class path, and the reader
+    hands that block back to the class's ``from_spec_dict``. The distillation
+    recipe uses it for a custom initial-structures source under
+    ``source_cls`` and for a custom teacher scorer under ``scorer_cls``. An
+    object offering neither method is refused by the spec that would name it.
+    """
+
+    def to_spec_dict(self) -> dict[str, Any]:
+        """Return the JSON-ready block :meth:`from_spec_dict` rebuilds this object from."""
+        ...
+
+    @classmethod
+    def from_spec_dict(cls, spec: Mapping[str, Any]) -> Any:
+        """Rebuild the object *spec* describes."""
+        ...
+
+
 class DatasetRef(BaseModel):
-    """Store reference by which a spec names one dataset."""
+    """Store reference naming a spec's dataset: one store or a MultiDataset's stores."""
 
     path: Annotated[
-        str,
-        Field(description="Filesystem path or URI of the store to read."),
-    ]
+        str | None,
+        Field(default=None, description="Filesystem path or URI of the store to read."),
+    ] = None
+    paths: Annotated[
+        list[str] | None,
+        Field(
+            default=None,
+            min_length=1,
+            description="Stores a MultiDataset concatenates, in global index order.",
+        ),
+    ] = None
     device: Annotated[
         str,
         Field(
@@ -335,6 +387,17 @@ class DatasetRef(BaseModel):
     ] = "cpu"
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _validate_one_reference(self) -> DatasetRef:
+        """Require exactly one of ``path`` and ``paths``."""
+        if (self.path is None) == (self.paths is None):
+            raise ValueError(
+                "A dataset reference names either one store under path or the "
+                f"stores of a composition under paths; got path={self.path!r}, "
+                f"paths={self.paths!r}."
+            )
+        return self
 
 
 def dataset_spec_dict(
@@ -347,7 +410,9 @@ def dataset_spec_dict(
     dataset : BatchDatasetProtocol
         Dataset to reference. Only a dataset that reads a filesystem or URI
         store can be named in a spec. A dataset that holds its samples in
-        memory cannot.
+        memory cannot. A
+        :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset` is named
+        by the stores it concatenates, in order.
     field : str
         Name of the spec field being serialized, quoted in the error.
     remedy : str | None, optional
@@ -358,14 +423,34 @@ def dataset_spec_dict(
     Returns
     -------
     dict[str, Any]
-        :class:`DatasetRef` fields, ``{"path": ..., "device": ...}``, which
-        :func:`dataset_from_spec_dict` reopens.
+        :class:`DatasetRef` fields: ``{"path": ..., "device": ...}`` for one
+        store, or ``{"paths": [...], "device": ...}`` for a composition.
+        :func:`dataset_from_spec_dict` reopens either.
 
     Raises
     ------
     ValueError
-        If *dataset* is not backed by a store that a path names.
+        If *dataset*, or a dataset it composes, is not backed by a store that
+        a path names, or if a composition collates onto more than one device.
     """
+    if isinstance(dataset, MultiDataset):
+        references = [
+            dataset_spec_dict(child, field=field, remedy=remedy)
+            for child in dataset.datasets
+        ]
+        devices = sorted({reference["device"] for reference in references})
+        if len(devices) != 1:
+            raise ValueError(
+                f"{field} composes stores that collate onto different devices, "
+                f"which one reference cannot name; got {devices!r}. Open every "
+                "store on one device."
+            )
+        paths = [
+            path
+            for reference in references
+            for path in reference.get("paths") or [reference["path"]]
+        ]
+        return {"paths": paths, "device": devices[0]}
     store = getattr(getattr(dataset, "reader", None), "store", None)
     if not isinstance(store, (str, Path)):
         if remedy is None:
@@ -382,7 +467,9 @@ def dataset_spec_dict(
     return {"path": str(store), "device": str(getattr(dataset, "target_device", "cpu"))}
 
 
-def dataset_from_spec_dict(spec: Mapping[str, Any], *, field: str) -> Dataset:
+def dataset_from_spec_dict(
+    spec: Mapping[str, Any], *, field: str
+) -> Dataset | MultiDataset:
     """Reopen the dataset that :func:`dataset_spec_dict` referenced.
 
     Parameters
@@ -394,21 +481,29 @@ def dataset_from_spec_dict(spec: Mapping[str, Any], *, field: str) -> Dataset:
 
     Returns
     -------
-    Dataset
-        Dataset over the referenced store. The reader it opens stays open for
-        the caller to close.
+    Dataset | MultiDataset
+        Dataset over the referenced store, or a
+        :class:`~nvalchemi.data.datapipes.multidataset.MultiDataset` over the
+        referenced stores. The readers it opens stay open for the caller to
+        close.
 
     Raises
     ------
     ValueError
-        If *spec* names no store to read, or carries a key that is not part of
-        a store reference.
+        If *spec* names no store to read, names both one store and a list of
+        them, or carries a key that is not part of a store reference.
     """
     try:
         reference = DatasetRef.model_validate(spec)
     except ValidationError as exc:
         raise ValueError(
             f"{field} must reference a dataset by the store it reads, as "
-            f"{{'path': ..., 'device': ...}}; got {dict(spec)!r}: {exc}"
+            f"{{'path': ..., 'device': ...}}, or by the stores a composition "
+            f"concatenates, as {{'paths': [...], 'device': ...}}; got "
+            f"{dict(spec)!r}: {exc}"
         ) from exc
-    return Dataset(AtomicDataZarrReader(reference.path), device=reference.device)
+    datasets = [
+        Dataset(AtomicDataZarrReader(path), device=reference.device)
+        for path in reference.paths or [reference.path]
+    ]
+    return datasets[0] if reference.paths is None else MultiDataset(*datasets)

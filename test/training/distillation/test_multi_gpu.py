@@ -17,13 +17,10 @@
 from __future__ import annotations
 
 import os
-import socket
-import time
 import warnings
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Iterator
 from itertools import combinations
 from pathlib import Path
-from queue import Empty
 from typing import Any
 from unittest.mock import patch
 
@@ -78,7 +75,9 @@ from test.training.distillation.conftest import (
     _build_propagator_system,
     _build_reference_dataset,
     _build_small_dataset,
+    _free_port,
     _ListSource,
+    _spawn_ranks,
 )
 from test.training.distillation.test_on_policy import (
     _LANGEVIN_KWARGS,
@@ -134,16 +133,6 @@ _RELAXATION_WORLDS = [
     pytest.param(2, True, id="recycled_one_row_shards"),
 ]
 """Structure counts and recycling a two-rank relaxation loop is dealt."""
-
-_RANK_REPORT_TIMEOUT = 600.0
-"""Seconds every spawned rank has to report before the world is declared hung."""
-
-
-def _free_port() -> int:
-    """Return an available localhost TCP port for process-group setup."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
 
 
 def _make_distributed_strategy(
@@ -523,51 +512,6 @@ def _run_union_worker(rank: int, world_size: int, port: int, result_queue: Any) 
             },
         )
     )
-
-
-def _spawn_ranks(
-    worker: Callable[..., None], rank_args: Sequence[tuple[Any, ...]]
-) -> dict[int, dict[str, Any]]:
-    """Spawn one process per entry of *rank_args* and collect what each reports.
-
-    Every worker is handed its own arguments followed by the result queue. The
-    wait polls the children rather than blocking on the queue for the whole
-    timeout, so a rank that dies without reporting — taking its peers down into
-    a collective that will never complete — fails the call in seconds.
-    """
-    ctx = torch.multiprocessing.get_context("spawn")
-    result_queue = ctx.Queue()
-    procs = [
-        ctx.Process(target=worker, args=(*args, result_queue)) for args in rank_args
-    ]
-    for proc in procs:
-        proc.start()
-    results: dict[int, dict[str, Any]] = {}
-    deadline = time.monotonic() + _RANK_REPORT_TIMEOUT
-    try:
-        while len(results) < len(procs):
-            try:
-                rank, payload = result_queue.get(timeout=1)
-            except Empty:
-                dead = {
-                    index: proc.exitcode
-                    for index, proc in enumerate(procs)
-                    if proc.exitcode not in (None, 0)
-                }
-                assert not dead, f"ranks exited before reporting: {dead}."
-                assert time.monotonic() < deadline, (
-                    f"{len(procs) - len(results)} rank(s) never reported."
-                )
-                continue
-            results[rank] = payload
-        for proc in procs:
-            proc.join(timeout=60)
-            assert proc.exitcode == 0
-    finally:
-        for proc in procs:
-            if proc.is_alive():
-                proc.terminate()
-    return results
 
 
 def _run_ranks(
@@ -1812,7 +1756,9 @@ class TestRankConsistentBookkeeping:
         strategy.run()
         trained = _student_state(strategy)
 
-        resumed = _make_distributed_strategy(num_steps=_WORKER_STEPS + 2)
+        resumed = _make_distributed_strategy(
+            num_steps=_WORKER_STEPS + 2, config_overrides={"restart": "reseed"}
+        )
         resumed.restore_checkpoint(checkpoints)
         restored = _student_state(resumed)
         resumed.run()
@@ -1832,7 +1778,11 @@ class TestRankConsistentBookkeeping:
             hooks=[CheckpointHook(checkpoints, step_interval=2, async_save=False)]
         ).run()
 
-        resumed = _make_distributed_strategy(rank=1, num_steps=_WORKER_STEPS + 2)
+        resumed = _make_distributed_strategy(
+            rank=1,
+            num_steps=_WORKER_STEPS + 2,
+            config_overrides={"restart": "reseed"},
+        )
         resumed.restore_checkpoint(checkpoints)
         resumed.run()
 
@@ -1857,7 +1807,10 @@ class TestRestartDevicePlacement:
         ).run()
 
         resumed = _make_restart_strategy(
-            1, device="cuda:1", num_steps=_WORKER_STEPS + 2
+            1,
+            device="cuda:1",
+            num_steps=_WORKER_STEPS + 2,
+            config_overrides={"restart": "reseed"},
         )
         resumed.restore_checkpoint(checkpoints, map_location="cuda:1")
         resumed.run()
@@ -1878,7 +1831,12 @@ class TestRestartDevicePlacement:
             hooks=[CheckpointHook(checkpoints, step_interval=2, async_save=False)],
         ).run()
 
-        resumed = _make_restart_strategy(1, device="cuda", num_steps=_WORKER_STEPS + 2)
+        resumed = _make_restart_strategy(
+            1,
+            device="cuda",
+            num_steps=_WORKER_STEPS + 2,
+            config_overrides={"restart": "reseed"},
+        )
         resumed.restore_checkpoint(checkpoints)
         resumed.run()
 

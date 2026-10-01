@@ -32,6 +32,7 @@ from nvalchemi.models.base import BaseModelMixin, ModelConfig
 from nvalchemi.training import EMAHook, EnergyMSELoss, FineTuningStrategy, TrainingStage
 from nvalchemi.training._checkpoint import (
     CheckpointManifest,
+    ModelReference,
     _filter_snapshot_to_trainable_state,
     load_checkpoint,
     save_checkpoint,
@@ -194,14 +195,16 @@ def _make_checkpoint_batch(n_atoms: int = 3, seed: int = 0) -> Batch:
 
 
 def _make_checkpoint_strategy(
-    num_steps: int = 4, device: torch.device | str = "cpu"
+    num_steps: int = 4,
+    device: torch.device | str = "cpu",
+    cls: type[TrainingStrategy] = TrainingStrategy,
 ) -> TrainingStrategy:
     """Create a serializable demo training strategy for checkpoint tests."""
     from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
     torch.manual_seed(0)
     model = DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8))
-    return TrainingStrategy(
+    return cls(
         models=model,
         optimizer_configs=OptimizerConfig(
             optimizer_cls=torch.optim.Adam,
@@ -1002,6 +1005,67 @@ class TestSecurityAST:
                     f"appears to be a raw object (self.{first.attr}), "
                     f"expected a state_dict result"
                 )
+
+
+class _StoredOnceStrategy(TrainingStrategy):
+    """Strategy declaring its one model as stored once per checkpoint root."""
+
+    def checkpoint_model_references(self) -> dict[str, ModelReference]:
+        """Declare ``main`` as a once-stored model."""
+        return {"main": ModelReference()}
+
+
+class _UntypedReferenceStrategy(TrainingStrategy):
+    """Strategy declaring a reference as a bare mapping rather than a ModelReference."""
+
+    def checkpoint_model_references(self) -> dict[str, Any]:
+        """Declare ``main`` with an untyped entry."""
+        return {"main": {"rebuild": "stored"}}
+
+
+class TestModelReferences:
+    """Typed ``ModelReference`` declarations of models stored once per root."""
+
+    def test_the_base_strategy_declares_no_reference(self, tmp_path: Path) -> None:
+        """A plain strategy stores every model at every index."""
+        strategy = _make_checkpoint_strategy()
+
+        assert strategy.checkpoint_model_references() == {}
+
+        strategy.save_checkpoint(tmp_path)
+        strategy.save_checkpoint(tmp_path)
+        manifest = json.loads((tmp_path / "manifest.json").read_text())
+        assert manifest["model_references"] == {}
+        assert (tmp_path / "models" / "main" / "checkpoints" / "1.pt").is_file()
+
+    def test_a_declared_model_is_written_once_and_referenced_after(
+        self, tmp_path: Path
+    ) -> None:
+        """Two saves write the declared weights at index 0 and point the second at it."""
+        strategy = _make_checkpoint_strategy(cls=_StoredOnceStrategy)
+
+        strategy.save_checkpoint(tmp_path)
+        strategy.save_checkpoint(tmp_path)
+
+        manifest = json.loads((tmp_path / "manifest.json").read_text())
+        reference = manifest["model_references"]["main"]
+        assert reference["rebuild"] == "stored"
+        assert reference["checkpoint_index"] == 0
+        assert set(reference["fingerprint"]) == {
+            "scheme",
+            "num_tensors",
+            "num_elements",
+            "digest",
+        }
+        assert (tmp_path / "models" / "main" / "checkpoints" / "0.pt").is_file()
+        assert not (tmp_path / "models" / "main" / "checkpoints" / "1.pt").exists()
+
+    def test_an_untyped_reference_is_rejected(self, tmp_path: Path) -> None:
+        """A declaration that is not a ModelReference is a programming error."""
+        strategy = _make_checkpoint_strategy(cls=_UntypedReferenceStrategy)
+
+        with pytest.raises(TypeError, match="must map model names to ModelReference"):
+            strategy.save_checkpoint(tmp_path)
 
 
 class TestSchemaVersion:
@@ -1863,6 +1927,165 @@ class TestStrategyCheckpoint:
         assert set(restored.models) == {"student", "teacher"}
         assert isinstance(restored.models["student"], DemoModelWrapper)
         assert isinstance(restored.models["teacher"], DemoModelWrapper)
+
+
+class _RuntimeObjectStrategy(TrainingStrategy):
+    """Strategy whose ``from_spec_dict`` takes a live object no spec carries."""
+
+    received: Any = None
+
+    @classmethod
+    def from_spec_dict(
+        cls,
+        spec: dict[str, Any],
+        *,
+        models: Any = None,
+        hooks: Any = None,
+        training_fn: Any = None,
+        marker: object | None = None,
+    ) -> TrainingStrategy:
+        """Record *marker* and rebuild through the base class."""
+        cls.received = marker
+        return super().from_spec_dict(
+            spec, models=models, hooks=hooks, training_fn=training_fn
+        )
+
+
+def _make_runtime_object_strategy() -> _RuntimeObjectStrategy:
+    """Return a serializable strategy of the subclass taking a runtime object."""
+    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+    torch.manual_seed(0)
+    return _RuntimeObjectStrategy(
+        models=DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8)),
+        optimizer_configs=OptimizerConfig(
+            optimizer_cls=torch.optim.Adam, optimizer_kwargs={"lr": 1e-3}
+        ),
+        num_steps=2,
+        training_fn=checkpoint_training_fn,
+        loss_fn=EnergyMSELoss(),
+        devices=[torch.device("cpu")],
+    )
+
+
+class TestLoadCheckpointRuntimeOverrides:
+    """Runtime overrides travel from the loader to the saved class's ``from_spec_dict``."""
+
+    def test_overrides_reach_the_rebuilt_strategy(self, tmp_path: Path) -> None:
+        """A rebuild from metadata hands the override to the subclass."""
+        save_checkpoint(tmp_path, strategy=_make_runtime_object_strategy())
+        marker = object()
+        _RuntimeObjectStrategy.received = None
+
+        loaded = load_checkpoint(tmp_path, marker=marker)
+
+        assert isinstance(loaded["strategy"], _RuntimeObjectStrategy)
+        assert _RuntimeObjectStrategy.received is marker
+
+    def test_strategy_load_checkpoint_forwards_overrides(self, tmp_path: Path) -> None:
+        """The classmethod wrapper forwards the same keywords."""
+        save_checkpoint(tmp_path, strategy=_make_runtime_object_strategy())
+        marker = object()
+        _RuntimeObjectStrategy.received = None
+
+        restored = _RuntimeObjectStrategy.load_checkpoint(tmp_path, marker=marker)
+
+        assert isinstance(restored, _RuntimeObjectStrategy)
+        assert _RuntimeObjectStrategy.received is marker
+
+    def test_overrides_are_refused_for_a_live_strategy_restore(
+        self, tmp_path: Path
+    ) -> None:
+        """A live restore rebuilds nothing, so an override would be silently lost."""
+        strategy = _make_runtime_object_strategy()
+        save_checkpoint(tmp_path, strategy=strategy)
+        with pytest.raises(TypeError, match=r"\['marker'\]"):
+            load_checkpoint(tmp_path, strategy=strategy, marker=object())
+
+    def test_overrides_are_refused_for_a_component_only_checkpoint(
+        self, tmp_path: Path
+    ) -> None:
+        """A checkpoint without strategy metadata has no ``from_spec_dict`` to reach."""
+        model = nn.Linear(4, 2)
+        spec = create_model_spec(nn.Linear, in_features=4, out_features=2)
+        save_checkpoint(tmp_path, models={"m": (model, spec)})
+        with pytest.raises(TypeError, match="carries no strategy metadata"):
+            load_checkpoint(tmp_path, marker=object())
+
+    def test_base_strategy_checkpoint_refuses_unknown_overrides(
+        self, tmp_path: Path
+    ) -> None:
+        """The base ``from_spec_dict`` names the keys it was not expecting."""
+        save_checkpoint(tmp_path, strategy=_make_checkpoint_strategy())
+        with pytest.raises(TypeError, match=r"\['marker'\]"):
+            load_checkpoint(tmp_path, marker=object())
+
+
+def _make_fresh_demo_model(seed: int = 1) -> Any:
+    """Return a demo model whose weights differ from the saved strategy's."""
+    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+    torch.manual_seed(seed)
+    return DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8))
+
+
+class TestLoadCheckpointCallerModels:
+    """Live models a caller passes receive the checkpoint's weights."""
+
+    def test_caller_models_receive_the_checkpoint_weights(self, tmp_path: Path) -> None:
+        """The rebuilt strategy holds the caller's object, loaded with the saved weights."""
+        strategy = _make_checkpoint_strategy()
+        save_checkpoint(tmp_path, strategy=strategy)
+        fresh = _make_fresh_demo_model()
+        saved = [
+            parameter.detach().clone()
+            for parameter in strategy.models["main"].parameters()
+        ]
+        assert not torch.equal(next(fresh.parameters()), saved[0])
+
+        loaded = load_checkpoint(tmp_path, models=fresh)
+
+        assert loaded["strategy"].models["main"] is fresh
+        for restored, expected in zip(fresh.parameters(), saved, strict=True):
+            torch.testing.assert_close(restored, expected)
+
+    def test_strategy_load_checkpoint_forwards_caller_models(
+        self, tmp_path: Path
+    ) -> None:
+        """The classmethod wrapper hands the same models to the loader."""
+        save_checkpoint(tmp_path, strategy=_make_checkpoint_strategy())
+        fresh = _make_fresh_demo_model()
+
+        restored = TrainingStrategy.load_checkpoint(tmp_path, models=fresh)
+
+        assert restored.models["main"] is fresh
+
+    def test_caller_models_with_other_names_are_refused(self, tmp_path: Path) -> None:
+        """A name set that is not the checkpoint's is refused, naming both."""
+        save_checkpoint(tmp_path, strategy=_make_checkpoint_strategy())
+        with pytest.raises(ValueError, match=r"\['main'\].*\['student'\]"):
+            load_checkpoint(tmp_path, models={"student": _make_fresh_demo_model()})
+
+    def test_caller_models_are_refused_for_a_live_strategy_restore(
+        self, tmp_path: Path
+    ) -> None:
+        """A live restore rebuilds nothing, so the models would go nowhere."""
+        strategy = _make_checkpoint_strategy()
+        save_checkpoint(tmp_path, strategy=strategy)
+        with pytest.raises(TypeError, match=r"\['models'\]"):
+            load_checkpoint(
+                tmp_path, strategy=strategy, models=_make_fresh_demo_model()
+            )
+
+    def test_caller_models_are_refused_for_a_component_only_checkpoint(
+        self, tmp_path: Path
+    ) -> None:
+        """A checkpoint without strategy metadata rebuilds no strategy to hold them."""
+        model = nn.Linear(4, 2)
+        spec = create_model_spec(nn.Linear, in_features=4, out_features=2)
+        save_checkpoint(tmp_path, models={"m": (model, spec)})
+        with pytest.raises(TypeError, match="carries no strategy metadata"):
+            load_checkpoint(tmp_path, models={"m": nn.Linear(4, 2)})
 
 
 class TestCheckpointDeviceRestore:

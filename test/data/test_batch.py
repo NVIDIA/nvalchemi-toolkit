@@ -2266,6 +2266,88 @@ class TestBatchDeviceAndCopy:
         assert batch["positions"].is_contiguous()
 
 
+class TestBatchWithoutKeys:
+    """Tests for Batch.without_keys."""
+
+    def _make_batch(self) -> Batch:
+        """Return a two-graph batch with a system-level energy and a custom node key."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_system(2), _atomic_data_with_system(3)]
+        )
+        batch.add_key("score", [torch.ones(2), torch.ones(3)], level="node")
+        return batch
+
+    def test_the_hidden_keys_are_absent_inside_the_block(self) -> None:
+        """The batch carries none of the named keys while the block runs."""
+        batch = self._make_batch()
+        with batch.without_keys("energy", "score"):
+            assert "energy" not in batch and "score" not in batch
+            assert "positions" in batch
+
+    def test_a_pre_existing_key_is_restored_at_its_level_as_the_same_tensor(
+        self,
+    ) -> None:
+        """A hidden key comes back where it was stored, as the object that was there."""
+        batch = self._make_batch()
+        energy, score = batch.energy, batch.score
+        with batch.without_keys("energy", "score"):
+            pass
+        assert batch.energy is energy and batch.score is score
+        assert "energy" in batch.level_keys["system"]
+        assert "score" in batch.level_keys["atoms"]
+
+    def test_a_key_written_inside_the_block_is_gone_afterwards(self) -> None:
+        """A field a model writes while the key is hidden leaves no trace."""
+        batch = self._make_batch()
+        with batch.without_keys("forces"):
+            batch.forces = torch.randn(batch.num_nodes, 3)
+            assert "forces" in batch
+        assert "forces" not in batch
+
+    def test_a_tensor_read_inside_the_block_outlives_it_with_its_graph(self) -> None:
+        """A value read inside stays usable, autograd graph included."""
+        batch = self._make_batch()
+        weight = torch.ones((), requires_grad=True)
+        with batch.without_keys("forces"):
+            batch.forces = weight * torch.randn(batch.num_nodes, 3)
+            forces = batch["forces"]
+        forces.sum().backward()
+        assert forces.shape == (batch.num_nodes, 3)
+        assert weight.grad is not None
+
+    def test_a_key_written_over_a_hidden_one_yields_to_the_original(self) -> None:
+        """A write over a hidden key inside the block is dropped when it ends."""
+        batch = self._make_batch()
+        energy = batch.energy
+        with batch.without_keys("energy"):
+            batch.energy = torch.full_like(energy, 7.0)
+        assert batch.energy is energy
+
+    def test_a_key_the_batch_lacks_is_ignored(self) -> None:
+        """Hiding an absent key neither raises nor creates it."""
+        batch = self._make_batch()
+        with batch.without_keys("not_there"):
+            assert "not_there" not in batch
+        assert "not_there" not in batch
+
+    def test_the_tracked_key_sets_are_hidden_and_restored(self) -> None:
+        """The level categorisation in ``keys`` follows the field in and out."""
+        batch = self._make_batch()
+        assert "energy" in batch.keys["system"]
+        with batch.without_keys("energy"):
+            assert "energy" not in batch.keys["system"]
+        assert "energy" in batch.keys["system"]
+
+    def test_the_keys_are_restored_when_the_block_raises(self) -> None:
+        """A block that raises still puts every hidden key back."""
+        batch = self._make_batch()
+        energy = batch.energy
+        with pytest.raises(RuntimeError, match="boom"):
+            with batch.without_keys("energy"):
+                raise RuntimeError("boom")
+        assert batch.energy is energy
+
+
 class TestBatchSerialization:
     """Tests for model_dump and round-trip."""
 
@@ -3847,3 +3929,148 @@ class TestSetTransient:
         batch = self._batch()
         batch.cell = batch.cell * 7.0
         assert batch._storage["cell"][0, 0, 0].item() == pytest.approx(7.0)
+
+
+class TestBatchToRawDicts:
+    """``to_raw_dicts`` is the per-graph inverse of ``from_raw_dicts``."""
+
+    def test_a_builtin_batch_round_trips_through_raw_dicts(self) -> None:
+        """Atom and system fields come back at their levels, graph for graph."""
+        data_list = [_atomic_data_with_edges_and_system(3, 4) for _ in range(3)]
+        batch = Batch.from_data_list(data_list, skip_validation=True)
+
+        samples, field_levels = batch.to_raw_dicts(drop=("neighbor_list",))
+
+        assert len(samples) == 3
+        assert field_levels["positions"] == "atom"
+        assert field_levels["energy"] == "system"
+        assert (
+            set(field_levels) == batch.level_keys["atoms"] | batch.level_keys["system"]
+        )
+        assert all(sample["positions"].shape == (3, 3) for sample in samples)
+        assert all(sample["energy"].shape == (1, 1) for sample in samples)
+        rebuilt = Batch.from_raw_dicts(samples, field_levels=field_levels)
+        torch.testing.assert_close(rebuilt.positions, batch.positions)
+        torch.testing.assert_close(rebuilt.energy, batch.energy)
+        assert rebuilt.num_nodes_list == batch.num_nodes_list
+
+    def test_a_custom_segmented_level_round_trips_with_its_schema(self) -> None:
+        """A custom level is named by its registered name and split by its own counts."""
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_values", "samples")
+        raw = [
+            {
+                "atomic_numbers": torch.tensor([1, 2]),
+                "positions": torch.zeros(2, 3),
+                "sample_values": torch.arange(3.0).reshape(3, 1),
+            },
+            {
+                "atomic_numbers": torch.tensor([3]),
+                "positions": torch.ones(1, 3),
+                "sample_values": torch.full((1, 1), 9.0),
+            },
+        ]
+        batch = Batch.from_raw_dicts(raw, attr_map=schema)
+
+        samples, field_levels = batch.to_raw_dicts()
+
+        assert field_levels["sample_values"] == "samples"
+        assert [sample["sample_values"].shape[0] for sample in samples] == [3, 1]
+        rebuilt = Batch.from_raw_dicts(
+            samples, attr_map=batch._storage.attr_map, field_levels=field_levels
+        )
+        assert rebuilt.level_ptr("samples").tolist() == [0, 3, 4]
+        torch.testing.assert_close(rebuilt.sample_values, batch.sample_values)
+
+    def test_a_product_level_is_returned_on_its_logical_axes(self) -> None:
+        """A product field comes back ``(left, right, ...)``, as ``get_data`` returns it."""
+        schema = LevelSchema()
+        schema.add_level("left_items", segmented=True)
+        schema.add_level("right_items", segmented=True)
+        schema.add_product_level("left_right", left="left_items", right="right_items")
+        schema.set("pair_values", "left_right")
+        raw = [
+            {
+                "atomic_numbers": torch.tensor([1, 2]),
+                "positions": torch.zeros(2, 3),
+                "pair_values": torch.zeros(2, 3, 4),
+            },
+            {
+                "atomic_numbers": torch.tensor([3]),
+                "positions": torch.zeros(1, 3),
+                "pair_values": torch.ones(1, 2, 4),
+            },
+        ]
+        batch = Batch.from_raw_dicts(raw, attr_map=schema)
+
+        samples, field_levels = batch.to_raw_dicts()
+
+        assert field_levels["pair_values"] == "left_right"
+        assert samples[0]["pair_values"].shape == (2, 3, 4)
+        assert samples[1]["pair_values"].shape == (1, 2, 4)
+        torch.testing.assert_close(samples[1]["pair_values"], torch.ones(1, 2, 4))
+
+    def test_a_defragged_batch_yields_only_the_graphs_it_kept(self) -> None:
+        """Storage compacted to the front is truncated to the kept graphs' rows."""
+        data_list = [_atomic_data_with_edges_and_system(2, 0) for _ in range(4)]
+        for index, data in enumerate(data_list):
+            data.positions.fill_(float(index))
+        batch = Batch.from_data_list(data_list, skip_validation=True)
+        batch.defrag(copied_mask=torch.tensor([True, False, True, False]))
+
+        samples, _ = batch.to_raw_dicts(drop=("neighbor_list",))
+
+        assert batch.num_graphs == 2
+        assert len(samples) == 2
+        assert batch.positions.shape[0] > sum(batch.num_nodes_list)
+        torch.testing.assert_close(samples[0]["positions"], torch.ones(2, 3))
+        torch.testing.assert_close(samples[1]["positions"], torch.full((2, 3), 3.0))
+
+    def test_a_kept_index_field_is_refused_and_a_dropped_one_is_not(self) -> None:
+        """A batch-global neighbor list cannot be split; dropping it is the remedy."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(3, 4) for _ in range(2)],
+            skip_validation=True,
+        )
+
+        with pytest.raises(ValueError, match="offsets a second time"):
+            batch.to_raw_dicts()
+        samples, field_levels = batch.to_raw_dicts(drop=("neighbor_list",))
+
+        assert "neighbor_list" not in field_levels
+        assert all("neighbor_list" not in sample for sample in samples)
+
+    def test_the_slices_are_views_on_the_batch(self) -> None:
+        """No copy is made, so a sample shares storage with the batch."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(2, 0) for _ in range(2)],
+            skip_validation=True,
+        )
+
+        samples, _ = batch.to_raw_dicts(drop=("neighbor_list",))
+        samples[1]["positions"].fill_(7.0)
+
+        torch.testing.assert_close(batch.positions[2:], torch.full((2, 3), 7.0))
+
+    def test_a_negative_segment_length_is_refused(self) -> None:
+        """A corrupt segment length names the level rather than slicing garbage."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(2, 0) for _ in range(2)],
+            skip_validation=True,
+        )
+        batch._atoms_group.segment_lengths = torch.tensor([-2, 6])
+
+        with pytest.raises(RuntimeError, match="negative segment length"):
+            batch.to_raw_dicts(drop=("neighbor_list",))
+
+    def test_counts_outrunning_the_rows_are_refused(self) -> None:
+        """Segment lengths describing more rows than stored name the batch inconsistent."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(2, 0) for _ in range(2)],
+            skip_validation=True,
+        )
+        batch._atoms_group.segment_lengths = torch.tensor([4, 12])
+
+        with pytest.raises(RuntimeError, match="internally inconsistent"):
+            batch.to_raw_dicts(drop=("neighbor_list",))

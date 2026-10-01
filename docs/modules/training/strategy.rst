@@ -61,6 +61,14 @@ Optimizer helpers
 Serialization and checkpoints
 -----------------------------
 
+:func:`~nvalchemi.training.load_checkpoint` and
+:meth:`~nvalchemi.training.TrainingStrategy.load_checkpoint` rebuild a saved
+strategy from its metadata and restore the weights into models built from the
+saved specs. ``models=`` hands the loader live models to restore into instead,
+one per saved name, for a caller whose other objects already hold them. Extra
+keyword arguments are runtime overrides forwarded to the strategy class's
+``from_spec_dict``. Both are refused on the loads that rebuild no strategy.
+
 .. autosummary::
    :toctree: generated
    :nosignatures:
@@ -70,6 +78,7 @@ Serialization and checkpoints
    create_model_spec_from_json
    register_type_serializer
    CheckpointManifest
+   ModelReference
    save_checkpoint
    load_checkpoint
 
@@ -119,6 +128,13 @@ its own entry and a ``MAX`` all-reduce merges them, on the device
 strategy uses it to turn a verdict only one rank can see, such as an empty data
 shard, into a refusal every rank raises together, before any rank reaches a
 collective its peers would block on.
+:func:`~nvalchemi.training.distributed.all_gather_rows` stacks every rank's
+rows of a tensor in rank order, padding unequal shards and trimming them back,
+and returns the slice this rank contributed; by default the gather is
+differentiable, so a loss over the world tensor sends gradients back to each
+rank's rows. :func:`~nvalchemi.training.distributed.all_gather_objects`
+collects one picklable object per rank. All three return without a collective
+on a single process.
 
 .. currentmodule:: nvalchemi.training.distributed
 
@@ -127,3 +143,5 @@ collective its peers would block on.
    :nosignatures:
 
    all_reduce_flags
+   all_gather_rows
+   all_gather_objects

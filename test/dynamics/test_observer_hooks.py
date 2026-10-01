@@ -13,12 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Unit tests for observer hooks — SnapshotHook, ConvergedSnapshotHook,
-LoggingHook, and EnergyDriftMonitorHook.
+LoggingHook, EnergyDriftMonitorHook, and StabilityMonitor.
 """
 
 from __future__ import annotations
 
 import csv
+import math
+import warnings
+from collections.abc import Sequence
 from enum import Enum
 from pathlib import Path
 from unittest.mock import patch
@@ -33,11 +36,38 @@ from nvalchemi.dynamics.hooks import (
     EnergyDriftMonitorHook,
     LoggingHook,
     SnapshotHook,
+    StabilityMetrics,
+    StabilityMonitor,
+    nonfinite_graph_mask,
+    total_momentum,
 )
+from nvalchemi.dynamics.integrators import NVE
 from nvalchemi.dynamics.sinks import HostMemory
-from nvalchemi.hooks import Hook
+from nvalchemi.hooks import DynamicsContext, Hook
+from nvalchemi.hooks.neighbor_list import NeighborListHook
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
-from test.dynamics.conftest import make_dynamics_context
+from nvalchemi.models.lj import LennardJonesModelWrapper
+from test.dynamics.conftest import (
+    ARGON_MASS,
+    make_dynamics_context,
+    make_lattice_batch,
+    make_lattice_data,
+)
+
+_LATTICE_ATOMS = 27
+"""Atom count of the default 3x3x3 argon lattice."""
+
+_SWING = 0.06
+"""Per-atom amplitude of the scripted energy oscillations, in eV."""
+
+_SWING_PERIOD_FS = 500.0
+"""Period of the scripted oscillation, in femtoseconds."""
+
+_SWING_SAMPLES = 16
+"""Samples per oscillation period."""
+
+_SWING_PERIODS = 4
+"""Whole periods the scripted oscillation runs for."""
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -690,6 +720,482 @@ class TestEnergyDriftMonitorHook:
 # ---------------------------------------------------------------------------
 # Hook lifecycle management (_open_hooks / _close_hooks)
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# StabilityMonitor
+# ---------------------------------------------------------------------------
+
+
+def _drive(monitor: StabilityMonitor, batch: Batch, energies: Sequence[float]) -> None:
+    """Fire *monitor* once per scripted total energy, one step apart."""
+    for step, energy in enumerate(energies):
+        batch.energy = torch.full((batch.num_graphs, 1), energy)
+        monitor(DynamicsContext(batch=batch, step_count=step), DynamicsStage.AFTER_STEP)
+
+
+def _swing(*, closed: bool) -> list[float]:
+    """Return a bounded per-atom oscillation as one total energy per step.
+
+    The closed series is a cosine over whole periods, ending on the sample it
+    started from; the open one is a sine over the same span, stopping one
+    sample short of closing, which is what a window cut mid-oscillation looks
+    like. Both swing by the same amplitude about the same mean.
+    """
+    samples = _SWING_PERIODS * _SWING_SAMPLES + (1 if closed else 0)
+    wave = math.cos if closed else math.sin
+    return [
+        _LATTICE_ATOMS * (-1.0 + _SWING * wave(2.0 * math.pi * step / _SWING_SAMPLES))
+        for step in range(samples)
+    ]
+
+
+def _make_geometry_only_batch() -> Batch:
+    """Return the moving lattice with every field an NVE run needs but no energy."""
+    lattice = make_lattice_data(speed=0.002, jitter=0.15)
+    data = AtomicData(
+        positions=lattice.positions,
+        atomic_numbers=lattice.atomic_numbers,
+        atomic_masses=lattice.atomic_masses,
+        cell=lattice.cell,
+        pbc=lattice.pbc,
+        forces=torch.zeros_like(lattice.positions),
+    )
+    data.add_node_property("velocities", lattice.velocities)
+    return Batch.from_data_list([data])
+
+
+def _make_pair_at_rest(dtype: torch.dtype) -> Batch:
+    """Return a two-atom batch at rest whose energy buffer is held in *dtype*."""
+    data = AtomicData(
+        positions=torch.zeros(2, 3, dtype=dtype),
+        atomic_numbers=torch.ones(2, dtype=torch.long),
+        atomic_masses=torch.ones(2, dtype=dtype),
+        energy=torch.zeros(1, 1, dtype=dtype),
+    )
+    data.add_node_property("velocities", torch.zeros(2, 3, dtype=dtype))
+    return Batch.from_data_list([data])
+
+
+def _make_identified_batch(
+    system_ids: Sequence[int], cells: Sequence[int] = (2, 2)
+) -> Batch:
+    """Return one lattice graph per entry of *system_ids*, tagged and sized to match."""
+    structures = []
+    for system_id, count in zip(system_ids, cells, strict=True):
+        data = make_lattice_data(cells=count)
+        data.add_system_property("system_id", torch.tensor([[system_id]]))
+        structures.append(data)
+    return Batch.from_data_list(structures)
+
+
+def _make_lj_nve(monitor: StabilityMonitor | None = None) -> NVE:
+    """Return an NVE integrator over an argon Lennard-Jones model with its neighbor hook."""
+    model = LennardJonesModelWrapper(epsilon=0.01, sigma=3.4, cutoff=5.0)
+    hooks = [
+        NeighborListHook(
+            config=model.model_config.neighbor_config,
+            skin=1.0,
+            stage=DynamicsStage.BEFORE_COMPUTE,
+        )
+    ]
+    if monitor is not None:
+        hooks.append(monitor)
+    return NVE(model=model, dt=1.0, hooks=hooks)
+
+
+class TestStabilityMonitor:
+    """Drift and momentum metrics over a recorded trajectory."""
+
+    def test_scripted_linear_drift_matches_the_analytic_rate(self) -> None:
+        """A total energy rising by a fixed amount per step reports that slope."""
+        monitor = StabilityMonitor(timestep_fs=2.0)
+        batch = make_lattice_batch()
+        _drive(monitor, batch, [1.0 + 0.027 * step for step in range(11)])
+        metrics = monitor.metrics()
+        assert metrics.num_samples == 11
+        assert metrics.energy_drift_per_atom == pytest.approx(0.27 / _LATTICE_ATOMS)
+        assert metrics.energy_drift_per_atom_per_step == pytest.approx(0.001)
+        assert metrics.energy_drift_per_atom_per_ns == pytest.approx(500.0)
+
+    @pytest.mark.parametrize(
+        ("dtype", "include_kinetic"),
+        [(torch.float64, False), (torch.float32, False), (torch.float64, True)],
+        ids=["float64-potential", "float32-potential", "float64-total"],
+    )
+    def test_samples_are_copied_off_a_buffer_written_in_place(
+        self, dtype: torch.dtype, include_kinetic: bool
+    ) -> None:
+        """An energy the propagator overwrites with copy_ leaves earlier samples intact."""
+        batch = _make_pair_at_rest(dtype)
+        monitor = StabilityMonitor(include_kinetic=include_kinetic)
+        for step, energy in enumerate([0.0, 2.0, 4.0]):
+            batch.energy.copy_(torch.full_like(batch.energy, energy))
+            monitor(
+                DynamicsContext(batch=batch, step_count=step), DynamicsStage.AFTER_STEP
+            )
+        assert monitor.metrics().energy_drift_per_atom_per_step == pytest.approx(1.0)
+
+    def test_kinetic_energy_is_included_by_default(self) -> None:
+        """Only the kinetic-aware monitor sees a constant-potential run heating up."""
+        batch = make_lattice_batch()
+        total = StabilityMonitor()
+        potential = StabilityMonitor(include_kinetic=False)
+        for step in range(2):
+            batch.velocities = torch.full((batch.num_nodes, 3), 0.1 * step)
+            batch.energy = torch.ones(1, 1)
+            for monitor in (total, potential):
+                monitor(
+                    DynamicsContext(batch=batch, step_count=step),
+                    DynamicsStage.AFTER_STEP,
+                )
+        assert potential.metrics().energy_drift_per_atom == 0.0
+        assert total.metrics().energy_drift_per_atom == pytest.approx(
+            0.5 * ARGON_MASS * 3.0 * 0.1**2
+        )
+
+    def test_momentum_drift_matches_the_scripted_velocity_change(self) -> None:
+        """Momentum drift is the total mass times the velocity it drifted by."""
+        monitor = StabilityMonitor()
+        batch = make_lattice_batch()
+        for step in range(3):
+            batch.velocities = torch.zeros(batch.num_nodes, 3)
+            batch.velocities[:, 0] = 0.25 * step
+            batch.energy = torch.zeros(1, 1)
+            monitor(
+                DynamicsContext(batch=batch, step_count=step), DynamicsStage.AFTER_STEP
+            )
+        expected = ARGON_MASS * _LATTICE_ATOMS * 0.5
+        assert monitor.metrics().max_momentum_drift == pytest.approx(expected, rel=1e-5)
+
+    def test_a_single_sample_cannot_be_scored(self) -> None:
+        """One recorded frame gives no interval to measure drift over."""
+        monitor = StabilityMonitor()
+        _drive(monitor, make_lattice_batch(), [1.0])
+        with pytest.raises(ValueError, match="at least two recorded samples"):
+            monitor.metrics()
+
+    def test_the_metrics_accessor_stays_a_method(self) -> None:
+        """``metrics`` is a method, so reading it uncalled is not the metrics."""
+        monitor = StabilityMonitor()
+        _drive(monitor, make_lattice_batch(), [1.0, 2.0])
+        assert not isinstance(StabilityMonitor.__dict__["metrics"], property)
+        assert isinstance(monitor.metrics(), StabilityMetrics)
+        assert not isinstance(monitor.metrics, StabilityMetrics)
+
+    def test_drift_rate_is_omitted_without_a_timestep(self) -> None:
+        """Steps become nanoseconds only when a timestep says how long one is."""
+        monitor = StabilityMonitor()
+        _drive(monitor, make_lattice_batch(), [1.0, 2.0])
+        assert monitor.metrics().energy_drift_per_atom_per_ns is None
+
+    def test_changing_graph_count_stops_recording_and_warns(self) -> None:
+        """A batch that graduated systems is not folded into the same series."""
+        monitor = StabilityMonitor()
+        _drive(monitor, make_lattice_batch(), [1.0, 2.0])
+        graduated = make_lattice_batch()
+        graduated = Batch.from_data_list(graduated.to_data_list() * 2)
+        with pytest.warns(UserWarning, match="went from .* graphs"):
+            monitor(
+                DynamicsContext(batch=graduated, step_count=9), DynamicsStage.AFTER_STEP
+            )
+        assert monitor.metrics().num_samples == 2
+
+    def test_a_refill_of_differently_sized_systems_stops_recording(self) -> None:
+        """Same graph count, different atom counts, is still a different series."""
+        monitor = StabilityMonitor()
+        _drive(monitor, _make_identified_batch([0, 1]), [1.0, 2.0])
+        refilled = _make_identified_batch([0, 1], cells=(2, 3))
+        with pytest.warns(UserWarning, match="went from .* graphs"):
+            monitor(
+                DynamicsContext(batch=refilled, step_count=9), DynamicsStage.AFTER_STEP
+            )
+        assert monitor.metrics().num_samples == 2
+
+    def test_a_shape_preserving_refill_stops_recording(self) -> None:
+        """Fresh systems in the same slots break the series even at the same size."""
+        monitor = StabilityMonitor()
+        _drive(monitor, _make_identified_batch([0, 1]), [1.0, 2.0])
+        refilled = _make_identified_batch([2, 3])
+        with pytest.warns(
+            UserWarning, match="replaced by others of the same atom counts"
+        ):
+            monitor(
+                DynamicsContext(batch=refilled, step_count=9), DynamicsStage.AFTER_STEP
+            )
+        assert monitor.metrics().num_samples == 2
+
+    def test_the_same_systems_keep_being_recorded(self) -> None:
+        """An unchanged inflight batch is not mistaken for a refilled one."""
+        monitor = StabilityMonitor()
+        _drive(monitor, _make_identified_batch([0, 1]), [1.0, 2.0, 3.0])
+        assert monitor.metrics().num_samples == 3
+
+    def test_a_symmetric_excursion_fits_a_zero_drift_rate(self) -> None:
+        """A run that heats up and cools back down is scored as no net drift."""
+        monitor = StabilityMonitor(timestep_fs=1.0)
+        _drive(monitor, make_lattice_batch(), [0.0, 2.0, 3.0, 2.0, 0.0])
+        metrics = monitor.metrics()
+        assert metrics.energy_drift_per_atom == pytest.approx(0.0)
+        assert metrics.energy_drift_per_atom_per_ns == pytest.approx(0.0, abs=1e-9)
+
+    def test_a_closed_oscillation_is_only_seen_by_the_diagnostics(self) -> None:
+        """Both drift figures read zero on a swing the fluctuation sizes exactly."""
+        monitor = StabilityMonitor(timestep_fs=_SWING_PERIOD_FS / _SWING_SAMPLES)
+        _drive(monitor, make_lattice_batch(), _swing(closed=True))
+        metrics = monitor.metrics()
+        assert metrics.energy_drift_per_atom == pytest.approx(0.0, abs=1e-9)
+        assert metrics.energy_drift_per_atom_per_ns == pytest.approx(0.0, abs=1e-9)
+        assert metrics.energy_fluctuation_per_atom == pytest.approx(
+            _SWING / math.sqrt(2.0), rel=0.02
+        )
+        assert metrics.max_energy_excursion_per_atom == pytest.approx(
+            2.0 * _SWING, rel=1e-5
+        )
+
+    def test_the_fluctuation_does_not_move_with_where_the_window_ends(self) -> None:
+        """The same swing fits a zero rate or a huge one; the fluctuation is fixed."""
+        timestep = _SWING_PERIOD_FS / _SWING_SAMPLES
+        closed = StabilityMonitor(timestep_fs=timestep)
+        open_ended = StabilityMonitor(timestep_fs=timestep)
+        _drive(closed, make_lattice_batch(), _swing(closed=True))
+        _drive(open_ended, make_lattice_batch(), _swing(closed=False))
+        cut = open_ended.metrics()
+        assert cut.energy_drift_per_atom_per_ns > 1.0
+        assert cut.energy_fluctuation_per_atom == pytest.approx(
+            closed.metrics().energy_fluctuation_per_atom, rel=0.05
+        )
+        assert cut.max_energy_excursion_per_atom == pytest.approx(_SWING, rel=1e-5)
+
+    def test_a_linear_ramp_has_nothing_to_fluctuate_about(self) -> None:
+        """A series that is its own fit leaves no residual, and drifts by its rise."""
+        monitor = StabilityMonitor(timestep_fs=1.0)
+        _drive(
+            monitor, make_lattice_batch(), [1.0 + 0.027 * step for step in range(11)]
+        )
+        metrics = monitor.metrics()
+        assert metrics.energy_fluctuation_per_atom == pytest.approx(0.0, abs=1e-6)
+        assert metrics.max_energy_excursion_per_atom == pytest.approx(
+            metrics.energy_drift_per_atom
+        )
+
+    def test_the_metrics_round_trip_through_an_export(self) -> None:
+        """Every field, diagnostics included, survives to_dict and back."""
+        monitor = StabilityMonitor(timestep_fs=1.0)
+        _drive(monitor, make_lattice_batch(), [1.0, 2.0, 4.0])
+        metrics = monitor.metrics()
+        assert StabilityMetrics.from_dict(metrics.to_dict()) == metrics
+
+    def test_an_export_written_before_the_diagnostics_still_loads(self) -> None:
+        """A dict lacking the two newer keys rebuilds with them unmeasured."""
+        monitor = StabilityMonitor(timestep_fs=1.0)
+        _drive(monitor, make_lattice_batch(), [1.0, 2.0, 4.0])
+        exported = monitor.metrics().to_dict()
+        older = {
+            key: value
+            for key, value in exported.items()
+            if key
+            not in {"energy_fluctuation_per_atom", "max_energy_excursion_per_atom"}
+        }
+        restored = StabilityMetrics.from_dict(older)
+        assert restored.energy_fluctuation_per_atom is None
+        assert restored.max_energy_excursion_per_atom is None
+
+    def test_a_geometry_only_batch_names_the_field_it_is_missing(self) -> None:
+        """An unpropagated frame is refused by field name rather than sampled."""
+        with pytest.raises(ValueError, match=r"carrying no \['energy'\]"):
+            StabilityMonitor()(
+                DynamicsContext(batch=_make_geometry_only_batch(), step_count=0),
+                DynamicsStage.AFTER_STEP,
+            )
+
+    def test_a_geometry_only_batch_gains_its_energy_during_the_run(self) -> None:
+        """compute() allocates the energy a seed batch lacks, so the run records it."""
+        batch = _make_geometry_only_batch()
+        monitor = StabilityMonitor()
+        _make_lj_nve(monitor).run(batch, n_steps=2)
+        assert batch.energy is not None
+        assert monitor.metrics().num_samples == 2
+
+    def test_a_status_filtered_dispatch_is_refused(self) -> None:
+        """Like its sibling, the monitor cannot yet track a masked subset of graphs."""
+        batch = make_lattice_batch()
+        dynamics = _make_lj_nve()
+        ctx = make_dynamics_context(
+            batch, dynamics, active_graph_mask=torch.tensor([True])
+        )
+        with pytest.raises(NotImplementedError, match="status-filtered"):
+            StabilityMonitor()(ctx, DynamicsStage.AFTER_STEP)
+
+    def test_an_equilibration_transient_hides_the_drift_that_follows_it(self) -> None:
+        """Discarding the relaxation window recovers the rate the whole fit cancels."""
+        rise = 0.03125
+        relaxation = [1.0 + rise * (5 - step) for step in range(5)]
+        heating = [1.0 + rise * step for step in range(6)]
+        whole = StabilityMonitor(timestep_fs=1.0)
+        equilibrated = StabilityMonitor(timestep_fs=1.0, warmup_steps=5)
+        for monitor in (whole, equilibrated):
+            _drive(monitor, make_lattice_batch(), relaxation + heating)
+        assert whole.metrics().energy_drift_per_atom == pytest.approx(0.0, abs=1e-9)
+        assert whole.metrics().energy_drift_per_atom_per_ns == pytest.approx(
+            0.0, abs=1e-6
+        )
+        metrics = equilibrated.metrics()
+        assert metrics.first_step == 5
+        assert metrics.num_samples == 6
+        assert metrics.energy_drift_per_atom == pytest.approx(5 * rise / _LATTICE_ATOMS)
+        assert metrics.energy_drift_per_atom_per_ns == pytest.approx(
+            rise / _LATTICE_ATOMS * 1.0e6
+        )
+
+    def test_the_series_is_fingerprinted_from_the_first_recorded_sample(self) -> None:
+        """A refill inside the warmup window is discarded, not treated as a break."""
+        monitor = StabilityMonitor(warmup_steps=2)
+        _drive(monitor, _make_identified_batch([0, 1]), [1.0, 2.0])
+        refilled = _make_identified_batch([2, 3])
+        for step in (2, 3):
+            refilled.energy = torch.full((refilled.num_graphs, 1), float(step))
+            monitor(
+                DynamicsContext(batch=refilled, step_count=step),
+                DynamicsStage.AFTER_STEP,
+            )
+        metrics = monitor.metrics()
+        assert metrics.num_samples == 2
+        assert metrics.first_step == 2
+
+    def test_lattice_at_rest_holds_its_energy_through_an_nve_run(self) -> None:
+        """A Lennard-Jones lattice at its minimum drifts by nothing measurable."""
+        monitor = StabilityMonitor(frequency=2, timestep_fs=1.0)
+        _make_lj_nve(monitor).run(make_lattice_batch(), n_steps=20)
+        metrics = monitor.metrics()
+        assert metrics.num_samples == 10
+        assert metrics.energy_drift_per_atom_per_step < 1e-9
+        assert metrics.max_momentum_drift < 1e-9
+
+    def test_perturbed_lattice_conserves_energy_under_nve(self) -> None:
+        """A moving, displaced lattice still conserves energy to MD tolerance."""
+        monitor = StabilityMonitor(frequency=5, timestep_fs=1.0)
+        _make_lj_nve(monitor).run(
+            make_lattice_batch(speed=0.002, jitter=0.15), n_steps=50
+        )
+        assert monitor.metrics().energy_drift_per_atom_per_step < 1e-6
+
+    def test_the_default_divergence_is_the_core_nonfinite_graph_mask(self) -> None:
+        """An unset predicate is the framework's own non-finite check, not a copy."""
+        assert StabilityMonitor().divergence is nonfinite_graph_mask
+
+    def test_a_nonfinite_frame_stops_the_series_at_its_step(self) -> None:
+        """The default predicate ends the series where a position went non-finite."""
+        monitor = StabilityMonitor()
+        batch = make_lattice_batch()
+        _drive(monitor, batch, [1.0, 1.1, 1.2])
+        batch.positions[0, 0] = math.nan
+        _drive(monitor, batch, [1.3])
+        batch.positions[0, 0] = 0.0
+        for step, energy in enumerate([1.4, 1.5], start=1):
+            batch.energy = torch.full((1, 1), energy)
+            monitor(
+                DynamicsContext(batch=batch, step_count=step), DynamicsStage.AFTER_STEP
+            )
+        metrics = monitor.metrics()
+        assert metrics.num_samples == 3
+        assert metrics.first_divergence_step == 0
+        assert StabilityMetrics.from_dict(metrics.to_dict()) == metrics
+
+    def test_an_undiverged_series_records_no_divergence_step(self) -> None:
+        """``None`` says the predicate never fired, not that it was never asked."""
+        monitor = StabilityMonitor()
+        _drive(monitor, make_lattice_batch(), [1.0, 2.0])
+        assert monitor.metrics().first_divergence_step is None
+
+    def test_a_custom_divergence_predicate_decides_the_stop(self) -> None:
+        """The predicate is the caller's; here a graph diverges past an energy."""
+
+        def hot(batch: Batch) -> torch.Tensor:
+            return batch.energy.reshape(-1) > 2.5
+
+        monitor = StabilityMonitor(divergence=hot)
+        _drive(monitor, make_lattice_batch(), [1.0, 2.0, 3.0, 4.0])
+        metrics = monitor.metrics()
+        assert metrics.num_samples == 2
+        assert metrics.first_divergence_step == 2
+
+    def test_the_mean_aggregate_averages_the_graphs_the_max_picks_from(self) -> None:
+        """Two graphs drifting differently report their worst or their mean."""
+        batch = _make_identified_batch([0, 1])
+        counts = batch.num_nodes_per_graph.to(torch.float64)
+        worst = StabilityMonitor()
+        mean = StabilityMonitor(aggregate="mean")
+        for step in range(3):
+            batch.energy = torch.tensor([[0.0], [0.5 * step]])
+            for monitor in (worst, mean):
+                monitor(
+                    DynamicsContext(batch=batch, step_count=step),
+                    DynamicsStage.AFTER_STEP,
+                )
+        per_graph = torch.tensor([0.0, 1.0]) / counts
+        assert worst.metrics().energy_drift_per_atom == pytest.approx(
+            float(per_graph.max())
+        )
+        assert mean.metrics().energy_drift_per_atom == pytest.approx(
+            float(per_graph.mean())
+        )
+        assert mean.metrics().aggregate == "mean"
+
+    def test_an_unknown_aggregate_is_rejected(self) -> None:
+        """Only the two reductions are offered."""
+        with pytest.raises(ValueError, match="aggregate must be one of"):
+            StabilityMonitor(aggregate="median")
+
+    def test_a_shape_preserving_refill_can_be_recorded_through(self) -> None:
+        """Turning the composition stop off keeps an equal-size refill in the series."""
+        monitor = StabilityMonitor(stop_on_composition_change=False)
+        _drive(monitor, _make_identified_batch([0, 1]), [1.0, 2.0])
+        refilled = _make_identified_batch([2, 3])
+        refilled.energy = torch.full((2, 1), 3.0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            monitor(
+                DynamicsContext(batch=refilled, step_count=2), DynamicsStage.AFTER_STEP
+            )
+        assert monitor.metrics().num_samples == 3
+
+    def test_a_resized_refill_stops_recording_whatever_the_setting(self) -> None:
+        """Different per-graph atom counts cannot join the series either way."""
+        monitor = StabilityMonitor(stop_on_composition_change=False)
+        _drive(monitor, _make_identified_batch([0, 1]), [1.0, 2.0])
+        refilled = _make_identified_batch([0, 1], cells=(2, 3))
+        with pytest.warns(UserWarning, match="went from .* graphs"):
+            monitor(
+                DynamicsContext(batch=refilled, step_count=9), DynamicsStage.AFTER_STEP
+            )
+        assert monitor.metrics().num_samples == 2
+
+
+class TestTotalMomentum:
+    """Mass-weighted velocity sums per graph."""
+
+    def test_total_momentum_sums_mass_weighted_velocities_per_graph(self) -> None:
+        """A batch at rest carries no momentum, one row per graph."""
+        batch = make_lattice_batch()
+        torch.testing.assert_close(total_momentum(batch), torch.zeros(1, 3))
+        batch.velocities = torch.ones(batch.num_nodes, 3)
+        expected = torch.full((1, 3), ARGON_MASS * _LATTICE_ATOMS)
+        torch.testing.assert_close(total_momentum(batch), expected)
+
+    def test_each_graph_sums_only_its_own_atoms(self) -> None:
+        """Two graphs moving in opposite directions report opposite momenta."""
+        batch = _make_identified_batch([0, 1])
+        batch.velocities = torch.zeros(batch.num_nodes, 3)
+        first = batch.batch_idx == 0
+        batch.velocities[first, 0] = 1.0
+        batch.velocities[~first, 0] = -1.0
+        momentum = total_momentum(batch)
+        atoms = batch.num_nodes_per_graph.to(momentum.dtype)
+        torch.testing.assert_close(
+            momentum[:, 0], ARGON_MASS * atoms * torch.tensor([1.0, -1.0])
+        )
+        torch.testing.assert_close(momentum[:, 1:], torch.zeros(2, 2))
 
 
 class _MockCMHook:

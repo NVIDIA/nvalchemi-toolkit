@@ -79,3 +79,21 @@ Sampling
    StructureSource
    FitPolicy
    WithinBudget
+
+Benchmarking
+------------
+
+:func:`~nvalchemi.dynamics.measure_throughput` times a propagator at steady
+state: a discarded warmup window absorbs neighbor-list builds, lazy allocation,
+and kernel compilation, then a timed window with the device synchronized at
+both ends reports steps per second, atoms per second, and simulated nanoseconds
+per day as a :class:`~nvalchemi.dynamics.ThroughputMetrics` record.
+
+.. currentmodule:: nvalchemi.dynamics
+
+.. autosummary::
+   :toctree: _generated
+   :nosignatures:
+
+   measure_throughput
+   ThroughputMetrics

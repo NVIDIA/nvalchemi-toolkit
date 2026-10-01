@@ -379,6 +379,88 @@ class TestBaseModelMixinOutputData:
         assert "magnetic_moment" in out
 
 
+class TestBaseModelMixinNarrowedOutputs:
+    """Tests for BaseModelMixin.narrowed_outputs()."""
+
+    def test_the_block_sees_only_the_narrowed_outputs(self, demo_model):
+        """Inside the block, active_outputs and output_data() are the narrowed set."""
+        demo_model.model_config.active_outputs = {"energy", "forces"}
+        with demo_model.narrowed_outputs({"energy"}):
+            assert demo_model.model_config.active_outputs == {"energy"}
+            assert demo_model.output_data() == {"energy"}
+
+    def test_the_previous_outputs_are_restored_on_exit(self, demo_model):
+        """Leaving the block puts the full set back, as a set the caller can mutate."""
+        demo_model.model_config.active_outputs = {"energy", "forces"}
+        with demo_model.narrowed_outputs({"energy"}):
+            pass
+        assert demo_model.model_config.active_outputs == {"energy", "forces"}
+        assert isinstance(demo_model.model_config.active_outputs, set)
+
+    def test_the_previous_outputs_are_restored_on_an_exception(self, demo_model):
+        """A block that raises still hands the model back as it found it."""
+        demo_model.model_config.active_outputs = {"energy", "forces"}
+        with pytest.raises(RuntimeError, match="boom"):
+            with demo_model.narrowed_outputs({"energy"}):
+                raise RuntimeError("boom")
+        assert demo_model.model_config.active_outputs == {"energy", "forces"}
+
+    def test_any_iterable_of_keys_is_accepted(self, demo_model):
+        """A frozenset or a list narrows like a set does."""
+        with demo_model.narrowed_outputs(frozenset({"forces"})):
+            assert demo_model.model_config.active_outputs == {"forces"}
+        with demo_model.narrowed_outputs(["energy"]):
+            assert demo_model.model_config.active_outputs == {"energy"}
+
+
+class TestBaseModelMixinRequiresAutograd:
+    """Tests for BaseModelMixin.requires_autograd."""
+
+    def test_an_active_autograd_output_requires_autograd(self, demo_model):
+        """The demo wrapper differentiates forces, so its forward needs autograd."""
+        assert "forces" in demo_model.model_config.autograd_outputs
+        assert demo_model.requires_autograd is True
+
+    def test_narrowing_away_the_autograd_outputs_drops_the_requirement(
+        self, demo_model
+    ):
+        """With only direct outputs active, the forward can run under no_grad."""
+        with demo_model.narrowed_outputs({"energy"}):
+            assert demo_model.requires_autograd is False
+        assert demo_model.requires_autograd is True
+
+    def test_a_model_declaring_no_autograd_outputs_never_requires_it(self):
+        """A direct-output model reports False whatever is active."""
+
+        class _Direct(BaseModelMixin, torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energy", "forces"}),
+                    autograd_outputs=frozenset(),
+                )
+
+            @property
+            def embedding_shapes(self):
+                return {}
+
+            def compute_embeddings(self, data, **kwargs):
+                return data
+
+        assert _Direct().requires_autograd is False
+
+    def test_adapt_input_marks_grads_exactly_when_autograd_is_required(
+        self, demo_model, simple_batch
+    ):
+        """The property and adapt_input agree on whether positions need grad."""
+        fresh = simple_batch.clone()
+        demo_model.adapt_input(simple_batch)
+        assert simple_batch.positions.requires_grad is demo_model.requires_autograd
+        with demo_model.narrowed_outputs({"energy"}):
+            demo_model.adapt_input(fresh)
+            assert fresh.positions.requires_grad is False
+
+
 class TestBaseModelMixinAdaptInput:
     """Tests for BaseModelMixin.adapt_input()."""
 

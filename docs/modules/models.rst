@@ -27,6 +27,23 @@ Core classes
    NeighborConfig
    BaseModelMixin
 
+Autograd helpers
+----------------
+
+:func:`~nvalchemi.models.hessian_vector_product` returns the product of an
+energy's position Hessian with a probe direction from two backward passes,
+without forming the Hessian. It differentiates an energy that carries an
+autograd graph back to positions with ``requires_grad`` enabled, so it serves
+any model exposed through :class:`~nvalchemi.models.base.BaseModelMixin`.
+
+.. currentmodule:: nvalchemi.models
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   hessian_vector_product
+
 Demo utilities
 --------------
 
