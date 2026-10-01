@@ -9,6 +9,9 @@
   matching, and greedy de-duplication for `Batch` and loader-backed pools,
   with caller-defined priority, confirmation before discarding, an optional
   conservative pre-screen, and self- and cross-pool match iteration.
+- Add local Hessian-vector products, reusable Hessian operators, and in-place
+  dense Hessians for AIMNet2, MACE, Ewald/PME, and flat pipelines, with `Batch`
+  and Zarr persistence.
 - Add support for PEFT fine-tuning within `FineTuningStrategy`, including
   LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
   and base-model fingerprint checks for PEFT checkpoint loading.
@@ -31,6 +34,13 @@
   graphs skip one integrator update so the shared compute and target-stage
   `AFTER_COMPUTE` hooks can refresh forces under the new stage's context
   before it advances them.
+
+### Breaking Changes
+
+- `MACEWrapper` no longer declares or passes through an ordinary `"hessian"`
+  model output. Custom MACE modules that relied on the raw upstream value must
+  use `hessian_vector_product()`, `prepare_hessian()`, or `compute_hessian()` for
+  the Hessian with respect to Cartesian positions.
 
 ### Fixed
 
