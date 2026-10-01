@@ -184,6 +184,7 @@ training and fine-tuning specs.
 `method="improved_tangent"` (the default and only named method)
 implements the Henkelman--Jónsson improved tangent
 ([*J. Chem. Phys.* 113, 9978 (2000)](https://doi.org/10.1063/1.1323224)).
+It corresponds to the default `NEBMethod()` without overrides.
 For an interior image with neighbor energies $E^-, E, E^+$ and
 displacement vectors $\mathbf{d}^\pm$ to the adjacent images:
 

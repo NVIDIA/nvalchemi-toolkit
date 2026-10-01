@@ -181,7 +181,8 @@ class NEB(DynamicsStrategy):
         default="improved_tangent",
         description=(
             "Method for computing NEB forces: 'improved_tangent', custom Warp "
-            "equations, or a Torch callable."
+            "equations, or a Torch callable. 'improved_tangent' is equivalent "
+            "to NEBMethod() without overrides."
         ),
     )
     climbing: ClimbingImageConfig | None = Field(
