@@ -142,6 +142,10 @@ class CSPGenerator(AtomisticGenerator):
     packs. A configured destination gathers native payloads and expands only
     its result when requested.
 
+    Execution placement comes from ``packer.device``. Scientific
+    configurations describe search settings and do not select the device;
+    an input Batch or downstream model does not choose it for this generator.
+
     For distributed calls with custom ``rank_targets``, omitted
     ``rank_candidate_budgets`` divide a finite global candidate cap in
     proportion to the requested rank targets. Integer largest remainders

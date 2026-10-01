@@ -16,6 +16,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 import torch
 
@@ -68,13 +70,30 @@ def _two_atom_formula() -> MolecularPackingInput:
     )
 
 
+def _make_persistence_callback(
+    writer: RigidMoleculeASUZarrWriter,
+) -> Callable[[PackingResult], None]:
+    initialized = False
+
+    def persist(result: PackingResult) -> None:
+        nonlocal initialized
+        if initialized:
+            writer.append(result.structures)
+        else:
+            writer.write(result.structures)
+            initialized = True
+
+    return persist
+
+
 class _PipelineFakePacker:
     """Small deterministic protocol fake for CSP pipeline integration."""
 
     device = torch.device("cpu")
 
-    def __init__(self, accepted: int = 1) -> None:
+    def __init__(self, accepted: int = 1, cell_length: float = 5.0) -> None:
         self.accepted = accepted
+        self.cell_length = cell_length
 
     def pack(self, inputs, *, num_samples, rng, context, **options):
         del rng, options
@@ -82,10 +101,10 @@ class _PipelineFakePacker:
         structures = RigidMoleculeASUBatch(
             packing_input=inputs,
             structure_molecule_ptr=torch.arange(count + 1, dtype=torch.int32) * 2,
-            conformer_indices=torch.zeros((count * 2,), dtype=torch.int32),
+            conformer_indices=torch.arange(2, dtype=torch.int32).repeat(count),
             rotations=torch.eye(3).expand(count * 2, 3, 3).clone(),
             fractional_centers=torch.full((count * 2, 3), 0.5),
-            cells=torch.eye(3).expand(count, 3, 3).clone() * 5,
+            cells=torch.eye(3).expand(count, 3, 3).clone() * self.cell_length,
             space_groups=torch.ones((count,), dtype=torch.int32),
             z=torch.ones((count,), dtype=torch.int32),
             z_prime=torch.ones((count,), dtype=torch.int32),
@@ -283,7 +302,126 @@ def test_raw_csp_result_before_dynamics_raises_and_pipeline_compile_rejects() ->
         )
 
 
+def test_persistence_callback_creates_then_appends_distinct_run(tmp_path) -> None:
+    store = tmp_path / "fresh-then-append.zarr"
+    packing_input = _two_atom_formula()
+    packer = _PipelineFakePacker(cell_length=5.0)
+
+    with RigidMoleculeASUZarrWriter(store) as writer:
+        generator = CSPGenerator(
+            packer,
+            on_result=_make_persistence_callback(writer),
+            dedicated_stream=False,
+        )
+        pipeline = GenerationPipeline(stages=[generator])
+        with pipeline:
+            first = pipeline(
+                packing_input,
+                stage_kwargs=[{"num_samples": 1, "run_id": 901}],
+            )
+            packer.cell_length = 6.0
+            second = pipeline(
+                packing_input,
+                stage_kwargs=[{"num_samples": 1, "run_id": 902}],
+            )
+
+    assert isinstance(first, Batch) and first.num_graphs == 1
+    assert isinstance(second, Batch) and second.num_graphs == 1
+    with RigidMoleculeASUZarrReader(store) as reader:
+        assert len(reader) == 2
+        restored = reader.read()
+
+    assert restored.structure_ids.tolist() == [[901, 0], [902, 0]]
+    torch.testing.assert_close(
+        restored.cells,
+        torch.stack((torch.eye(3) * 5.0, torch.eye(3) * 6.0)),
+    )
+
+
+def test_persistence_callback_appends_after_empty_first_result(tmp_path) -> None:
+    store = tmp_path / "empty-first.zarr"
+    packing_input = _two_atom_formula()
+    packer = _PipelineFakePacker(accepted=0)
+
+    with RigidMoleculeASUZarrWriter(store) as writer:
+        generator = CSPGenerator(
+            packer,
+            on_result=_make_persistence_callback(writer),
+            dedicated_stream=False,
+        )
+        pipeline = GenerationPipeline(stages=[generator])
+        with pipeline:
+            empty = pipeline(
+                packing_input,
+                stage_kwargs=[{"num_samples": 1, "run_id": 903}],
+            )
+            with RigidMoleculeASUZarrReader(store) as reader:
+                assert len(reader) == 0
+                empty_store = reader.read()
+            assert empty_store.num_structures == 0
+            assert empty_store.packing_input.sha256 == packing_input.sha256
+            assert set(empty_store.properties) == set()
+
+            packer.accepted = 1
+            nonempty = pipeline(
+                packing_input,
+                stage_kwargs=[{"num_samples": 1, "run_id": 904}],
+            )
+
+    assert isinstance(empty, Batch) and empty.num_graphs == 0
+    assert isinstance(nonempty, Batch) and nonempty.num_graphs == 1
+    with RigidMoleculeASUZarrReader(store) as reader:
+        assert len(reader) == 1
+        restored = reader.read()
+
+    assert restored.structure_ids.tolist() == [[904, 0]]
+    torch.testing.assert_close(restored.cells[0], torch.eye(3) * 5.0)
+
+
+def test_persistence_callback_existing_path_is_not_overwritten(tmp_path) -> None:
+    store = tmp_path / "existing.zarr"
+    expected = make_skew_compact()
+    with RigidMoleculeASUZarrWriter(store) as writer:
+        writer.write(expected)
+
+    with RigidMoleculeASUZarrWriter(store) as writer:
+        generator = CSPGenerator(
+            _PipelineFakePacker(),
+            on_result=_make_persistence_callback(writer),
+            dedicated_stream=False,
+        )
+        pipeline = GenerationPipeline(stages=[generator])
+        with pytest.raises(FileExistsError, match="already exists"):
+            with pipeline:
+                pipeline(
+                    _two_atom_formula(),
+                    stage_kwargs=[{"num_samples": 1, "run_id": 905}],
+                )
+
+    with RigidMoleculeASUZarrReader(store) as reader:
+        assert len(reader) == expected.num_structures
+        restored = reader.read()
+
+    for name in (
+        "structure_molecule_ptr",
+        "conformer_indices",
+        "rotations",
+        "fractional_centers",
+        "cells",
+        "space_groups",
+        "z",
+        "z_prime",
+        "structure_ids",
+    ):
+        torch.testing.assert_close(getattr(restored, name), getattr(expected, name))
+    assert set(restored.properties) == set(expected.properties)
+    for name, value in expected.properties.items():
+        torch.testing.assert_close(restored.properties[name], value)
+    assert restored.packing_input.sha256 == expected.packing_input.sha256
+
+
 def test_compact_callback_write_survives_later_optimization_failure(tmp_path) -> None:
+    store = tmp_path / "csp.zarr"
     compact = make_skew_compact()
     packing_result = PackingResult(
         structures=compact,
@@ -298,20 +436,17 @@ def test_compact_callback_write_survives_later_optimization_failure(tmp_path) ->
             ),
         ),
     )
-    store = tmp_path / "csp.zarr"
 
     class _FailingDemoModel(DemoModel):
         def forward(self, *args, **kwargs):
             raise RuntimeError("intentional optimization failure")
 
     with RigidMoleculeASUZarrWriter(store) as writer:
-
-        def write_compact_result(result: PackingResult) -> None:
-            writer.write(result.structures)
+        persist_result = _make_persistence_callback(writer)
 
         def generate_batch(inputs=None, *, num_samples=1, rng=None, **kwargs):
             del inputs, num_samples, rng, kwargs
-            write_compact_result(packing_result)
+            persist_result(packing_result)
             selected = packing_result.structures.select(
                 torch.tensor([1], dtype=torch.int32)
             )

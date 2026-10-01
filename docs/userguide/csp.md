@@ -152,6 +152,13 @@ composition. A 1:1 hydrate, for example, has one solute and one water molecule
 per formula unit. Pass those molecules in a fixed order, for example
 `build_molecular_packing_input([solute, water])`.
 
+{py:attr}`~nvalchemi.csp.MolecularPackingInput.sha256` provides a fingerprint of
+the supplied formula input, including tensor values, dtypes, shapes, metadata,
+and volume. Chemically equivalent inputs can have different fingerprints. The
+value is recomputed on each access. Reading GPU-resident input copies tensors
+to CPU and may synchronize the device, so use it at startup rather than during
+packing iterations.
+
 Each molecule can have several input conformers. For a flexible molecule,
 these represent alternative internal geometries that may pack differently.
 The `OverlapReliefPacker` chooses one conformer for each independently placed
@@ -341,6 +348,11 @@ supplies equivalent formula-unit input; scientific settings such as `Z`, `Z′`,
 and space-group policy may differ between ranks. Gloo supports CPU packers;
 NCCL supports CUDA packers, usually with one process per GPU.
 
+`packer.device` selects where packing runs; the configuration describes the
+scientific search settings. `CSPGenerator` takes its execution device from the
+packer. Each rank can use the same settings on its own device. An input Batch
+or a downstream model does not select the CSP generator's device.
+
 This fragment assumes a `torchrun` launch and an initialized NCCL group. Prepare
 the [input and config](#csp-water-example) on each process:
 
@@ -477,6 +489,44 @@ raises an error. `read_batch()` requires explicit row indices so a large store
 is not expanded accidentally. An empty `OverlapReliefPacker` result is a
 valid ASU batch, but handle it before passing data to an optimizer.
 
+### Check externally prepared compact data
+
+Before expanding compact data prepared by another program, call
+`check_integrity()` explicitly on the selected structures:
+
+```python
+with RigidMoleculeASUZarrReader("water-candidates.zarr") as reader:
+    compact = reader.read(indices=torch.tensor([0, 1]), device="cpu")
+    compact.check_integrity()
+    batch = compact.to_batch(device="cuda:0")
+```
+
+Let `F` be the number of molecules in one formula unit and `Q` the total ASU
+molecule rows. `structure_molecule_ptr` must start at zero, never decrease,
+end at `Q`, and assign `F * z_prime` rows to each structure. `z` and `z_prime`
+must be positive, `z_prime` must divide `z`, and the space group must be in
+1–230 with `z / z_prime` bundled operations. Rows repeat the formula-molecule
+order for each independent copy; every conformer index must belong to that
+molecule's pool. The checker verifies these index relationships and raises
+`ValueError` when they fail.
+
+Geometry still needs to be valid: fractional centers must be finite, but may
+lie outside `[0, 1)`. Cartesian rotations must be finite proper rotations,
+applied as `local_positions @ rotation.T`. Cells must be finite nonsingular
+row-vector lattices in angstroms with positive volume; the selected fractional
+symmetry operations must preserve the cell metric. Index checking does not
+certify these conditions. Invalid geometry can produce incorrect or nonfinite
+expanded coordinates even when index checking passes.
+
+Construction checks tensor shapes, dtypes, device consistency, and property
+names. Construction, storage reads, packing, and expansion do not automatically
+run the index checker. Skipping it on malformed data can select another
+structure's rows or another group's operations. Storage-layout checks do not
+establish these relationships or geometry validity. Checking on CPU before
+expansion avoids additional GPU readbacks; checking device-resident data may
+synchronize. The checker scans integer metadata in proportion to the selected
+data, and its overhead has not been measured.
+
 The expanded `batch` can enter Toolkit dynamics. This one-step demonstration
 shows the handoff; `DemoModel` is not a physical crystal potential and its
 output has no CSP ranking value. For a search, use a model suitable for the
@@ -541,6 +591,8 @@ generator = CSPGenerator(
     seed=79,
     hooks=[DeduplicateHook.radial(cutoff=5.0, threshold=0.05)],
 )
+with generator | FIRE2(model=demo_model, dt=0.05, n_steps=1) as pipeline:
+    relaxed = pipeline(packing_input)
 ```
 
 Choose the cutoff and threshold for the application. The bundled engine uses
@@ -564,16 +616,42 @@ or dynamics. For rigid results, the existing ASU writer can persist candidates
 even if later optimization fails:
 
 ```python
+def make_persistence_callback(writer):
+    initialized = False
+
+    def persist(result):
+        nonlocal initialized
+        if initialized:
+            writer.append(result.structures)
+        else:
+            writer.write(result.structures)
+            initialized = True
+
+    return persist
+
+
 with RigidMoleculeASUZarrWriter("pipeline-candidates.zarr") as writer:
     generator = CSPGenerator(
         packer,
         num_samples=4,
         seed=79,
-        on_result=lambda packed: writer.append(packed.structures),
+        on_result=make_persistence_callback(writer),
     )
     with generator | FIRE2(model=demo_model, dt=0.05, n_steps=1) as pipeline:
         relaxed = pipeline(packing_input)
 ```
+
+Use a fresh destination owned by this callback. The first successful call
+creates the store with `write()`; later calls use `append()`. An empty first
+result also creates a valid store. Later results must have the same formula
+input and compatible property names, dtypes, and trailing dimensions. Completed
+writes survive a later optimization failure.
+
+An existing path raises `FileExistsError`; this callback does not resume an
+existing search or overwrite data. Its state belongs to this writer and
+callback lifetime. Failed creation leaves the flag unset, but partial I/O may
+leave an existing path, so retry and interrupted-write recovery are not
+guaranteed. It provides no concurrent-writer coordination.
 
 The callback runs once per result owner, including empty results: each rank
 in rank-local mode or only the destination in gather mode, after

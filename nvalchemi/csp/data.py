@@ -712,23 +712,30 @@ class RigidMoleculeASUBatch(BaseModel):
     Notes
     -----
     Let ``F`` be the number of formula-unit molecules and ``Q`` the total
-    ASU molecule rows. ``structure_molecule_ptr`` starts at zero, ends at
-    ``Q``, and gives each structure's contiguous row range. For every structure
-    ``p``, its row molecule count is ``F * z_prime[p]``; ``z`` and ``z_prime``
-    are positive, ``z_prime`` divides ``z``, and the space-group operation
-    count is ``z / z_prime``. ASU rows repeat formula-unit molecule order once
-    per ``z_prime`` copy, and each row's conformer index must belong to that
+    ASU molecule rows. ``structure_molecule_ptr`` starts at zero, never
+    decreases, ends at ``Q``, and gives each structure a contiguous range of
+    ``F * z_prime[p]`` rows. ``z`` and ``z_prime`` are positive, ``z_prime``
+    divides ``z``, and space-group numbers are in ``[1, 230]`` with a bundled
+    operation count of ``z / z_prime``. ASU rows repeat formula-unit molecule
+    order once per ``z_prime`` copy; each conformer index belongs to that
     formula molecule's pool in ``packing_input``.
 
-    ``rotations[q]`` is a Cartesian rotation applied as
-    ``local_positions @ rotations[q].T``. ``fractional_centers`` are fractional
-    coordinates, while ``cells`` are row-vector lattice matrices in angstroms.
-    Each cell must be compatible with its space group: the fractional
-    operations must preserve its lattice metric. These geometry, multiplicity,
-    and conformer-pool relationships are caller preconditions. Construction
-    checks array shapes, required tensor dtypes, device consistency, and
-    property names; callers must provide valid pointer values, conformer
-    indices, rotations, cells, and multiplicities.
+    ``fractional_centers`` must be finite; values outside ``[0, 1)`` are
+    allowed by periodic equivalence. ``rotations[q]`` must be a finite proper
+    Cartesian rotation applied as ``local_positions @ rotations[q].T``.
+    ``cells`` must be finite nonsingular row-vector lattice matrices in
+    angstroms with positive volume. The selected fractional symmetry
+    operations must preserve each cell's lattice metric.
+
+    Construction checks shapes, required tensor dtypes, device consistency,
+    and property names. Construction, reads, packing, and expansion do not
+    automatically call :meth:`check_integrity`. Call it explicitly to check
+    the pointer, multiplicity, operation-count, and conformer-pool
+    relationships. Geometry validity remains a caller precondition. Malformed
+    indices can select another structure's rows or another group's operations;
+    invalid geometry can produce incorrect or nonfinite expanded coordinates
+    even when index checking passes. Storage-layout checks alone do not
+    establish these conditions.
 
     ``select`` shares ``packing_input`` and preserves repeated row indices.
     """
@@ -1146,6 +1153,10 @@ class RigidMoleculeASUBatch(BaseModel):
 
         Notes
         -----
+        Expansion assumes valid index relationships and geometry. It does not
+        automatically call :meth:`check_integrity`; the explicit checker covers
+        indices only, and geometry remains a caller precondition.
+
         Cells must be compatible with their space-group operations. Molecular
         centers are wrapped in fractional space before their unwrapped rigid
         atomic displacements are added. Provenance describes source state and
