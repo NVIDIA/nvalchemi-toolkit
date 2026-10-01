@@ -461,15 +461,31 @@ def _attach_hessian_blocks(
     *,
     dtype: torch.dtype,
 ) -> None:
-    """Attach canonical blocks through public Batch schema and field APIs."""
-    batch.add_product_level("atom_atom", left="atoms", right="atoms")
-    batch.add_key(
+    """Prepare and install canonical Hessian blocks as one Batch update."""
+    schema = batch.get_level_schema()
+    schema.add_product_level("atom_atom", left="atoms", right="atoms")
+    group_name, blocks = batch._validate_add_key_request(
         "hessian",
         blocks,
         level="atom_atom",
         overwrite=True,
         dtype=dtype,
         payload_shape=(3, 3),
+        schema=schema,
+    )
+    prepared = batch._prepare_product_field(
+        "hessian",
+        blocks,
+        group_name,
+        schema=schema,
+        dtype=dtype,
+        payload_shape=(3, 3),
+    )
+    candidate_schema, groups, data_updates = prepared
+    batch._install_level_schema(
+        candidate_schema,
+        groups=groups,
+        data_updates=data_updates,
     )
 
 

@@ -1195,7 +1195,17 @@ class TestDenseHessian:
             [torch.arange(2), torch.arange(1)],
             level="atoms",
         )
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+        batch.add_key(
+            "pair_marker",
+            [torch.full((2, 2, 1), 3.0), torch.full((1, 1, 1), 4.0)],
+            level="atom_atom",
+        )
         marker = batch.marker.clone()
+        marker_ref = batch.marker
+        pair_marker = batch.pair_marker.clone()
+        pair_marker_ref = batch.pair_marker
+        product_lengths = batch.level_ptr("atom_atom").tolist()
         model = _QualifiedQuadraticDerivativeWrapper()
 
         model.compute_hessian(batch, strategy="loop")
@@ -1205,7 +1215,52 @@ class TestDenseHessian:
 
         torch.testing.assert_close(batch.hessian, 2 * first)
         torch.testing.assert_close(batch.marker, marker)
+        torch.testing.assert_close(batch.pair_marker, pair_marker)
+        assert batch.marker is marker_ref
+        assert batch.pair_marker is pair_marker_ref
+        assert batch.level_ptr("atom_atom").tolist() == product_lengths
         assert model.forward_calls == 2
+
+    @pytest.mark.parametrize("existing_hessian", [False, True])
+    def test_attachment_preparation_failure_leaves_batch_unchanged(
+        self, existing_hessian, monkeypatch
+    ):
+        batch = _make_derivative_batch(2, 1)
+        batch.add_key(
+            "marker",
+            [torch.arange(2), torch.arange(1)],
+            level="atoms",
+        )
+        if existing_hessian:
+            batch.add_product_level("atom_atom", left="atoms", right="atoms")
+            batch.add_key(
+                "hessian",
+                [torch.full((2, 2, 3, 3), 5.0), torch.full((1, 1, 3, 3), 6.0)],
+                level="atom_atom",
+                dtype=batch.positions.dtype,
+                payload_shape=(3, 3),
+            )
+            batch.add_key(
+                "pair_marker",
+                [torch.full((2, 2, 1), 3.0), torch.full((1, 1, 1), 4.0)],
+                level="atom_atom",
+            )
+        snapshot = self._snapshot(batch)
+        tensor_refs = {key: value for key, value in batch}
+        model = _QualifiedQuadraticDerivativeWrapper()
+        prepare_product_field = Batch._prepare_product_field
+
+        def fail_preparation(batch_self, *args, **kwargs):
+            prepare_product_field(batch_self, *args, **kwargs)
+            raise ValueError("injected product field preparation failure")
+
+        monkeypatch.setattr(Batch, "_prepare_product_field", fail_preparation)
+        with pytest.raises(ValueError, match="injected product field preparation"):
+            model.compute_hessian(batch, strategy="loop")
+
+        assert model.forward_calls == 1
+        self._assert_snapshot(batch, snapshot)
+        assert all(batch[key] is value for key, value in tensor_refs.items())
 
     def test_explicit_clone_provides_nonmutating_use(self):
         batch = _make_derivative_batch(2, 3)

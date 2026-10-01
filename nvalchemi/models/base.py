@@ -697,8 +697,6 @@ class BaseModelMixin(abc.ABC):
             )
 
         with torch.inference_mode(False):
-            staging = batch.clone()
-            _attach_hessian_blocks(staging, blocks, dtype=request.positions.dtype)
             _attach_hessian_blocks(batch, blocks, dtype=request.positions.dtype)
         return batch
 
