@@ -29,7 +29,7 @@ from nvalchemi.csp.packer import (
     PackingResult,
     PackingStopReason,
 )
-from nvalchemi.csp.storage import CSPZarrReader, CSPZarrWriter
+from nvalchemi.csp.storage import RigidMoleculeASUZarrReader, RigidMoleculeASUZarrWriter
 from nvalchemi.csp.symmetry import SpaceGroupPolicy
 from nvalchemi.data import Batch
 from nvalchemi.dynamics import FIRE2
@@ -304,7 +304,7 @@ def test_compact_callback_write_survives_later_optimization_failure(tmp_path) ->
         def forward(self, *args, **kwargs):
             raise RuntimeError("intentional optimization failure")
 
-    with CSPZarrWriter(store) as writer:
+    with RigidMoleculeASUZarrWriter(store) as writer:
 
         def write_compact_result(result: PackingResult) -> None:
             writer.write(result.structures)
@@ -339,7 +339,7 @@ def test_compact_callback_write_survives_later_optimization_failure(tmp_path) ->
             with pipeline:
                 pipeline()
 
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         assert len(reader) == len(packing_result)
         restored = reader.read(torch.tensor([0, 1], dtype=torch.int64))
         expected = packing_result.structures
@@ -402,11 +402,11 @@ def test_cpu_packing_round_trips_complete_compact_result_through_zarr(
     assert torch.all(compact.properties["max_overlap"] <= 3.25)
 
     store = tmp_path / "complete-csp-result.zarr"
-    with CSPZarrWriter(store) as writer:
+    with RigidMoleculeASUZarrWriter(store) as writer:
         writer.write(compact)
     selected_indices = torch.tensor([1, 0, 1], dtype=torch.int64)
     direct = compact.to_batch(indices=selected_indices)
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         assert len(reader) == 2
         stored_compact = reader.read(selected_indices)
         stored = reader.read_batch(selected_indices)

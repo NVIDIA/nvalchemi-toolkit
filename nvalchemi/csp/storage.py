@@ -357,7 +357,7 @@ def _id_key(ids: np.ndarray, index: int) -> tuple[int, int]:
     return int(ids[index, 0]), int(ids[index, 1])
 
 
-class CSPZarrWriter:
+class RigidMoleculeASUZarrWriter:
     """Write and maintain rigid-molecule ASU representations in a Zarr store.
 
     Custom property names must not contain ``/`` or equal ``.``, ``..``, or
@@ -397,7 +397,7 @@ class CSPZarrWriter:
     def _check_open(self) -> None:
         """Raise if this writer has been closed."""
         if self._closed:
-            raise RuntimeError("Cannot use a closed CSPZarrWriter")
+            raise RuntimeError("Cannot use a closed RigidMoleculeASUZarrWriter")
 
     def _open(self, mode: str = "r") -> zarr.Group:
         """Open the configured store using a Zarr access mode."""
@@ -715,7 +715,7 @@ class CSPZarrWriter:
         """Rewrite active rows densely in their current logical order.
 
         Deleted rows are removed, so physical row indices may change. Existing
-        readers should call :meth:`CSPZarrReader.refresh` after defragmentation.
+        readers should call :meth:`RigidMoleculeASUZarrReader.refresh` after defragmentation.
         The packing input and property schema are retained. ``config`` replaces
         this writer's settings after the new store has been installed. Only local
         filesystem stores are supported; callers must provide exclusive access.
@@ -743,7 +743,7 @@ class CSPZarrWriter:
         if not target.exists() or not target.is_dir():
             raise FileNotFoundError(f"CSP Zarr directory does not exist: {target}")
         new_config = self._config if config is None else _config(config)
-        reader = CSPZarrReader(target)
+        reader = RigidMoleculeASUZarrReader(target)
         try:
             compact = reader.read()
         finally:
@@ -753,8 +753,10 @@ class CSPZarrWriter:
         staged = target.with_name(f".{target.name}.csp-stage-{token}")
         backup = target.with_name(f".{target.name}.csp-backup-{token}")
         try:
-            CSPZarrWriter(staged, new_config)._write_new(compact, mode="w-")
-            with CSPZarrReader(staged) as staged_reader:
+            RigidMoleculeASUZarrWriter(staged, new_config)._write_new(
+                compact, mode="w-"
+            )
+            with RigidMoleculeASUZarrReader(staged) as staged_reader:
                 validated = staged_reader.read()
                 if not _same_batch(compact, validated):
                     raise ValueError("staged CSP Zarr payload differs from the source")
@@ -794,7 +796,7 @@ class CSPZarrWriter:
         """Close this writer; subsequent operations raise ``RuntimeError``."""
         self._closed = True
 
-    def __enter__(self) -> CSPZarrWriter:
+    def __enter__(self) -> RigidMoleculeASUZarrWriter:
         """Return this open writer for use as a context manager."""
         self._check_open()
         return self
@@ -804,7 +806,7 @@ class CSPZarrWriter:
         self.close()
 
 
-class CSPZarrReader:
+class RigidMoleculeASUZarrReader:
     """Read active rigid-molecule ASU representations from a CSP Zarr store.
 
     Selections index the current sequence of undeleted rows; call ``refresh``
@@ -828,7 +830,7 @@ class CSPZarrReader:
     def _check_open(self) -> zarr.Group:
         """Return the current root group or raise if the reader is closed."""
         if self._root is None:
-            raise RuntimeError("Cannot use a closed CSPZarrReader")
+            raise RuntimeError("Cannot use a closed RigidMoleculeASUZarrReader")
         return self._root
 
     def _refresh(self) -> None:
@@ -1030,7 +1032,7 @@ class CSPZarrReader:
         """Close this reader; subsequent operations raise ``RuntimeError``."""
         self._root = None
 
-    def __enter__(self) -> CSPZarrReader:
+    def __enter__(self) -> RigidMoleculeASUZarrReader:
         """Return this open reader for use as a context manager."""
         self._check_open()
         return self

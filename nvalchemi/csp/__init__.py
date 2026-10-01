@@ -25,7 +25,7 @@ structures for possible duplicates with approximate comparison.
 
 from nvalchemi.csp.data import MolecularPackingInput, RigidMoleculeASUBatch
 from nvalchemi.csp.generator import CSP_OUTPUT_FIELDS, CSPGenerator
-from nvalchemi.csp.storage import CSPZarrReader, CSPZarrWriter
+from nvalchemi.csp.storage import RigidMoleculeASUZarrReader, RigidMoleculeASUZarrWriter
 from nvalchemi.csp.symmetry import (
     CrystalSystem,
     SpaceGroupPolicy,
@@ -44,8 +44,8 @@ from nvalchemi.csp.volume import (
 
 __all__ = [
     "CrystalSystem",
-    "CSPZarrReader",
-    "CSPZarrWriter",
+    "RigidMoleculeASUZarrReader",
+    "RigidMoleculeASUZarrWriter",
     "CSPGenerator",
     "CSP_OUTPUT_FIELDS",
     "MolecularPackingInput",

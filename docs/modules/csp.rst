@@ -169,17 +169,17 @@ persist those representations without first expanding every structure.
    :nosignatures:
 
    RigidMoleculeASUBatch
-   CSPZarrWriter
-   CSPZarrReader
+   RigidMoleculeASUZarrWriter
+   RigidMoleculeASUZarrReader
 
 .. autosummary::
    :nosignatures:
 
    RigidMoleculeASUBatch.to_batch
-   CSPZarrWriter.write
-   CSPZarrWriter.append
-   CSPZarrReader.read
-   CSPZarrReader.read_batch
+   RigidMoleculeASUZarrWriter.write
+   RigidMoleculeASUZarrWriter.append
+   RigidMoleculeASUZarrReader.read
+   RigidMoleculeASUZarrReader.read_batch
 
 
 Screen similarity and duplicates

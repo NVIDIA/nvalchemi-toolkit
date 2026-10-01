@@ -24,7 +24,7 @@ import torch
 import zarr
 
 from nvalchemi.csp.data import MolecularPackingInput, RigidMoleculeASUBatch
-from nvalchemi.csp.storage import CSPZarrReader, CSPZarrWriter
+from nvalchemi.csp.storage import RigidMoleculeASUZarrReader, RigidMoleculeASUZarrWriter
 from nvalchemi.data.datapipes.backends.zarr import ZarrArrayConfig, ZarrWriteConfig
 
 
@@ -105,9 +105,9 @@ def make_compact(
 def test_round_trip_order_repeats_metadata_and_p1(tmp_path) -> None:
     store = tmp_path / "compact.zarr"
     source = make_compact(multiplicities=[(1, 1), (2, 1), (4, 2)])
-    with CSPZarrWriter(store) as writer:
+    with RigidMoleculeASUZarrWriter(store) as writer:
         writer.write(source)
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         assert len(reader) == 3
         assert reader.metadata["representation"] == "nvalchemi.csp.rigid_molecule_asu"
         assert reader.get_metadata(
@@ -171,9 +171,9 @@ def test_cuda_write_selected_compact_and_p1_round_trip(tmp_path) -> None:
     indices = torch.tensor([2, 0], dtype=torch.int64)
     expected = source.select(indices.to(device="cuda:0"))
 
-    with CSPZarrWriter(store) as writer:
+    with RigidMoleculeASUZarrWriter(store) as writer:
         writer.write(source)
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         compact = reader.read(indices, device="cuda:0")
         assert compact.cells.device == torch.device("cuda:0")
         assert compact.structure_ids.device == torch.device("cuda:0")
@@ -191,7 +191,7 @@ def test_cuda_write_selected_compact_and_p1_round_trip(tmp_path) -> None:
 
 def test_append_is_idempotent_and_conflicts_fail_before_mutation(tmp_path) -> None:
     store = tmp_path / "compact.zarr"
-    writer = CSPZarrWriter(store)
+    writer = RigidMoleculeASUZarrWriter(store)
     writer.write(make_compact())
     source = make_compact()
     writer.append(source.select(torch.tensor([0, 0])))
@@ -200,7 +200,7 @@ def test_append_is_idempotent_and_conflicts_fail_before_mutation(tmp_path) -> No
         writer.append(make_compact([(11, 1)], scores=[99.0], multiplicities=[(1, 1)]))
     assert int(zarr.open(store, mode="r").attrs["num_samples"]) == 3
     writer.append(make_compact([(12, 0)], scores=[7.0]))
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         assert len(reader) == 4
         assert reader.read(torch.tensor([3])).structure_ids.tolist() == [[12, 0]]
 
@@ -212,14 +212,14 @@ def test_write_deduplicates_identical_rows_and_rejects_conflict_before_creation(
     duplicate_rows = make_compact([(20, 4)], scores=[5.0]).select(
         torch.tensor([0, 0], dtype=torch.int64)
     )
-    CSPZarrWriter(duplicate_store).write(duplicate_rows)
-    with CSPZarrReader(duplicate_store) as reader:
+    RigidMoleculeASUZarrWriter(duplicate_store).write(duplicate_rows)
+    with RigidMoleculeASUZarrReader(duplicate_store) as reader:
         assert len(reader) == 1
         assert reader.read().structure_ids.tolist() == [[20, 4]]
 
     conflict_store = tmp_path / "conflict.zarr"
     with pytest.raises(ValueError, match="conflicts"):
-        CSPZarrWriter(conflict_store).write(
+        RigidMoleculeASUZarrWriter(conflict_store).write(
             make_compact(
                 [(20, 4), (20, 4)],
                 scores=[5.0, 6.0],
@@ -233,18 +233,18 @@ def test_write_rejects_existing_empty_group(tmp_path) -> None:
     store = tmp_path / "empty-existing.zarr"
     zarr.open_group(store, mode="w")
     with pytest.raises(FileExistsError):
-        CSPZarrWriter(store).write(make_compact())
+        RigidMoleculeASUZarrWriter(store).write(make_compact())
 
 
 def test_writer_rejects_negative_ids_before_mutation(tmp_path) -> None:
     invalid = make_compact([(-1, 0)], scores=[2.0])
     new_store = tmp_path / "negative.zarr"
     with pytest.raises(ValueError, match="structure_ids values must be nonnegative"):
-        CSPZarrWriter(new_store).write(invalid)
+        RigidMoleculeASUZarrWriter(new_store).write(invalid)
     assert not new_store.exists()
 
     store = tmp_path / "existing.zarr"
-    writer = CSPZarrWriter(store)
+    writer = RigidMoleculeASUZarrWriter(store)
     writer.write(make_compact())
     with pytest.raises(ValueError, match="structure_ids values must be nonnegative"):
         writer.append(invalid)
@@ -253,9 +253,9 @@ def test_writer_rejects_negative_ids_before_mutation(tmp_path) -> None:
 
 def test_reopened_append_empty_append_and_reader_refresh(tmp_path) -> None:
     store = tmp_path / "compact.zarr"
-    first = CSPZarrWriter(store)
+    first = RigidMoleculeASUZarrWriter(store)
     first.write(make_compact())
-    reader = CSPZarrReader(store)
+    reader = RigidMoleculeASUZarrReader(store)
     first.append(make_compact([(12, 0)], scores=[9.0]))
     first.append(make_compact([(13, 0)], scores=[10.0]))
     first.append(make_compact([(13, 0)], scores=[10.0]))
@@ -273,7 +273,7 @@ def test_reopened_append_empty_append_and_reader_refresh(tmp_path) -> None:
     assert reader.read(torch.tensor([4])).properties["score"].tolist() == [10.0]
     first.close()
 
-    reopened = CSPZarrWriter(store)
+    reopened = RigidMoleculeASUZarrWriter(store)
     reopened.append(make_compact([], scores=[]))
     assert int(zarr.open_group(store, mode="r").attrs["num_samples"]) == 5
     reopened.append(make_compact([(14, 0)], scores=[11.0]))
@@ -301,7 +301,7 @@ def test_reopened_append_empty_append_and_reader_refresh(tmp_path) -> None:
 
 def test_append_rejects_property_schema_mismatch(tmp_path) -> None:
     store = tmp_path / "compact.zarr"
-    writer = CSPZarrWriter(store)
+    writer = RigidMoleculeASUZarrWriter(store)
     writer.write(make_compact())
     with pytest.raises(ValueError, match="property keys"):
         writer.append(make_compact([(12, 0)], property_name="different"))
@@ -315,25 +315,25 @@ def test_unsupported_property_names_fail_before_write_or_append_mutation(
     invalid = make_compact([(12, 0)], property_name=name)
     new_store = tmp_path / "invalid-name.zarr"
     with pytest.raises(ValueError, match="cannot be stored as a Zarr array key"):
-        CSPZarrWriter(new_store).write(invalid)
+        RigidMoleculeASUZarrWriter(new_store).write(invalid)
     assert not new_store.exists()
 
     store = tmp_path / "existing.zarr"
-    writer = CSPZarrWriter(store)
+    writer = RigidMoleculeASUZarrWriter(store)
     writer.write(make_compact())
     with pytest.raises(ValueError, match="cannot be stored as a Zarr array key"):
         writer.append(invalid)
     root = zarr.open_group(store, mode="r")
     assert root.attrs["num_samples"] == 3
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         assert reader.read().structure_ids.tolist() == [[11, 0], [11, 1], [11, 2]]
 
 
 def test_none_and_empty_formula_metadata_remain_distinct_on_reopen(tmp_path) -> None:
     store = tmp_path / "compact.zarr"
-    writer = CSPZarrWriter(store)
+    writer = RigidMoleculeASUZarrWriter(store)
     writer.write(make_compact(metadata=None))
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         assert reader.read().packing_input.metadata is None
     with pytest.raises(ValueError, match="packing_input"):
         writer.append(make_compact([(12, 0)], metadata={}))
@@ -341,27 +341,27 @@ def test_none_and_empty_formula_metadata_remain_distinct_on_reopen(tmp_path) -> 
 
 def test_reader_rejects_corrupt_formula_state(tmp_path) -> None:
     store = tmp_path / "corrupt-input.zarr"
-    CSPZarrWriter(store).write(make_compact())
+    RigidMoleculeASUZarrWriter(store).write(make_compact())
     root = zarr.open_group(store, mode="r+")
     root["packing_input"]["atomic_numbers"][0] = -6
     with pytest.raises(ValueError, match="packing_input version-1 state is invalid"):
-        CSPZarrReader(store)
+        RigidMoleculeASUZarrReader(store)
 
 
 def test_reader_rejects_corrupt_structure_pointer(tmp_path) -> None:
     store = tmp_path / "corrupt-pointer.zarr"
-    CSPZarrWriter(store).write(make_compact())
+    RigidMoleculeASUZarrWriter(store).write(make_compact())
     root = zarr.open_group(store, mode="r+")
     root["meta"]["molecules_ptr"][:] = np.asarray([0, 1, 3, 2], dtype=np.int32)
     with pytest.raises(ValueError, match="molecules_ptr"):
-        CSPZarrReader(store)
+        RigidMoleculeASUZarrReader(store)
 
 
 def test_append_pointer_overflow_is_pre_mutation(tmp_path, monkeypatch) -> None:
     import nvalchemi.csp.storage as csp_storage
 
     store = tmp_path / "overflow.zarr"
-    writer = CSPZarrWriter(store)
+    writer = RigidMoleculeASUZarrWriter(store)
     writer.write(make_compact())
     monkeypatch.setattr(csp_storage, "_MAX_POINTER", 3)
     with pytest.raises(OverflowError, match="molecules_ptr"):
@@ -374,12 +374,12 @@ def test_append_pointer_overflow_is_pre_mutation(tmp_path, monkeypatch) -> None:
 
 def test_delete_reuse_and_defragment_preserve_logical_rows(tmp_path) -> None:
     store = tmp_path / "compact.zarr"
-    writer = CSPZarrWriter(store)
+    writer = RigidMoleculeASUZarrWriter(store)
     source = make_compact()
     writer.write(source)
     writer.delete(torch.tensor([0], dtype=torch.int64))
     writer.append(source.select(torch.tensor([0])))
-    reader = CSPZarrReader(store)
+    reader = RigidMoleculeASUZarrReader(store)
     assert reader.read().structure_ids.tolist() == [[11, 1], [11, 2], [11, 0]]
     writer.defragment()
     reader.refresh()
@@ -403,19 +403,19 @@ def test_delete_reuse_and_defragment_preserve_logical_rows(tmp_path) -> None:
 
 def test_delete_uses_active_logical_indices_and_repeated_indices_once(tmp_path) -> None:
     store = tmp_path / "logical-delete.zarr"
-    writer = CSPZarrWriter(store)
+    writer = RigidMoleculeASUZarrWriter(store)
     writer.write(make_compact())
     writer.delete(torch.tensor([1], dtype=torch.int64))
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         assert reader.read().structure_ids.tolist() == [[11, 0], [11, 2]]
 
     with pytest.raises(IndexError, match="active logical"):
         writer.delete(torch.tensor([2], dtype=torch.int64))
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         assert reader.read().structure_ids.tolist() == [[11, 0], [11, 2]]
 
     writer.delete(torch.tensor([1, 0, 1], dtype=torch.int64))
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         assert reader.read().num_structures == 0
 
 
@@ -425,10 +425,10 @@ def test_defragment_replacement_failure_restores_original_store(
     import nvalchemi.csp.storage as csp_storage
 
     store = tmp_path / "rollback.zarr"
-    writer = CSPZarrWriter(store)
+    writer = RigidMoleculeASUZarrWriter(store)
     writer.write(make_compact())
     writer.delete(torch.tensor([1], dtype=torch.int64))
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         expected = reader.read()
 
     original_replace = csp_storage.os.replace
@@ -447,7 +447,7 @@ def test_defragment_replacement_failure_restores_original_store(
     with pytest.raises(RuntimeError, match="original store was restored"):
         writer.defragment()
 
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         actual = reader.read()
     assert actual.structure_ids.tolist() == expected.structure_ids.tolist()
     torch.testing.assert_close(actual.cells, expected.cells)
@@ -457,10 +457,10 @@ def test_defragment_detects_staged_payload_corruption_before_replacement(
     tmp_path, monkeypatch
 ) -> None:
     store = tmp_path / "corrupt-stage.zarr"
-    writer = CSPZarrWriter(store)
+    writer = RigidMoleculeASUZarrWriter(store)
     writer.write(make_compact())
     writer.delete(torch.tensor([1], dtype=torch.int64))
-    original_write_new = CSPZarrWriter._write_new
+    original_write_new = RigidMoleculeASUZarrWriter._write_new
 
     def write_corrupted_stage(stage_writer, batch, *, mode="w-"):
         original_write_new(stage_writer, batch, mode=mode)
@@ -469,20 +469,20 @@ def test_defragment_detects_staged_payload_corruption_before_replacement(
             root = zarr.open_group(stage_path, mode="r+")
             root["core"]["cells"][0, 0, 0] += 0.25
 
-    monkeypatch.setattr(CSPZarrWriter, "_write_new", write_corrupted_stage)
+    monkeypatch.setattr(RigidMoleculeASUZarrWriter, "_write_new", write_corrupted_stage)
     with pytest.raises(ValueError, match="staged CSP Zarr payload differs"):
         writer.defragment()
 
     original = zarr.open_group(store, mode="r")
     assert original.attrs["num_samples"] == 3
     assert original["meta"]["samples_mask"][:].tolist() == [True, False, True]
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         assert reader.read().structure_ids.tolist() == [[11, 0], [11, 2]]
 
 
 def test_defragment_rejects_non_filesystem_store(tmp_path) -> None:
     store = zarr.storage.MemoryStore()
-    writer = CSPZarrWriter(store)
+    writer = RigidMoleculeASUZarrWriter(store)
     writer.write(make_compact())
     with pytest.raises(TypeError, match="local filesystem"):
         writer.defragment()
@@ -494,7 +494,7 @@ def test_defragment_cleanup_failure_keeps_backup_and_installed_store(
     import nvalchemi.csp.storage as csp_storage
 
     store = tmp_path / "cleanup.zarr"
-    writer = CSPZarrWriter(store)
+    writer = RigidMoleculeASUZarrWriter(store)
     writer.write(make_compact())
     writer.delete(torch.tensor([1], dtype=torch.int64))
     original_rmtree = csp_storage.shutil.rmtree
@@ -513,23 +513,23 @@ def test_defragment_cleanup_failure_keeps_backup_and_installed_store(
     backup_root = zarr.open_group(backups[0], mode="r")
     assert backup_root.attrs["num_samples"] == 3
     assert backup_root["meta"]["samples_mask"][:].tolist() == [True, False, True]
-    with CSPZarrReader(backups[0]) as backup_reader:
+    with RigidMoleculeASUZarrReader(backups[0]) as backup_reader:
         assert backup_reader.read().structure_ids.tolist() == [[11, 0], [11, 2]]
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         assert reader.read().structure_ids.tolist() == [[11, 0], [11, 2]]
 
     writer.append(make_compact([(12, 0)], scores=[8.0]))
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         assert reader.read().structure_ids.tolist() == [[11, 0], [11, 2], [12, 0]]
 
 
 def test_defragment_invalid_config_preserves_existing_store(tmp_path) -> None:
     store = tmp_path / "invalid-defragment-config.zarr"
-    writer = CSPZarrWriter(store)
+    writer = RigidMoleculeASUZarrWriter(store)
     source = make_compact(multiplicities=[(1, 1), (2, 1), (4, 2)])
     writer.write(source)
     writer.delete(torch.tensor([0], dtype=torch.int64))
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         expected = reader.read()
 
     invalid = ZarrWriteConfig(core=ZarrArrayConfig(chunk_size=-1))
@@ -539,7 +539,7 @@ def test_defragment_invalid_config_preserves_existing_store(tmp_path) -> None:
     root = zarr.open_group(store, mode="r")
     assert root.attrs["num_samples"] == 3
     assert root["meta"]["samples_mask"][:].tolist() == [False, True, True]
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         actual = reader.read()
     for name in (
         "structure_molecule_ptr",
@@ -560,9 +560,9 @@ def test_defragment_invalid_config_preserves_existing_store(tmp_path) -> None:
 def test_empty_store_round_trip_and_empty_selection(tmp_path) -> None:
     store = tmp_path / "empty.zarr"
     empty = make_compact([])
-    with CSPZarrWriter(store) as writer:
+    with RigidMoleculeASUZarrWriter(store) as writer:
         writer.write(empty)
-    with CSPZarrReader(store) as reader:
+    with RigidMoleculeASUZarrReader(store) as reader:
         assert len(reader) == 0
         assert reader.read().num_structures == 0
         assert reader.read(torch.empty(0, dtype=torch.int64)).num_structures == 0
@@ -572,10 +572,10 @@ def test_empty_store_round_trip_and_empty_selection(tmp_path) -> None:
 
 def test_reader_rejects_invalid_field_alignment(tmp_path) -> None:
     store = tmp_path / "invalid.zarr"
-    CSPZarrWriter(store).write(make_compact())
+    RigidMoleculeASUZarrWriter(store).write(make_compact())
     root = zarr.open_group(store, mode="r+")
     fields = dict(root.attrs["fields"])
     fields["core"] = {**fields["core"], "cells": "molecule"}
     root.attrs["fields"] = fields
     with pytest.raises(ValueError, match="alignment"):
-        CSPZarrReader(store)
+        RigidMoleculeASUZarrReader(store)

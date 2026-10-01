@@ -435,12 +435,12 @@ all full-cell atom coordinates. Save accepted ASU representations first, then
 expand only the candidates chosen for expensive physical optimization.
 
 ```python
-from nvalchemi.csp import CSPZarrReader, CSPZarrWriter
+from nvalchemi.csp import RigidMoleculeASUZarrReader, RigidMoleculeASUZarrWriter
 
-with CSPZarrWriter("water-candidates.zarr") as writer:
+with RigidMoleculeASUZarrWriter("water-candidates.zarr") as writer:
     writer.write(result.structures)
 
-with CSPZarrReader("water-candidates.zarr") as reader:
+with RigidMoleculeASUZarrReader("water-candidates.zarr") as reader:
     asu_rows = reader.read(indices=torch.tensor([0, 1]))
     batch = reader.read_batch(indices=torch.tensor([0, 1]), device="cuda:0")
 assert asu_rows.num_structures == batch.num_graphs == 2
@@ -511,7 +511,7 @@ or dynamics. For rigid results, the existing ASU writer can persist candidates
 even if later optimization fails:
 
 ```python
-with CSPZarrWriter("pipeline-candidates.zarr") as writer:
+with RigidMoleculeASUZarrWriter("pipeline-candidates.zarr") as writer:
     generator = CSPGenerator(
         packer,
         num_samples=4,
