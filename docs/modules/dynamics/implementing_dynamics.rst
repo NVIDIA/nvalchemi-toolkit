@@ -221,7 +221,8 @@ every call:
    4.  BEFORE_POST_UPDATE hooks →  post_update()  →  AFTER_POST_UPDATE hooks
    5.  AFTER_STEP hooks
    6.  convergence check  →  ON_CONVERGE hooks (if any samples converged)
-   7.  step_count += 1
+   7.  ON_GRADUATE hooks (with the graphs whose status reached exit_status)
+   8.  step_count += 1
 
 ``ON_ADMISSION`` runs before the per-step sequence and before initial force
 priming. In a compiled :class:`~nvalchemi.dynamics.FusedStage`, it remains

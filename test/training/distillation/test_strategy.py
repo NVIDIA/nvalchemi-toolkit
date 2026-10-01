@@ -672,6 +672,17 @@ class TestDistillationStrategyLabeling:
             assert probe[field].dtype == reference[field].dtype
             assert torch.equal(probe[field], reference[field])
 
+    def test_the_labeling_seam_leaves_precision_to_the_scorer(self) -> None:
+        """A scorer told to keep the caller's autocast region labels inside it."""
+        strategy = _make_strategy()
+        reference = _build_batch()
+        strategy.attach_teacher_labels(reference)
+        strategy.teacher_scorer.autocast = None
+        probe = _build_batch()
+        with torch.autocast(device_type="cpu", dtype=torch.bfloat16):
+            assert strategy.attach_teacher_labels(probe) is True
+        assert not torch.equal(probe.teacher_energy, reference.teacher_energy)
+
     def test_mixed_precision_run_labels_at_the_teacher_precision(self) -> None:
         """An AMP training step attaches the same labels a full-precision one does."""
         recorder = _RecordingLabelHook(("teacher_energy", "teacher_forces"))

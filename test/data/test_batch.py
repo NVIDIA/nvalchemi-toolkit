@@ -1268,6 +1268,59 @@ class TestBatchIndexing:
         d1 = sub.get_data(1)
         assert d0.neighbor_list is not None and d1.neighbor_list is not None
 
+    def _batch_with_extra_keys(self, device: str) -> Batch:
+        """Return three graphs carrying a node key, a system key, and edges."""
+        data_list = [
+            _atomic_data_with_edges_and_system(num_nodes=2, num_edges=3),
+            _atomic_data_with_edges_and_system(num_nodes=3, num_edges=2),
+            _atomic_data_with_edges_and_system(num_nodes=1, num_edges=1),
+        ]
+        batch = Batch.from_data_list(data_list, device=device)
+        batch.forces = torch.randn(batch.num_nodes, 3, device=device)
+        return batch
+
+    def test_index_select_drop_leaves_the_named_keys_out(self, device):
+        """Dropped keys are absent from the selection and its tracked key sets."""
+        batch = self._batch_with_extra_keys(device)
+        plain = batch.index_select([0, 2])
+        sub = batch.index_select([0, 2], drop=("forces", "energy", "not_there"))
+        assert "forces" not in sub
+        assert "energy" not in sub
+        assert "forces" in batch and "energy" in batch
+        assert torch.equal(sub.positions, plain.positions)
+        assert torch.equal(sub.neighbor_list, plain.neighbor_list)
+        assert sub.num_nodes_list == plain.num_nodes_list
+        assert sub.num_edges_list == plain.num_edges_list
+        if sub.keys is not None:
+            assert all(
+                "forces" not in names and "energy" not in names
+                for names in sub.keys.values()
+            )
+
+    def test_index_select_default_drop_copies_every_key(self, device):
+        """Without a drop the selection carries exactly the keys the batch does."""
+        batch = self._batch_with_extra_keys(device)
+        sub = batch.index_select([1])
+        assert set(sub._storage.keys()) == set(batch._storage.keys())
+        assert torch.equal(sub.forces, batch.forces[2:5])
+
+    def test_index_select_drop_keeps_the_segmented_pointers_intact(self, device):
+        """Dropping a node key leaves the atom and edge pointers of the selection whole."""
+        batch = self._batch_with_extra_keys(device)
+        plain = batch.index_select([0, 2])
+        sub = batch.index_select([0, 2], drop=("forces",))
+        assert sub.batch_ptr.tolist() == plain.batch_ptr.tolist()
+        assert sub.level_ptr("edges").tolist() == plain.level_ptr("edges").tolist()
+        assert sub.get_data(1).neighbor_list is not None
+
+    def test_index_select_drop_of_every_edge_key_keeps_the_level(self, device):
+        """A level emptied by the drop keeps its cardinality and no fields."""
+        batch = self._batch_with_extra_keys(device)
+        sub = batch.index_select([0, 2], drop=("neighbor_list",))
+        assert "neighbor_list" not in sub
+        assert sub.level_keys["edges"] == set()
+        assert sub.num_edges_list == [3, 1]
+
     def test_index_select_normalize_bool_tensor(self):
         batch = Batch.from_data_list(
             [
@@ -2180,6 +2233,27 @@ class TestBatchDeviceAndCopy:
         assert c is not batch
         assert c.num_graphs == batch.num_graphs
         assert c["positions"] is not batch["positions"]
+
+    def test_clone_drop_leaves_the_named_keys_out(self):
+        """A drop keeps the named keys out of the copy and out of the tracked sets."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_system(2), _atomic_data_with_system(3)]
+        )
+        batch.forces = torch.randn(batch.num_nodes, 3)
+        c = batch.clone(drop=("forces", "energy", "not_there"))
+        assert "forces" not in c and "energy" not in c
+        assert "forces" in batch and "energy" in batch
+        assert torch.equal(c.positions, batch.positions)
+        assert c.positions is not batch.positions
+        assert c.num_nodes_list == batch.num_nodes_list
+        if c.keys is not None:
+            assert all("forces" not in names for names in c.keys.values())
+
+    def test_clone_default_drop_is_a_full_copy(self):
+        """Without a drop the clone carries exactly the keys the batch does."""
+        batch = Batch.from_data_list([_atomic_data_with_system(2)])
+        batch.forces = torch.randn(batch.num_nodes, 3)
+        assert set(batch.clone()._storage.keys()) == set(batch._storage.keys())
 
     def test_cpu_cuda(self):
         batch = Batch.from_data_list([_minimal_atomic_data(2)])

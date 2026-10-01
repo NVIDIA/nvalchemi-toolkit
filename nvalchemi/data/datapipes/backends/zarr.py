@@ -465,6 +465,19 @@ def _get_cat_dim(key: str) -> int:
     return 0
 
 
+def _row_axis(key: str, array: Any, builtin: bool) -> int:
+    """Return the axis of *array* that holds one entry per stored row of *key*.
+
+    A built-in field is concatenated along the axis :func:`_get_cat_dim`
+    assigns its name, so a core index field keeps its rows on the last axis.
+    A custom array, under ``custom/`` or a custom level, is stored as it was
+    given and appended along axis 0, whatever its name.
+    """
+    if not builtin:
+        return 0
+    return _get_cat_dim(key) % array.ndim
+
+
 def _slice_edge_array(arr: Any, key: str, edge_start: int, edge_end: int) -> Any:
     """Slice an edge-level array on dim 0, rejecting non-zero cat dims.
 
@@ -2538,7 +2551,9 @@ class AtomicDataZarrReader(Reader):
     def schema(self) -> dict[str, FieldSchema]:
         """Return the level, dtype, and row shape of every field the store holds.
 
-        Dtypes come from the array metadata, so no chunk is read.
+        Dtypes come from the array metadata, so no chunk is read. The row shape
+        leaves out the axis rows are stored along: the one a built-in field's
+        name assigns, and axis 0 for every custom array.
 
         Returns
         -------
@@ -2551,11 +2566,13 @@ class AtomicDataZarrReader(Reader):
             If the reader has been closed.
         """
         schema: dict[str, FieldSchema] = {}
-        for key, level, array in self._field_entries():
+        entries = self._field_entries()
+        core_keys = set(self._root["core"].array_keys())
+        for key, level, array in entries:
             dtype = torch.from_numpy(np.empty(0, dtype=array.dtype)).dtype
-            cat_dim = _get_cat_dim(key) % len(array.shape)
+            row_axis = _row_axis(key, array, key in core_keys)
             row_shape = tuple(
-                size for axis, size in enumerate(array.shape) if axis != cat_dim
+                size for axis, size in enumerate(array.shape) if axis != row_axis
             )
             schema[key] = FieldSchema(level, dtype, row_shape)
         return schema
@@ -2608,6 +2625,7 @@ class AtomicDataZarrReader(Reader):
                     f"zero; got {pointer.tolist()!r}"
                 )
         entries = self._field_entries()
+        core_keys = set(self._root["core"].array_keys())
         held = {key for key, _, _ in entries}
         for field in self.field_levels:
             if field not in held:
@@ -2624,8 +2642,8 @@ class AtomicDataZarrReader(Reader):
             if name in meta:
                 lengths[f"meta/{name}"] = (int(meta[name].shape[0]), totals[level])
         for key, level, array in entries:
-            cat_dim = _get_cat_dim(key) % len(array.shape)
-            lengths[key] = (int(array.shape[cat_dim]), totals[level])
+            row_axis = _row_axis(key, array, key in core_keys)
+            lengths[key] = (int(array.shape[row_axis]), totals[level])
         mismatched = [
             f"{name} holds {found!r} rows where {expected!r} are committed"
             for name, (found, expected) in lengths.items()

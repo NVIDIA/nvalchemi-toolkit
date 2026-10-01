@@ -80,7 +80,8 @@ class StageTimingHook:
     profiled_stages : set[Enum] | {"all", "step", "detailed"}
         Which stages to instrument.
 
-        * ``"all"`` (default): every dynamics stage except ``ON_CONVERGE``.
+        * ``"all"`` (default): every dynamics stage except ``ON_CONVERGE`` and
+          ``ON_GRADUATE``.
         * ``"step"``: ``BEFORE_STEP`` and ``AFTER_STEP`` only.
         * ``"detailed"``: all stages from ``BEFORE_STEP`` through
           ``AFTER_STEP`` (excluding ``ON_CONVERGE``).
@@ -156,7 +157,9 @@ class StageTimingHook:
             dynamics_stage = _get_dynamics_stage_type()
             if profiled_stages == "all":
                 resolved = {
-                    s for s in dynamics_stage if s != dynamics_stage.ON_CONVERGE
+                    s
+                    for s in dynamics_stage
+                    if s not in (dynamics_stage.ON_CONVERGE, dynamics_stage.ON_GRADUATE)
                 }
             elif profiled_stages == "step":
                 resolved = {dynamics_stage.BEFORE_STEP, dynamics_stage.AFTER_STEP}

@@ -388,6 +388,17 @@ class TestReplayBufferDevice:
 
         assert buffer.dataset.in_memory_batch.device.type == "cpu"
 
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_the_first_extend_pins_the_device_the_later_ones_are_moved_to(self) -> None:
+        """Two capture routes on two devices fill one buffer rather than colliding."""
+        buffer = ReplayBuffer()
+
+        buffer.extend(_make_frames([0.0], device="cuda"))
+        buffer.extend(_make_frames([1.0]))
+
+        assert len(buffer) == 2
+        assert buffer.dataset.in_memory_batch.device.type == "cuda"
+
 
 class TestBuildMixedLoader:
     def test_every_batch_holds_the_requested_mixture(self) -> None:

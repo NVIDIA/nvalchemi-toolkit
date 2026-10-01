@@ -57,6 +57,7 @@ from torch.optim.lr_scheduler import LRScheduler
 
 from nvalchemi._serialization import _import_cls
 from nvalchemi._typing import ModelOutputs
+from nvalchemi.data.level_storage import resolve_device
 from nvalchemi.distributed import DistributedManager
 from nvalchemi.hooks._context import TrainContext
 from nvalchemi.hooks._protocol import Hook
@@ -382,8 +383,12 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     target. Every ``optimizer_configs`` key must name a model present in
     ``models``, and each entry must contain at least one
     :class:`OptimizerConfig`. ``devices`` must have length ``1`` or
-    ``len(models)``; named-model :meth:`run` currently supports a single shared
-    device only.
+    ``len(models)``. Named-model :meth:`run` stages one batch on
+    ``devices[0]``, so a per-model list must name the same device in every
+    entry, and a list naming distinct devices is refused. Entries are compared
+    after :func:`~nvalchemi.data.resolve_device` fills in the index of an
+    index-less ``cuda``, so ``cuda`` and ``cuda:0`` are one device on a
+    process whose current device is ``0``.
 
     Use :meth:`to_spec_dict` / :meth:`from_spec_dict` for JSON-based save/load.
     Optimizer configs, loss specs, devices, importable training functions, and
@@ -487,8 +492,11 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
     devices: list[torch.device] = Field(
         default_factory=lambda: [torch.device("cpu")],
         description=(
-            "One device shared by all models, or one device per model for helper "
-            "placement. Named-model ``run`` currently supports one device only."
+            "One device shared by all models, or one entry per model naming "
+            "that same device; named-model ``run`` stages its batch on the "
+            "first, so two distinct devices are refused at run time. An "
+            "index-less 'cuda' is resolved to the process's current device "
+            "before the entries are compared."
         ),
     )
     distributed_manager: Annotated[DistributedManager | None, SkipValidation()] = Field(
@@ -1014,13 +1022,29 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         return self.active_dataloader
 
     def _validate_runtime_devices(self) -> None:
-        """Raise for runtime device layouts that cannot be executed."""
-        if not self.single_model_input and len(self.devices) > 1:
+        """Raise for runtime device layouts that cannot be executed.
+
+        ``training_fn(models, batch)`` receives one batch staged on
+        ``devices[0]``, so a per-model list is accepted only when every entry
+        names the same device. An index-less ``cuda`` means the process's
+        current device, which each data-parallel rank sets to its node-local
+        one, so entries are compared after
+        :func:`~nvalchemi.data.resolve_device` fills that index in:
+        ``[cuda, cuda:0]`` is one device on the rank whose current device is
+        ``0`` and two devices on every other rank. Without a CUDA runtime the
+        index cannot be resolved, and entries are compared as written.
+        """
+        resolve = resolve_device if torch.cuda.is_available() else torch.device
+        distinct = {resolve(device) for device in self.devices}
+        if not self.single_model_input and len(distinct) > 1:
             raise ValueError(
-                "Named-model training with multiple devices is unsupported: "
-                "training_fn(models, batch) receives one batch on one device. "
-                "Use a single shared device or pass models=model for "
-                "single-model behavior."
+                "Named-model training across distinct devices is unsupported: "
+                "training_fn(models, batch) receives one batch on devices[0], so "
+                "a model on another device cannot read it; got "
+                f"{sorted(str(device) for device in distinct)!r}. An index-less "
+                "'cuda' resolves to this process's current device before the "
+                "comparison. Name one device for every model, or pass "
+                "models=model for single-model behavior."
             )
 
     def _setup_runtime_optimizers(
@@ -1403,9 +1427,9 @@ class TrainingStrategy(BaseModel, HookRegistryMixin):
         Raises
         ------
         ValueError
-            If named-model training is configured with multiple devices, or if
-            the dataloader produces no batches before the configured target
-            step count is reached.
+            If named-model training is configured with more than one distinct
+            device, or if the dataloader produces no batches before the
+            configured target step count is reached.
         """
         training_started = False
         strategy_context = nullcontext(self) if self._context_depth > 0 else self

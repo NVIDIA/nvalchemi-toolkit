@@ -37,6 +37,8 @@ from nvalchemi.models.base import (
     NeighborListFormat,
 )
 from nvalchemi.models.lj import LennardJonesModelWrapper
+from nvalchemi.training.distillation._attach import _attach_teacher_labels
+from nvalchemi.training.distillation.scoring import TeacherScorer
 from nvalchemi.training.distillation.seeding import FitPolicy
 from test.training.conftest import _build_atomic_data, _build_batch, _build_demo_model
 
@@ -48,6 +50,16 @@ _PAIR_CUTOFF = 4.5
 
 _WIRED_CHARGE = 7.0
 """Per-atom charge the charge-emitting stub teacher writes for every atom."""
+
+
+_INITIAL_ELEMENT = 1
+"""Atomic number tagging every structure an on-policy run generates from."""
+
+_REFERENCE_ELEMENT = 6
+"""Atomic number tagging every structure that comes from the reference dataset."""
+
+_ATOMS_PER_SYSTEM = 4
+"""Atoms in every synthetic on-policy system, so batches stay small and uniform."""
 
 
 class _DirectForceModel(nn.Module):
@@ -309,8 +321,12 @@ class _ListSource:
         return Batch.from_data_list([self.structures[0]])
 
     def initial_batch(self) -> Batch:
-        """Return every structure left as one batch."""
+        """Return every structure left as one batch, stamped with clean bookkeeping."""
         batch = Batch.from_data_list(self.structures[self._cursor :])
+        batch["status"] = torch.zeros(batch.num_graphs, 1, dtype=torch.long)
+        batch["system_id"] = torch.arange(
+            self._cursor, self._cursor + batch.num_graphs, dtype=torch.long
+        ).unsqueeze(-1)
         self._cursor = len(self.structures)
         return batch
 
@@ -425,6 +441,63 @@ def _build_periodic_dataset(
         for index in range(n_systems)
     ]
     return InMemoryDataset(in_memory_batch=Batch.from_data_list(data_list))
+
+
+def _build_propagator_system(
+    atomic_number: int, seed: int, *, predictions: bool = True
+) -> AtomicData:
+    """Return one system tagged by *atomic_number*, carrying the propagator's keys.
+
+    ``predictions=False`` leaves out the ``energy`` and ``forces`` a propagator
+    writes and the labeling hook strips again, which is the shape a replay frame
+    — and therefore the mixture's reference dataset — has.
+    """
+    generator = torch.Generator().manual_seed(seed)
+    predicted = (
+        {"energy": torch.zeros(1, 1), "forces": torch.zeros(_ATOMS_PER_SYSTEM, 3)}
+        if predictions
+        else {}
+    )
+    return AtomicData(
+        positions=torch.randn(_ATOMS_PER_SYSTEM, 3, generator=generator),
+        atomic_numbers=torch.full(
+            (_ATOMS_PER_SYSTEM,), atomic_number, dtype=torch.long
+        ),
+        atomic_masses=torch.ones(_ATOMS_PER_SYSTEM),
+        **predicted,
+    )
+
+
+def _build_propagator_batch(
+    atomic_number: int, n_systems: int, base_seed: int, *, predictions: bool = True
+) -> Batch:
+    """Return a batch of *n_systems* systems all tagged by *atomic_number*."""
+    return Batch.from_data_list(
+        [
+            _build_propagator_system(
+                atomic_number, base_seed + index, predictions=predictions
+            )
+            for index in range(n_systems)
+        ]
+    )
+
+
+def _build_initial_dataset(n_systems: int = 4, base_seed: int = 500) -> InMemoryDataset:
+    """Return the structures the generated trajectories start from."""
+    return InMemoryDataset(
+        in_memory_batch=_build_propagator_batch(_INITIAL_ELEMENT, n_systems, base_seed)
+    )
+
+
+def _build_reference_dataset(
+    scorer: TeacherScorer, n_systems: int = 8, base_seed: int = 700
+) -> InMemoryDataset:
+    """Return a teacher-labeled reference dataset with the generated frames' schema."""
+    frames = _build_propagator_batch(
+        _REFERENCE_ELEMENT, n_systems, base_seed, predictions=False
+    )
+    _attach_teacher_labels(frames, scorer.label(frames))
+    return InMemoryDataset(in_memory_batch=frames)
 
 
 @pytest.fixture

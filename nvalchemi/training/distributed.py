@@ -27,11 +27,14 @@ from typing import TYPE_CHECKING, Any
 import torch
 from torch import distributed as dist
 
+from nvalchemi.distributed import collective_device
+
 if TYPE_CHECKING:
     from nvalchemi.distributed import DistributedManager
 
 __all__ = [
     "all_reduce",
+    "all_reduce_flags",
     "barrier",
     "destroy_distributed",
     "distributed_device",
@@ -215,3 +218,45 @@ def all_reduce(
     if dist.is_available() and dist.is_initialized():
         dist.all_reduce(tensor, op=op)
     return tensor
+
+
+def all_reduce_flags(
+    flag: bool | int, manager: DistributedManager | None = None
+) -> torch.Tensor:
+    """Return every rank's *flag* as one tensor, this rank's at its own index.
+
+    Each rank raises its own entry of a zero vector and a ``MAX`` all-reduce
+    collects the vector, so the result reads the same on every rank and names
+    the ranks whose flag was set. The vector lives on the device
+    :func:`~nvalchemi.distributed.collective_device` picks for the backend in
+    use, so callers never choose a device for a collective themselves.
+
+    Parameters
+    ----------
+    flag : bool | int
+        This rank's verdict. A truthy value raises this rank's entry.
+    manager : DistributedManager | None, optional
+        Manager whose rank, world size, and ``all_reduce`` are used when
+        given. Default ``None`` reads ``torch.distributed`` or the launcher's
+        environment.
+
+    Returns
+    -------
+    torch.Tensor
+        Integer tensor of shape ``(world_size,)`` holding ``1`` where a rank
+        raised its flag. A single process gets a length-one tensor holding its
+        own flag, without a collective.
+
+    Examples
+    --------
+    >>> from nvalchemi.training.distributed import all_reduce_flags
+    >>> flags = all_reduce_flags(shard_is_empty, manager)  # doctest: +SKIP
+    >>> if bool(flags.any()):  # doctest: +SKIP
+    ...     raise ValueError(f"Ranks {flags.nonzero().flatten().tolist()} came up empty.")
+    """
+    world_size = get_world_size(manager)
+    if world_size == 1:
+        return torch.tensor([int(bool(flag))], dtype=torch.int64)
+    flags = torch.zeros(world_size, dtype=torch.int64, device=collective_device())
+    flags[get_rank(manager)] = int(bool(flag))
+    return all_reduce(flags, manager, op=dist.ReduceOp.MAX)
