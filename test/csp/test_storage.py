@@ -35,6 +35,7 @@ def make_compact(
     metadata: object = {"source": {"name": "test", "labels": ["a", "b"]}},
     multiplicities: list[tuple[int, int]] | None = None,
     property_name: str = "score",
+    component_charge: torch.Tensor | None = None,
 ) -> RigidMoleculeASUBatch:
     """Create three valid P1 compact structures with stable caller IDs."""
     count = 3 if ids is None else len(ids)
@@ -56,6 +57,11 @@ def make_compact(
         atomic_numbers=torch.tensor([6, 6, 6], dtype=torch.int64),
         contact_distances=torch.ones((3, 3), dtype=torch.float32),
         component_index=torch.tensor([0], dtype=torch.int32),
+        component_charge=(
+            torch.zeros(1, dtype=torch.int32)
+            if component_charge is None
+            else component_charge
+        ),
         formula_unit_volume=12.0,
         metadata=metadata,
     )
@@ -126,6 +132,7 @@ def test_round_trip_order_repeats_metadata_and_p1(tmp_path) -> None:
             "atomic_numbers",
             "contact_distances",
             "component_index",
+            "component_charge",
         ):
             torch.testing.assert_close(
                 getattr(selected.packing_input, name),
@@ -174,6 +181,7 @@ def test_external_store_wrong_formula_pool_is_rejected_explicitly(tmp_path) -> N
         atomic_numbers=torch.tensor([6, 8], dtype=torch.int64),
         contact_distances=torch.ones((2, 2), dtype=torch.float32),
         component_index=torch.tensor([0, 1], dtype=torch.int32),
+        component_charge=torch.zeros(2, dtype=torch.int32),
         formula_unit_volume=10.0,
     )
     source = RigidMoleculeASUBatch(
@@ -242,6 +250,37 @@ def test_append_is_idempotent_and_conflicts_fail_before_mutation(tmp_path) -> No
     with RigidMoleculeASUZarrReader(store) as reader:
         assert len(reader) == 4
         assert reader.read(torch.tensor([3])).structure_ids.tolist() == [[12, 0]]
+
+
+def test_component_charge_round_trip_and_append_identity(tmp_path) -> None:
+    store = tmp_path / "charged.zarr"
+    charge = torch.tensor([1], dtype=torch.int32)
+    with pytest.warns(UserWarning, match="Qformula=1"):
+        source = make_compact(
+            multiplicities=[(1, 1), (2, 1), (4, 2)], component_charge=charge
+        )
+    writer = RigidMoleculeASUZarrWriter(store)
+    writer.write(source)
+    root = zarr.open_group(store, mode="r")
+    assert root.attrs["schema_version"] == 1
+    assert root["packing_input"]["component_charge"].dtype == np.dtype("int32")
+    assert root["packing_input"]["component_charge"][:].tolist() == [1]
+
+    with RigidMoleculeASUZarrReader(store) as reader:
+        restored = reader.read()
+        assert restored.packing_input.component_charge.tolist() == [1]
+        batch = reader.read_batch(torch.tensor([2, 0, 1], dtype=torch.int64))
+        assert batch.charge.dtype == torch.float32
+        assert batch.charge.shape == (3, 1)
+        assert batch.charge[:, 0].tolist() == [4.0, 1.0, 2.0]
+
+    with pytest.warns(UserWarning, match="Qformula=2"):
+        changed_charge = make_compact(
+            [(12, 0)], component_charge=torch.tensor([2], dtype=torch.int32)
+        )
+    with pytest.raises(ValueError, match="packing_input does not exactly match"):
+        writer.append(changed_charge)
+    assert int(zarr.open_group(store, mode="r").attrs["num_samples"]) == 3
 
 
 def test_write_deduplicates_identical_rows_and_rejects_conflict_before_creation(

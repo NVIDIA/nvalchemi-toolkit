@@ -627,6 +627,8 @@ def build_molecular_packing_input(
     component_index : torch.Tensor, int32 ``[F]``, optional
         Contiguous component IDs, one per molecule. Defaults to ``0..F-1``;
         repeated IDs can group molecules that belong to the same component.
+        The total RDKit formal charge of each molecule is stored once for its
+        component ID; molecules sharing an ID must have the same formal charge.
     metadata : Mapping[str, JSONValue], optional
         JSON-compatible provenance retained by the formula input.
 
@@ -651,7 +653,9 @@ def build_molecular_packing_input(
     -----
     This helper does not mutate RDKit molecules. Callers that already have
     tensors or use another chemistry toolkit can construct
-    :class:`~nvalchemi.csp.data.MolecularPackingInput` directly.
+    :class:`~nvalchemi.csp.data.MolecularPackingInput` directly. The returned
+    input stores each component's total formal charge in elementary charge
+    units and warns if the formula-unit sum is nonzero.
 
     Examples
     --------

@@ -42,7 +42,7 @@ from nvalchemi.csp.packer.result import (
     PackingResult,
     PackingStopReason,
 )
-from nvalchemi.data.level_storage import _resolve_device
+from nvalchemi.data.level_storage import resolve_device
 
 __all__ = ["OverlapReliefPacker"]
 
@@ -334,7 +334,7 @@ class OverlapReliefPacker:
         elif target.type == "cuda":
             if not torch.cuda.is_available():
                 raise ValueError("CUDA is not available")
-            target = _resolve_device(target)
+            target = resolve_device(target)
             index = target.index
             if not 0 <= index < torch.cuda.device_count():
                 raise ValueError(f"CUDA device index {index} is unavailable")
@@ -701,6 +701,7 @@ class OverlapReliefPacker:
             "atomic_numbers",
             "contact_distances",
             "component_index",
+            "component_charge",
         ):
             input_device = getattr(inputs, name).device
             if input_device.type != "cpu" and input_device != device:

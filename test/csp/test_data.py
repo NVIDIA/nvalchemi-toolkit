@@ -16,6 +16,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import pytest
 import torch
 
@@ -44,6 +46,7 @@ def make_packing_input(**overrides: object) -> MolecularPackingInput:
             dtype=torch.float32,
         ),
         "component_index": torch.tensor([0, 1], dtype=torch.int32),
+        "component_charge": torch.zeros(2, dtype=torch.int32),
         "formula_unit_volume": 42.5,
         "metadata": {"source": {"name": "seed.xyz", "atom_order": [0, 1, 2]}},
     }
@@ -61,6 +64,7 @@ def make_digest_input(**overrides: object) -> MolecularPackingInput:
         "atomic_numbers": torch.tensor([6], dtype=torch.int64),
         "contact_distances": torch.tensor([[1.25]], dtype=torch.float32),
         "component_index": torch.tensor([0], dtype=torch.int32),
+        "component_charge": torch.zeros(1, dtype=torch.int32),
         "formula_unit_volume": 2.5,
         "metadata": {"source": "fixture", "values": [1, 2]},
     }
@@ -141,13 +145,13 @@ def _compact_with_updates(
 
 
 class TestMolecularPackingInput:
-    def test_sha256_matches_frozen_encoding_without_becoming_model_state(self) -> None:
+    def test_sha256_matches_frozen_encoding_with_component_charge(self) -> None:
         packing_input = make_digest_input()
 
-        # Independently computed from the documented ordered tensor bytes,
-        # sorted compact metadata JSON, and repr(float(volume)).
+        # Independently computed from the ordered tensor bytes, including the
+        # explicit neutral component charge, sorted metadata JSON, and volume.
         assert packing_input.sha256 == (
-            "28b1b1bc84eb12bdcbe8a036d30a11f6d8232aa80db487b0769008f0445d30a0"
+            "de4fc5de75aecc4a0341c188e4d08c3e31e5e8c8ac1df786c21ba3dc5d122f68"
         )
         assert len(packing_input.sha256) == 64
         assert packing_input.sha256 == packing_input.sha256.lower()
@@ -168,6 +172,10 @@ class TestMolecularPackingInput:
             metadata={"source": "fixture", "values": [1, 3]}
         )
         changed_volume = make_digest_input(formula_unit_volume=2.75)
+        with pytest.warns(UserWarning, match="Qformula=1"):
+            changed_charge = make_digest_input(
+                component_charge=torch.tensor([1], dtype=torch.int32)
+            )
         rng_state = torch.random.get_rng_state().clone()
 
         assert restored.sha256 == expected
@@ -176,7 +184,39 @@ class TestMolecularPackingInput:
         assert changed_contact.sha256 != expected
         assert changed_metadata.sha256 != expected
         assert changed_volume.sha256 != expected
+        assert changed_charge.sha256 != expected
         assert torch.equal(torch.random.get_rng_state(), rng_state)
+
+    def test_component_charge_maps_molecule_stoichiometry_and_warns_once(self) -> None:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            balanced = MolecularPackingInput(
+                conformer_positions=torch.zeros((3, 3), dtype=torch.float32),
+                conformer_ptr=torch.tensor([0, 1, 2, 3], dtype=torch.int32),
+                molecule_conformer_ptr=torch.tensor([0, 1, 2, 3], dtype=torch.int32),
+                molecule_atom_ptr=torch.tensor([0, 1, 2, 3], dtype=torch.int32),
+                atomic_numbers=torch.tensor([11, 11, 8], dtype=torch.int64),
+                contact_distances=torch.ones((3, 3), dtype=torch.float32),
+                component_index=torch.tensor([0, 0, 1], dtype=torch.int32),
+                component_charge=torch.tensor([1, -2], dtype=torch.int32),
+                formula_unit_volume=20.0,
+            )
+        assert not caught
+        assert balanced.molecule_charge.tolist() == [1, 1, -2]
+        assert balanced.formula_unit_charge == 0
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            nonneutral = make_packing_input(
+                component_charge=torch.tensor([1, 0], dtype=torch.int32)
+            )
+            nonneutral.to("cpu")
+            MolecularPackingInput.from_state_dict(nonneutral.state_dict())
+        assert len(caught) == 1
+        warning = str(caught[0].message)
+        assert "Qformula=1" in warning
+        assert "Qcell = Z * Qformula" in warning
+        assert "counterions and stoichiometry" in warning
 
     def test_constructor_owns_cpu_tensors_centers_each_conformer_and_copies_metadata(
         self,
@@ -199,6 +239,7 @@ class TestMolecularPackingInput:
             "atomic_numbers": torch.tensor([6, 1], dtype=torch.int64),
             "contact_distances": torch.ones((2, 2), dtype=torch.float32),
             "component_index": torch.tensor([0], dtype=torch.int32),
+            "component_charge": torch.zeros(1, dtype=torch.int32),
             "formula_unit_volume": 12,
             "metadata": {"nested": {"values": [1, 2]}},
         }
@@ -250,6 +291,7 @@ class TestMolecularPackingInput:
             "atomic_numbers",
             "contact_distances",
             "component_index",
+            "component_charge",
         ):
             source = getattr(packing_input, name)
             state_tensor = state[name]
@@ -277,6 +319,7 @@ class TestMolecularPackingInput:
             "atomic_numbers",
             "contact_distances",
             "component_index",
+            "component_charge",
         ):
             source = getattr(packing_input, name)
             result = getattr(transferred, name)
@@ -306,6 +349,7 @@ class TestMolecularPackingInput:
             atomic_numbers=torch.tensor([6, 6, 6, 1, 1], dtype=torch.int64),
             contact_distances=torch.ones((5, 5), dtype=torch.float32),
             component_index=torch.tensor([0, 1], dtype=torch.int32),
+            component_charge=torch.zeros(2, dtype=torch.int32),
             formula_unit_volume=15.0,
         )
         residual = packing_input.conformer_positions[:3].mean(dim=0)
@@ -344,6 +388,16 @@ class TestMolecularPackingInput:
                 ValueError,
             ),
             ("component_index", torch.tensor([0, 2], dtype=torch.int32), ValueError),
+            (
+                "component_charge",
+                torch.tensor([0], dtype=torch.int32),
+                ValueError,
+            ),
+            (
+                "component_charge",
+                torch.zeros(2, dtype=torch.int64),
+                TypeError,
+            ),
             ("atomic_numbers", torch.tensor([6, 0, 8], dtype=torch.int64), ValueError),
             ("formula_unit_volume", float("inf"), ValueError),
             ("formula_unit_volume", True, TypeError),
@@ -375,6 +429,13 @@ class TestMolecularPackingInput:
         state["extra"] = 3
         with pytest.raises(ValueError, match="exactly"):
             MolecularPackingInput.from_state_dict(state)
+
+    def test_component_charge_is_required(self) -> None:
+        values = make_digest_input().state_dict()
+        del values["component_charge"]
+        values.pop("version")
+        with pytest.raises(ValueError, match="Missing MolecularPackingInput fields"):
+            MolecularPackingInput(**values)
 
 
 class TestRigidMoleculeASUBatch:

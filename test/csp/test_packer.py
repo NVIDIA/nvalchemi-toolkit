@@ -54,6 +54,7 @@ def _one_atom_input(contact_distance: float = 1.0) -> MolecularPackingInput:
         atomic_numbers=torch.tensor([6], dtype=torch.int64),
         contact_distances=torch.tensor([[contact_distance]], dtype=torch.float32),
         component_index=torch.tensor([0], dtype=torch.int32),
+        component_charge=torch.zeros(1, dtype=torch.int32),
         formula_unit_volume=1000.0,
     )
 
@@ -865,6 +866,7 @@ def test_budget_exhaustion_recomputes_expiration_for_surviving_row() -> None:
         atomic_numbers=torch.tensor([6, 6], dtype=torch.int64),
         contact_distances=torch.full((2, 2), 2.0, dtype=torch.float32),
         component_index=torch.tensor([0, 1], dtype=torch.int32),
+        component_charge=torch.zeros(2, dtype=torch.int32),
         formula_unit_volume=100.0,
     )
     config = OverlapReliefConfig(
@@ -1003,6 +1005,7 @@ def test_public_cpu_conformer_pools_and_geometry_invariants() -> None:
         atomic_numbers=torch.tensor([6, 8], dtype=torch.int64),
         contact_distances=torch.full((2, 2), 1.0, dtype=torch.float32),
         component_index=torch.tensor([0, 1], dtype=torch.int32),
+        component_charge=torch.zeros(2, dtype=torch.int32),
         formula_unit_volume=1000.0,
     )
     config = OverlapReliefConfig(

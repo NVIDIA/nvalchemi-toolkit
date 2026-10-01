@@ -152,6 +152,10 @@ composition. A 1:1 hydrate, for example, has one solute and one water molecule
 per formula unit. Pass those molecules in a fixed order, for example
 `build_molecular_packing_input([solute, water])`.
 
+Component charges are preserved through preparation, storage, and expansion.
+Tensor inputs require `component_charge`; nonneutral formula units produce a
+warning.
+
 Each molecule can have several input conformers. For a flexible molecule,
 these represent alternative internal geometries that may pack differently.
 The `OverlapReliefPacker` chooses one conformer for each independently placed

@@ -36,6 +36,16 @@ def _mol(smiles: str) -> Chem.Mol:
     return molecule
 
 
+def _with_3d_conformer(molecule: Chem.Mol) -> Chem.Mol:
+    """Attach a small 3D conformer to a connected test molecule."""
+    conformer = Chem.Conformer(molecule.GetNumAtoms())
+    conformer.Set3D(True)
+    for atom_index in range(molecule.GetNumAtoms()):
+        conformer.SetAtomPosition(atom_index, (float(atom_index), 0.0, 0.0))
+    molecule.AddConformer(conformer, assignId=True)
+    return molecule
+
+
 def test_rdkit_helpers_use_optional_dependency_guard(monkeypatch) -> None:
     monkeypatch.setattr(OptionalDependency.RDKIT, "_available", False)
     monkeypatch.setattr(
@@ -198,6 +208,38 @@ def test_formula_input_uses_default_contacts_volume_and_component_ids() -> None:
     assert torch.equal(
         packing_input.contact_distances, packing_input.contact_distances.T
     )
+
+
+def test_formula_input_extracts_component_charges_with_repeated_stoichiometry() -> None:
+    molecules = [
+        _with_3d_conformer(_mol("[Na+]")),
+        _with_3d_conformer(_mol("[Na+]")),
+        _with_3d_conformer(_mol("[O-2]")),
+    ]
+    packing_input = build_molecular_packing_input(
+        molecules,
+        component_index=torch.tensor([0, 0, 1], dtype=torch.int32),
+        contact_distances=torch.ones((3, 3), dtype=torch.float32),
+        formula_unit_volume=20.0,
+    )
+
+    assert packing_input.component_charge.tolist() == [1, -2]
+    assert packing_input.molecule_charge.tolist() == [1, 1, -2]
+    assert packing_input.formula_unit_charge == 0
+
+
+def test_formula_input_rejects_different_charges_for_one_component_id() -> None:
+    molecules = [
+        _with_3d_conformer(_mol("[Na+]")),
+        _with_3d_conformer(_mol("[Cl-]")),
+    ]
+    with pytest.raises(ValueError, match="conflicting formal charges"):
+        build_molecular_packing_input(
+            molecules,
+            component_index=torch.tensor([0, 0], dtype=torch.int32),
+            contact_distances=torch.ones((2, 2), dtype=torch.float32),
+            formula_unit_volume=20.0,
+        )
 
 
 @pytest.mark.parametrize(

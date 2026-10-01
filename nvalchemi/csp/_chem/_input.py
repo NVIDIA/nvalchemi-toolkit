@@ -120,6 +120,36 @@ def build_molecular_packing_input(
         else component_index
     )
 
+    if not isinstance(components_tensor, Tensor):
+        raise TypeError("component_index must be a torch.Tensor or None")
+    if components_tensor.dtype != torch.int32:
+        raise TypeError("component_index must have dtype torch.int32")
+    if components_tensor.shape != (len(components),):
+        raise ValueError(f"component_index must have shape [{len(components)}]")
+    component_ids = components_tensor.detach().cpu().tolist()
+    if any(component < 0 for component in component_ids):
+        raise ValueError("component_index values must be nonnegative")
+    unique_components = set(component_ids)
+    if unique_components != set(range(max(component_ids) + 1)):
+        raise ValueError("component_index IDs must be contiguous from zero")
+
+    charge_by_component: dict[int, int] = {}
+    for molecule_index, (molecule, component) in enumerate(
+        zip(components, component_ids, strict=True)
+    ):
+        charge = sum(int(atom.GetFormalCharge()) for atom in molecule.GetAtoms())
+        existing = charge_by_component.setdefault(component, charge)
+        if existing != charge:
+            raise ValueError(
+                f"molecules assigned to component_index {component} have "
+                f"conflicting formal charges ({existing} and {charge}); "
+                f"molecule {molecule_index} disagrees"
+            )
+    component_charge = torch.tensor(
+        [charge_by_component[component] for component in range(len(unique_components))],
+        dtype=torch.int32,
+    )
+
     return MolecularPackingInput(
         conformer_positions=torch.cat(positions, dim=0),
         conformer_ptr=torch.tensor(conformer_ptr, dtype=torch.int32),
@@ -128,6 +158,7 @@ def build_molecular_packing_input(
         atomic_numbers=atom_numbers,
         contact_distances=contacts,
         component_index=components_tensor,
+        component_charge=component_charge,
         formula_unit_volume=volume,
         metadata=metadata,
     )

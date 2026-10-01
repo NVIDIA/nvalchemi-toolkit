@@ -21,6 +21,7 @@ import json
 import math
 import numbers
 import secrets
+import warnings
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
@@ -40,16 +41,11 @@ _FORMULA_DTYPES: dict[str, torch.dtype] = {
     "atomic_numbers": torch.int64,
     "contact_distances": torch.float32,
     "component_index": torch.int32,
+    "component_charge": torch.int32,
 }
 _FORMULA_STATE_KEYS = {
     "version",
-    "conformer_positions",
-    "conformer_ptr",
-    "molecule_conformer_ptr",
-    "molecule_atom_ptr",
-    "atomic_numbers",
-    "contact_distances",
-    "component_index",
+    *_FORMULA_DTYPES,
     "formula_unit_volume",
     "metadata",
 }
@@ -241,6 +237,13 @@ def _prepare_formula_input(
     if component_ids != set(range(max(component_values) + 1)):
         raise ValueError("component_index IDs must be contiguous from zero")
 
+    component_charge = tensors["component_charge"]
+    if component_charge.shape != (len(component_ids),):
+        raise ValueError(
+            "component_charge must have shape "
+            f"[{len(component_ids)}] (one value per component)"
+        )
+
     raw_volume = values["formula_unit_volume"]
     if isinstance(raw_volume, bool) or not isinstance(raw_volume, numbers.Real):
         raise TypeError("formula_unit_volume must be a real number")
@@ -303,6 +306,8 @@ class MolecularPackingInput(BaseModel):
         used to measure overlap between atoms in different molecular copies.
     component_index : torch.Tensor, int32 ``[M]``
         Contiguous nonnegative component IDs, one per formula-unit molecule.
+    component_charge : torch.Tensor, int32 ``[num_components]``
+        Formal charge in elementary charge units for each component ID.
     formula_unit_volume : float
         Positive formula-unit volume estimate in cubic angstroms.
     metadata : Mapping[str, object], optional
@@ -330,6 +335,7 @@ class MolecularPackingInput(BaseModel):
     ...     atomic_numbers=torch.tensor([6, 6], dtype=torch.int64),
     ...     contact_distances=torch.ones((2, 2)),
     ...     component_index=torch.tensor([0], dtype=torch.int32),
+    ...     component_charge=torch.tensor([0], dtype=torch.int32),
     ...     formula_unit_volume=25.0,
     ... )
     >>> packing_input.conformer_positions.mean(dim=0)
@@ -350,6 +356,7 @@ class MolecularPackingInput(BaseModel):
     atomic_numbers: Tensor
     contact_distances: Tensor
     component_index: Tensor
+    component_charge: Tensor
     formula_unit_volume: float
     metadata: Mapping[str, Any] | None = None
 
@@ -365,7 +372,22 @@ class MolecularPackingInput(BaseModel):
             return _prepare_formula_input(values, center_conformers=False)
         if not isinstance(values, Mapping):
             raise TypeError("MolecularPackingInput requires a mapping of tensor fields")
-        return _prepare_formula_input(values)
+        prepared = _prepare_formula_input(values)
+        formula_charge = int(
+            prepared["component_charge"]
+            .index_select(0, prepared["component_index"])
+            .sum()
+            .item()
+        )
+        if formula_charge:
+            warnings.warn(
+                f"Formula unit has nonzero formal charge Qformula={formula_charge} e. "
+                "Full-cell charge follows Qcell = Z * Qformula; check counterions "
+                "and stoichiometry.",
+                UserWarning,
+                stacklevel=3,
+            )
+        return prepared
 
     @property
     def num_atoms(self) -> int:
@@ -386,6 +408,23 @@ class MolecularPackingInput(BaseModel):
     def num_components(self) -> int:
         """Number of contiguous component IDs represented in the formula unit."""
         return int(self.component_index.max().item()) + 1
+
+    @property
+    def molecule_charge(self) -> Tensor:
+        """Formal charge for each formula-unit molecule.
+
+        The returned tensor follows formula-unit molecule order, including
+        repeated component IDs that represent stoichiometric copies.
+        """
+        return self.component_charge.index_select(
+            0, self.component_index.to(torch.int64)
+        )
+
+    @property
+    def formula_unit_charge(self) -> int:
+        """Sum molecule formal charges in the formula unit."""
+        molecule_charge = self.molecule_charge
+        return int(molecule_charge.sum().item())
 
     @property
     def sha256(self) -> str:
@@ -416,6 +455,7 @@ class MolecularPackingInput(BaseModel):
             "atomic_numbers",
             "contact_distances",
             "component_index",
+            "component_charge",
         ):
             tensor = getattr(self, name).detach().cpu().contiguous()
             digest.update(name.encode())
@@ -520,6 +560,7 @@ class MolecularPackingInput(BaseModel):
         atomic_numbers: Tensor,
         contact_distances: Tensor,
         component_index: Tensor,
+        component_charge: Tensor,
         formula_unit_volume: float,
         metadata: Mapping[str, Any] | None,
     ) -> MolecularPackingInput:
@@ -533,6 +574,7 @@ class MolecularPackingInput(BaseModel):
             atomic_numbers=atomic_numbers,
             contact_distances=contact_distances,
             component_index=component_index,
+            component_charge=component_charge,
             formula_unit_volume=formula_unit_volume,
             metadata=metadata,
         )

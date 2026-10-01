@@ -55,6 +55,7 @@ def _packing_input(
         atomic_numbers=torch.tensor([6], dtype=torch.int64),
         contact_distances=torch.tensor([[contact_distance]], dtype=torch.float32),
         component_index=torch.tensor([0], dtype=torch.int32),
+        component_charge=torch.zeros(1, dtype=torch.int32),
         formula_unit_volume=1000.0,
         metadata={"marker": marker, "nested": {"value": 1}},
     )

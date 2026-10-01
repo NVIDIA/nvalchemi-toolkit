@@ -33,7 +33,9 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.gen.stages import GenerationStage
 
 
-def _formula(*, marker: str = "same") -> MolecularPackingInput:
+def _formula(
+    *, marker: str = "same", component_charge: int = 0
+) -> MolecularPackingInput:
     """Build a one-carbon formula-unit input."""
     return MolecularPackingInput(
         conformer_positions=torch.zeros((1, 3), dtype=torch.float32),
@@ -43,6 +45,7 @@ def _formula(*, marker: str = "same") -> MolecularPackingInput:
         atomic_numbers=torch.tensor([6], dtype=torch.int64),
         contact_distances=torch.ones((1, 1), dtype=torch.float32),
         component_index=torch.tensor([0], dtype=torch.int32),
+        component_charge=torch.tensor([component_charge], dtype=torch.int32),
         formula_unit_volume=1000.0,
         metadata={"marker": marker},
     )
@@ -69,10 +72,7 @@ def _compact(
     )
 
 
-def _native_batch(
-    context: PackingContext,
-    count: int,
-) -> Batch:
+def _native_batch(context: PackingContext, count: int) -> Batch:
     """Build a minimal native P1 Batch using the public data constructors."""
     rows = []
     for row in range(count):
@@ -86,6 +86,7 @@ def _native_batch(
             "csp_source_structure_id",
             context.structure_ids(count, device="cpu")[row : row + 1],
         )
+        data.add_system_property("charge", torch.zeros((1, 1), dtype=torch.float32))
         rows.append(data)
     return Batch.from_data_list(rows, device="cpu")
 
@@ -102,11 +103,13 @@ class _FakePacker:
         accepted: int | None = None,
         generated: int | None = None,
         native_batch: bool = False,
+        omit_native_charge: bool = False,
     ) -> None:
         self.budget = budget
         self.accepted = accepted
         self.generated = generated
         self.native_batch = native_batch
+        self.omit_native_charge = omit_native_charge
         self.calls: list[dict[str, Any]] = []
         self.budget_calls: list[dict[str, Any]] = []
         self.input_override: MolecularPackingInput | None = None
@@ -142,9 +145,16 @@ class _FakePacker:
         )
         packed_input = self.input_override or inputs
         if self.native_batch:
-            structures: RigidMoleculeASUBatch | Batch = _native_batch(context, accepted)
+            structures = _native_batch(context, accepted)
+            if self.omit_native_charge:
+                structures = Batch.from_data_list(
+                    structures.to_data_list(),
+                    device=self.device,
+                    exclude_keys=["charge"],
+                )
+            packed_result: RigidMoleculeASUBatch | Batch = structures
         else:
-            structures = _compact(packed_input, context, accepted)
+            packed_result = _compact(packed_input, context, accepted)
         generated = accepted if self.generated is None else self.generated
         reason = (
             PackingStopReason.TARGET_REACHED
@@ -159,7 +169,7 @@ class _FakePacker:
             stop_reason=reason,
         )
         return PackingResult(
-            structures=structures,
+            structures=packed_result,
             run_id=context.run_id,
             reports=(report,),
         )
@@ -180,7 +190,14 @@ class _AfterGenerate:
 
 def test_public_export_local_conversion_and_callback_order() -> None:
     assert CSP_OUTPUT_FIELDS == frozenset(
-        {"positions", "atomic_numbers", "cell", "pbc", "csp_source_structure_id"}
+        {
+            "positions",
+            "atomic_numbers",
+            "cell",
+            "pbc",
+            "charge",
+            "csp_source_structure_id",
+        }
     )
     packer = _FakePacker()
     events: list[tuple[str, Any]] = []
@@ -207,7 +224,14 @@ def test_public_export_local_conversion_and_callback_order() -> None:
     assert isinstance(result, Batch)
     assert generator.required_inputs == frozenset()
     assert generator.outputs == frozenset(
-        {"positions", "atomic_numbers", "cell", "pbc", "csp_source_structure_id"}
+        {
+            "positions",
+            "atomic_numbers",
+            "cell",
+            "pbc",
+            "charge",
+            "csp_source_structure_id",
+        }
     )
     assert [event[0] for event in events] == [
         "condition",
@@ -226,6 +250,30 @@ def test_public_export_local_conversion_and_callback_order() -> None:
     ]
     assert events[2][1] is result
     assert generator.step_count == 1
+
+
+def test_known_system_charge_reaches_after_generate_hook() -> None:
+    events: list[tuple[str, Any]] = []
+    generator = CSPGenerator(
+        _FakePacker(), hooks=[_AfterGenerate(events)], dedicated_stream=False
+    )
+    with pytest.warns(UserWarning, match="Qformula=2"):
+        inputs = _formula(component_charge=2)
+    result = generator.sample(inputs, num_samples=1, run_id=88)
+
+    assert result.charge.shape == (1, 1)
+    assert result.charge.dtype == torch.float32
+    assert result.charge.tolist() == [[2.0]]
+    assert events[0][1].charge.tolist() == [[2.0]]
+
+
+def test_native_batch_must_provide_declared_system_charge() -> None:
+    generator = CSPGenerator(
+        _FakePacker(native_batch=True, omit_native_charge=True),
+        dedicated_stream=False,
+    )
+    with pytest.raises(ValueError, match=r"returned batch lacks \['charge'\]"):
+        generator.sample(_formula(), num_samples=1, run_id=89)
 
 
 def test_compact_mode_returns_packing_result_without_batch_hooks() -> None:
@@ -259,6 +307,7 @@ def test_empty_result_uses_typed_batch_and_calls_owner_once() -> None:
     assert {
         "cell",
         "pbc",
+        "charge",
         "csp_source_structure_id",
     } <= result.level_keys["system"]
 

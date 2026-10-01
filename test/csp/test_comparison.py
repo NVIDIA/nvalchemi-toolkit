@@ -959,6 +959,7 @@ def test_packer_produced_batch_is_accepted() -> None:
         atomic_numbers=torch.tensor([6], dtype=torch.int64),
         contact_distances=torch.ones((1, 1), dtype=torch.float32),
         component_index=torch.tensor([0], dtype=torch.int32),
+        component_charge=torch.zeros(1, dtype=torch.int32),
         formula_unit_volume=10_000.0,
     )
     result = OverlapReliefPacker(

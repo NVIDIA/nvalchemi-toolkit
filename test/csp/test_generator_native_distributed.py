@@ -42,6 +42,7 @@ def _formula() -> MolecularPackingInput:
         atomic_numbers=torch.tensor([6], dtype=torch.int64),
         contact_distances=torch.ones((1, 1), dtype=torch.float32),
         component_index=torch.tensor([0], dtype=torch.int32),
+        component_charge=torch.zeros(1, dtype=torch.int32),
         formula_unit_volume=1000.0,
         metadata={"source": "native-driver-test"},
     )
@@ -308,6 +309,9 @@ def _native_batch(
             "csp_source_structure_id",
             context.structure_ids(ordinal + 1, device=device)[ordinal : ordinal + 1],
         )
+        data.add_system_property(
+            "charge", torch.zeros((1, 1), dtype=torch.float32, device=device)
+        )
         marker = rank * 10 + ordinal
         data.metadata_values = torch.full(
             (1, metadata_width),
@@ -423,9 +427,15 @@ class _MalformedNativeBatchPacker:
                 ids = context.structure_ids(1, device="cpu").to(torch.int32)
             elif self.problem == "id_sequence":
                 ids = torch.tensor([[context.run_id, 19]], dtype=torch.int64)
+            elif self.problem == "missing_charge":
+                ids = context.structure_ids(1, device="cpu")
             else:
                 raise ValueError(f"unknown malformed Batch fixture: {self.problem}")
             data.add_system_property("csp_source_structure_id", ids)
+            if self.problem != "missing_charge":
+                data.add_system_property(
+                    "charge", torch.zeros((1, 1), dtype=torch.float32)
+                )
         structures = Batch.from_data_list([data], device="cpu")
         return PackingResult(
             structures=structures,
@@ -446,6 +456,7 @@ class _MalformedNativeBatchPacker:
     ("problem", "message"),
     [
         ("missing_fields", "native Batch payload must place positions"),
+        ("missing_charge", r"returned batch lacks \['charge'\]"),
         ("id_dtype", "must be int64"),
         ("id_sequence", "payload structure IDs do not match PackingContext"),
     ],
@@ -466,6 +477,7 @@ def _batch_summary(batch: Batch) -> dict[str, Any]:
     return {
         "graphs": batch.num_graphs,
         "ids": batch["csp_source_structure_id"].tolist(),
+        "charge": batch["charge"].tolist(),
         "metadata": batch["metadata_values"].tolist(),
         "positions": batch["positions"].tolist(),
         "atomic_numbers": batch["atomic_numbers"].tolist(),
@@ -489,6 +501,7 @@ def _batch_summary(batch: Batch) -> dict[str, Any]:
             "cell": list(batch["cell"].shape),
             "pbc": list(batch["pbc"].shape),
             "ids": list(batch["csp_source_structure_id"].shape),
+            "charge": list(batch["charge"].shape),
         },
     }
 
@@ -891,6 +904,7 @@ def test_gloo_native_batch_schema_and_zero_quota_rank_round_trip() -> None:
     assert records[0]["local"]["ids"] == [[801, 0]]
     assert records[1]["local"]["ids"] == [[801, 1]]
     assert all(record["local"]["edge_ptr"] == [0, 1] for record in records)
+    assert all(record["local"]["charge"] == [[0.0]] for record in records)
     assert [record["local"]["molecule_ptr"] for record in records] == [
         [0, 1],
         [0, 2],
@@ -922,10 +936,13 @@ def test_gloo_native_batch_schema_and_zero_quota_rank_round_trip() -> None:
         "cell": [0, 3, 3],
         "pbc": [0, 3],
         "ids": [0, 2],
+        "charge": [0, 1],
     }
 
     gathered = records[1]["gathered"]
     assert gathered["ids"] == [[802, 0], [802, 1]]
+    assert gathered["charge"] == [[0.0], [0.0]]
+    assert gathered["builtin_shapes"]["charge"] == [2, 1]
     assert gathered["metadata"] == [[0.0], [10.0]]
     assert gathered["atomic_numbers"] == [6, 1, 6, 1]
     assert gathered["cell"] == [
@@ -954,6 +971,7 @@ def test_gloo_native_batch_schema_and_zero_quota_rank_round_trip() -> None:
         "cell": [0, 3, 3],
         "pbc": [0, 3],
         "ids": [0, 2],
+        "charge": [0, 1],
     }
     zero_quota_gathered = records[1]["zero_quota"]
     assert zero_quota_gathered["ids"] == [[803, 0], [803, 2]]

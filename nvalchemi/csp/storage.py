@@ -52,6 +52,7 @@ _FORMULA_FIELDS = (
     "atomic_numbers",
     "contact_distances",
     "component_index",
+    "component_charge",
 )
 _STRUCTURE_FIELDS = (
     "structure_ids",

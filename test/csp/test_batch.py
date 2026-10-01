@@ -21,6 +21,7 @@ import torch
 
 from nvalchemi.csp.data import MolecularPackingInput, RigidMoleculeASUBatch
 from nvalchemi.csp.symmetry import get_space_group_operations
+from nvalchemi.data.datapipes import AtomicDataZarrReader, AtomicDataZarrWriter
 
 ATOM_SOURCE_FIELDS = (
     "csp_source_asu_atom_index",
@@ -37,7 +38,9 @@ SYSTEM_SOURCE_FIELDS = (
 )
 
 
-def make_skew_compact() -> RigidMoleculeASUBatch:
+def make_skew_compact(
+    component_charge: torch.Tensor | None = None,
+) -> RigidMoleculeASUBatch:
     """Make two compatible monoclinic SG 4 structures with valid conformer pools."""
     packing_input = MolecularPackingInput(
         conformer_positions=torch.tensor(
@@ -59,6 +62,11 @@ def make_skew_compact() -> RigidMoleculeASUBatch:
         atomic_numbers=torch.tensor([6, 1, 8, 7], dtype=torch.int64),
         contact_distances=torch.ones((4, 4), dtype=torch.float32),
         component_index=torch.tensor([0, 1], dtype=torch.int32),
+        component_charge=(
+            torch.zeros(2, dtype=torch.int32)
+            if component_charge is None
+            else component_charge
+        ),
         formula_unit_volume=64.0,
         metadata={"source": "independent-skew-oracle"},
     )
@@ -177,6 +185,53 @@ def independent_p1_oracle(
 
 
 class TestP1Expansion:
+    def test_system_charge_scales_by_z_and_survives_batch_conversions(
+        self, tmp_path
+    ) -> None:
+        with pytest.warns(UserWarning, match="Qformula=1"):
+            base = make_skew_compact(
+                component_charge=torch.tensor([1, 0], dtype=torch.int32)
+            )
+        compact = RigidMoleculeASUBatch(
+            packing_input=base.packing_input,
+            structure_molecule_ptr=base.structure_molecule_ptr,
+            conformer_indices=base.conformer_indices,
+            rotations=base.rotations,
+            fractional_centers=base.fractional_centers,
+            cells=base.cells,
+            space_groups=torch.tensor([1, 2], dtype=torch.int32),
+            z=torch.tensor([1, 2], dtype=torch.int32),
+            z_prime=torch.ones(2, dtype=torch.int32),
+            structure_ids=base.structure_ids,
+            properties=base.properties,
+        )
+        batch = compact.to_batch()
+        assert batch.charge.dtype == torch.float32
+        assert batch.charge.shape == (2, 1)
+        assert batch.charge[:, 0].tolist() == [1.0, 2.0]
+
+        selected = batch[[1, 0, 1]]
+        assert selected.charge[:, 0].tolist() == [2.0, 1.0, 2.0]
+        unbatched = selected.to_data_list()
+        assert [float(data.charge.item()) for data in unbatched] == [2.0, 1.0, 2.0]
+
+        store = tmp_path / "expanded-charge.zarr"
+        AtomicDataZarrWriter(store).write(selected)
+        reader = AtomicDataZarrReader(store)
+        restored = reader.read_many([0, 1, 2])
+        assert [float(data[0]["charge"].item()) for data in restored] == [
+            2.0,
+            1.0,
+            2.0,
+        ]
+
+        neutral = make_skew_compact().to_batch()
+        assert neutral.charge.shape == (2, 1)
+        assert torch.equal(neutral.charge, torch.zeros((2, 1)))
+        empty = compact.to_batch(indices=torch.empty(0, dtype=torch.int64))
+        assert empty.charge.shape == (0, 1)
+        assert empty.charge.dtype == torch.float32
+
     def test_skew_cell_geometry_and_provenance_match_independent_oracle(self) -> None:
         compact = make_skew_compact()
         expected_operations = get_space_group_operations(4)
@@ -210,7 +265,10 @@ class TestP1Expansion:
 
         assert batch.num_graphs == 3
         assert batch.num_nodes == 24
-        torch.testing.assert_close(batch.batch_ptr, torch.tensor([0, 8, 16, 24]))
+        torch.testing.assert_close(
+            batch.batch_ptr,
+            torch.tensor([0, 8, 16, 24], dtype=torch.int32),
+        )
         torch.testing.assert_close(
             batch.positions, expected_positions, atol=3.0e-6, rtol=1.0e-6
         )
@@ -241,7 +299,10 @@ class TestP1Expansion:
         selected = original.index_select(torch.tensor([2, 0, 2], dtype=torch.int32))
 
         expected_positions, expected_sources = independent_p1_oracle(compact, [1, 1, 1])
-        torch.testing.assert_close(selected.batch_ptr, torch.tensor([0, 8, 16, 24]))
+        torch.testing.assert_close(
+            selected.batch_ptr,
+            torch.tensor([0, 8, 16, 24], dtype=torch.int32),
+        )
         torch.testing.assert_close(
             selected.positions, expected_positions, atol=3.0e-6, rtol=1.0e-6
         )

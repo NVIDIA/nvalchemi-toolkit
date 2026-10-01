@@ -27,7 +27,7 @@ from nvalchemi.data.batch import Batch
 from nvalchemi.data.level_storage import (
     LevelSchema,
     MultiLevelStorage,
-    _resolve_device,
+    resolve_device,
 )
 
 if TYPE_CHECKING:
@@ -71,7 +71,7 @@ def _operation_tables(
     device: torch.device | str,
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Return cached symmetry operation tensors on ``device``."""
-    return _operation_tables_cached(_resolve_device(torch.device(device)))
+    return _operation_tables_cached(resolve_device(torch.device(device)))
 
 
 @lru_cache(maxsize=None)
@@ -82,7 +82,7 @@ def _mass_table_cached(device: torch.device) -> Tensor:
 
 def _mass_table(device: torch.device | str) -> Tensor:
     """Return the Toolkit atomic-mass lookup table cached on ``device``."""
-    return _mass_table_cached(_resolve_device(torch.device(device)))
+    return _mass_table_cached(resolve_device(torch.device(device)))
 
 
 def _selected_indices(compact: RigidMoleculeASUBatch, indices: Tensor | None) -> Tensor:
@@ -122,6 +122,7 @@ def _batch_schema(
         "pbc",
         *_SYSTEM_SOURCE_FIELDS,
         "csp_source_structure_id",
+        "charge",
         *properties,
     }
     schema.set("atom_categories", "atoms", dtype=torch.int64, is_segmented=True)
@@ -130,6 +131,7 @@ def _batch_schema(
     for name in _SYSTEM_SOURCE_FIELDS:
         schema.set(name, "system", dtype=torch.int32)
     schema.set("csp_source_structure_id", "system", dtype=torch.int64)
+    schema.set("charge", "system", dtype=torch.float32)
     for name in properties:
         schema.set(name, "system")
     return schema, {"node": node_keys, "edge": set(), "system": system_keys}
@@ -143,7 +145,7 @@ def expand_asu_batch(
 ) -> Batch:
     """Expand selected ASU rows to full-cell coordinates with provenance maps."""
     target_device = (
-        _resolve_device(torch.device(device))
+        resolve_device(torch.device(device))
         if device is not None
         else compact.cells.device
     )
@@ -417,6 +419,12 @@ def expand_asu_batch(
         "csp_source_z": selected_z.to(torch.int32),
         "csp_source_z_prime": selected_z_prime.to(torch.int32),
         "csp_source_structure_id": selected_structure_ids,
+        "charge": (
+            selected_z.to(dtype=torch.float32).unsqueeze(1)
+            * formula.molecule_charge.sum().to(
+                device=target_device, dtype=torch.float32
+            )
+        ),
         **selected_properties,
     }
     fields = {**atom_fields, **system_fields}
