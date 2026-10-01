@@ -7,6 +7,9 @@
 - Add `GroupLayout` and `Batch.group_layout` for treating contiguous graphs as
   logical groups, with graph/node mappings, group cardinalities, reductions,
   broadcasts, cache invalidation, and grouped-batch append support.
+- Add local Hessian-vector products, reusable Hessian operators, and in-place
+  dense Hessians for AIMNet2, MACE, Ewald/PME, and flat pipelines, with `Batch`
+  and Zarr persistence.
 - Add support for PEFT fine-tuning within `FineTuningStrategy`, including
   LoRA workflows with `LoRAConfig`, `load_peft_checkpoint_into_model`,
   and base-model fingerprint checks for PEFT checkpoint loading.
@@ -35,6 +38,13 @@
   regular and climbing-image nudged elastic band. `NEB` supports custom Warp or
   PyTorch force equations and spring policies, fixed endpoints or atoms,
   serializable specs, and per-path diagnostics.
+
+### Breaking Changes
+
+- `MACEWrapper` no longer declares or passes through an ordinary `"hessian"`
+  model output. Custom MACE modules that relied on the raw upstream value must
+  use `hessian_vector_product()`, `prepare_hessian()`, or `compute_hessian()` for
+  the Hessian with respect to Cartesian positions.
 
 ### Fixed
 
