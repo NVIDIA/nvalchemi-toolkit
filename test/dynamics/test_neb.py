@@ -59,6 +59,7 @@ from nvalchemi.dynamics.mep.neb_equations import (
     neb_effective_force,
     neb_effective_force_from_gram_stats,
 )
+from nvalchemi.dynamics.optimizers.fire2 import FIRE2
 from nvalchemi.hooks import DynamicsContext, NeighborListHook
 from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -470,6 +471,24 @@ class TestNEBConfiguration:
             strategy.optimizer_kwargs["delaystep"] == _NEB_FIRE2_DEFAULTS["delaystep"]
         )
         assert kwargs == {"dt": 0.02, "maxstep": 0.03}
+
+    @pytest.mark.parametrize("optimizer", [FIRE2, _CustomOptimizer])
+    def test_optimizer_is_frozen_but_kwargs_remain_editable(
+        self, optimizer: type[BaseDynamics]
+    ) -> None:
+        """Keep the optimizer class fixed while allowing parameter changes."""
+        key = "dt" if optimizer is FIRE2 else "learning_rate"
+        strategy = NEB(model=_model(), optimizer=optimizer)
+        restored = NEB.from_spec_dict(strategy.to_spec_dict(), model=_model())
+        for candidate in (strategy, restored):
+            with pytest.raises(ValueError, match="Field is frozen"):
+                candidate.optimizer = _CustomOptimizer
+            candidate.optimizer_kwargs = {key: 0.02}
+            candidate.optimizer_kwargs[key] = 0.03
+            stage = candidate.build_engine().sub_stages[0][1]
+            assert candidate.optimizer is optimizer
+            assert type(stage) is optimizer
+            assert getattr(stage, "_dt_init" if optimizer is FIRE2 else key) == 0.03
 
     @pytest.mark.parametrize("kwargs", [{}, {"learning_rate": 0.02}])
     def test_custom_optimizer_round_trips_and_receives_kwargs(

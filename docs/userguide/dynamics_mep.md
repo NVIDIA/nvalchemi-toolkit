@@ -140,6 +140,9 @@ Key fields:
 | `compile` | `False` | Compile the fused NEB step with `torch.compile` |
 | `compile_kwargs` | `{}` | Keyword arguments forwarded to `torch.compile` when compilation is enabled |
 
+`optimizer` is fixed after construction. To select a different optimizer class,
+construct a new `NEB` strategy. `optimizer_kwargs` remains an editable dictionary.
+
 `optimizer_kwargs` is forwarded to every internal optimizer stage, for
 settings such as `dt` or `maxstep`. `NEB` sets `model`, `hooks`, `by_group`,
 `convergence_hook`, and `n_steps` itself for each stage, so passing any of

@@ -196,10 +196,11 @@ class NEB(DynamicsStrategy):
     )
     optimizer: SerializableClass = Field(
         default=FIRE2,
+        frozen=True,
         description=(
             "Optimizer class used by internal stages. Must subclass BaseDynamics "
             "and support fixed-cell, group-aware updates through the FusedStage "
-            "contract."
+            "contract. Cannot be reassigned after construction."
         ),
     )
     optimizer_kwargs: dict[str, Any] = Field(
