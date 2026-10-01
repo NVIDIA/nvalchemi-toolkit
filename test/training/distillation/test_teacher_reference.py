@@ -301,6 +301,37 @@ class TestTeacherStoredOncePerRoot:
         assert _manifest(root)["model_references"]["teacher"]["checkpoint_index"] == 0
         assert not _teacher_weight_file(root, 1).exists()
 
+    def test_a_teacher_differing_in_one_value_is_refused(self, tmp_path: Path) -> None:
+        """Every stored value counts, so one changed weight among thousands is another teacher."""
+        teacher = _build_direct_force_teacher(hidden_dim=128, seed=2)
+        strategy = _make_strategy(teacher)
+        root = tmp_path / "checkpoints"
+        strategy.save_checkpoint(root)
+        weight = next(p for p in teacher.parameters() if p.numel() > 4096)
+
+        with torch.no_grad():
+            weight.reshape(-1)[1] += 1.0
+
+        with pytest.raises(ValueError, match="already holds a different copy"):
+            strategy.save_checkpoint(root)
+        assert not _teacher_weight_file(root, 1).exists()
+
+    def test_a_copy_fingerprinted_under_another_scheme_is_refused_at_save(
+        self, tmp_path: Path
+    ) -> None:
+        """A root whose copy was fingerprinted another way is refused rather than compared."""
+        teacher = _write_teacher(tmp_path)
+        strategy = _make_strategy(teacher)
+        root = tmp_path / "checkpoints"
+        strategy.save_checkpoint(root)
+        manifest = _manifest(root)
+        manifest["model_references"]["teacher"]["fingerprint"]["scheme"] = "sampled"
+        _write_manifest(root, manifest)
+
+        with pytest.raises(ValueError, match="fingerprint of scheme 'sampled'"):
+            strategy.save_checkpoint(root)
+        assert not _teacher_weight_file(root, 1).exists()
+
     def test_a_copy_the_manifest_does_not_name_is_still_refused(
         self, tmp_path: Path
     ) -> None:
@@ -493,6 +524,23 @@ class TestTeacherStoredOncePerRoot:
                 training_fn="nvalchemi.training.distillation.default_distillation_fn",
             )
 
+    def test_a_fingerprint_of_another_scheme_is_refused_at_load(
+        self, tmp_path: Path
+    ) -> None:
+        """A fingerprint taken another way, such as a sampled one, fails rather than matches."""
+        strategy = _make_strategy(_write_teacher(tmp_path))
+        root = tmp_path / "checkpoints"
+        strategy.save_checkpoint(root)
+        manifest = _manifest(root)
+        del manifest["model_references"]["teacher"]["fingerprint"]["scheme"]
+        _write_manifest(root, manifest)
+
+        with pytest.raises(ValueError, match="fingerprint of scheme None"):
+            DistillationStrategy.load_checkpoint(
+                root,
+                training_fn="nvalchemi.training.distillation.default_distillation_fn",
+            )
+
     def test_a_reference_without_an_index_is_refused(self, tmp_path: Path) -> None:
         """A manifest naming no stored index says so instead of failing on a path."""
         strategy = _make_strategy(_write_teacher(tmp_path))
@@ -593,7 +641,7 @@ class TestModelFingerprint:
         assert widened["digest"] != digest["digest"]
 
     def test_a_change_in_a_tensors_final_values_is_detected(self) -> None:
-        """The sample spans the whole index range, so no tensor ends in a blind tail."""
+        """The last value counts like any other, so no tensor ends in a blind tail."""
         module = nn.Linear(256, 256)
 
         digest = _model_fingerprint(module)
@@ -601,6 +649,20 @@ class TestModelFingerprint:
             module.weight.reshape(-1)[-1] += 1.0
 
         assert _model_fingerprint(module) != digest
+
+    def test_a_change_in_one_value_of_a_large_tensor_is_detected(self) -> None:
+        """Every value is hashed, so a change has no gap between samples to hide in."""
+        module = nn.Linear(256, 256)
+
+        digest = _model_fingerprint(module)
+        with torch.no_grad():
+            module.weight.reshape(-1)[1] += 1.0
+
+        assert _model_fingerprint(module) != digest
+
+    def test_the_fingerprint_names_its_scheme(self) -> None:
+        """A reader can tell how a digest was taken before comparing it."""
+        assert _model_fingerprint(nn.Linear(4, 2))["scheme"] == "sha256-full"
 
     def test_a_change_late_in_a_per_element_table_is_detected(self) -> None:
         """A table small enough to hash whole has no gaps between samples to hide in."""

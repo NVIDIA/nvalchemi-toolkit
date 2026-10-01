@@ -327,19 +327,21 @@ never changes. Ordinarily the first checkpoint under a root writes
 repaired after its weight file went missing, holds the copy at a later index.
 Every other checkpoint writes no teacher weight file of its own. It records a
 *model reference* instead: a `model_references`
-manifest entry naming that index plus a cheap fingerprint. The checkpoint
+manifest entry naming that index plus a fingerprint of the weights. The checkpoint
 interval therefore costs the student's weights alone, whatever the teacher's
 size, so shorten it freely.
 
-The fingerprint carries a tensor count, an element count, and a digest over
-each state-dict entry's name, shape, dtype, and values. Values are read at
-`float64` on the host, so the device does not change the digest. A tensor of
-at most 4096 values (per-element tables, biases) is hashed whole. A larger one
-contributes 64 values spanning its whole index range, first and last included.
-Loading reads the stored weights back and verifies the fingerprint, so a
-replaced or truncated copy raises `ValueError` instead of quietly training
-against a different model. Precision is part of the identity: a `bfloat16` copy
-is a different model to the fingerprint.
+The fingerprint carries a `scheme` (`"sha256-full"`), a tensor count, an
+element count, and a SHA-256 over each state-dict entry's name, shape, dtype,
+and the raw bytes of every value, in key order. Every value counts: a copy
+differing in one weight anywhere is another model. Bytes are hashed as stored,
+so the device does not change the digest, and a `bfloat16` copy is a different
+model to the fingerprint. Hashing streams the weights to the host in chunks,
+one pass per save or load (about 0.25 s per 100M `float32` parameters). A
+fingerprint of another scheme is refused with a `ValueError` at save and at
+load rather than compared. Loading reads the stored weights back and verifies
+the fingerprint, so a replaced or truncated copy raises `ValueError` instead of
+quietly training against a different model.
 
 **One root holds one copy.** Saving a *different* copy of the teacher into a
 root that already holds one raises `ValueError` at save time. The model

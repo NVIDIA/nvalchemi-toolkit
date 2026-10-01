@@ -1052,6 +1052,7 @@ class TestModelReferences:
         assert reference["rebuild"] == "stored"
         assert reference["checkpoint_index"] == 0
         assert set(reference["fingerprint"]) == {
+            "scheme",
             "num_tensors",
             "num_elements",
             "digest",

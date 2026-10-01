@@ -536,6 +536,7 @@ checkpoint therefore costs the student's weights alone:
     "rebuild": "stored",
     "checkpoint_index": 0,
     "fingerprint": {
+      "scheme": "sha256-full",
       "num_tensors": 42,
       "num_elements": 4501000,
       "digest": "9f2c..."
@@ -546,20 +547,20 @@ checkpoint therefore costs the student's weights alone:
 
 Loading reads the weights back from the index the model reference names,
 into the rebuilt teacher or into the live one the caller supplied. It then
-checks them against the `fingerprint`. The fingerprint hashes each state-dict
-entry's name, shape, and dtype together with its values. The values are read
-at `float64` on the host, so the device the weights were loaded on does not
-change the digest. How many values are hashed depends on the tensor. A tensor
-holding at most 4096 values is hashed whole, which covers the per-element
-tables and the biases a change tends to hide in. A larger tensor contributes 64
-values spanning its whole index range, first and last included, so no tensor
-ends in a blind tail. Precision is part of the identity: a copy held at
-`bfloat16` is a different model to the fingerprint, and is reported as one,
-because widening back to `float64` cannot recover what the cast rounded off.
-Sampling the large tensors keeps the cost independent of a foundation
-teacher's size. The price is that the fingerprint identifies a model rather
-than validating it: a change confined to the values between two samples of one
-large tensor can slip past. A stored copy that was replaced or truncated
+checks them against the `fingerprint`: a SHA-256 over every state-dict entry's
+name, shape, and dtype together with the raw bytes of all its values, taken in
+key order. Every value counts, so a copy differing in a single weight anywhere
+is another teacher, and is refused as one. The bytes are hashed as stored, so
+the device the weights were loaded on does not change the digest. Precision is
+part of the identity: a copy held at `bfloat16` is a different model to the
+fingerprint, and is reported as one. Hashing a whole foundation teacher costs
+one pass over its weights, moved to the host in chunks rather than copied:
+about a third of a second per 100 million `float32` parameters on an H100,
+and a quarter of a second for the same state already on the host.
+The `scheme` entry names how the digest was taken. A reader compares only a
+fingerprint of the scheme it computes itself; one of another scheme is refused
+with a `ValueError` naming the remedy, at save and at load, rather than matched
+or mistaken for a different copy. A stored copy that was replaced or truncated
 raises `ValueError` at load, rather than quietly training a student against a
 different teacher.
 

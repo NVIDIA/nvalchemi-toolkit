@@ -67,13 +67,20 @@ disk::
       "teacher": {
         "rebuild": "stored",
         "checkpoint_index": 0,
-        "fingerprint": {"num_tensors": 42, "num_elements": 4501000, "digest": "..."}
+        "fingerprint": {
+          "scheme": "sha256-full",
+          "num_tensors": 42,
+          "num_elements": 4501000,
+          "digest": "..."
+        }
       }
     }
 
 Loading reads the weights from that index and checks them against the
-fingerprint. The fingerprint samples values, so it identifies the copy rather
-than validating it. One root holds one copy. A save whose model differs from
+fingerprint. The fingerprint is a SHA-256 over every stored value, so a copy
+differing in one value anywhere is told apart. The ``scheme`` names how the
+digest was taken; a fingerprint of another scheme is refused rather than
+compared. One root holds one copy. A save whose model differs from
 the copy already on disk is refused, whether or not the earlier writer
 declared the model, because moving the reference would point every earlier
 checkpoint at the wrong weights. The manifest keeps ``schema_version`` 1. An older reader ignores
@@ -216,11 +223,11 @@ _SCHEDULER_OPTIMIZERS_KEY = "scheduler_optimizers"
 _OPTIMIZER_PARAMETER_NAMES_KEY = "optimizer_parameter_names"
 """Association key mapping optimizer component names to parameter names."""
 
-_FINGERPRINT_SAMPLE = 64
-"""Values sampled per state-dict tensor when fingerprinting a referenced model."""
+_FINGERPRINT_SCHEME = "sha256-full"
+"""Scheme a model reference's fingerprint records and a reader checks for."""
 
-_FINGERPRINT_FULL = 4096
-"""Largest state-dict tensor a fingerprint hashes in full rather than sampling."""
+_FINGERPRINT_CHUNK_BYTES = 1 << 28
+"""Bytes of one state-dict tensor moved to the host per step while hashing."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -484,16 +491,18 @@ def _save_component(
 
 
 def _state_dict_fingerprint(state: Mapping[str, Any]) -> dict[str, Any]:
-    """Return a cheap identity fingerprint of the state dict *state*.
+    """Return the full-state identity fingerprint of the state dict *state*.
 
-    The hash covers each entry's name, shape, dtype, and values. Values are
-    read at ``float64`` on the host, so the device does not change the digest.
-    A tensor of at most ``_FINGERPRINT_FULL`` values is hashed whole. A larger
-    one contributes ``_FINGERPRINT_SAMPLE`` values spread over its index range,
-    first and last included. The cost is therefore independent of a foundation
-    teacher's size, at the price of missing a change confined to the values
-    between two samples. Precision is part of the identity: a reduced-precision
-    copy fingerprints as a different model.
+    The digest is a SHA-256 over every entry in key order: the entry's name,
+    shape, and dtype, then the raw bytes of all its values. Every value
+    counts, so two states differing in one element anywhere fingerprint
+    differently. Bytes are hashed as stored, so the device the tensors sit on
+    does not change the digest, and precision is part of the identity: a
+    reduced-precision copy fingerprints as a different model. A tensor is
+    moved to the host in chunks of ``_FINGERPRINT_CHUNK_BYTES``, so hashing
+    a foundation teacher costs one pass over its weights and no second copy
+    of them. The record names its ``scheme`` so a reader can refuse a
+    fingerprint taken another way instead of comparing it.
 
     Parameters
     ----------
@@ -503,7 +512,8 @@ def _state_dict_fingerprint(state: Mapping[str, Any]) -> dict[str, Any]:
     Returns
     -------
     dict[str, Any]
-        JSON-ready ``{"num_tensors", "num_elements", "digest"}`` record.
+        JSON-ready ``{"scheme", "num_tensors", "num_elements", "digest"}``
+        record.
     """
     digest = hashlib.sha256()
     num_tensors = 0
@@ -519,17 +529,43 @@ def _state_dict_fingerprint(state: Mapping[str, Any]) -> dict[str, Any]:
         flat = value.detach().reshape(-1)
         if flat.numel() == 0:
             continue
-        if flat.numel() <= _FINGERPRINT_FULL:
-            sample = flat
-        else:
-            steps = torch.arange(_FINGERPRINT_SAMPLE)
-            sample = flat[steps * (flat.numel() - 1) // (_FINGERPRINT_SAMPLE - 1)]
-        digest.update(sample.to(device="cpu", dtype=torch.float64).numpy().tobytes())
+        for chunk in (
+            flat.contiguous().view(torch.uint8).split(_FINGERPRINT_CHUNK_BYTES)
+        ):
+            digest.update(chunk.cpu().numpy())
     return {
+        "scheme": _FINGERPRINT_SCHEME,
         "num_tensors": num_tensors,
         "num_elements": num_elements,
         "digest": digest.hexdigest(),
     }
+
+
+def _check_fingerprint_scheme(
+    name: str, fingerprint: Mapping[str, Any], *, holder: str
+) -> None:
+    """Raise unless *fingerprint* was taken under the scheme this code compares.
+
+    A fingerprint of another scheme, such as one written before the digest
+    covered every value, can neither match nor be shown to differ, so it is
+    refused with the remedy rather than compared.
+
+    Raises
+    ------
+    ValueError
+        If *fingerprint* records no ``scheme`` or a scheme other than
+        ``_FINGERPRINT_SCHEME``.
+    """
+    scheme = fingerprint.get("scheme")
+    if scheme == _FINGERPRINT_SCHEME:
+        return
+    raise ValueError(
+        f"Model {name!r} is stored once per checkpoint root, and {holder} "
+        f"carries a fingerprint of scheme {scheme!r}, which cannot be compared "
+        f"with the {_FINGERPRINT_SCHEME!r} digest over every stored value this "
+        "version takes. Save the model again under a checkpoint root written "
+        "by this version."
+    )
 
 
 def _model_fingerprint(module: nn.Module) -> dict[str, Any]:
@@ -609,7 +645,8 @@ def _model_reference_entries(
     KeyError
         If *strategy* declares a model the checkpoint does not hold.
     ValueError
-        If *root* already holds a different copy of a referenced model.
+        If *root* already holds a different copy of a referenced model, or a
+        copy fingerprinted under another scheme.
     """
     declared: dict[str, dict[str, Any]] = {}
     if strategy is not None:
@@ -644,6 +681,10 @@ def _model_reference_entries(
         )
         fingerprint = _model_fingerprint(models[name][0])
         index = previous.get("checkpoint_index")
+        if previous.get("fingerprint"):
+            _check_fingerprint_scheme(
+                name, previous["fingerprint"], holder=f"{root!s} already"
+            )
         reuse = (
             index is not None
             and previous.get("fingerprint") == fingerprint
@@ -714,6 +755,7 @@ def _verify_model_reference(
             f"against; got {dict(reference)!r}. Restore the manifest.json the "
             "run wrote; without a fingerprint the stored copy cannot be verified."
         )
+    _check_fingerprint_scheme(name, expected, holder="its manifest entry")
     observed = _model_fingerprint(module)
     if observed == dict(expected):
         return
