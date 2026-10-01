@@ -809,6 +809,13 @@ class RigidMoleculeASUZarrWriter:
 class RigidMoleculeASUZarrReader:
     """Read active rigid-molecule ASU representations from a CSP Zarr store.
 
+    Parameters
+    ----------
+    store : StoreLike
+        Path or Zarr-compatible store containing an existing CSP ASU dataset.
+
+    Notes
+    -----
     Selections index the current sequence of undeleted rows; call ``refresh``
     after a writer changes the store.
 

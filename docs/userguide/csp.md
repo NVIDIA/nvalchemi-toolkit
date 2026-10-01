@@ -152,13 +152,6 @@ composition. A 1:1 hydrate, for example, has one solute and one water molecule
 per formula unit. Pass those molecules in a fixed order, for example
 `build_molecular_packing_input([solute, water])`.
 
-{py:attr}`~nvalchemi.csp.MolecularPackingInput.sha256` provides a fingerprint of
-the supplied formula input, including tensor values, dtypes, shapes, metadata,
-and volume. Chemically equivalent inputs can have different fingerprints. The
-value is recomputed on each access. Reading GPU-resident input copies tensors
-to CPU and may synchronize the device, so use it at startup rather than during
-packing iterations.
-
 Each molecule can have several input conformers. For a flexible molecule,
 these represent alternative internal geometries that may pack differently.
 The `OverlapReliefPacker` chooses one conformer for each independently placed
@@ -344,9 +337,15 @@ movement, cell-shape, and progress controls.
 
 `CSPGenerator` allocates independent packing work across an existing process
 group. The application owns process launch and group lifetime. Each process
-supplies equivalent formula-unit input; scientific settings such as `Z`, `Z′`,
+supplies the same prepared formula-unit input; scientific settings such as `Z`, `Z′`,
 and space-group policy may differ between ranks. Gloo supports CPU packers;
 NCCL supports CUDA packers, usually with one process per GPU.
+
+Before packing, the generator automatically compares
+{py:attr}`~nvalchemi.csp.MolecularPackingInput.sha256` across processes to check
+that they received the same prepared input. The comparison includes conformer
+coordinates, contact distances, metadata, and the formula-unit volume estimate.
+It requires exact data: even small coordinate differences cause a mismatch.
 
 `packer.device` selects where packing runs; the configuration describes the
 scientific search settings. `CSPGenerator` takes its execution device from the
@@ -580,37 +579,6 @@ native results and their reports describe packing before those hooks filter
 or modify it. Collective dynamics need a separate integration when ranks have
 unequal outputs or gathered non-destination ranks have no output.
 
-Apply a generation hook to screen the current expanded Batch before dynamics:
-
-```python
-from nvalchemi.csp.hooks import DeduplicateHook
-
-generator = CSPGenerator(
-    packer,
-    num_samples=4,
-    seed=79,
-    hooks=[DeduplicateHook.radial(cutoff=5.0, threshold=0.05)],
-)
-with generator | FIRE2(model=demo_model, dt=0.05, n_steps=1) as pipeline:
-    relaxed = pipeline(packing_input)
-```
-
-Choose the cutoff and threshold for the application. The bundled engine uses
-atomic numbers and typed neighbors for element-sensitive radial screening;
-matches remain approximate and may remove distinct structures. An optional
-`confirm` callback can reject proposed matches. Each call compares only its
-current Batch; no reference pool persists. Custom engines implement
-`DeduplicationEngine.deduplicate(batch)` and return a one-dimensional boolean
-keep-mask on the input device, with one entry per input graph, without mutating
-the input Batch.
-
-The hook filters `ctx.batch` in input order and replaces `accepted_mask` with a
-mask aligned to the Batch entering this hook, including after an earlier
-filter. It leaves `ctx.sample` unchanged. Packing reports and compact results
-persisted before expansion still describe the original packing output. An
-all-false mask creates a zero-graph Batch with the same schema, device,
-provenance fields, and capacities; later pipeline stages are skipped.
-
 Use `on_result` to inspect or persist native results before expansion, hooks,
 or dynamics. For rigid results, the existing ASU writer can persist candidates
 even if later optimization fails:
@@ -745,6 +713,37 @@ are deferred until a second implementation demonstrates a common lifecycle.
 These choices follow the extensibility goal of
 [the API design discussion](https://github.com/NVIDIA/nvalchemi-toolkit/pull/207#discussion_r4128056444)
 while supporting both rigid and explicit-coordinate output.
+
+#### Optional deduplication for custom packers
+
+Custom packers, including those based on generative models, may propose
+repeated crystal candidates. `DeduplicateHook` provides optional filtering of
+their generated structures before downstream processing.
+
+The bundled `radial` engine compares expanded atomic structures within each
+generated Batch using approximate similarity. It keeps no reference set between
+calls.
+
+The following example uses `FixedGeometryPacker` from above, which deliberately
+repeats the supplied geometry:
+
+```python
+from nvalchemi.csp.hooks import DeduplicateHook
+
+custom_packer = FixedGeometryPacker(template)
+generator = CSPGenerator(
+    custom_packer,
+    num_samples=4,
+    seed=79,
+    hooks=[DeduplicateHook.radial(cutoff=5.0, threshold=0.05)],
+)
+with generator | FIRE2(model=demo_model, dt=0.05, n_steps=1) as pipeline:
+    relaxed = pipeline(packing_input)
+```
+
+Choose the cutoff and threshold for your application. See
+{py:meth}`~nvalchemi.csp.hooks.DeduplicateHook.radial` for confirmation options
+and {py:class}`~nvalchemi.csp.hooks.DeduplicationEngine` for custom engines.
 
 (csp-comparison)=
 

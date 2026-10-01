@@ -711,31 +711,19 @@ class RigidMoleculeASUBatch(BaseModel):
 
     Notes
     -----
-    Let ``F`` be the number of formula-unit molecules and ``Q`` the total
-    ASU molecule rows. ``structure_molecule_ptr`` starts at zero, never
-    decreases, ends at ``Q``, and gives each structure a contiguous range of
-    ``F * z_prime[p]`` rows. ``z`` and ``z_prime`` are positive, ``z_prime``
-    divides ``z``, and space-group numbers are in ``[1, 230]`` with a bundled
-    operation count of ``z / z_prime``. ASU rows repeat formula-unit molecule
-    order once per ``z_prime`` copy; each conformer index belongs to that
-    formula molecule's pool in ``packing_input``.
+    Each structure contains ``z_prime`` independent copies of the formula
+    unit in ``packing_input``. Molecules follow the same order as that input
+    and select conformers from their respective pools. :meth:`to_batch`
+    applies the space-group symmetry to generate the full crystal.
 
-    ``fractional_centers`` must be finite; values outside ``[0, 1)`` are
-    allowed by periodic equivalence. ``rotations[q]`` must be a finite proper
-    Cartesian rotation applied as ``local_positions @ rotations[q].T``.
-    ``cells`` must be finite nonsingular row-vector lattice matrices in
-    angstroms with positive volume. The selected fractional symmetry
-    operations must preserve each cell's lattice metric.
+    The unit cell must be compatible with the selected space group, whose
+    number of symmetry operations must equal ``z / z_prime``. Fractional
+    molecular centers may lie outside ``[0, 1)``; expansion wraps them
+    periodically.
 
-    Construction checks shapes, required tensor dtypes, device consistency,
-    and property names. Construction, reads, packing, and expansion do not
-    automatically call :meth:`check_integrity`. Call it explicitly to check
-    the pointer, multiplicity, operation-count, and conformer-pool
-    relationships. Geometry validity remains a caller precondition. Malformed
-    indices can select another structure's rows or another group's operations;
-    invalid geometry can produce incorrect or nonfinite expanded coordinates
-    even when index checking passes. Storage-layout checks alone do not
-    establish these conditions.
+    For externally prepared data, call :meth:`check_integrity` before
+    expansion to check molecule assignments and symmetry multiplicities.
+    This check does not validate molecular orientations or cell geometry.
 
     ``select`` shares ``packing_input`` and preserves repeated row indices.
     """

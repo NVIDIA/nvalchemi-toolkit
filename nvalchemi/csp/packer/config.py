@@ -231,8 +231,20 @@ class OverlapReliefConfig(BaseModel):
         return self
 
     def effective(self, **overrides: Any) -> OverlapReliefConfig:
-        """Return a new config with overrides fully validated.
+        """Return a new configuration with validated overrides.
 
+        Parameters
+        ----------
+        **overrides : Any
+            Configuration field names and replacement values.
+
+        Returns
+        -------
+        OverlapReliefConfig
+            A validated configuration containing the requested overrides.
+
+        Notes
+        -----
         Unknown fields are rejected by the same ``extra='forbid'`` policy as
         direct construction. The retained policy is checked against the
         effective ``z / z_prime`` without changing its weights.

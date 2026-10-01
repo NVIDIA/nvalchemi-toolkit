@@ -238,15 +238,16 @@ before a caller's more specific confirmation step.
    RadialComparisonIndex.deduplicate
 
 
-Deduplicate generated structures
----------------------------------
+Hooks for custom packers
+------------------------
 
-``DeduplicateHook`` runs after generation on expanded atomistic output. A
-custom engine returns a boolean input-length mask on the input device. The
-``radial`` factory uses atomic numbers and typed neighbors for approximate
-within-Batch screening, with an explicit cutoff and threshold and optional
-confirmation. Its reporting mask aligns with the hook's input; Batch replacement
-performs filtering. The bundled engine retains no cross-call reference pool.
+Custom packers, including those based on generative models, may propose repeated
+crystal candidates. ``DeduplicateHook`` provides optional filtering of their
+generated structures before downstream processing.
+
+The bundled ``radial`` engine compares expanded atomic structures within each
+generated Batch using approximate similarity. It keeps no reference set between
+calls.
 
 .. currentmodule:: nvalchemi.csp.hooks
 

@@ -136,24 +136,19 @@ class _CSPGeneratingFunction:
 
 
 class CSPGenerator(AtomisticGenerator):
-    """Run one CSP packer call inside the Toolkit generation lifecycle.
+    """A Toolkit generation driver for running crystal packers
+    in local or distributed searches.
 
-    A generator owns the packer and uses its device and compact structures as
-    the source of truth. With a process group, startup validates the shared
-    request and assigns rank-strided structure identities before any rank
-    packs. A configured destination gathers native payloads and expands only
-    its result when requested.
+    The packer determines the search algorithm and execution device. By default,
+    compact ASU structures are expanded into full-cell atomic Batches; packers
+    that already return Batches require no expansion. Search limits can leave
+    fewer accepted structures than requested.
 
-    Execution placement comes from ``packer.device``. Scientific
-    configurations describe search settings and do not select the device;
-    an input Batch or downstream model does not choose it for this generator.
-
-    For distributed calls with custom ``rank_targets``, omitted
-    ``rank_candidate_budgets`` divide a finite global candidate cap in
-    proportion to the requested rank targets. Integer largest remainders
-    determine leftover trials, with ties assigned to the lower group-local
-    rank. Explicit budgets retain precedence, and an unlimited cap stays
-    unlimited.
+    Distributed generation shares the search across a process group. Each rank
+    supplies the same prepared molecular input. Results can remain on their
+    generating ranks or be gathered on one rank. With custom ``rank_targets``,
+    a finite candidate budget is divided proportionally unless explicit
+    ``rank_candidate_budgets`` are supplied.
 
     Parameters
     ----------
