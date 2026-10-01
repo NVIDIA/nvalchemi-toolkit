@@ -127,7 +127,12 @@ class StructureSource(Protocol):
         ...
 
     def initial_batch(self) -> Batch:
-        """Return the batch the first step propagates from, advancing the position."""
+        """Return the batch the first step propagates from, advancing the position.
+
+        A source that feeds a trajectory lifecycle stamps every structure with a
+        ``status`` of ``0`` and its own ``system_id``, as
+        :class:`OrderedStructureSampler` does.
+        """
         ...
 
     def draw(
@@ -172,6 +177,14 @@ class OrderedStructureSampler:
     has started, not the rows a policy passed over. :attr:`next_system_id` is
     therefore tracked separately from :attr:`next_row`.
 
+    A sampler built with ``recycle=True`` never reports itself exhausted.
+    When its position reaches the end of the shard, it wraps to the front, and
+    :attr:`wraps` counts how often that happened. The ``system_id`` numbers
+    keep increasing across a wrap. One :meth:`draw` reaches every row at most
+    once, so a single call never serves two copies of one structure. Across
+    calls there is no such guarantee: a trajectory that outlives a full pass
+    over the shard shares the batch with a second copy of its structure.
+
     Parameters
     ----------
     dataset : BatchDatasetProtocol
@@ -186,6 +199,10 @@ class OrderedStructureSampler:
         Total structures the initial batch may hold. Default ``None`` puts no
         bound on the count. With all three ``None``, the sampler is unbudgeted
         and serves every row it owns as one batch.
+    recycle : bool, optional
+        Whether the position wraps to the front of the shard when it reaches
+        the end, instead of the sampler reporting itself exhausted. Default
+        ``False``.
 
     Raises
     ------
@@ -209,6 +226,7 @@ class OrderedStructureSampler:
         max_atoms: int | None = None,
         max_edges: int | None = None,
         max_batch_size: int | None = None,
+        recycle: bool = False,
     ) -> None:
         """Open the sampler at the first row of *dataset*."""
         declared = {
@@ -227,8 +245,10 @@ class OrderedStructureSampler:
         self.max_atoms = max_atoms
         self.max_edges = max_edges
         self.max_batch_size = max_batch_size
+        self.recycle = recycle
         self._rows: tuple[int, ...] = tuple(range(len(dataset)))
         self._next_row = 0
+        self._wraps = 0
         self._next_system_id = 0
         self._rank = 0
         self._world_size = 1
@@ -253,9 +273,14 @@ class OrderedStructureSampler:
         return self._next_system_id
 
     @property
+    def wraps(self) -> int:
+        """How often a recycling position has wrapped to the front of the shard."""
+        return self._wraps
+
+    @property
     def exhausted(self) -> bool:
         """Whether the shard has no structure left to hand out."""
-        return self._next_row >= len(self._rows)
+        return not self.recycle and self._next_row >= len(self._rows)
 
     def shard(self, rank: int, world_size: int) -> None:
         """Narrow this sampler to the rows that rank *rank* of *world_size* owns.
@@ -266,9 +291,9 @@ class OrderedStructureSampler:
         by at most one structure. The deal balances the number of structures,
         not the work, so sort the dataset by atom count when structure sizes
         differ widely. The shards are not padded, because a padded structure
-        would be propagated twice. Sharding resets the position and the next
-        ``system_id``, so a sampler that has already run restarts from its
-        first row instead of resuming.
+        would be propagated twice. Sharding resets the position, its wrap
+        count, and the next ``system_id``, so a sampler that has already run
+        restarts from its first row instead of resuming.
 
         Parameters
         ----------
@@ -302,6 +327,7 @@ class OrderedStructureSampler:
             )
         )
         self._next_row = 0
+        self._wraps = 0
         self._next_system_id = 0
 
     def probe(self) -> Batch:
@@ -407,7 +433,9 @@ class OrderedStructureSampler:
         list[AtomicData]
             Structures in row order, each stamped with its own ``system_id``.
             Empty once the shard is exhausted, or once the first candidate
-            misses under ``on_miss="stop"``.
+            misses under ``on_miss="stop"``. A recycling sampler wraps to the
+            front of the shard instead of running out. One call still reaches
+            every row at most once.
         """
         drawn: list[AtomicData] = []
         for index in self._scan_rows(limit=limit, fits=fits, on_miss=on_miss):
@@ -426,13 +454,14 @@ class OrderedStructureSampler:
         Returns
         -------
         dict[str, int]
-            ``next_row``, ``next_system_id``, and the ``rank`` and
-            ``world_size`` of the shard they count in. The dataset and the
-            declared budgets are configuration, not state, so they are left
-            out.
+            ``next_row``, ``wraps`` (how often the position has wrapped),
+            ``next_system_id``, and the ``rank`` and ``world_size`` of the
+            shard they count in. The dataset, the declared budgets, and
+            ``recycle`` are configuration, not state, so they are left out.
         """
         return {
             "next_row": self._next_row,
+            "wraps": self._wraps,
             "next_system_id": self._next_system_id,
             "rank": self._rank,
             "world_size": self._world_size,
@@ -450,16 +479,21 @@ class OrderedStructureSampler:
         Raises
         ------
         KeyError
-            If *state* lacks ``next_row``. A bundle written under the former
-            ``cursor`` key is not read, so it raises too.
+            If *state* lacks any of ``next_row``, ``wraps``, ``next_system_id``,
+            ``rank``, or ``world_size``. One error names every missing key. A
+            bundle written under the former ``cursor`` key is not read, so it
+            raises too.
         ValueError
             If *state* was written for another rank or another world size. Its
             position counts rows in a different shard.
         """
-        if "next_row" not in state:
+        required = ("next_row", "wraps", "next_system_id", "rank", "world_size")
+        missing = [key for key in required if key not in state]
+        if missing:
             raise KeyError(
-                f"{type(self).__name__} state is resumed from 'next_row'; got "
-                f"keys {sorted(state)!r}."
+                f"{type(self).__name__} state is resumed from the keys "
+                f"{list(required)!r}; got {sorted(state)!r}, missing {missing!r}. "
+                "Pass a bundle written by state_dict()."
             )
         rank = int(state["rank"])
         world_size = int(state["world_size"])
@@ -471,6 +505,7 @@ class OrderedStructureSampler:
                 "start over from the first row."
             )
         self._next_row = int(state["next_row"])
+        self._wraps = int(state["wraps"])
         self._next_system_id = int(state["next_system_id"])
 
     def _scan_rows(
@@ -480,11 +515,23 @@ class OrderedStructureSampler:
         fits: FitPolicy | None,
         on_miss: Literal["stop", "skip"],
     ) -> list[int]:
-        """Advance the position and return the rows the policy admitted."""
+        """Advance the position and return the rows the policy admitted.
+
+        The scan reaches every row of the shard at most once. A recycling
+        position that wraps during the scan therefore never serves a structure
+        twice in the same call.
+        """
         rows: list[int] = []
         atoms = edges = 0
-        while self._next_row < len(self._rows) and (limit is None or len(rows) < limit):
+        scanned = 0
+        while scanned < len(self._rows) and (limit is None or len(rows) < limit):
+            if self._next_row >= len(self._rows):
+                if not self.recycle:
+                    break
+                self._next_row = 0
+                self._wraps += 1
             index = self._rows[self._next_row]
+            scanned += 1
             if fits is not None:
                 num_atoms, num_edges = self.dataset.get_metadata(index)
                 if not fits(atoms + num_atoms, edges + num_edges):

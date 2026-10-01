@@ -330,12 +330,13 @@ class TestOrderedStructureSamplerState:
         assert (restored.next_row, restored.next_system_id) == (3, 3)
 
     def test_the_state_dict_records_next_row(self) -> None:
-        """The position travels under ``next_row`` and nothing else."""
+        """The position travels under ``next_row``, with its wrap count beside it."""
         sampler = OrderedStructureSampler(_make_dataset(), max_batch_size=1)
         sampler.initial_batch()
 
         assert sampler.state_dict() == {
             "next_row": 1,
+            "wraps": 0,
             "next_system_id": 1,
             "rank": 0,
             "world_size": 1,
@@ -364,7 +365,13 @@ class TestOrderedStructureSamplerState:
 
         with pytest.raises(ValueError, match="written for rank 1 of 2"):
             sampler.load_state_dict(
-                {"next_row": 0, "next_system_id": 0, "rank": 1, "world_size": 2}
+                {
+                    "next_row": 0,
+                    "wraps": 0,
+                    "next_system_id": 0,
+                    "rank": 1,
+                    "world_size": 2,
+                }
             )
 
     def test_a_bundle_under_the_former_cursor_key_is_refused(self) -> None:
@@ -376,3 +383,73 @@ class TestOrderedStructureSamplerState:
                 {"cursor": 2, "next_system_id": 2, "rank": 0, "world_size": 1}
             )
         assert sampler.next_row == 0
+
+    def test_a_bundle_missing_wraps_is_refused_naming_every_key(self) -> None:
+        """One refusal lists the keys the bundle lacks and the full set it needs."""
+        sampler = OrderedStructureSampler(_make_dataset())
+
+        with pytest.raises(KeyError, match=r"missing \['wraps'\]") as excinfo:
+            sampler.load_state_dict(
+                {"next_row": 2, "next_system_id": 2, "rank": 0, "world_size": 1}
+            )
+        assert "'next_row', 'wraps', 'next_system_id', 'rank', 'world_size'" in str(
+            excinfo.value
+        )
+        assert (sampler.next_row, sampler.wraps, sampler.next_system_id) == (0, 0, 0)
+
+
+class TestOrderedStructureSamplerRecycle:
+    def test_a_recycling_position_wraps_to_the_front_of_the_shard(self) -> None:
+        """Past the last row, the next draw starts over at the first one."""
+        sampler = OrderedStructureSampler(_make_dataset([2, 3, 4]), recycle=True)
+        sampler.initial_batch()
+
+        assert _served_sizes(sampler.draw(limit=2)) == [2, 3]
+        assert (sampler.next_row, sampler.wraps, sampler.next_system_id) == (2, 1, 5)
+
+    def test_a_recycling_sampler_never_reports_itself_exhausted(self) -> None:
+        """Exhaustion is what stops a run, and a wrapping position has no end."""
+        sampler = OrderedStructureSampler(_make_dataset([2, 3]), recycle=True)
+        sampler.initial_batch()
+
+        assert sampler.exhausted is False
+        assert OrderedStructureSampler(_make_dataset([2, 3])).exhausted is False
+
+    def test_one_draw_reaches_every_row_at_most_once(self) -> None:
+        """A wrapped scan stops after one pass, so no structure is served twice per call."""
+        sampler = OrderedStructureSampler(_make_dataset([2, 3, 4]), recycle=True)
+
+        assert _served_sizes(sampler.draw(limit=10)) == [2, 3, 4]
+        assert sampler.wraps == 0
+
+    def test_a_skipping_draw_gives_up_after_one_pass_over_the_shard(self) -> None:
+        """Nothing fitting anywhere ends the scan rather than spinning the position."""
+        sampler = OrderedStructureSampler(_make_dataset([5, 6]), recycle=True)
+
+        drawn = sampler.draw(fits=WithinBudget(atoms=4), on_miss="skip")
+
+        assert drawn == []
+        assert (sampler.next_row, sampler.wraps) == (2, 0)
+
+    def test_the_wrap_count_rides_in_the_state_dict(self) -> None:
+        """A restart resumes a recycled run where it stopped, not at the first row."""
+        sampler = OrderedStructureSampler(_make_dataset([2, 3]), recycle=True)
+        sampler.initial_batch()
+        sampler.draw(limit=1)
+
+        restored = OrderedStructureSampler(_make_dataset([2, 3]), recycle=True)
+        restored.load_state_dict(sampler.state_dict())
+
+        assert sampler.state_dict()["wraps"] == 1
+        assert restored.state_dict() == sampler.state_dict()
+        assert _served_sizes(restored.draw(limit=1)) == [3]
+
+    def test_installing_a_shard_resets_the_wrap_count(self) -> None:
+        """A rerun restarts the pass, so its wraps are counted from zero again."""
+        sampler = OrderedStructureSampler(_make_dataset([2, 3]), recycle=True)
+        sampler.initial_batch()
+        sampler.draw(limit=1)
+
+        sampler.shard(0, 1)
+
+        assert (sampler.next_row, sampler.wraps) == (0, 0)

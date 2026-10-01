@@ -16,11 +16,14 @@
 
 from __future__ import annotations
 
+import copy
 import warnings
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import nullcontext
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import Annotated, Any
 
 import torch
+from jaxtyping import Bool
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -30,9 +33,12 @@ from pydantic import (
     model_validator,
 )
 
+from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes.dataset import BatchDatasetProtocol
-from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.distributed.domain_parallel import DomainParallel
+from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, DynamicsStage
 from nvalchemi.dynamics.sinks import DataSink, ResizableSink
+from nvalchemi.hooks import DynamicsContext
 from nvalchemi.training.distillation.replay import (
     FIFO,
     AdmissionPolicy,
@@ -51,9 +57,6 @@ from nvalchemi.training.distillation.seeding import (
     InitialStructuresSource,
 )
 from nvalchemi.training.runtime import evaluating
-
-if TYPE_CHECKING:
-    from nvalchemi.data import Batch
 
 __all__ = ["OnPolicyConfig", "OnPolicySettings", "ResizableSink"]
 
@@ -159,6 +162,234 @@ def _probe_propagator(probe: Batch, dynamics: BaseDynamics) -> Batch | None:
     return probe
 
 
+def _probe_criterion(
+    probe: Batch, dynamics: BaseDynamics, criterion: ConvergenceHook
+) -> None:
+    """Dispatch a copy of *criterion* once on *probe* and check that it migrates status.
+
+    *probe* carries the outputs of one ``compute()``. It is stamped with the
+    ``status`` the run gives its structures and dispatched to a deep copy of
+    the criterion, exactly as the propagator dispatches the live one. The hook
+    must therefore read every key its criteria name, and the ``status`` column
+    must migrate to ``target_status`` exactly where
+    :meth:`~nvalchemi.dynamics.base.ConvergenceHook.evaluate_mask` says the
+    structure converged. Whether the structure converges depends on the data
+    and is not checked; whether the migration works is. Dispatching a copy
+    leaves the live criterion untouched, because the lifecycle registers and
+    removes that object by identity. A criterion that names a key the row does
+    not carry is not dispatched, because a hook may write that key during the
+    step and one ``compute()`` cannot show that. The check is skipped instead,
+    with a warning that names the key.
+
+    Parameters
+    ----------
+    probe : Batch
+        One-row batch :func:`_probe_propagator` returned.
+    dynamics : BaseDynamics
+        Propagator the criterion will be registered on.
+    criterion : ConvergenceHook
+        Live criterion the lifecycle drives.
+
+    Raises
+    ------
+    ValueError
+        If the criterion raised while reading the row, or if the status column
+        did not migrate where the criterion converged.
+
+    Warns
+    -----
+    UserWarning
+        If a criterion reads a key the probed row does not carry.
+    """
+    missing = sorted({rule.key for rule in criterion.criteria if rule.key not in probe})
+    if missing:
+        warnings.warn(
+            f"The convergence criterion reads {missing!r}, which one compute() of "
+            f"{type(dynamics).__name__} on an initial structure did not produce, so "
+            "whether it fires cannot be checked at construction. A hook writing "
+            "the key during the step is fine; a key nothing writes never converges.",
+            UserWarning,
+            stacklevel=2,
+        )
+        return
+    hook = copy.deepcopy(criterion)
+    probe["status"] = torch.full(
+        (probe.num_graphs, 1), hook.source_status, dtype=torch.long, device=probe.device
+    )
+    try:
+        converged = hook.evaluate_mask(probe)
+        hook(
+            DynamicsContext(batch=probe, step_count=0, workflow=dynamics),
+            DynamicsStage.AFTER_STEP,
+        )
+    except (KeyError, AttributeError, RuntimeError) as exc:
+        raise ValueError(
+            "The convergence criterion failed on one initial structure carrying "
+            f"the propagator's outputs: {exc}"
+        ) from exc
+    status = probe["status"].view(-1)
+    expected = torch.where(
+        converged,
+        torch.full_like(status, hook.target_status),
+        torch.full_like(status, hook.source_status),
+    )
+    if not torch.equal(status, expected):
+        raise ValueError(
+            "The convergence criterion fired on one initial structure but the "
+            f"status column did not migrate where it converged; got status "
+            f"{status.tolist()!r} for converged {converged.tolist()!r}, migrating "
+            f"{hook.source_status!r} to {hook.target_status!r}. A criterion the "
+            "lifecycle drives has to write batch.status itself, as ConvergenceHook "
+            "does."
+        )
+
+
+def _propagator_tree(dynamics: BaseDynamics) -> Iterator[BaseDynamics]:
+    """Yield *dynamics* and every propagator it composes, each exactly once.
+
+    A :class:`~nvalchemi.dynamics.FusedStage` keeps its integrators in
+    ``sub_stages``, and a pipeline keeps its stages in ``stages``. A check that
+    reads only the root therefore misses the propagator that actually runs.
+    Nodes are compared by identity, because one integrator reached through two
+    sub-stages is a single propagator.
+
+    Parameters
+    ----------
+    dynamics : BaseDynamics
+        Propagator at the root of the composition.
+
+    Yields
+    ------
+    BaseDynamics
+        Every propagator in the tree, the root first.
+    """
+    seen: list[BaseDynamics] = []
+    pending: list[BaseDynamics] = [dynamics]
+    while pending:
+        node = pending.pop()
+        if any(node is visited for visited in seen):
+            continue
+        seen.append(node)
+        yield node
+        pending.extend(sub for _, sub in getattr(node, "sub_stages", ()))
+        stages = getattr(node, "stages", ())
+        pending.extend(stages.values() if isinstance(stages, Mapping) else stages)
+
+
+def _competing_migrators(
+    dynamics: BaseDynamics, criterion: ConvergenceHook
+) -> list[ConvergenceHook]:
+    """Return the status migrators already on *dynamics* that are not *criterion*.
+
+    A status migrator is a :class:`~nvalchemi.dynamics.base.ConvergenceHook`
+    with both ``source_status`` and ``target_status`` set. Every place a
+    propagator can hold one is searched. That covers its registered hooks (on
+    a :class:`~nvalchemi.dynamics.FusedStage`, the hooks registered at the
+    fused level) and its ``convergence_hook``, which the lifecycle is about to
+    replace. It also covers the same two places on every sub-stage, where a
+    fused stage puts the migrators it builds itself: one on every sub-stage
+    except the last, and one on the last whenever it declares a
+    ``convergence_hook``.
+
+    Parameters
+    ----------
+    dynamics : BaseDynamics
+        Propagator the lifecycle is being installed on.
+    criterion : ConvergenceHook
+        The lifecycle's own criterion, which is not a competitor.
+
+    Returns
+    -------
+    list[ConvergenceHook]
+        The competing criteria, in the order they were found.
+    """
+    return [
+        hook
+        for propagator in _propagator_tree(dynamics)
+        for hook in (*propagator.hooks, propagator.convergence_hook)
+        if isinstance(hook, ConvergenceHook)
+        and hook is not criterion
+        and hook.source_status is not None
+        and hook.target_status is not None
+    ]
+
+
+def _check_sole_migrator(dynamics: BaseDynamics, criterion: ConvergenceHook) -> None:
+    """Reject *dynamics* unless *criterion* would be its only status migrator.
+
+    The config runs this check when it is built, and the lifecycle runs it
+    again when the run starts, because a hook can be registered on the
+    propagator in between.
+
+    Raises
+    ------
+    ValueError
+        If *dynamics* carries a status-migrating criterion other than
+        *criterion*.
+    """
+    competing = _competing_migrators(dynamics, criterion)
+    if not competing:
+        return
+    migrations = [(hook.source_status, hook.target_status) for hook in competing]
+    raise ValueError(
+        "The relaxation lifecycle owns graduation for this run, so the "
+        "propagator must carry no other status-migrating ConvergenceHook; "
+        f"got {migrations!r} beside the configured "
+        f"({criterion.source_status!r}, {criterion.target_status!r}). "
+        "Remove it, or drop fmax or convergence_hook and let the propagator "
+        "manage its own lifecycle. A FusedStage builds one for every "
+        "sub-stage except the last, and for the last one when it declares a "
+        "convergence_hook."
+    )
+
+
+def _check_structure_status(state: Batch, criterion: ConvergenceHook) -> None:
+    """Reject a criterion that migrates off a status no initial structure holds.
+
+    :meth:`~nvalchemi.dynamics.base.ConvergenceHook.__call__` migrates only the
+    graphs whose status equals its ``source_status``. A criterion whose
+    ``source_status`` no initial structure holds leaves the convergence path
+    inert: no structure ever converges, so none freezes or graduates through
+    it, and generation never runs out of trajectories through it, so the
+    exhaustion warning never fires. The divergence path ignores
+    ``source_status``, so a diverged structure would still freeze, graduate,
+    and be counted in the boundary warning.
+
+    Parameters
+    ----------
+    state : Batch
+        Initial batch, already stamped with the run's own bookkeeping.
+    criterion : ConvergenceHook
+        Criterion driving the trajectory lifecycle.
+
+    Raises
+    ------
+    ValueError
+        If *state* carries no ``status`` column, or if no graph of it carries
+        the criterion's ``source_status``.
+    """
+    if "status" not in state:
+        raise ValueError(
+            "The initial batch carries no status column, so nothing could migrate "
+            f"off source_status={criterion.source_status!r}. A relaxation "
+            "lifecycle graduates structures on that column. An "
+            "InitialStructuresSource driving a lifecycle stamps status zeros and "
+            "system_ids on the batch its initial_batch returns, as "
+            "InitialStructures does."
+        )
+    statuses = sorted({int(value) for value in state["status"].view(-1).tolist()})
+    if criterion.source_status in statuses:
+        return
+    raise ValueError(
+        "A converged graph migrates off the status its initial structure "
+        f"carries; got source_status={criterion.source_status!r} against "
+        f"initial statuses {statuses!r}. The run stamps that status itself "
+        "rather than reading it from the structures, so nothing would ever "
+        "freeze or graduate. Pass source_status=0, or pass the threshold as "
+        "fmax instead."
+    )
+
+
 class OnPolicySettings(BaseModel):
     """Declarative settings of one on-policy distillation segment loop.
 
@@ -195,6 +426,12 @@ class OnPolicySettings(BaseModel):
         there is no reference dataset.
     seed : int, optional
         Base seed of every segment's mixture sampler. Default ``0``.
+    fmax : float | None, optional
+        Max force norm below which a generated trajectory counts as finished.
+        Setting it turns on the trajectory lifecycle of a relaxation run, in
+        which converged structures leave the batch and fresh initial
+        structures replace them. Default ``None`` ends no trajectory, which
+        suits a molecular-dynamics run.
     weight_sync_frequency : int, optional
         Segments between weight syncs to the propagator. Default ``1``, the
         only accepted value while the propagator shares the student module.
@@ -207,9 +444,9 @@ class OnPolicySettings(BaseModel):
     Raises
     ------
     ValueError
-        If a count is not positive, if ``replay_ratio`` falls outside
-        ``[0, 1]`` or is exactly ``0``, if rounding the ratio against the
-        batch size gives one mixture source no sample in any batch, or if
+        If a count or the threshold is not positive, if ``replay_ratio`` falls
+        outside ``[0, 1]`` or is exactly ``0``, if rounding the ratio against
+        the batch size gives one mixture source no sample in any batch, or if
         ``weight_sync_frequency`` is not ``1``.
 
     Examples
@@ -231,6 +468,9 @@ class OnPolicySettings(BaseModel):
     The first segment pays one more, for the cadence dispatch at step ``0``.
     ``training_steps_per_segment`` counts training batches. It equals the
     number of optimizer steps only while every batch takes one step.
+    ``fmax`` is compared against the student's forces, which are the forces
+    the propagator follows. It therefore measures the convergence of the
+    relaxation itself.
 
     Size ``replay_capacity`` as a multiple of the trajectory count. Otherwise
     FIFO eviction removes only part of one labeled step's frames, which
@@ -334,6 +574,20 @@ class OnPolicySettings(BaseModel):
             ),
         ),
     ] = 0
+    fmax: Annotated[
+        float | None,
+        Field(
+            default=None,
+            gt=0.0,
+            description=(
+                "Max force norm below which a generated trajectory counts as "
+                "finished, which is what turns a relaxation run into a "
+                "lifecycle. None runs no trajectory lifecycle: nothing graduates "
+                "and nothing is backfilled, which is what a molecular-dynamics "
+                "run wants."
+            ),
+        ),
+    ] = None
     weight_sync_frequency: Annotated[
         int,
         Field(
@@ -435,6 +689,18 @@ class OnPolicyConfig(OnPolicySettings):
     ``neighbor_config`` declares, built on the row and rolled back afterwards.
     A model that plans more than one neighbor-list source is not probed.
 
+    A relaxation propagator needs a *trajectory lifecycle*. Relaxations
+    converge, and a converged structure that keeps being propagated fills the
+    replay buffer with near-duplicates of a frame it already holds. ``fmax``
+    turns the lifecycle on. A converged structure freezes and is stored once,
+    as the minimum it reached. At the segment boundary it *graduates*, that
+    is, it leaves the batch, and the initial structures *backfill* a fresh
+    structure in its place for as long as the source holds rows. An
+    :class:`~nvalchemi.training.distillation.InitialStructures` built with
+    ``recycle=True`` wraps to its first row instead of letting the batch
+    narrow. Generation ends when the last trajectory finishes, and the
+    remaining training steps draw on the frames already in the buffer.
+
     Parameters
     ----------
     dynamics : BaseDynamics
@@ -462,14 +728,30 @@ class OnPolicyConfig(OnPolicySettings):
     replay_admission : AdmissionPolicy | None, optional
         Predicate that selects which captured frames each segment admits into
         the replay buffer. Default ``None`` admits every captured frame.
+    convergence_hook : ConvergenceHook | None, optional
+        Live criterion that decides when a generated trajectory is finished,
+        used instead of the ``fmax`` threshold. Default ``None``.
+    divergence : Callable[[Batch], Bool[torch.Tensor, "G"]] | None, optional
+        Predicate over the live frame that returns one boolean per graph,
+        ``True`` where the trajectory diverged. The lifecycle freezes a flagged
+        graph on the step it is flagged and keeps it out of both capture
+        routes. At the segment boundary it retires the graph and backfills its
+        place. Default ``None`` uses
+        :func:`~nvalchemi.training.distillation.nonfinite_divergence`.
 
     Raises
     ------
     ValueError
-        If a setting is out of range, if ``initial_structures`` is neither a
-        source nor a dataset, if the initial structures lack a field the
-        propagator needs for its first step, or if the propagator's
-        ``compute()`` on one row contradicts its declared keys.
+        If a setting is out of range, if both ``fmax`` and
+        ``convergence_hook`` are set, if ``convergence_hook`` cannot manage
+        the lifecycle, if ``initial_structures`` recycles while no criterion is
+        set, if a criterion is paired with a
+        :class:`~nvalchemi.distributed.DomainParallel` propagator or a
+        multi-sub-stage :class:`~nvalchemi.dynamics.FusedStage`, if
+        ``initial_structures`` is neither a source nor a dataset, if the
+        initial structures lack a field the propagator needs for its first
+        step, or if the propagator's ``compute()`` on one row contradicts its
+        declared keys.
 
     Examples
     --------
@@ -488,6 +770,22 @@ class OnPolicyConfig(OnPolicySettings):
     ...     generation_steps=50,
     ...     label_frequency=10,
     ...     replay_capacity=8192,
+    ... )
+
+    The same loop over relaxation paths. Each structure graduates once its max
+    force norm falls below ``0.05``, and the next initial structure takes its
+    place:
+
+    >>> config = OnPolicyConfig(  # doctest: +SKIP
+    ...     dynamics=FIRE(student, dt=0.1),
+    ...     teacher_scorer=InProcessTeacherScorer(teacher, ["energy", "forces"]),
+    ...     initial_structures=InitialStructures(dataset, recycle=True),
+    ...     fmax=0.05,
+    ...     replay_ratio=0.25,
+    ...     training_steps_per_segment=32,
+    ...     batch_size=16,
+    ...     generation_steps=50,
+    ...     label_frequency=10,
     ... )
 
     Notes
@@ -515,6 +813,52 @@ class OnPolicyConfig(OnPolicySettings):
     instance either. :attr:`settings` records a custom ``replay_eviction`` as
     ``"fifo"`` with a warning, and a config rebuilt from those settings evicts
     FIFO until the policy is supplied again.
+
+    ``fmax`` stays a plain number that a recipe can hold.
+    :attr:`convergence_criterion` is the live criterion the lifecycle drives.
+    For an ``fmax`` threshold, it is built once with
+    :meth:`~nvalchemi.dynamics.base.ConvergenceHook.from_fmax`, migrating
+    status ``0`` to the propagator's ``exit_status``. The same object is
+    returned on every read, because the lifecycle registers that one object
+    and removes it by identity. A criterion that has to be a live hook goes to
+    ``convergence_hook`` instead. Setting both ``fmax`` and
+    ``convergence_hook`` is refused.
+
+    A ``convergence_hook`` must migrate status on every step, from the status
+    ``0`` the run stamps its structures with. A hook that only reports
+    convergence would freeze and graduate nothing. A hook that skips steps
+    graduates a structure late, so both capture routes would store it. The
+    construction probe also dispatches a copy of the criterion to the probed
+    row. A criterion that raises on the propagator's outputs, or whose firing
+    leaves ``status`` unchanged, is therefore refused here. A criterion that
+    reads a key no ``compute()`` produces is not dispatched, because a hook
+    may write that key during the step; a warning names the key instead.
+    ``probe=False`` skips this dispatch along with the forward pass it reads.
+
+    ``divergence`` ends a trajectory before it converges. It has the same
+    shape as :class:`~nvalchemi.training.distillation.AdmissionPolicy`: it
+    takes the live frame and returns one boolean per graph. The default flags
+    a graph whose positions or forces are no longer finite. Use a custom
+    predicate for a student whose forces explode to finite but unphysical
+    values, or for a criterion on the energy. Like ``replay_admission``, the
+    predicate is runtime-only. A predicate that returns anything but one
+    boolean per graph is refused on its first dispatch, and the error names
+    the shape it returned.
+
+    For the duration of the loop, the criterion also becomes the propagator's
+    convergence detector. It must be the only hook that migrates status, so a
+    propagator that carries a second migrating
+    :class:`~nvalchemi.dynamics.base.ConvergenceHook` is refused. A
+    :class:`~nvalchemi.dynamics.FusedStage` builds such a hook for every
+    sub-stage except the last, and for the last one whenever it declares a
+    ``convergence_hook``. Only a single-sub-stage fused stage without a
+    criterion of its own is therefore accepted. A
+    :class:`~nvalchemi.distributed.DomainParallel` propagator is refused with
+    a criterion as well: its step dispatches no ``ON_GRADUATE``, the stage
+    the converged route captures at, so its minima would never be stored. A
+    migrator already on the propagator is refused when the config is built,
+    and one registered afterwards is refused when the run starts. See
+    :ref:`training-distillation-api` for the capture routes and the backfill.
     """
 
     dynamics: Annotated[
@@ -542,10 +886,11 @@ class OnPolicyConfig(OnPolicySettings):
         InitialStructuresSource,
         Field(
             description=(
-                "Structures the generated trajectories start from, served from "
-                "a position that a restart resumes: any InitialStructuresSource, "
-                "of which InitialStructures is the reference. A bare dataset is "
-                "wrapped in an unbudgeted one."
+                "Structures the generated trajectories start from: any "
+                "InitialStructuresSource, of which InitialStructures is the "
+                "reference. The initial batch, the backfill, and a restart all "
+                "read from its one position. A bare dataset is wrapped in an "
+                "unbudgeted InitialStructures."
             )
         ),
     ]
@@ -586,10 +931,34 @@ class OnPolicyConfig(OnPolicySettings):
             ),
         ),
     ] = None
+    convergence_hook: Annotated[
+        ConvergenceHook | None,
+        Field(
+            default=None,
+            description=(
+                "Live criterion deciding when a generated trajectory is "
+                "finished, in place of the fmax threshold. No recipe "
+                "describes it, so it is runtime-only."
+            ),
+        ),
+    ] = None
+    divergence: Annotated[
+        Callable[[Batch], Bool[torch.Tensor, "G"]] | None,
+        Field(
+            default=None,
+            description=(
+                "Predicate over the live frame returning one boolean per graph, "
+                "set where the trajectory diverged; the lifecycle freezes and "
+                "retires those graphs uncaptured. None flags non-finite "
+                "positions or forces. Runtime-only: no recipe names it."
+            ),
+        ),
+    ] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     _probed: bool = PrivateAttr(default=False)
+    _convergence_criterion: ConvergenceHook | None = PrivateAttr(default=None)
 
     @property
     def settings(self) -> OnPolicySettings:
@@ -624,6 +993,33 @@ class OnPolicyConfig(OnPolicySettings):
             values["replay_eviction"] = "fifo"
         return OnPolicySettings.model_validate(values)
 
+    @property
+    def convergence_criterion(self) -> ConvergenceHook | None:
+        """Return the criterion the trajectory lifecycle drives, or ``None``.
+
+        A ``convergence_hook`` is returned as is. An ``fmax`` threshold is
+        turned into a criterion on first read, migrating status ``0`` to the
+        propagator's ``exit_status``. The same object is returned for the life
+        of the config, because the lifecycle registers it on the propagator
+        and removes it again by identity.
+
+        Returns
+        -------
+        ConvergenceHook | None
+            The live criterion, or ``None`` for a run managing no lifecycle.
+        """
+        if self.convergence_hook is not None:
+            return self.convergence_hook
+        if self.fmax is None:
+            return None
+        if self._convergence_criterion is None:
+            self._convergence_criterion = ConvergenceHook.from_fmax(
+                float(self.fmax),
+                source_status=0,
+                target_status=self.dynamics.exit_status,
+            )
+        return self._convergence_criterion
+
     @model_validator(mode="before")
     @classmethod
     def _coerce_initial_structures(cls, data: Any) -> Any:
@@ -647,16 +1043,94 @@ class OnPolicyConfig(OnPolicySettings):
         )
 
     @model_validator(mode="after")
-    def _validate_structure_fields(self) -> OnPolicyConfig:
-        """Check one row against the propagator's declared keys, then its compute().
+    def _validate_convergence_hook(self) -> OnPolicyConfig:
+        """Validate a ``convergence_hook``; an ``fmax`` threshold needs no checks."""
+        if self.convergence_hook is None:
+            return self
+        if self.fmax is not None:
+            raise ValueError(
+                "Set fmax or convergence_hook, not both; got "
+                f"fmax={self.fmax!r}, convergence_hook={self.convergence_hook!r}. "
+                "Drop the threshold to keep the hook, or drop the hook to keep a "
+                "config a recipe can describe."
+            )
+        exit_status = self.dynamics.exit_status
+        migrates = (
+            self.convergence_hook.source_status is not None
+            and self.convergence_hook.target_status is not None
+        )
+        if not migrates:
+            raise ValueError(
+                "The convergence hook of a relaxation loop has to migrate "
+                f"status; got source_status={self.convergence_hook.source_status!r} "
+                f"and target_status={self.convergence_hook.target_status!r}. A "
+                "converged graph freezes in the propagator's step on its status. "
+                "It graduates out of the batch on that status too. Pass "
+                f"source_status=0 with target_status={exit_status!r}, or pass "
+                "the threshold as fmax instead."
+            )
+        if self.convergence_hook.target_status < exit_status:
+            raise ValueError(
+                "Converged graphs must migrate to at least the propagator's "
+                "exit status, which is what graduates them out of the active "
+                f"batch; got target_status="
+                f"{self.convergence_hook.target_status!r} against "
+                f"dynamics.exit_status={exit_status!r}."
+            )
+        if self.convergence_hook.frequency != 1:
+            raise ValueError(
+                "The convergence hook of a relaxation loop has to run on every "
+                f"step; got frequency={self.convergence_hook.frequency!r}. A "
+                "structure is captured on the step it converges. It has to be "
+                "frozen and left out of the path capture on that same step. A "
+                "hook that skips steps would store it by both routes and keep "
+                "propagating it until the next firing. Pass frequency=1, or pass "
+                "the threshold as fmax instead."
+            )
+        return self
 
-        The forward pass runs only with ``probe=True``, and only once per
-        instance. The after-validators run again when the config is passed
-        into a strategy, and that second pass skips the forward.
+    @model_validator(mode="after")
+    def _validate_lifecycle_shape(self) -> OnPolicyConfig:
+        """Reject a lifecycle the structures or the propagator cannot carry."""
+        managed = self.fmax is not None or self.convergence_hook is not None
+        if getattr(self.initial_structures, "recycle", False) and not managed:
+            raise ValueError(
+                "The initial-structures source sets recycle=True; got "
+                f"fmax={self.fmax!r} and "
+                f"convergence_hook={self.convergence_hook!r}. Recycling wraps "
+                "the backfill to the front of the rows, and only a run managing "
+                "a trajectory lifecycle ever backfills. Pass fmax or a "
+                "convergence_hook, or drop recycle."
+            )
+        if not managed:
+            return self
+        if isinstance(self.dynamics, DomainParallel):
+            raise ValueError(
+                "A DomainParallel propagator cannot carry a trajectory lifecycle: "
+                "its step dispatches no ON_GRADUATE stage, so no converged frame "
+                f"would ever be captured; got dynamics={self.dynamics!r} with "
+                f"fmax={self.fmax!r} and convergence_hook={self.convergence_hook!r}. "
+                "Pass the dynamics it wraps, or drop fmax and convergence_hook."
+            )
+        _check_sole_migrator(self.dynamics, self.convergence_criterion)
+        return self
+
+    @model_validator(mode="after")
+    def _validate_structure_fields(self) -> OnPolicyConfig:
+        """Check one row against the propagator's declared keys, its compute(), and the criterion.
+
+        The forward pass and the criterion dispatch run only with
+        ``probe=True``, and only once per instance. The after-validators run
+        again when the config is passed into a strategy, and that second pass
+        skips both.
         """
         probe = self.initial_structures.probe()
         self.dynamics.check_initial_batch(probe)
-        if self.probe and not self._probed:
-            _probe_propagator(probe, self.dynamics)
-            self._probed = True
+        if self._probed or not self.probe:
+            return self
+        probed = _probe_propagator(probe, self.dynamics)
+        criterion = self.convergence_criterion
+        if probed is not None and criterion is not None:
+            _probe_criterion(probed, self.dynamics, criterion)
+        self._probed = True
         return self

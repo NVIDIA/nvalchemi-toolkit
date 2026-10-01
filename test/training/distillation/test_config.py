@@ -25,6 +25,7 @@ import torch
 from pydantic import ValidationError
 
 from nvalchemi.data import Batch
+from nvalchemi.dynamics.base import ConvergenceHook
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.optimizers.fire import FIRE, FIREVariableCell
 from nvalchemi.dynamics.sinks import HostMemory
@@ -37,6 +38,7 @@ from nvalchemi.training.distillation import (
     OnPolicyConfig,
     OnPolicySettings,
 )
+from nvalchemi.training.distillation.config import _check_structure_status
 from test.training.conftest import _build_atomic_data, _build_demo_model
 from test.training.distillation.conftest import (
     _build_atom_only_dataset,
@@ -52,6 +54,8 @@ _OBJECT_FIELDS = frozenset(
         "initial_structures",
         "capture_sink",
         "replay_admission",
+        "convergence_hook",
+        "divergence",
     }
 )
 """The whole of what a live segment loop adds to the declarative settings."""
@@ -82,6 +86,11 @@ def _make_config_kwargs(**overrides: Any) -> dict[str, Any]:
 def _admit_everything(frames: Batch) -> torch.Tensor:
     """Admission predicate keeping every frame."""
     return torch.ones(frames.num_graphs, dtype=torch.bool)
+
+
+def _diverge_nothing(frames: Batch) -> torch.Tensor:
+    """Divergence predicate flagging no graph."""
+    return torch.zeros(frames.num_graphs, dtype=torch.bool)
 
 
 class _DropNewest:
@@ -229,11 +238,6 @@ class TestOnPolicySettings:
         with pytest.raises(ValidationError):
             OnPolicySettings(**_make_settings_kwargs(**overrides))
 
-    def test_the_relaxation_lifecycle_is_not_configured_here(self) -> None:
-        """A convergence criterion belongs to the lifecycle layered on this loop."""
-        with pytest.raises(ValidationError, match="convergence"):
-            OnPolicySettings(**_make_settings_kwargs(convergence=0.05))
-
     def test_an_eviction_string_other_than_fifo_is_rejected(self) -> None:
         """The recipe spelling is ``"fifo"`` alone; a policy object is not a setting."""
         with pytest.raises(ValidationError):
@@ -363,6 +367,20 @@ class TestOnPolicyConfigComposition:
         assert config.replay_admission is _admit_everything
         assert "replay_admission" not in OnPolicySettings.model_fields
         assert config.settings == OnPolicySettings(**_make_settings_kwargs())
+
+    def test_divergence_is_a_runtime_predicate_outside_the_settings(self) -> None:
+        """The predicate defaults to the built-in and never reaches the settings."""
+        assert OnPolicyConfig(**_make_config_kwargs()).divergence is None
+        config = OnPolicyConfig(**_make_config_kwargs(divergence=_diverge_nothing))
+
+        assert config.divergence is _diverge_nothing
+        assert "divergence" not in OnPolicySettings.model_fields
+        assert config.settings == OnPolicySettings(**_make_settings_kwargs())
+
+    def test_divergence_must_be_callable(self) -> None:
+        """A mask is not a predicate; the field wants something to call per frame."""
+        with pytest.raises(ValidationError):
+            OnPolicyConfig(**_make_config_kwargs(divergence=torch.zeros(3).bool()))
 
     def test_capture_sink_must_be_a_data_sink(self) -> None:
         """A list is not a sink, whatever it can append."""
@@ -498,3 +516,31 @@ class TestOnPolicyConfigRequiredObjects:
         """The loop has to be told what to propagate from."""
         with pytest.raises(ValidationError, match="initial_structures"):
             OnPolicyConfig(**_make_config_kwargs(initial_structures=None))
+
+
+class TestStructureStatusContract:
+    def _initial_batch(self) -> Batch:
+        """Return a two-system initial batch carrying the run's own bookkeeping."""
+        return InitialStructures(_build_small_dataset(n_systems=2)).initial_batch()
+
+    def test_the_stamped_status_is_the_one_the_shorthand_migrates_off(self) -> None:
+        """Structures enter on status 0, which is what the fmax shorthand reads."""
+        state = self._initial_batch()
+
+        assert state["status"].view(-1).tolist() == [0, 0]
+        _check_structure_status(
+            state,
+            ConvergenceHook.from_fmax(0.05, source_status=0, target_status=1),
+        )
+
+    def test_a_criterion_aimed_at_an_unseeded_status_raises(self) -> None:
+        """A criterion migrating off status 1 would freeze and graduate nothing."""
+        state = self._initial_batch()
+
+        with pytest.raises(
+            ValueError, match=r"source_status=1 against initial statuses"
+        ):
+            _check_structure_status(
+                state,
+                ConvergenceHook.from_fmax(0.05, source_status=1, target_status=2),
+            )

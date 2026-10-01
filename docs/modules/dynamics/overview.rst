@@ -51,6 +51,7 @@ GPUs. It is built around four core ideas:
         before_step [label="BEFORE_STEP" fillcolor="#4a3315"]
         after_step  [label="AFTER_STEP" fillcolor="#4a3315"]
         on_converge [label="ON_CONVERGE" fillcolor="#4a3315"]
+        on_graduate [label="ON_GRADUATE" fillcolor="#4a3315"]
 
         hook_pre  [label="BEFORE / AFTER\n_PRE_UPDATE"  fillcolor="#4a3315"]
         hook_comp [label="BEFORE / AFTER\n_COMPUTE"     fillcolor="#4a3315"]
@@ -60,6 +61,7 @@ GPUs. It is built around four core ideas:
         before_step -> pre [style=dashed color="#999999"]
         post -> after_step [style=dashed color="#999999"]
         after_step -> on_converge [style=dashed color="#999999"]
+        on_converge -> on_graduate [style=dashed color="#999999"]
         hook_pre  -> pre  [style=dotted color="#999999" arrowhead=none]
         hook_comp -> comp [style=dotted color="#999999" arrowhead=none]
         hook_post -> post [style=dotted color="#999999" arrowhead=none]

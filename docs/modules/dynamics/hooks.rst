@@ -22,8 +22,8 @@ For the general hook protocol, context, and registry see
 DynamicsStage
 --------------
 
-:class:`~nvalchemi.dynamics.base.DynamicsStage` enumerates ten lifecycle
-hook-firing points: ``ON_ADMISSION`` for batch setup, followed by nine stages
+:class:`~nvalchemi.dynamics.base.DynamicsStage` enumerates eleven lifecycle
+hook-firing points: ``ON_ADMISSION`` for batch setup, followed by ten stages
 within each dynamics step:
 
 .. graphviz::
@@ -66,11 +66,13 @@ within each dynamics step:
 
        AFTER_STEP  [label="AFTER_STEP" fillcolor="#4a3315"]
        ON_CONVERGE [label="ON_CONVERGE\n(if converged)" fillcolor="#4a3315"]
+       ON_GRADUATE [label="ON_GRADUATE\n(with graduated mask)" fillcolor="#4a3315"]
 
        ON_ADMISSION -> BEFORE_STEP
        BEFORE_STEP -> BEFORE_PRE_UPDATE [lhead=cluster_step]
        AFTER_POST_UPDATE -> AFTER_STEP [ltail=cluster_step]
        AFTER_STEP -> ON_CONVERGE [style=dashed]
+       ON_CONVERGE -> ON_GRADUATE [style=dashed]
    }
 
 .. list-table:: Dynamics stages reference
@@ -112,12 +114,28 @@ within each dynamics step:
      - After convergence evaluation. ``BaseDynamics.step()`` calls registered
        hooks only when samples converge; fused sub-stages call them at the
        step interval configured by ``hook.frequency``.
+   * - ``ON_GRADUATE``
+     - 9
+     - After ``ON_CONVERGE``. ``ctx.graduated_mask`` marks the graphs whose
+       status reached ``exit_status`` during the step, whatever changed it.
+       Dispatched on every step on which a hook is registered for it and the
+       batch carries a ``status`` column, ignoring the hook's ``frequency``,
+       so the mask may be all ``False``.
 
 ``ON_ADMISSION`` fires once per run or managed batch replacement, before force
 priming. It ignores a hook's step-based ``frequency``; for a multi-stage hook,
 the frequency continues to gate all other stages. In
 :class:`~nvalchemi.dynamics.FusedStage`, it runs outside the compiled
 ``_step_impl``, making it suitable for validation and shape-dependent setup.
+
+``ON_GRADUATE`` reports graduation. A graph is *active* while its ``status`` is
+below the engine's ``exit_status``, and it *graduates* on the step its status
+reaches ``exit_status``, whether a convergence criterion, a step budget, or
+another hook changed it, at any stage of the step: the mask compares the status
+at step start with the status at dispatch. Without a ``status`` column nothing
+can graduate, so the stage is not dispatched; with one, it is not gated on the
+mask, because checking the mask first would synchronize with the host. A hook
+must therefore read ``ctx.graduated_mask`` rather than assume a graph graduated.
 
 
 Built-in dynamics hooks
@@ -250,6 +268,18 @@ poorly-sampled configurations. It is a safety net, not a model fix: if
 clamping fires frequently, the model has accuracy problems for those
 structures.
 
+nonfinite_graph_mask
+....................
+
+:func:`~nvalchemi.dynamics.hooks.nonfinite_graph_mask` is a standalone
+per-graph finiteness check for a hook or workflow to call directly; the two
+guards above keep element-level checks of their own. It returns one boolean per
+graph, ``True`` where any value under the inspected keys (``positions`` and
+``forces`` by default) is NaN or infinite, and it does not synchronize with the
+host. It takes no action itself. The caller decides what to do with a diverged
+graph, meaning one holding a non-finite value: freeze it, drop it, or keep it
+out of a capture.
+
 Constraint hooks
 ~~~~~~~~~~~~~~~~
 
@@ -339,7 +369,12 @@ Hooks may be registered directly on a
 compute, and integrator update boundaries all fire at both levels. Every hook
 receives the full batch and an active mask for the graphs participating at that
 boundary. Fused-stage masks span all participating sub-stages; sub-stage masks
-are restricted to that sub-stage's status. During force repriming, graphs remain
+are restricted to that sub-stage's status. Every mask is fixed at the start of
+the step. A hook that must see a status change made earlier in the same step
+reads the current ``status`` through
+:meth:`BaseDynamics.active_graph_mask(ctx.batch, exit_status)
+<nvalchemi.dynamics.BaseDynamics.active_graph_mask>`.
+During force repriming, graphs remain
 active for step and compute hooks but are excluded from pre-update and
 post-update hooks because their integrator updates are skipped. At admission,
 the fused-stage ``ON_ADMISSION`` hooks fire first, followed by each sub-stage's
@@ -353,6 +388,12 @@ convergence is evaluated independently for each sub-stage. Registered
 ``hook.frequency`` and must inspect ``ctx.converged_mask`` to determine which
 samples, if any, converged.
 ``BaseDynamics.step()`` calls these hooks only when convergence is detected.
+``ON_GRADUATE`` fires at both levels, after the step-budget migration and the
+``ON_CONVERGE`` dispatch. Sub-stage hooks fire first, each with
+``ctx.graduated_mask`` limited to the graphs its sub-stage owned. Fused-stage
+hooks fire last, with every graph that graduated during the step. The dispatch
+is not gated on the mask, so the mask may be all ``False`` and a hook must read
+it.
 
 Register a cross-stage constraint once on the fused stage when it should apply
 to every active system, regardless of its current sub-stage:
@@ -433,6 +474,9 @@ Hook ordering inside a fused step:
            conv_check -> ON_CONVERGE [style=dashed]
        }
 
+       sub_on_graduate [label="each sub-stage ON_GRADUATE hooks\n(with graduated mask)"]
+       fused_on_graduate [label="FusedStage ON_GRADUATE hooks\n(with graduated mask)" fillcolor="#4a3315"]
+
        fused_on_admission -> sub_on_admission
        sub_on_admission -> fused_before_step
        fused_before_step -> sub_before_step
@@ -450,6 +494,8 @@ Hook ordering inside a fused step:
        fused_after_post -> sub_after_step
        sub_after_step -> fused_after_step
        fused_after_step -> conv_check [lhead=cluster_converge]
+       ON_CONVERGE -> sub_on_graduate [ltail=cluster_converge style=dashed]
+       sub_on_graduate -> fused_on_graduate
    }
 
 Initial force priming follows the same nested ``BEFORE_COMPUTE`` and
@@ -473,6 +519,7 @@ API reference
    EnergyDriftMonitorHook
    NaNDetectorHook
    MaxForceClampHook
+   nonfinite_graph_mask
    FreezeAtomsHook
 
 The general-purpose profiling hooks

@@ -41,7 +41,15 @@ layout differs from the field's, and the scorer refuses the spec at
 construction when the teacher does not declare that output.
 :class:`~nvalchemi.training.distillation.InProcessTeacherScorer` evaluates a
 teacher loaded in the current process and leaves the scored batch exactly as it
-found it, including neighbor tensors.
+found it, including neighbor tensors. Label precision is the scorer's decision.
+Nothing that calls a scorer opens an autocast region of its own, so a scorer
+runs inside whatever autocast region is open at the call site. The in-process
+scorer's ``autocast`` setting picks the mode. The default ``False`` disables
+autocast for the scoring pass, so a mixed-precision region around the call
+never reaches the teacher. ``None`` leaves the caller's region in force. A
+floating-point dtype enables autocast at that dtype, whether or not a region is
+open. ``True`` enables it at the autocast dtype in force for the device: the
+device default when no region is open, the caller's region's dtype when one is.
 
 .. currentmodule:: nvalchemi.training.distillation
 
@@ -216,7 +224,7 @@ the teacher, batch after batch, at identical values.
 
 Training and validation batches go through one labeling seam: an internal hook
 on ``BEFORE_FORWARD``, a stage both loops dispatch on the device-placed batch.
-The teacher runs there with autocast disabled, so mixed-precision training does
+The strategy's own scorer disables autocast, so mixed-precision training does
 not change the targets, and an on-the-fly label matches the offline one exactly
 wherever the store returns the label dtype (see Labeling above): over the usual
 float32 dataset every student but a float64 one agrees on both paths, while a
@@ -400,6 +408,7 @@ runtime-only.
    :nosignatures:
 
    TeacherLabelHook
+   nonfinite_divergence
 
 Generated frames land in the replay buffer, a
 :class:`~nvalchemi.training.distillation.ReplayBuffer`: an in-memory dataset
@@ -536,6 +545,115 @@ Because ``on_policy`` and ``reference_dataset`` hold live runtime objects,
 :meth:`~nvalchemi.training.distillation.DistillationStrategy.to_spec_dict`
 leaves them out and warns. A strategy rebuilt from that spec runs offline until
 they are supplied again.
+
+Relaxation
+----------
+
+A relaxation propagator generates paths that *end*. ``fmax`` tells the segment
+loop about that and turns on the *trajectory lifecycle* described below.
+``fmax`` is the max-force-norm threshold, a plain number a recipe can hold.
+``convergence_hook`` instead takes a
+:class:`~nvalchemi.dynamics.base.ConvergenceHook` when the run needs a live hook
+rather than a number. ``convergence_criterion`` resolves the two into one
+criterion. For the duration of the run, the loop installs that criterion on the
+propagator in two roles: as the hook that migrates status, and as the
+convergence detector. Graduation and detection therefore cannot disagree. A
+detector the propagator was built with is set aside and restored afterwards.
+
+A hook passed as ``convergence_hook`` must migrate status on every step, from
+the status ``0`` the run stamps its structures with. A criterion that only
+reports convergence would look configured while freezing and graduating
+nothing. A criterion that skips steps would graduate a structure late, and both
+capture routes (see below) would store that frame. The lifecycle must also be
+the only thing that migrates status. A propagator that already carries its own
+status-migrating ``ConvergenceHook``, or its own sampler, is therefore refused;
+it would otherwise run at two thresholds or refill mid-segment. A
+multi-sub-stage :class:`~nvalchemi.dynamics.FusedStage` is refused at
+construction, where that shape is fixed: the stage builds a migrator for every
+sub-stage except the last, and for the last one too when it declares a
+``convergence_hook``.
+
+The construction probe runs the propagator's ``compute()`` on one row. It also
+dispatches a copy of the criterion to that row, stamped with the ``status`` the
+run gives its structures. A criterion that raises on the propagator's outputs,
+or whose firing leaves the status column unchanged where it converged, is
+refused before a run is paid for. The probe does not check whether the
+structure converges, which depends on the data. It checks that the migration
+works. A criterion that reads a key no ``compute()`` produces is not
+dispatched, because a hook may write that key during the step. A warning names
+the key instead.
+
+The lifecycle keeps the buffer filling with informative frames. A converged
+structure freezes in the propagator's step and is stored once, as the minimum
+it reached. Every later capture of the segment leaves it out instead of writing
+it again. At the segment boundary it *graduates*: it leaves the batch, and the
+optimizer's own per-structure state follows the membership change. The initial
+structures then *backfill* the room it freed, with at most as many structures
+as graduated, within the atoms they held. The backfill goes through
+:meth:`~nvalchemi.dynamics.OrderedStructureSampler.draw` with
+``on_miss="skip"``, so one oversized row never starves the refills behind it.
+
+A budgeted :class:`~nvalchemi.training.distillation.InitialStructures` packs the
+initial batch and leaves the remaining rows, in order, for the backfill. An
+unbudgeted one is propagated whole, so its position starts past the last row.
+The batch then narrows by one trajectory per graduation, unless
+``recycle=True`` wraps the position to the front of the rows this rank owns. A
+backfilled structure is restamped with fresh bookkeeping, keeping only the
+``system_id`` the source assigned. A store of minima that an earlier relaxation
+graduated therefore does not arrive frozen.
+
+A trajectory can also end by diverging. No criterion ever accepts a NaN, so the
+``OnPolicyConfig.divergence`` predicate handles that case. By default it is
+:func:`~nvalchemi.training.distillation.nonfinite_divergence`, which flags a
+graph whose positions or forces are no longer finite. A flagged graph is frozen
+at ``exit_status`` on that step and kept out of both capture routes. At the
+boundary it is retired and backfilled like a converged one, and one warning per
+boundary counts the diverged graphs. A custom predicate takes the live frame
+and returns one boolean per graph, the same shape an
+:class:`~nvalchemi.training.distillation.AdmissionPolicy` has. It is
+runtime-only, and one that returns any other shape is refused on its first
+dispatch. When the last trajectory finishes and nothing is left to start
+another, the loop warns once and trains its remaining steps on the frames it
+has.
+
+Frames reach the buffer by two *capture routes*, and each frame takes exactly
+one of them. The *path route* is
+:class:`~nvalchemi.training.distillation.TeacherLabelHook`. The lifecycle gives
+it the propagator's ``exit_status``, so it stores only the structures still
+relaxing. It labels them inline, and it narrows the frame to them before the
+teacher runs rather than after, so a mostly frozen batch costs only a small
+teacher pass. A run without a lifecycle leaves the hook unnarrowed, so a
+propagator that manages its own convergence keeps its final frames. The
+*converged route* is a converged-frame hook that stores each minimum once. It
+captures the frame, unlabeled, at ``ON_GRADUATE``: the stage every
+:class:`~nvalchemi.dynamics.base.BaseDynamics` and
+:class:`~nvalchemi.dynamics.FusedStage` propagator dispatches with the graphs
+whose status reached ``exit_status`` on the step. A fused stage's own
+``ON_CONVERGE`` fires on its sub-stages only; it dispatches ``ON_GRADUATE``
+after its step-budget migration. A
+:class:`~nvalchemi.distributed.DomainParallel` propagator dispatches no
+``ON_GRADUATE``, so ``OnPolicyConfig`` refuses one with a criterion rather
+than let its minima go uncaptured. The hook leaves out a graph the divergence
+predicate has flagged, and a graph whose final frame the path route stored on
+the same step. The converged frames are labeled in a single teacher pass when
+the hook's sink is drained, which keeps the teacher's batch size independent of
+the propagated one.
+
+The path route stages its frames in ``OnPolicyConfig.capture_sink`` when one
+is configured. Every segment needs ``(generation_steps + 1)`` frames per
+trajectory in the batch. A sink too small for that is grown through
+``resize(capacity)`` when it offers one, and refused up front when it does not.
+The sink is never shrunk. A backfill never grows the batch past its initial
+size, so a sink that fits the initial batch fits every later one, and the
+growth happens at most once, for the first segment. The converged route keeps
+its own host-memory sink, one frame per graph.
+
+A custom :class:`~nvalchemi.training.distillation.InitialStructuresSource`
+drives the lifecycle too, provided its ``initial_batch`` stamps the ``status``
+zeros and ``system_id`` numbers the lifecycle graduates and backfills on.
+Distribution-matching objectives are defined on equilibrium ensembles, which a
+relaxation path is not. Pointwise energy, force, and atomic-energy matching
+distill a relaxation path exactly as they distill a trajectory.
 
 Losses
 ------
