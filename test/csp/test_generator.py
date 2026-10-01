@@ -30,6 +30,8 @@ from nvalchemi.csp.packer import (
     PackingStopReason,
 )
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.gen.generator import AtomisticGenerator
+from nvalchemi.gen.pipeline import GenerationPipeline
 from nvalchemi.gen.stages import GenerationStage
 
 
@@ -72,7 +74,13 @@ def _compact(
     )
 
 
-def _native_batch(context: PackingContext, count: int) -> Batch:
+def _native_batch(
+    context: PackingContext,
+    count: int,
+    *,
+    charge: float = 0.0,
+    include_charge: bool = True,
+) -> Batch:
     """Build a minimal native P1 Batch using the public data constructors."""
     rows = []
     for row in range(count):
@@ -86,9 +94,22 @@ def _native_batch(context: PackingContext, count: int) -> Batch:
             "csp_source_structure_id",
             context.structure_ids(count, device="cpu")[row : row + 1],
         )
-        data.add_system_property("charge", torch.zeros((1, 1), dtype=torch.float32))
+        if include_charge:
+            data.add_system_property(
+                "charge", torch.full((1, 1), charge, dtype=torch.float32)
+            )
         rows.append(data)
-    return Batch.from_data_list(rows, device="cpu")
+    if rows:
+        return Batch.from_data_list(rows, device="cpu")
+
+    template = _native_batch(context, 1, charge=charge, include_charge=include_charge)
+    return Batch.empty(
+        num_systems=0,
+        num_nodes=0,
+        num_edges=0,
+        template=template,
+        device="cpu",
+    )
 
 
 class _FakePacker:
@@ -104,12 +125,14 @@ class _FakePacker:
         generated: int | None = None,
         native_batch: bool = False,
         omit_native_charge: bool = False,
+        native_charge: float = 0.0,
     ) -> None:
         self.budget = budget
         self.accepted = accepted
         self.generated = generated
         self.native_batch = native_batch
         self.omit_native_charge = omit_native_charge
+        self.native_charge = native_charge
         self.calls: list[dict[str, Any]] = []
         self.budget_calls: list[dict[str, Any]] = []
         self.input_override: MolecularPackingInput | None = None
@@ -145,13 +168,12 @@ class _FakePacker:
         )
         packed_input = self.input_override or inputs
         if self.native_batch:
-            structures = _native_batch(context, accepted)
-            if self.omit_native_charge:
-                structures = Batch.from_data_list(
-                    structures.to_data_list(),
-                    device=self.device,
-                    exclude_keys=["charge"],
-                )
+            structures = _native_batch(
+                context,
+                accepted,
+                charge=self.native_charge,
+                include_charge=not self.omit_native_charge,
+            )
             packed_result: RigidMoleculeASUBatch | Batch = structures
         else:
             packed_result = _compact(packed_input, context, accepted)
@@ -195,7 +217,6 @@ def test_public_export_local_conversion_and_callback_order() -> None:
             "atomic_numbers",
             "cell",
             "pbc",
-            "charge",
             "csp_source_structure_id",
         }
     )
@@ -229,7 +250,6 @@ def test_public_export_local_conversion_and_callback_order() -> None:
             "atomic_numbers",
             "cell",
             "pbc",
-            "charge",
             "csp_source_structure_id",
         }
     )
@@ -244,6 +264,8 @@ def test_public_export_local_conversion_and_callback_order() -> None:
     assert packer.calls[0]["option_marker"] == 7
     assert packer.budget_calls == [{"num_samples": 2, "option_marker": 7}]
     assert result.num_graphs == 2
+    assert result["charge"].dtype == torch.float32
+    assert result["charge"].tolist() == [[0.0], [0.0]]
     assert result["csp_source_structure_id"].tolist() == [
         [packer.calls[0]["context"].run_id, 0],
         [packer.calls[0]["context"].run_id, 1],
@@ -267,13 +289,106 @@ def test_known_system_charge_reaches_after_generate_hook() -> None:
     assert events[0][1].charge.tolist() == [[2.0]]
 
 
-def test_native_batch_must_provide_declared_system_charge() -> None:
+def test_native_batch_may_omit_neutral_charge_through_callback_and_hooks() -> None:
+    events: list[tuple[str, Any]] = []
+    callbacks: list[PackingResult] = []
     generator = CSPGenerator(
+        _FakePacker(native_batch=True, omit_native_charge=True),
+        hooks=[_AfterGenerate(events)],
+        on_result=callbacks.append,
+        dedicated_stream=False,
+    )
+    result = generator.sample(_formula(), num_samples=1, run_id=89)
+
+    assert isinstance(result, Batch)
+    assert len(callbacks) == 1
+    assert callbacks[0].structures.level_keys["system"] == {
+        "cell",
+        "pbc",
+        "csp_source_structure_id",
+    }
+    assert result is callbacks[0].structures
+    assert "charge" not in result.level_keys["system"]
+    assert events == [("after_generate", result)]
+
+
+def test_neutral_native_batch_pipeline_skips_charge_contract() -> None:
+    observed: list[Batch] = []
+
+    def neutral_stage(inputs=None, *, num_samples=1, rng=None):
+        del num_samples, rng
+        assert isinstance(inputs, Batch)
+        assert "charge" not in inputs.level_keys["system"]
+        observed.append(inputs)
+        return inputs
+
+    producer = CSPGenerator(
         _FakePacker(native_batch=True, omit_native_charge=True),
         dedicated_stream=False,
     )
-    with pytest.raises(ValueError, match=r"returned batch lacks \['charge'\]"):
-        generator.sample(_formula(), num_samples=1, run_id=89)
+    neutral_consumer = AtomisticGenerator(
+        generator_func=neutral_stage,
+        required_inputs=frozenset(),
+        outputs=frozenset(),
+        dedicated_stream=False,
+    )
+    pipeline = GenerationPipeline(stages=[producer, neutral_consumer])
+    result = pipeline(_formula(), stage_kwargs=[{"num_samples": 1, "run_id": 89}, None])
+
+    assert isinstance(result, Batch)
+    assert len(observed) == 1
+    assert result is observed[0]
+
+    charged_consumer = AtomisticGenerator(
+        generator_func=neutral_stage,
+        required_inputs=frozenset({"charge"}),
+        outputs=frozenset(),
+        dedicated_stream=False,
+    )
+    with pytest.raises(ValueError, match=r"consumes fields \['charge'\]"):
+        GenerationPipeline(
+            stages=[
+                CSPGenerator(
+                    _FakePacker(native_batch=True, omit_native_charge=True),
+                    dedicated_stream=False,
+                ),
+                charged_consumer,
+            ]
+        )
+
+
+@pytest.mark.parametrize("total_charge", [0.0, 2.0])
+def test_native_batch_preserves_explicit_total_charge(total_charge: float) -> None:
+    events: list[tuple[str, Any]] = []
+    callbacks: list[PackingResult] = []
+    generator = CSPGenerator(
+        _FakePacker(native_batch=True, native_charge=total_charge),
+        hooks=[_AfterGenerate(events)],
+        on_result=callbacks.append,
+        dedicated_stream=False,
+    )
+    result = generator.sample(_formula(), num_samples=1, run_id=90)
+
+    assert isinstance(result, Batch)
+    assert len(callbacks) == 1
+    assert callbacks[0].structures is result
+    assert result["charge"].dtype == torch.float32
+    assert result["charge"].shape == (1, 1)
+    assert result["charge"].tolist() == [[total_charge]]
+    assert callbacks[0].structures["charge"].tolist() == [[total_charge]]
+    assert events == [("after_generate", result)]
+    assert events[0][1]["charge"].tolist() == [[total_charge]]
+
+
+def test_native_zero_accepted_batch_keeps_charge_omitted() -> None:
+    empty_accepted = CSPGenerator(
+        _FakePacker(native_batch=True, accepted=0, omit_native_charge=True),
+        dedicated_stream=False,
+    ).sample(_formula(), num_samples=1, run_id=91)
+
+    assert isinstance(empty_accepted, Batch)
+    assert empty_accepted.num_graphs == 0
+    assert "charge" not in empty_accepted.level_keys["system"]
 
 
 def test_compact_mode_returns_packing_result_without_batch_hooks() -> None:

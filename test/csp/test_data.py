@@ -436,6 +436,8 @@ class TestMolecularPackingInput:
         values.pop("version")
         with pytest.raises(ValueError, match="Missing MolecularPackingInput fields"):
             MolecularPackingInput(**values)
+        with pytest.raises(TypeError, match="component_charge must be a torch.Tensor"):
+            make_digest_input(component_charge=None)
 
 
 class TestRigidMoleculeASUBatch:

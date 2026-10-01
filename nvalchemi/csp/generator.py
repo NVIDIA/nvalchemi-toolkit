@@ -50,7 +50,7 @@ from nvalchemi.gen.generator import AtomisticGenerator, _PreparedGeneration
 __all__ = ["CSPGenerator", "CSP_OUTPUT_FIELDS"]
 
 CSP_OUTPUT_FIELDS = frozenset(
-    {"positions", "atomic_numbers", "cell", "pbc", "charge", "csp_source_structure_id"}
+    {"positions", "atomic_numbers", "cell", "pbc", "csp_source_structure_id"}
 )
 
 _GENERATOR_OPTIONS = frozenset(

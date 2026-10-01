@@ -283,6 +283,7 @@ def _native_batch(
     count: int,
     device: torch.device | str,
     metadata_width: int = 1,
+    include_charge: bool = True,
 ) -> Batch:
     """Build native Batch payloads with built-in and custom level data."""
     device = torch.device(device)
@@ -309,9 +310,10 @@ def _native_batch(
             "csp_source_structure_id",
             context.structure_ids(ordinal + 1, device=device)[ordinal : ordinal + 1],
         )
-        data.add_system_property(
-            "charge", torch.zeros((1, 1), dtype=torch.float32, device=device)
-        )
+        if include_charge:
+            data.add_system_property(
+                "charge", torch.zeros((1, 1), dtype=torch.float32, device=device)
+            )
         marker = rank * 10 + ordinal
         data.metadata_values = torch.full(
             (1, metadata_width),
@@ -336,16 +338,12 @@ def _native_batch(
     if rows:
         return Batch.from_data_list(rows, device=device, attr_map=schema)
 
-    template_context = PackingContext(
-        run_id=context.run_id,
-        rank=context.rank,
-        world_size=context.world_size,
-    )
     template = _native_batch(
-        template_context,
+        context,
         count=1,
         device=device,
         metadata_width=metadata_width,
+        include_charge=include_charge,
     )
     return Batch.empty(
         num_systems=0,
@@ -361,9 +359,16 @@ def _native_batch(
 class _BatchProtocolPacker:
     """Structural packer that returns a native Batch without inheritance."""
 
-    def __init__(self, device: torch.device | str, *, metadata_width: int = 1):
+    def __init__(
+        self,
+        device: torch.device | str,
+        *,
+        metadata_width: int = 1,
+        include_charge: bool = True,
+    ):
         self.device = torch.device(device)
         self.metadata_width = metadata_width
+        self.include_charge = include_charge
         self.option_keys: list[tuple[str, ...]] = []
 
     def pack(
@@ -382,6 +387,7 @@ class _BatchProtocolPacker:
             count=num_samples,
             device=self.device,
             metadata_width=self.metadata_width,
+            include_charge=self.include_charge,
         )
         return PackingResult(
             structures=structures,
@@ -427,15 +433,10 @@ class _MalformedNativeBatchPacker:
                 ids = context.structure_ids(1, device="cpu").to(torch.int32)
             elif self.problem == "id_sequence":
                 ids = torch.tensor([[context.run_id, 19]], dtype=torch.int64)
-            elif self.problem == "missing_charge":
-                ids = context.structure_ids(1, device="cpu")
             else:
                 raise ValueError(f"unknown malformed Batch fixture: {self.problem}")
             data.add_system_property("csp_source_structure_id", ids)
-            if self.problem != "missing_charge":
-                data.add_system_property(
-                    "charge", torch.zeros((1, 1), dtype=torch.float32)
-                )
+            data.add_system_property("charge", torch.zeros((1, 1), dtype=torch.float32))
         structures = Batch.from_data_list([data], device="cpu")
         return PackingResult(
             structures=structures,
@@ -456,7 +457,6 @@ class _MalformedNativeBatchPacker:
     ("problem", "message"),
     [
         ("missing_fields", "native Batch payload must place positions"),
-        ("missing_charge", r"returned batch lacks \['charge'\]"),
         ("id_dtype", "must be int64"),
         ("id_sequence", "payload structure IDs do not match PackingContext"),
     ],
@@ -474,10 +474,9 @@ def test_malformed_native_batch_fails_through_public_generator(
 
 def _batch_summary(batch: Batch) -> dict[str, Any]:
     """Expose public payload values and pointers for queue assertions."""
-    return {
+    summary = {
         "graphs": batch.num_graphs,
         "ids": batch["csp_source_structure_id"].tolist(),
-        "charge": batch["charge"].tolist(),
         "metadata": batch["metadata_values"].tolist(),
         "positions": batch["positions"].tolist(),
         "atomic_numbers": batch["atomic_numbers"].tolist(),
@@ -501,9 +500,14 @@ def _batch_summary(batch: Batch) -> dict[str, Any]:
             "cell": list(batch["cell"].shape),
             "pbc": list(batch["pbc"].shape),
             "ids": list(batch["csp_source_structure_id"].shape),
-            "charge": list(batch["charge"].shape),
         },
     }
+    if "charge" in batch.level_keys.get("system", set()):
+        summary["charge"] = batch["charge"].tolist()
+        summary["builtin_shapes"]["charge"] = list(batch["charge"].shape)
+    else:
+        summary["charge"] = None
+    return summary
 
 
 def _batch_gloo_worker(rank: int, port: int, queue: Any) -> None:
@@ -614,6 +618,43 @@ def _batch_gloo_worker(rank: int, port: int, queue: Any) -> None:
                 [804, 1],
                 [804, 3],
             ]
+
+        charge_free_packer = _BatchProtocolPacker("cpu", include_charge=False)
+        charge_free_local = CSPGenerator(
+            charge_free_packer,
+            process_group=dist.group.WORLD,
+            expand=True,
+            dedicated_stream=False,
+        ).sample(
+            _formula(),
+            num_samples=2,
+            rank_targets=(1, 1),
+            run_id=805,
+        )
+        charge_free_gathered = CSPGenerator(
+            charge_free_packer,
+            process_group=dist.group.WORLD,
+            gather_to_rank=1,
+            expand=True,
+            dedicated_stream=False,
+        ).sample(
+            _formula(),
+            num_samples=2,
+            rank_targets=(1, 1),
+            run_id=806,
+        )
+        charge_free_zero_quota = CSPGenerator(
+            charge_free_packer,
+            process_group=dist.group.WORLD,
+            gather_to_rank=1,
+            expand=True,
+            dedicated_stream=False,
+        ).sample(
+            _formula(),
+            num_samples=2,
+            rank_targets=(2, 0),
+            run_id=807,
+        )
         queue.put(
             {
                 "rank": rank,
@@ -621,6 +662,9 @@ def _batch_gloo_worker(rank: int, port: int, queue: Any) -> None:
                 "gathered": gathered_info,
                 "zero_quota": _batch_summary(zero_quota),
                 "empty_sender": _batch_summary(empty_sender),
+                "charge_free_local": _batch_summary(charge_free_local),
+                "charge_free_gathered": _batch_summary(charge_free_gathered),
+                "charge_free_zero_quota": _batch_summary(charge_free_zero_quota),
                 "options": packer.option_keys,
             }
         )
@@ -636,7 +680,9 @@ class _DisagreeingPacker:
     def __init__(self, mode: str, rank: int) -> None:
         self.mode = mode
         self.rank = rank
-        self.batch = _BatchProtocolPacker("cpu")
+        self.batch = _BatchProtocolPacker(
+            "cpu", include_charge=mode != "charge" or rank == 0
+        )
 
     def pack(
         self,
@@ -994,8 +1040,37 @@ def test_gloo_native_batch_schema_and_zero_quota_rank_round_trip() -> None:
         for options in record["options"]
     )
 
+    assert [record["charge_free_local"]["ids"] for record in records] == [
+        [[805, 0]],
+        [[805, 1]],
+    ]
+    assert all(record["charge_free_local"]["charge"] is None for record in records)
+    assert all(
+        "charge" not in record["charge_free_local"]["level_keys"]["system"]
+        for record in records
+    )
 
-@pytest.mark.parametrize("mode", ["kind", "schema"])
+    charge_free_nonowner = records[0]["charge_free_gathered"]
+    charge_free_owner = records[1]["charge_free_gathered"]
+    assert charge_free_nonowner["graphs"] == 0
+    assert charge_free_nonowner["charge"] is None
+    assert charge_free_owner["ids"] == [[806, 0], [806, 1]]
+    assert charge_free_owner["charge"] is None
+    assert "charge" not in charge_free_owner["builtin_shapes"]
+    assert charge_free_nonowner["level_keys"] == charge_free_owner["level_keys"]
+    assert "charge" not in charge_free_owner["level_keys"]["system"]
+
+    quota_empty = records[0]["charge_free_zero_quota"]
+    quota_owner = records[1]["charge_free_zero_quota"]
+    assert quota_empty["graphs"] == 0
+    assert quota_owner["ids"] == [[807, 0], [807, 2]]
+    assert quota_empty["charge"] is None
+    assert quota_owner["charge"] is None
+    assert quota_empty["level_keys"] == quota_owner["level_keys"]
+    assert "charge" not in quota_owner["level_keys"]["system"]
+
+
+@pytest.mark.parametrize("mode", ["kind", "schema", "charge"])
 def test_gloo_native_metadata_disagreement_fails_before_payload_transfer(
     mode: str,
 ) -> None:
