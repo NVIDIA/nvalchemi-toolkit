@@ -237,6 +237,33 @@ before a caller's more specific confirmation step.
    RadialComparisonIndex.iter_matches
    RadialComparisonIndex.deduplicate
 
+
+Deduplicate generated structures
+---------------------------------
+
+``DeduplicateHook`` runs after generation on expanded atomistic output. A
+custom engine returns a boolean input-length mask on the input device. The
+``radial`` factory uses atomic numbers and typed neighbors for approximate
+within-Batch screening, with an explicit cutoff and threshold and optional
+confirmation. Its reporting mask aligns with the hook's input; Batch replacement
+performs filtering. The bundled engine retains no cross-call reference pool.
+
+.. currentmodule:: nvalchemi.csp.hooks
+
+.. autosummary::
+   :toctree: generated
+   :template: class.rst
+   :nosignatures:
+
+   DeduplicationEngine
+   DeduplicateHook
+
+.. autosummary::
+   :nosignatures:
+
+   DeduplicationEngine.deduplicate
+   DeduplicateHook.radial
+
 .. currentmodule:: nvalchemi.csp.chem
 
 .. autosummary::

@@ -530,6 +530,35 @@ native results and their reports describe packing before those hooks filter
 or modify it. Collective dynamics need a separate integration when ranks have
 unequal outputs or gathered non-destination ranks have no output.
 
+Apply a generation hook to screen the current expanded Batch before dynamics:
+
+```python
+from nvalchemi.csp.hooks import DeduplicateHook
+
+generator = CSPGenerator(
+    packer,
+    num_samples=4,
+    seed=79,
+    hooks=[DeduplicateHook.radial(cutoff=5.0, threshold=0.05)],
+)
+```
+
+Choose the cutoff and threshold for the application. The bundled engine uses
+atomic numbers and typed neighbors for element-sensitive radial screening;
+matches remain approximate and may remove distinct structures. An optional
+`confirm` callback can reject proposed matches. Each call compares only its
+current Batch; no reference pool persists. Custom engines implement
+`DeduplicationEngine.deduplicate(batch)` and return a one-dimensional boolean
+keep-mask on the input device, with one entry per input graph, without mutating
+the input Batch.
+
+The hook filters `ctx.batch` in input order and replaces `accepted_mask` with a
+mask aligned to the Batch entering this hook, including after an earlier
+filter. It leaves `ctx.sample` unchanged. Packing reports and compact results
+persisted before expansion still describe the original packing output. An
+all-false mask creates a zero-graph Batch with the same schema, device,
+provenance fields, and capacities; later pipeline stages are skipped.
+
 Use `on_result` to inspect or persist native results before expansion, hooks,
 or dynamics. For rigid results, the existing ASU writer can persist candidates
 even if later optimization fails:

@@ -35,12 +35,12 @@ Semantics:
 * **Stage 1 consumes the user's ``inputs``** (its generating function owns
   conditioning); every later stage maps Batch → Batch.
 * **1→1 cardinality** per stage: filters may shrink a batch; nothing fans
-  out. (A filter may not shrink a batch to *empty* today —
-  :class:`~nvalchemi.data.Batch` raises ``IndexError`` on zero-graph
-  selections; empty-batch support is a separate data-layer decision.)
-* **Empty batches short-circuit** (defensive contract): should a stage ever
-  yield a zero-graph batch, remaining stages are skipped for that item and
-  the empty batch is returned as-is. No shipped path currently produces one.
+  out. An all-false filter can use :meth:`~nvalchemi.data.Batch.empty_like`
+  to retain materialized schema and capacities; ordinary empty Batch indexing
+  still raises ``IndexError``.
+* **Empty batches short-circuit**: when a stage yields a zero-graph Batch,
+  remaining stages are skipped for that item and the empty Batch is returned
+  as-is. ``DeduplicateHook`` uses ``Batch.empty_like`` for an all-false mask.
 * **Non-``Batch`` outputs are terminal-only**: a generating function returning
   a non-``Batch`` container passes it through raw, so such a stage can only
   be last (or feed plain callables); a dynamics stage fed a non-``Batch``
@@ -354,9 +354,8 @@ class GenerationPipeline(BaseModel):
         Any
             The final stage's output — a :class:`~nvalchemi.data.Batch`,
             unless the terminal stage is a mapping-less generator (raw
-            sample). Should a stage ever yield a zero-graph batch, remaining
-            stages are skipped and it is returned as-is (defensive; no
-            current :class:`~nvalchemi.data.Batch` path produces one).
+            sample). If a stage yields a zero-graph Batch, remaining stages
+            are skipped and it is returned as-is.
 
         Raises
         ------

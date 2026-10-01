@@ -193,13 +193,12 @@ class GenerationContext(HookContext):
         sample should be GPU tensors; it may be any structure the function
         emits.
     accepted_mask : torch.Tensor | None
-        Boolean mask recording which of the call's candidates were accepted,
-        written by filtering hooks (a generating function signals total
-        rejection by returning a zero-graph ``Batch``). ``None`` when
-        acceptance has not been recorded for this dispatch. Mirrors the
-        :attr:`~nvalchemi.hooks.DynamicsContext.converged_mask` convention so
-        acceptance-aware reporting and resampling loops have a stable
-        channel.
+        Boolean acceptance mask written by a hook. The writing hook defines
+        which rows it refers to; there is no universal alignment with the
+        original call's candidates. ``DeduplicateHook`` aligns its mask with
+        the Batch entering that hook and replaces any earlier mask. The
+        generation driver does not use this field to filter, stop, or
+        resample. ``None`` until a hook records a mask.
     """
 
     batch: Batch | None = None
