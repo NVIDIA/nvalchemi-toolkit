@@ -40,7 +40,7 @@ from tensordict import TensorDict
 from torch import nn
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.gen.generator import AtomisticGenerator
+from nvalchemi.gen.generator import AtomisticGenerator, _PreparedGeneration
 from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.models.gen import DemoGANModel
 from test.gen.conftest import (
@@ -1358,3 +1358,127 @@ class TestReviewPins:
 
         gen = AtomisticGenerator(generator_func=batch_generate, hooks=[_Hook()])
         assert gen.hooks[0].stage is GenerationStage.AFTER_GENERATE
+
+
+class TestPreparationSeam:
+    """The preparation seam preserves call order and closes failed calls."""
+
+    def test_finish_runs_after_conditioning_and_before_generation(self) -> None:
+        order: list[str] = []
+        seen: dict[str, object] = {}
+        explicit_rng = torch.Generator().manual_seed(23)
+
+        class _Hook:
+            frequency = 1
+
+            def __init__(self, stage: GenerationStage) -> None:
+                self.stage = stage
+
+            def __call__(self, ctx, stage) -> None:
+                del ctx, stage
+                order.append(self.stage.name)
+
+        def _condition(inputs, *, num_samples: int, rng: torch.Generator | None):
+            order.append("condition")
+            seen["condition"] = (num_samples, rng)
+            return inputs
+
+        def _generate(inputs, *, num_samples: int, rng, marker: str):
+            del inputs
+            order.append("generate")
+            seen["generate"] = (num_samples, rng, marker)
+            return TensorDict(
+                {"x1": torch.zeros(num_samples, 1)}, batch_size=[num_samples]
+            )
+
+        class _Generator(AtomisticGenerator):
+            def _finish_preparation(
+                self,
+                prepared: _PreparedGeneration | None,
+                error: Exception | None,
+            ) -> _PreparedGeneration:
+                order.append("finish")
+                return super()._finish_preparation(prepared, error)
+
+        gen = _Generator(
+            generator_func=_generate,
+            condition_func=_condition,
+            hooks=[
+                _Hook(GenerationStage.BEFORE_CONDITION),
+                _Hook(GenerationStage.AFTER_CONDITION),
+            ],
+        )
+        out = gen.sample(
+            make_batch(num_graphs=1),
+            num_samples=3,
+            rng=explicit_rng,
+            marker="forwarded",
+        )
+
+        assert order == [
+            "BEFORE_CONDITION",
+            "condition",
+            "AFTER_CONDITION",
+            "finish",
+            "generate",
+        ]
+        assert seen["condition"] == (3, explicit_rng)
+        assert seen["generate"] == (3, explicit_rng, "forwarded")
+        assert out.batch_size == torch.Size([3])
+        assert gen.step_count == 1
+
+    def test_finish_receives_preparation_error_and_call_is_cleaned_up(self) -> None:
+        condition_error = RuntimeError("condition failed")
+        observed: list[tuple[_PreparedGeneration | None, Exception | None]] = []
+
+        class _Generator(AtomisticGenerator):
+            def _finish_preparation(
+                self,
+                prepared: _PreparedGeneration | None,
+                error: Exception | None,
+            ) -> _PreparedGeneration:
+                observed.append((prepared, error))
+                return super()._finish_preparation(prepared, error)
+
+        def _condition(inputs, *, num_samples: int, rng):
+            raise condition_error
+
+        def _generate(inputs=None, **kwargs):
+            pytest.fail("generation must not run after preparation fails")
+
+        gen = _Generator(generator_func=_generate, condition_func=_condition)
+        with pytest.raises(RuntimeError, match="condition failed") as exc_info:
+            gen()
+
+        assert exc_info.value is condition_error
+        assert observed == [(None, condition_error)]
+        assert gen._ctx is None
+        assert gen.step_count == 1
+
+    def test_context_construction_failure_does_not_advance_step(self, monkeypatch):
+        context_error = RuntimeError("context construction failed")
+        observed: list[tuple[_PreparedGeneration | None, Exception | None]] = []
+
+        class _Generator(AtomisticGenerator):
+            def _finish_preparation(
+                self,
+                prepared: _PreparedGeneration | None,
+                error: Exception | None,
+            ) -> _PreparedGeneration:
+                observed.append((prepared, error))
+                return super()._finish_preparation(prepared, error)
+
+        def _fail_context(**kwargs):
+            raise context_error
+
+        monkeypatch.setattr("nvalchemi.gen.generator.GenerationContext", _fail_context)
+        gen = _Generator(generator_func=batch_generate)
+        with pytest.raises(
+            RuntimeError, match="context construction failed"
+        ) as exc_info:
+            gen()
+
+        assert exc_info.value is context_error
+        assert observed == [(None, context_error)]
+        assert gen._ctx is None
+        assert gen.step_count == 0

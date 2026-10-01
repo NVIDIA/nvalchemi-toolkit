@@ -22,10 +22,16 @@ from math import sqrt
 import pytest
 import torch
 import warp as wp
+from pydantic import ValidationError
 
 from nvalchemi.csp._space_group_tables import SG_OPS_IDX, SG_OPS_PTR, SYMM_OPS
 from nvalchemi.csp.data import MolecularPackingInput
-from nvalchemi.csp.packer import CrystalPacker, PackingConfig, PackingStopReason
+from nvalchemi.csp.packer import (
+    OverlapReliefConfig,
+    OverlapReliefPacker,
+    PackingContext,
+    PackingStopReason,
+)
 from nvalchemi.csp.packer._contacts import (
     ContactEvaluation,
     ContactWorkspace,
@@ -475,7 +481,7 @@ def test_cuda_fixed_state_contact_and_one_step_match_source_fixture(
 
 def test_public_cpu_packing_has_compact_z_prime_and_one_seed_draw() -> None:
     inputs = _one_atom_input()
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=2,
         z_prime=2,
         batch_size=4,
@@ -487,7 +493,7 @@ def test_public_cpu_packing_has_compact_z_prime_and_one_seed_draw() -> None:
     expected_generator = torch.Generator(device="cpu").manual_seed(147)
     torch.randint(0, 2**31 - 1, (), dtype=torch.int64, generator=expected_generator)
     events = []
-    result = CrystalPacker(config, device="cpu")(
+    result = OverlapReliefPacker(config, device="cpu")(
         inputs,
         num_samples=4,
         rng=generator,
@@ -529,8 +535,8 @@ def test_public_cpu_packing_has_compact_z_prime_and_one_seed_draw() -> None:
 
 
 def test_public_cpu_packing_preserves_explicit_run_id() -> None:
-    result = CrystalPacker(
-        PackingConfig(
+    result = OverlapReliefPacker(
+        OverlapReliefConfig(
             z=1,
             z_prime=1,
             batch_size=2,
@@ -550,13 +556,118 @@ def test_public_cpu_packing_preserves_explicit_run_id() -> None:
     assert result.structures.structure_ids.tolist() == [[17, 0], [17, 1]]
 
 
+def test_public_cpu_packing_uses_context_identity_and_rank_strided_ids() -> None:
+    packer = OverlapReliefPacker(
+        OverlapReliefConfig(
+            z=1,
+            z_prime=1,
+            batch_size=2,
+            max_candidates=2,
+            cell_volume_range=(10_000.0, 10_000.0),
+            space_groups=SpaceGroupPolicy.fixed(1),
+        ),
+        device="cpu",
+    )
+    result = packer.pack(
+        _one_atom_input(),
+        num_samples=2,
+        rng=torch.Generator().manual_seed(28),
+        context=PackingContext(run_id=23, rank=1, world_size=2),
+    )
+    assert result.run_id == 23
+    assert result.reports[0].rank == 1
+    assert result.reports[0].requested_count == result.reports[0].accepted_count == 2
+    assert result.structures.structure_ids.tolist() == [[23, 1], [23, 3]]
+
+
+def test_context_ids_avoid_unused_oversized_world_stride() -> None:
+    context = PackingContext(run_id=23, rank=9, world_size=2**64)
+    assert context.structure_ids(0, device="cpu").shape == (0, 2)
+    assert context.structure_ids(1, device="cpu").tolist() == [[23, 9]]
+    with pytest.raises(OverflowError, match="rank-strided structure IDs"):
+        context.structure_ids(2, device="cpu")
+
+
+def test_zero_target_and_zero_candidate_budget_skip_sampling_and_keep_empty_schema() -> (
+    None
+):
+    inputs = _one_atom_input()
+    packer = OverlapReliefPacker(
+        OverlapReliefConfig(
+            z=1,
+            z_prime=1,
+            batch_size=2,
+            max_candidates=4,
+            cell_volume_range=(10_000.0, 10_000.0),
+            space_groups=SpaceGroupPolicy.fixed(1),
+        ),
+        device="cpu",
+    )
+    rng = torch.Generator().manual_seed(53)
+    initial_rng_state = rng.get_state()
+
+    empty_target = packer.pack(inputs, num_samples=0, rng=rng)
+    assert len(empty_target) == 0
+    assert empty_target.complete
+    assert empty_target.generated_count == 0
+    assert empty_target.stop_reason is PackingStopReason.TARGET_REACHED
+    assert empty_target.reports[0].requested_count == 0
+    assert empty_target.reports[0].stop_reason == "target_reached"
+    assert set(empty_target.structures.properties) == {
+        "steps",
+        "total_overlap",
+        "max_overlap",
+    }
+    assert empty_target.structures.cells.shape == (0, 3, 3)
+
+    no_budget = packer.pack(inputs, num_samples=3, rng=rng, candidate_budget=0)
+    assert len(no_budget) == 0
+    assert not no_budget.complete
+    assert no_budget.requested_count == 3
+    assert no_budget.generated_count == 0
+    assert no_budget.stop_reason is PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED
+    assert no_budget.reports[0].stop_reason == "candidate_budget_exhausted"
+    assert set(no_budget.structures.properties) == {
+        "steps",
+        "total_overlap",
+        "max_overlap",
+    }
+    assert torch.equal(rng.get_state(), initial_rng_state)
+
+
+def test_budget_resolver_validates_options_without_consuming_torch_rng() -> None:
+    packer = OverlapReliefPacker(
+        OverlapReliefConfig(
+            z=1,
+            z_prime=1,
+            batch_size=2,
+            cell_volume_range=(10_000.0, 10_000.0),
+            space_groups=SpaceGroupPolicy.fixed(1),
+        ),
+        device="cpu",
+    )
+    rng_state = torch.get_rng_state()
+    assert (
+        packer.resolve_candidate_budget(num_samples=3, progress_callback=lambda _: None)
+        == 3000
+    )
+    assert packer.resolve_candidate_budget(num_samples=3, max_candidates=7) == 7
+    assert packer.resolve_candidate_budget(num_samples=3, max_candidates=None) is None
+    assert packer.resolve_candidate_budget(num_samples=0) == 0
+    assert torch.equal(torch.get_rng_state(), rng_state)
+    with pytest.raises(TypeError, match="progress_callback"):
+        packer.resolve_candidate_budget(num_samples=1, progress_callback=object())
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        packer.resolve_candidate_budget(num_samples=1, unknown_option=3)
+
+
 @pytest.mark.parametrize(
     ("run_id", "error"),
     [(True, TypeError), (1.5, TypeError), (-1, ValueError), (2**63, ValueError)],
 )
 def test_packer_rejects_invalid_run_id(run_id: object, error: type[Exception]) -> None:
-    packer = CrystalPacker(
-        PackingConfig(
+    packer = OverlapReliefPacker(
+        OverlapReliefConfig(
             z=1,
             z_prime=1,
             batch_size=1,
@@ -570,7 +681,7 @@ def test_packer_rejects_invalid_run_id(run_id: object, error: type[Exception]) -
 
 def test_public_cpu_partial_candidate_budget_returns_compact_shortfall() -> None:
     inputs = _one_atom_input()
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=1,
         z_prime=1,
         batch_size=4,
@@ -578,7 +689,7 @@ def test_public_cpu_partial_candidate_budget_returns_compact_shortfall() -> None
         cell_volume_range=(10_000.0, 10_000.0),
         space_groups=SpaceGroupPolicy.fixed(1),
     )
-    result = CrystalPacker(config, device="cpu")(
+    result = OverlapReliefPacker(config, device="cpu")(
         inputs,
         num_samples=4,
         rng=torch.Generator().manual_seed(1),
@@ -591,7 +702,7 @@ def test_public_cpu_partial_candidate_budget_returns_compact_shortfall() -> None
 
 def test_public_cpu_expiration_partially_refills_and_returns_empty_shortfall() -> None:
     inputs = _one_atom_input(contact_distance=5.0)
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=1,
         z_prime=1,
         batch_size=2,
@@ -605,7 +716,7 @@ def test_public_cpu_expiration_partially_refills_and_returns_empty_shortfall() -
         space_groups=SpaceGroupPolicy.fixed(1),
     )
     events = []
-    result = CrystalPacker(config, device="cpu")(
+    result = OverlapReliefPacker(config, device="cpu")(
         inputs,
         num_samples=1,
         rng=torch.Generator().manual_seed(87),
@@ -632,7 +743,7 @@ def test_public_cpu_expiration_partially_refills_and_returns_empty_shortfall() -
 def test_public_cpu_default_auto_budget_bounds_unreachable_acceptance(
     num_samples: int,
 ) -> None:
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=1,
         z_prime=1,
         batch_size=64,
@@ -645,7 +756,7 @@ def test_public_cpu_default_auto_budget_bounds_unreachable_acceptance(
         cell_volume_range=(125.0, 125.0),
         space_groups=SpaceGroupPolicy.fixed(1),
     )
-    result = CrystalPacker(config, device="cpu")(
+    result = OverlapReliefPacker(config, device="cpu")(
         _one_atom_input(contact_distance=7.0),
         num_samples=num_samples,
         rng=torch.Generator().manual_seed(87),
@@ -661,7 +772,7 @@ def test_refilled_candidate_skips_relaxation_with_stale_nonzero_force(
     monkeypatch,
 ) -> None:
     inputs = _one_atom_input()
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=1,
         z_prime=1,
         batch_size=1,
@@ -696,7 +807,7 @@ def test_refilled_candidate_skips_relaxation_with_stale_nonzero_force(
     monkeypatch.setattr(
         "nvalchemi.csp.packer.engine.contact_forces", synthetic_contacts
     )
-    result = CrystalPacker(config, device="cpu")(
+    result = OverlapReliefPacker(config, device="cpu")(
         inputs, num_samples=2, rng=torch.Generator().manual_seed(101)
     )
 
@@ -713,7 +824,7 @@ def test_progress_callback_reports_exact_expiration_checks(
     check_interval: int, step_limit: int, expected_iterations: list[int]
 ) -> None:
     inputs = _one_atom_input(contact_distance=5.0)
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=1,
         z_prime=1,
         batch_size=2,
@@ -727,7 +838,7 @@ def test_progress_callback_reports_exact_expiration_checks(
         space_groups=SpaceGroupPolicy.fixed(1),
     )
     events = []
-    result = CrystalPacker(config, device="cpu")(
+    result = OverlapReliefPacker(config, device="cpu")(
         inputs,
         num_samples=1,
         rng=torch.Generator().manual_seed(88),
@@ -756,7 +867,7 @@ def test_budget_exhaustion_recomputes_expiration_for_surviving_row() -> None:
         component_index=torch.tensor([0, 1], dtype=torch.int32),
         formula_unit_volume=100.0,
     )
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=2,
         z_prime=2,
         batch_size=2,
@@ -771,7 +882,7 @@ def test_budget_exhaustion_recomputes_expiration_for_surviving_row() -> None:
         space_groups=SpaceGroupPolicy.fixed(1),
     )
     events = []
-    result = CrystalPacker(config, device="cpu")(
+    result = OverlapReliefPacker(config, device="cpu")(
         inputs,
         num_samples=4,
         rng=torch.Generator().manual_seed(2),
@@ -791,7 +902,7 @@ def test_budget_exhaustion_recomputes_expiration_for_surviving_row() -> None:
 
 def test_public_cpu_same_seed_repeats_and_different_seed_changes_geometry() -> None:
     inputs = _one_atom_input()
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=1,
         z_prime=1,
         batch_size=4,
@@ -799,7 +910,7 @@ def test_public_cpu_same_seed_repeats_and_different_seed_changes_geometry() -> N
         cell_volume_range=(10_000.0, 10_000.0),
         space_groups=SpaceGroupPolicy.fixed(1),
     )
-    packer = CrystalPacker(config, device="cpu")
+    packer = OverlapReliefPacker(config, device="cpu")
     results = [
         packer(inputs, num_samples=4, rng=torch.Generator().manual_seed(seed))
         for seed in (22, 22, 23)
@@ -824,7 +935,7 @@ def test_public_cpu_same_seed_repeats_and_different_seed_changes_geometry() -> N
 def test_call_level_space_group_policy_revalidates_without_mutating_base() -> None:
     inputs = _one_atom_input()
     base_policy = SpaceGroupPolicy.fixed(1)
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=2,
         z_prime=2,
         batch_size=2,
@@ -832,7 +943,7 @@ def test_call_level_space_group_policy_revalidates_without_mutating_base() -> No
         cell_volume_range=(10_000.0, 10_000.0),
         space_groups=base_policy,
     )
-    packer = CrystalPacker(config, device="cpu")
+    packer = OverlapReliefPacker(config, device="cpu")
     with pytest.raises(ValueError, match=r"z / z_prime requires 2"):
         packer(
             inputs,
@@ -859,7 +970,7 @@ def test_public_space_group_weights_are_scale_invariant_and_exclude_zeros() -> N
     inputs = _one_atom_input()
 
     def sample_groups(weights: dict[int, float]) -> torch.Tensor:
-        config = PackingConfig(
+        config = OverlapReliefConfig(
             z=3,
             z_prime=1,
             batch_size=24,
@@ -867,7 +978,7 @@ def test_public_space_group_weights_are_scale_invariant_and_exclude_zeros() -> N
             cell_volume_range=(1_000_000.0, 1_000_000.0),
             space_groups=SpaceGroupPolicy.sampled(probabilities=weights),
         )
-        result = CrystalPacker(config, device="cpu")(
+        result = OverlapReliefPacker(config, device="cpu")(
             inputs,
             num_samples=24,
             rng=torch.Generator().manual_seed(925),
@@ -894,7 +1005,7 @@ def test_public_cpu_conformer_pools_and_geometry_invariants() -> None:
         component_index=torch.tensor([0, 1], dtype=torch.int32),
         formula_unit_volume=1000.0,
     )
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=1,
         z_prime=1,
         batch_size=8,
@@ -902,7 +1013,7 @@ def test_public_cpu_conformer_pools_and_geometry_invariants() -> None:
         cell_volume_range=(10_000.0, 10_000.0),
         space_groups=SpaceGroupPolicy.fixed(1),
     )
-    result = CrystalPacker(config, device="cpu")(
+    result = OverlapReliefPacker(config, device="cpu")(
         inputs,
         num_samples=8,
         rng=torch.Generator().manual_seed(91),
@@ -936,7 +1047,7 @@ def test_public_cpu_conformer_pools_and_geometry_invariants() -> None:
 
 def test_public_cpu_callback_exception_propagates() -> None:
     inputs = _one_atom_input()
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=1,
         z_prime=1,
         batch_size=1,
@@ -948,7 +1059,7 @@ def test_public_cpu_callback_exception_propagates() -> None:
         raise RuntimeError("callback failed")
 
     with pytest.raises(RuntimeError, match="callback failed"):
-        CrystalPacker(config, device="cpu")(
+        OverlapReliefPacker(config, device="cpu")(
             inputs,
             rng=torch.Generator().manual_seed(4),
             progress_callback=fail,
@@ -959,14 +1070,14 @@ def test_raw_atomistic_generator_returns_packing_result() -> None:
     from nvalchemi.gen.generator import AtomisticGenerator
 
     inputs = _one_atom_input()
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=1,
         z_prime=1,
         batch_size=1,
         cell_volume_range=(10_000.0, 10_000.0),
         space_groups=SpaceGroupPolicy.fixed(1),
     )
-    packer = CrystalPacker(config, device="cpu")
+    packer = OverlapReliefPacker(config, device="cpu")
     generator = AtomisticGenerator(
         generator_func=packer,
         device="cpu",
@@ -985,14 +1096,14 @@ def test_cuda_packer_launches_on_active_torch_stream(
     from nvalchemi.gen.generator import AtomisticGenerator
 
     inputs = _one_atom_input()
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=1,
         z_prime=1,
         batch_size=1,
         cell_volume_range=(10_000.0, 10_000.0),
         space_groups=SpaceGroupPolicy.fixed(1),
     )
-    packer = CrystalPacker(config, device="cuda:0")
+    packer = OverlapReliefPacker(config, device="cuda:0")
     observed_streams = []
     original_launch = wp.launch
 
@@ -1037,7 +1148,7 @@ def test_cuda_packer_launches_on_active_torch_stream(
 @pytest.mark.skipif(torch.cuda.device_count() < 2, reason="requires two CUDA devices")
 def test_cuda_input_on_other_device_is_rejected_before_copy() -> None:
     inputs = _one_atom_input().to("cuda:1")
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=1,
         z_prime=1,
         batch_size=1,
@@ -1045,16 +1156,41 @@ def test_cuda_input_on_other_device_is_rejected_before_copy() -> None:
         space_groups=SpaceGroupPolicy.fixed(1),
     )
     with pytest.raises(ValueError, match=r"inputs\.conformer_positions is on cuda:1"):
-        CrystalPacker(config, device="cuda:0")(
+        OverlapReliefPacker(config, device="cuda:0")(
             inputs, rng=torch.Generator(device="cuda:0")
         )
+
+
+@pytest.mark.parametrize(("num_samples", "candidate_budget"), [(0, "config"), (2, 0)])
+@pytest.mark.skipif(torch.cuda.device_count() < 2, reason="requires two CUDA devices")
+def test_cuda_empty_call_still_validates_input_placement(
+    num_samples: int, candidate_budget: int | str
+) -> None:
+    inputs = _one_atom_input().to("cuda:1")
+    config = OverlapReliefConfig(
+        z=1,
+        z_prime=1,
+        batch_size=1,
+        cell_volume_range=(10_000.0, 10_000.0),
+        space_groups=SpaceGroupPolicy.fixed(1),
+    )
+    rng = torch.Generator(device="cuda:0").manual_seed(53)
+    initial_rng_state = rng.get_state()
+    with pytest.raises(ValueError, match=r"inputs\.conformer_positions is on cuda:1"):
+        OverlapReliefPacker(config, device="cuda:0").pack(
+            inputs,
+            num_samples=num_samples,
+            rng=rng,
+            candidate_budget=candidate_budget,
+        )
+    assert torch.equal(rng.get_state(), initial_rng_state)
 
 
 @pytest.mark.parametrize("device", ["cuda:0", "cuda:1"])
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 def test_cuda_public_packer_preserves_selected_device(device: str) -> None:
     inputs = _one_atom_input()
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=1,
         z_prime=1,
         batch_size=2,
@@ -1062,7 +1198,7 @@ def test_cuda_public_packer_preserves_selected_device(device: str) -> None:
         cell_volume_range=(10_000.0, 10_000.0),
         space_groups=SpaceGroupPolicy.fixed(1),
     )
-    result = CrystalPacker(config, device=device)(
+    result = OverlapReliefPacker(config, device=device)(
         inputs,
         num_samples=2,
         rng=torch.Generator(device=device).manual_seed(12),
@@ -1074,7 +1210,7 @@ def test_cuda_public_packer_preserves_selected_device(device: str) -> None:
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 def test_cuda_weighted_policy_packs_only_compatible_groups_on_device() -> None:
     device = "cuda:0"
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=3,
         z_prime=1,
         batch_size=8,
@@ -1084,7 +1220,7 @@ def test_cuda_weighted_policy_packs_only_compatible_groups_on_device() -> None:
             probabilities={143: 1.0e300, 144: 0.0, 145: 3.0e300}
         ),
     )
-    result = CrystalPacker(config, device=device)(
+    result = OverlapReliefPacker(config, device=device)(
         _one_atom_input(),
         num_samples=8,
         rng=torch.Generator(device=device).manual_seed(925),
@@ -1096,7 +1232,7 @@ def test_cuda_weighted_policy_packs_only_compatible_groups_on_device() -> None:
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 def test_cuda_packer_identity_survives_p1_expansion() -> None:
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=1,
         z_prime=1,
         batch_size=2,
@@ -1104,7 +1240,7 @@ def test_cuda_packer_identity_survives_p1_expansion() -> None:
         cell_volume_range=(10_000.0, 10_000.0),
         space_groups=SpaceGroupPolicy.fixed(1),
     )
-    result = CrystalPacker(config, device="cuda:0")(
+    result = OverlapReliefPacker(config, device="cuda:0")(
         _one_atom_input(),
         num_samples=2,
         rng=torch.Generator(device="cuda:0").manual_seed(26),
@@ -1125,7 +1261,7 @@ def test_cuda_zero_accepted_shortfall_keeps_empty_outputs_on_device(
     device: str,
 ) -> None:
     inputs = _one_atom_input(contact_distance=5.0)
-    config = PackingConfig(
+    config = OverlapReliefConfig(
         z=1,
         z_prime=1,
         batch_size=1,
@@ -1138,7 +1274,7 @@ def test_cuda_zero_accepted_shortfall_keeps_empty_outputs_on_device(
         cell_volume_range=(90.0, 90.0),
         space_groups=SpaceGroupPolicy.fixed(1),
     )
-    result = CrystalPacker(config, device=device)(
+    result = OverlapReliefPacker(config, device=device)(
         inputs,
         num_samples=1,
         rng=torch.Generator(device=device).manual_seed(88),

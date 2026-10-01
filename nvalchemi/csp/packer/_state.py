@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Mutable candidate state used only while one CrystalPacker call runs."""
+"""Mutable candidate state used only while one OverlapReliefPacker call runs."""
 
 from __future__ import annotations
 

@@ -12,20 +12,30 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Crystal packing, configuration, and result types."""
+"""Crystal packer protocols, overlap relief, configuration, and results."""
 
-from nvalchemi.csp.packer.config import PackingConfig
-from nvalchemi.csp.packer.engine import CrystalPacker
+from nvalchemi.csp.packer.config import OverlapReliefConfig
+from nvalchemi.csp.packer.engine import OverlapReliefPacker
+from nvalchemi.csp.packer.protocol import (
+    CandidateBudgetPacker,
+    CrystalPacker,
+    PackingContext,
+)
 from nvalchemi.csp.packer.result import (
-    PackingProgress,
+    OverlapReliefProgress,
+    PackingReport,
     PackingResult,
     PackingStopReason,
 )
 
 __all__ = [
+    "CandidateBudgetPacker",
     "CrystalPacker",
-    "PackingConfig",
-    "PackingProgress",
+    "OverlapReliefConfig",
+    "OverlapReliefPacker",
+    "OverlapReliefProgress",
+    "PackingContext",
+    "PackingReport",
     "PackingResult",
     "PackingStopReason",
 ]

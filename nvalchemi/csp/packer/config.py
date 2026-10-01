@@ -28,7 +28,7 @@ from nvalchemi.csp.symmetry import (
 )
 
 
-class PackingConfig(BaseModel):
+class OverlapReliefConfig(BaseModel):
     """Choose how many trial structures to sample, which crystal symmetries and cell
     sizes to use, and when a trial is accepted.
 
@@ -111,7 +111,7 @@ class PackingConfig(BaseModel):
 
         from nvalchemi.csp.symmetry import CrystalSystem, SpaceGroupPolicy
 
-        config = PackingConfig(
+        config = OverlapReliefConfig(
             z=4,
             z_prime=1,
             batch_size=16,
@@ -150,7 +150,7 @@ class PackingConfig(BaseModel):
     space_groups: SpaceGroupPolicy = Field(default_factory=SpaceGroupPolicy.sampled)
 
     @model_validator(mode="after")
-    def _validate_configuration(self) -> PackingConfig:
+    def _validate_configuration(self) -> OverlapReliefConfig:
         """Validate coupled packing, sampling, and relaxation settings."""
         for name in (
             "z",
@@ -230,7 +230,7 @@ class PackingConfig(BaseModel):
             _resolve_space_group_distribution(self.space_groups, required_operations)
         return self
 
-    def effective(self, **overrides: Any) -> PackingConfig:
+    def effective(self, **overrides: Any) -> OverlapReliefConfig:
         """Return a new config with overrides fully validated.
 
         Unknown fields are rejected by the same ``extra='forbid'`` policy as

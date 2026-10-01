@@ -554,8 +554,8 @@ def build_contact_distance_matrix(
         Owned symmetric contact cutoffs in Å. Entry ``[i, j]`` defines overlap
         between atoms ``i`` and ``j`` in different molecular copies; distances
         within one rigid molecule are not measured against this matrix.
-        ``CrystalPacker`` may accept residual overlap up to
-        ``PackingConfig.overlap_tolerance``.
+        ``OverlapReliefPacker`` may accept residual overlap up to
+        ``OverlapReliefConfig.overlap_tolerance``.
 
     Raises
     ------

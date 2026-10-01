@@ -938,7 +938,7 @@ def test_confirmation_callback_must_return_ordered_subset() -> None:
 
 def test_packer_produced_batch_is_accepted() -> None:
     from nvalchemi.csp.data import MolecularPackingInput
-    from nvalchemi.csp.packer import CrystalPacker, PackingConfig
+    from nvalchemi.csp.packer import OverlapReliefConfig, OverlapReliefPacker
 
     inputs = MolecularPackingInput(
         conformer_positions=torch.tensor([[0.0, 0, 0]], dtype=torch.float32),
@@ -950,8 +950,8 @@ def test_packer_produced_batch_is_accepted() -> None:
         component_index=torch.tensor([0], dtype=torch.int32),
         formula_unit_volume=10_000.0,
     )
-    result = CrystalPacker(
-        PackingConfig(
+    result = OverlapReliefPacker(
+        OverlapReliefConfig(
             z=1,
             z_prime=1,
             batch_size=2,

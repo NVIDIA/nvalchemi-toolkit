@@ -24,9 +24,9 @@ Prepare a formula unit
 ----------------------
 
 ``MolecularPackingInput`` holds the molecules, conformers, contact distances,
-and starting volume estimate needed by the Packer. The optional RDKit helpers
-build it from molecules and generate conformers; the tensor input can also be
-constructed directly.
+and starting volume estimate needed by the rigid packer. The optional RDKit
+helpers build it from molecules and generate conformers; the tensor input can
+also be constructed directly.
 
 .. currentmodule:: nvalchemi.csp
 
@@ -61,7 +61,7 @@ Choose volume and symmetry
 Estimate a starting cell-volume range and select symmetry through
 ``SpaceGroupPolicy``. Its ``fixed`` and ``sampled`` constructors describe group
 selection; ``draw`` samples compatible groups independently of packing.
-``PackingConfig`` checks the policy against ``z / z_prime``.
+``OverlapReliefConfig`` checks the policy against ``z / z_prime``.
 
 .. currentmodule:: nvalchemi.csp
 
@@ -102,31 +102,56 @@ selection; ``draw`` samples compatible groups independently of packing.
 Generate candidates
 -------------------
 
-``CrystalPacker`` samples and adjusts rigid molecular placements until their
-intermolecular overlaps meet the chosen tolerance or the trial budget ends.
-It changes whole-molecule translations and rotations and can transform the
-cell while leaving each chosen conformer's internal geometry fixed.
-Its result contains accepted ASU structures and the stop reason; an optional
-callback receives progress events during the search. Packing does not
-minimize a physical crystal energy.
+``CSPGenerator`` extends ``AtomisticGenerator`` with packing execution policy,
+optional gathering, and native-result callbacks. It accepts any structural
+``CrystalPacker``; algorithms retain their own configuration and
+scientific loop.
+``PackingResult`` contains rigid ASU data or a ``Batch``, plus per-rank reports.
+Expansion defaults to true; raw results bypass Batch hooks and dynamics.
 
-.. currentmodule:: nvalchemi.csp.packer
+.. currentmodule:: nvalchemi.csp
 
 .. autosummary::
    :toctree: generated
    :template: class.rst
    :nosignatures:
 
-   PackingConfig
+   CSPGenerator
+
+.. autodata:: CSP_OUTPUT_FIELDS
+
+.. currentmodule:: nvalchemi.csp.packer
+
+``OverlapReliefPacker`` samples and adjusts rigid molecular placements until
+their intermolecular overlaps meet the chosen tolerance or
+the trial budget ends.
+It changes whole-molecule translations and rotations and can transform the
+cell while leaving each chosen conformer's internal geometry fixed.
+Its result contains accepted ASU structures and the stop reason; an optional
+callback receives progress events during the search. Packing does not
+minimize a physical crystal energy.
+
+.. autosummary::
+   :toctree: generated
+   :template: class.rst
+   :nosignatures:
+
    CrystalPacker
+   CandidateBudgetPacker
+   PackingContext
+   PackingReport
    PackingResult
-   PackingProgress
    PackingStopReason
+   OverlapReliefConfig
+   OverlapReliefPacker
+   OverlapReliefProgress
 
 .. autosummary::
    :nosignatures:
 
-   CrystalPacker.pack
+   OverlapReliefPacker.pack
+   OverlapReliefPacker.resolve_candidate_budget
+   PackingContext.structure_ids
 
 
 Store and expand selected structures

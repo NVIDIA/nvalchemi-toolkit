@@ -85,8 +85,11 @@ EXPECTED_PUBLIC_NAMES: frozenset[str] = frozenset(
         "DistributedManager",
         "PhysicsNeMoUninitializedDistributedManagerWarning",
         "collective_device",
+        "collective_error_sync",
+        "CollectivePhase",
         "resolve_global_rank",
         "resolve_world_size",
+        "ProcessGroupContext",
     }
 )
 

@@ -268,8 +268,9 @@ class MolecularPackingInput(BaseModel):
 
     Constructor tensors are copied to contiguous CPU storage. Each conformer is
     centered by its unweighted Cartesian mean. Contact matrix entries are
-    intermolecular contact cutoffs used to measure overlap; the ``CrystalPacker``
-    may accept residual overlap up to ``PackingConfig.overlap_tolerance``.
+    intermolecular contact cutoffs used to measure overlap; the
+    ``OverlapReliefPacker``
+    may accept residual overlap up to ``OverlapReliefConfig.overlap_tolerance``.
     ``formula_unit_volume`` is a positive volume estimate in cubic angstroms.
 
     Direct in-place mutation of exposed tensors is unsupported. Use

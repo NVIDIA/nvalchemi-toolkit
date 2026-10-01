@@ -24,15 +24,21 @@ from pydantic import ValidationError
 
 from nvalchemi.csp.data import MolecularPackingInput, RigidMoleculeASUBatch
 from nvalchemi.csp.packer import (
-    PackingConfig,
-    PackingProgress,
+    CandidateBudgetPacker,
+    CrystalPacker,
+    OverlapReliefConfig,
+    OverlapReliefPacker,
+    OverlapReliefProgress,
+    PackingContext,
+    PackingReport,
     PackingResult,
     PackingStopReason,
 )
 from nvalchemi.csp.symmetry import CrystalSystem, SpaceGroupPolicy
+from nvalchemi.data.batch import Batch
 
 
-def make_config(**overrides: object) -> PackingConfig:
+def make_config(**overrides: object) -> OverlapReliefConfig:
     values: dict[str, object] = {
         "z": 1,
         "z_prime": 1,
@@ -44,7 +50,7 @@ def make_config(**overrides: object) -> PackingConfig:
         values.pop("cell_volume_scale_range", None)
     if "cell_volume_scale_range" in overrides:
         values.pop("cell_volume_range", None)
-    return PackingConfig(**values)
+    return OverlapReliefConfig(**values)
 
 
 def make_structures() -> RigidMoleculeASUBatch:
@@ -73,9 +79,9 @@ def make_structures() -> RigidMoleculeASUBatch:
 
 def test_config_requires_exactly_one_cell_volume_mode() -> None:
     with pytest.raises(ValidationError, match="exactly one"):
-        PackingConfig(z=1, z_prime=1, batch_size=1)
+        OverlapReliefConfig(z=1, z_prime=1, batch_size=1)
     with pytest.raises(ValidationError, match="exactly one"):
-        PackingConfig(
+        OverlapReliefConfig(
             z=1,
             z_prime=1,
             batch_size=4,
@@ -128,7 +134,7 @@ def test_automatic_candidate_budget_mode_is_preserved_and_overridable() -> None:
 
     for budget in ("auto", None, 7):
         serialized = make_config(max_candidates=budget).model_dump()
-        assert PackingConfig.model_validate(serialized).max_candidates == budget
+        assert OverlapReliefConfig.model_validate(serialized).max_candidates == budget
 
 
 @pytest.mark.parametrize("budget", [True, 1.5, "unlimited"])
@@ -252,17 +258,113 @@ def test_space_groups_rejects_explicit_none() -> None:
 
 def test_result_len_is_accepted_structure_count_and_records_are_frozen() -> None:
     structures = make_structures()
+    report = PackingReport(
+        rank=0,
+        requested_count=3,
+        accepted_count=2,
+        generated_count=4,
+        stop_reason=PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED.value,
+    )
     result = PackingResult(
         structures=structures,
-        generated_count=4,
-        stop_reason=PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED,
         run_id=0,
+        reports=(report,),
     )
     assert len(result) == 2
+    assert result.accepted_count == 2
+    assert result.requested_count == 3
+    assert not result.complete
     assert result.generated_count == 4
     assert result.stop_reason is PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED
     with pytest.raises(FrozenInstanceError):
-        result.generated_count = 1  # type: ignore[misc]
+        report.rank = 1  # type: ignore[misc]
 
-    progress = PackingProgress(4, 2, 2, 1, 0, 1, 10, 0.25, 0.1)
+    progress = OverlapReliefProgress(4, 2, 2, 1, 0, 1, 10, 0.25, 0.1)
     assert (progress.rank, progress.world_size) == (0, 1)
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        ("rank", True),
+        ("requested_count", -1),
+        ("accepted_count", 2),
+        ("generated_count", False),
+        ("stop_reason", ""),
+    ],
+)
+def test_packing_report_rejects_invalid_counters_and_reason(
+    field: str, value: object
+) -> None:
+    values: dict[str, object] = {
+        "rank": 0,
+        "requested_count": 1,
+        "accepted_count": 1,
+        "stop_reason": PackingStopReason.TARGET_REACHED.value,
+        "generated_count": 1,
+    }
+    values[field] = value
+    with pytest.raises((TypeError, ValueError)):
+        PackingReport(**values)  # type: ignore[arg-type]
+
+
+def test_gathered_result_derives_counts_and_shortfall_from_reports() -> None:
+    result = PackingResult(
+        structures=make_structures(),
+        run_id=7,
+        reports=(
+            PackingReport(0, 1, 1, "target_reached", 1),
+            PackingReport(1, 2, 1, "acceptance_limit", None),
+        ),
+        scope="gathered",
+    )
+    assert result.accepted_count == 2
+    assert result.requested_count == 3
+    assert not result.complete
+    assert result.generated_count is None
+    assert result.stop_reason is PackingStopReason.SHORTFALL
+
+    budget_limited = PackingResult(
+        structures=make_structures(),
+        run_id=7,
+        reports=(
+            PackingReport(0, 2, 1, "candidate_budget_exhausted", 2),
+            PackingReport(1, 2, 1, "candidate_budget_exhausted", 2),
+        ),
+        scope="gathered",
+    )
+    assert budget_limited.generated_count == 4
+    assert budget_limited.stop_reason is PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED
+
+
+def test_result_accepts_toolkit_batch_payload_and_uses_occupied_graph_count() -> None:
+    structures = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+    result = PackingResult(
+        structures=structures,
+        run_id=4,
+        reports=(PackingReport(0, 0, 0, "target_reached", 0),),
+    )
+    assert len(result) == result.accepted_count == 0
+    assert result.complete
+
+
+def test_context_builds_rank_strided_ids_and_checks_int64_overflow() -> None:
+    context = PackingContext(run_id=17, rank=2, world_size=3)
+    assert context.structure_ids(3, device="cpu").tolist() == [
+        [17, 2],
+        [17, 5],
+        [17, 8],
+    ]
+    assert context.structure_ids(0, device="cpu").shape == (0, 2)
+    with pytest.raises(OverflowError, match="int64"):
+        PackingContext(run_id=1, rank=0, world_size=2**63).structure_ids(
+            2, device="cpu"
+        )
+    with pytest.raises((TypeError, ValueError)):
+        PackingContext(run_id=True)
+
+
+def test_local_packer_implements_structural_protocols() -> None:
+    packer = OverlapReliefPacker(make_config(), device="cpu")
+    assert isinstance(packer, CrystalPacker)
+    assert isinstance(packer, CandidateBudgetPacker)

@@ -122,6 +122,7 @@ import inspect
 import itertools
 from collections.abc import Iterator, Mapping
 from contextlib import ExitStack
+from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -155,6 +156,16 @@ __all__ = [
 
 InputT = TypeVar("InputT")
 SampleT = TypeVar("SampleT")
+
+
+@dataclass
+class _PreparedGeneration:
+    """Resolved per-call state after generation preparation."""
+
+    ctx: GenerationContext
+    num_samples: int
+    rng: torch.Generator | None
+    kwargs: dict[str, Any]
 
 
 @runtime_checkable
@@ -752,6 +763,82 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
             step_count=self.step_count,
         )
 
+    def _prepare_generation(
+        self,
+        inputs: Any,
+        num_samples: int | None,
+        kwargs: dict[str, Any],
+    ) -> _PreparedGeneration:
+        """Build and install the context, then resolve per-call generation state."""
+        from nvalchemi.training.distributed import get_rank
+
+        ctx = GenerationContext(
+            batch=inputs if isinstance(inputs, Batch) else None,
+            global_rank=get_rank(None),
+            workflow=self,
+            inputs=inputs,
+            step_count=self.step_count,
+        )
+        self._ctx = ctx
+
+        n_draws = num_samples if num_samples is not None else self.num_samples
+        if n_draws < 1:
+            raise ValueError(f"num_samples must be positive, got {n_draws}")
+
+        # Resolve RNG: per-call override, then session, then seed-derived.
+        rng = kwargs.pop("rng", None)
+        if rng is None:
+            if self._session_rng is not None:
+                rng = self._session_rng
+            elif self.seed is not None:
+                device = self._infer_device()
+                rng = torch.Generator(
+                    device=device if device is not None else "cpu"
+                ).manual_seed(self.seed + ctx.step_count)
+
+        # Resolve condition: driver's condition_func > generator_func.condition.
+        condition = self.condition_func
+        if condition is None:
+            condition = getattr(self.generator_func, "condition", None)
+        if condition is not None and callable(condition):
+            self._call_hooks(GenerationStage.BEFORE_CONDITION, None)
+            ctx.inputs = condition(ctx.inputs, num_samples=n_draws, rng=rng)
+            self._call_hooks(GenerationStage.AFTER_CONDITION, None)
+
+        if self.required_inputs:
+            if ctx.inputs is None or not isinstance(
+                ctx.inputs, (Batch, TensorDictBase, Mapping)
+            ):
+                raise TypeError(
+                    "AtomisticGenerator declares required_inputs="
+                    f"{sorted(self.required_inputs)}, but the call's inputs "
+                    f"({type(ctx.inputs).__name__}) are not a "
+                    "field-addressable container (Batch, TensorDict, or a "
+                    "string-keyed mapping). Pass inputs carrying those "
+                    "fields, or fix the declaration."
+                )
+            missing = [f for f in sorted(self.required_inputs) if f not in ctx.inputs]
+            if missing:
+                raise ValueError(
+                    "AtomisticGenerator declares required_inputs but the "
+                    f"call's inputs lack {missing}. Provide the fields in the "
+                    "inputs or in the condition step, or fix the declaration."
+                )
+
+        return _PreparedGeneration(ctx, n_draws, rng, kwargs)
+
+    def _finish_preparation(
+        self,
+        prepared: _PreparedGeneration | None,
+        error: Exception | None,
+    ) -> _PreparedGeneration:
+        """Return prepared call state, or re-raise its preparation error."""
+        if error is not None:
+            raise error
+        if prepared is None:
+            raise RuntimeError("generation preparation returned no call state")
+        return prepared
+
     def sample(
         self,
         inputs: Any = None,
@@ -813,65 +900,21 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
             resolved (via ``device`` or ``generator_func.device``) but the
             returned batch lives on a different device.
         """
-        from nvalchemi.training.distributed import get_rank
-
-        ctx = GenerationContext(
-            batch=inputs if isinstance(inputs, Batch) else None,
-            global_rank=get_rank(None),
-            workflow=self,
-            inputs=inputs,
-            step_count=self.step_count,
-        )
-        self._ctx = ctx
         try:
-            n_draws = num_samples if num_samples is not None else self.num_samples
-            if n_draws < 1:
-                raise ValueError(f"num_samples must be positive, got {n_draws}")
-            # Resolve RNG: per-call override, then session, then seed-derived
-            rng = kwargs.pop("rng", None)
-            if rng is None:
-                if self._session_rng is not None:
-                    rng = self._session_rng
-                elif self.seed is not None:
-                    device = self._infer_device()
-                    rng = torch.Generator(
-                        device=device if device is not None else "cpu"
-                    ).manual_seed(self.seed + ctx.step_count)
-            # Resolve condition: driver's condition_func > generator_func.condition
-            condition = self.condition_func
-            if condition is None:
-                condition = getattr(self.generator_func, "condition", None)
-            if condition is not None and callable(condition):
-                self._call_hooks(GenerationStage.BEFORE_CONDITION, None)
-                ctx.inputs = condition(ctx.inputs, num_samples=n_draws, rng=rng)
-                self._call_hooks(GenerationStage.AFTER_CONDITION, None)
-            if self.required_inputs:
-                if ctx.inputs is None or not isinstance(
-                    ctx.inputs, (Batch, TensorDictBase, Mapping)
-                ):
-                    raise TypeError(
-                        "AtomisticGenerator declares required_inputs="
-                        f"{sorted(self.required_inputs)}, but the call's inputs "
-                        f"({type(ctx.inputs).__name__}) are not a "
-                        "field-addressable container (Batch, TensorDict, or a "
-                        "string-keyed mapping). Pass inputs carrying those "
-                        "fields, or fix the declaration."
-                    )
-                missing = [
-                    f for f in sorted(self.required_inputs) if f not in ctx.inputs
-                ]
-                if missing:
-                    raise ValueError(
-                        "AtomisticGenerator declares required_inputs but the "
-                        f"call's inputs lack {missing}. Provide the fields in the "
-                        "inputs or in the condition step, or fix the declaration."
-                    )
+            try:
+                prepared = self._prepare_generation(inputs, num_samples, kwargs)
+            except Exception as error:
+                prepared = self._finish_preparation(None, error)
+            else:
+                prepared = self._finish_preparation(prepared, None)
+
+            ctx = prepared.ctx
             gen_fn = self._compiled_generate or self.generator_func
             ctx.sample = gen_fn(
                 ctx.inputs,
-                num_samples=n_draws,
-                rng=rng,
-                **kwargs,
+                num_samples=prepared.num_samples,
+                rng=prepared.rng,
+                **prepared.kwargs,
             )
             if not isinstance(ctx.sample, Batch):
                 # raw passthrough: AFTER_GENERATE hooks are Batch-level
@@ -913,8 +956,9 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
                     )
             return batch
         finally:
-            self._ctx = None
-            self.step_count += 1
+            if self._ctx is not None:
+                self._ctx = None
+                self.step_count += 1
 
     def __call__(self, inputs: Any = None, **kwargs: Any) -> Any:
         """Syntactic sugar for :meth:`sample`.

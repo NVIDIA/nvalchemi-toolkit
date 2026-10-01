@@ -8,13 +8,12 @@ in a crystal. The `nvalchemi.csp` package provides four parts of this search:
 - **Prepare the search:** assemble molecular conformers into a formula unit,
   estimate starting cell volumes, and choose compatible space groups. The
   molecule helpers use RDKit when available; raw tensor inputs are also supported.
-- **Generate starting structures:** `CrystalPacker` chooses an input conformer
-  for each independent molecule and places the molecules in a cell. It applies
-  rigid-body translations and rotations to the molecules and can transform the
-  cell to reduce intermolecular overlaps. The chosen conformers keep their
-  internal geometries during packing.
-- **Save and expand structures:** the Packer returns an asymmetric-unit (ASU)
-  representation containing independent molecule placements, a cell, and
+- **Generate starting structures:** `OverlapReliefPacker` chooses input
+  conformers and adjusts rigid molecular placements and cells to reduce
+  overlaps. `CSPGenerator` also accepts user-defined packers that return rigid
+  ASU data or explicit atomistic coordinates in a `Batch`.
+- **Save and expand structures:** the rigid packer returns an asymmetric-unit
+  (ASU) representation containing independent molecule placements, a cell, and
   symmetry information. Zarr storage retains these data without writing every
   atom in the cell. Selected structures can be expanded to full-cell Toolkit
   {py:class}`~nvalchemi.data.Batch` objects for physical optimization. Here
@@ -59,7 +58,7 @@ from nvalchemi.csp.chem import (
     build_molecular_packing_input,
     generate_conformers_from_smiles,
 )
-from nvalchemi.csp.packer import CrystalPacker, PackingConfig
+from nvalchemi.csp.packer import OverlapReliefPacker, OverlapReliefConfig
 
 # Generate one water conformer with RDKit.
 molecule = generate_conformers_from_smiles(
@@ -68,7 +67,7 @@ molecule = generate_conformers_from_smiles(
 # Assemble the molecules and contact distances for one formula unit.
 packing_input = build_molecular_packing_input([molecule])
 # Configure the starting cells, symmetry, and finite trial budget.
-config = PackingConfig(
+config = OverlapReliefConfig(
     z=1,
     z_prime=1,
     batch_size=64,
@@ -77,7 +76,7 @@ config = PackingConfig(
     space_groups=SpaceGroupPolicy.fixed(1),
 )
 # Bind the packer to the selected GPU.
-packer = CrystalPacker(
+packer = OverlapReliefPacker(
     config=config,
     device="cuda:0",
 )
@@ -155,12 +154,12 @@ per formula unit. Pass those molecules in a fixed order, for example
 
 Each molecule can have several input conformers. For a flexible molecule,
 these represent alternative internal geometries that may pack differently.
-The Packer chooses one conformer for each independently placed molecule, then
-keeps its internal coordinates fixed while translating and rotating the
-molecule and changing the cell. With `Z′ > 1`, it can choose different
-conformers for the symmetry-independent copies of a molecule. The conformer
-pool does not rank molecular energies. RDKit can generate the conformers, or
-callers can supply coordinates prepared by another method.
+The `OverlapReliefPacker` chooses one conformer for each independently placed
+molecule, then keeps its internal coordinates fixed while translating and
+rotating the molecule and changing the cell. With `Z′ > 1`, it can choose
+different conformers for the symmetry-independent copies of a molecule.
+The conformer pool does not rank molecular energies. RDKit can generate the
+conformers, or callers can supply coordinates prepared by another method.
 
 ### Choose Z, Z′, and a space group
 
@@ -170,8 +169,9 @@ the space group must have `Z / Z′` operations. For `Z=2` and `Z′=1`, familia
 choices include P-1 (group 2) and P2₁ (group 4), each with two operations.
 For `Z=4` and `Z′=1`, four-operation choices include P2₁/c (group 14),
 P2₁2₁2₁ (group 19), and Cc (group 9). With `Z′=2`, two formula units are
-placed independently, so the Packer can choose different conformers for their
-corresponding molecules. The bundled operations use the standard P2₁/c setting
+placed independently, so the `OverlapReliefPacker` can choose different
+conformers for their corresponding molecules. The bundled operations use the
+standard P2₁/c setting
 for group 14; P2₁/n is an alternative cell setting of the same group.
 
 Molecules on **special positions** are not supported. Some symmetry operations
@@ -227,7 +227,8 @@ change the volume in either direction.
 them. Use `SpaceGroupPolicy.fixed(number)` for one group, or
 `SpaceGroupPolicy.sampled()` for compatible groups weighted by the bundled
 Cambridge Structural Database (CSD) prior. Omitting `space_groups` from
-`PackingConfig` selects the sampled policy. The bundled weights come from the
+`OverlapReliefConfig` selects the sampled policy. The bundled weights come
+from the
 [CCDC space-group statistics report dated 1 January 2026](https://www.ccdc.cam.ac.uk/media/CSD-Space-Group-Statistics-Space-Group-Number-Ordering-2026.pdf).
 
 A sampled policy can restrict the crystal system and molecular handedness:
@@ -265,7 +266,8 @@ group 19. These weights control initial group selection. Cell initialization
 and acceptance can change the proportions in returned structures, and
 weighted sampling does not guarantee coverage of every group.
 
-`PackingConfig` checks the policy against `z / z_prime` when it is constructed
+`OverlapReliefConfig` checks the policy against `z / z_prime` when it is
+constructed
 or updated. A fixed group must provide that many operations; a sampled policy
 must retain at least one compatible group with positive weight. For example,
 group 2 has two operations and is incompatible with `z=4, z_prime=1`. The
@@ -295,10 +297,10 @@ policy and `draw()` with the same arguments.
 
 ### Understand acceptance and shortfall
 
-The Packer checks contacts between different molecular copies, including
-periodic copies. An **overlap** is the positive difference between a contact
-cutoff and an atom-pair distance, in $\mathrm{\AA}$. Small residual overlap
-can remain: a trial is accepted when its largest overlap is at most
+The `OverlapReliefPacker` checks contacts between different molecular copies,
+including periodic copies. An **overlap** is the positive difference between a
+contact cutoff and an atom-pair distance, in $\mathrm{\AA}$. Small residual
+overlap can remain: a trial is accepted when its largest overlap is at most
 `overlap_tolerance`.
 The accepted structures carry `steps`, `total_overlap`, and `max_overlap` in
 `result.structures.properties`. These are clash diagnostics, not physical
@@ -310,36 +312,39 @@ Contacts are checked at iteration zero, at each
 active-trial diagnostics. If the finite candidate budget ends first, the
 result can contain fewer accepted structures than requested. Restrictive
 cell-shape or volume limits can instead prevent initialization and raise
-`RuntimeError`. See {py:class}`~nvalchemi.csp.packer.PackingConfig` for the
+`RuntimeError`. See
+{py:class}`~nvalchemi.csp.packer.OverlapReliefConfig` for the
 movement, cell-shape, and progress controls.
 
 ## Distribute candidate generation
 
-Independent packing trials can run across several GPUs, usually with one
-process per GPU. Every process needs equivalent formula-unit input and an
-agreed global target and trial budget. This distributes packing work;
-distributing later optimization stages is a separate Toolkit workflow (see
-{ref}`dynamics_guide`).
+`CSPGenerator` allocates independent packing work across an existing process
+group. The application owns process launch and group lifetime. Each process
+supplies equivalent formula-unit input; scientific settings such as `Z`, `Z′`,
+and space-group policy may differ between ranks. Gloo supports CPU packers;
+NCCL supports CUDA packers, usually with one process per GPU.
 
-The application creates the process group and assigns a local CUDA device to
-each process. This fragment assumes a `torchrun` launch and an initialized
-NCCL group. Prepare the [input and config](#csp-water-example) on each
-process; run the packing call below in place of the single-GPU call:
+This fragment assumes a `torchrun` launch and an initialized NCCL group. Prepare
+the [input and config](#csp-water-example) on each process:
 
 ```python
 import os
 import torch.distributed as dist
+from nvalchemi.csp import CSPGenerator
 
 local_rank = int(os.environ["LOCAL_RANK"])
 device = f"cuda:{local_rank}"
-torch.cuda.set_device(local_rank)
-rank_packer = CrystalPacker(config=config, device=device)
-rank_result = rank_packer(
+rank_packer = OverlapReliefPacker(config=config, device=device)
+generator = CSPGenerator(
+    rank_packer,
+    process_group=dist.group.WORLD,
+    gather_to_rank=0,
+    expand=False,
+)
+rank_result = generator(
     packing_input,
     num_samples=200,
     rng=torch.Generator(device=device).manual_seed(7),
-    process_group=dist.group.WORLD,
-    gather_to_rank=0,
     run_id=78,
 )
 if dist.get_rank() == 0:
@@ -348,14 +353,75 @@ else:
     assert rank_result is None
 ```
 
-All ranks provide equivalent formula-unit input and agree on the global target
-and candidate budget. The default quotas divide them as evenly as possible;
-custom `rank_targets` must sum to the global target, and with a finite budget
-require `rank_candidate_budgets` summing to that budget. With
-`gather_to_rank=0`, rank 0 receives the combined ASU representations and the
-others receive `None`; with `None`, each rank retains its local result. The
-caller owns process launch, group lifetime, device assignment, and output
-storage. Gloo with CPU Packers is also supported.
+`num_samples` is the global accepted-output target. Default quotas divide it
+by quotient and remainder. For budget-capable packers, resolve the global
+candidate cap before allocating it. Custom `rank_targets` must sum to the
+global target; with a finite cap they require `rank_candidate_budgets` summing
+to that cap. Unused budgets are not redistributed. Packers without candidate
+budgets need no trial counting and reject explicit rank-budget vectors.
+
+`gather_to_rank` uses group-local ranks. With a destination, the native result
+contains rank-major structures and every rank's completion report. Without a
+destination, each rank keeps its local result. Gathering requires one native
+representation and matching property or Batch schemas on all ranks, including
+empty results; mixing rigid and atomistic output in one gather is rejected.
+
+Ranks agree on the input, execution contract, and run ID at startup, then pack
+locally to completion. Rank-local output has no terminal rendezvous: errors
+and completion are local. Gathered output exchanges terminal status before
+payload transfer and assembly status afterward. Early, failed, and zero-quota
+ranks may wait for the slowest peer. Set the process-group timeout to cover
+that skew; unlimited searches may never finish. There is no periodic
+coordination or peer cancellation. Hard process/device failures and transport
+failures are outside ordinary Python error agreement.
+
+The generator scopes NCCL communication to the packer's CUDA device and
+restores the caller's current device. Constructor/session failures and
+collectives inside user callbacks remain caller-owned. Later distributed
+optimization is a separate Toolkit workflow (see {ref}`dynamics_guide`).
+
+Distributed setup remains caller-owned. Internally, each grouped generation
+call uses {py:class}`~nvalchemi.distributed.ProcessGroupContext` for the supplied
+group's topology and communication device, and
+{py:func}`~nvalchemi.distributed.collective_error_sync` for startup, packing
+metadata, and assembly error agreement. Rank-local calls exchange startup
+metadata and broadcast the run ID, then finish independently. Gathered calls
+also exchange packing metadata before typed transfers and assembly status
+afterward. Callbacks, expansion, and `AFTER_GENERATE` run after these phases;
+their exceptions remain local.
+
+As an alternative to external PyTorch initialization, use a named Manager
+group. This setup starts before a process group has been initialized and reuses
+`config` from the water example above:
+
+```python
+import torch.distributed as dist
+from nvalchemi.csp import CSPGenerator
+from nvalchemi.csp.packer import OverlapReliefPacker
+from nvalchemi.distributed import DistributedManager
+
+DistributedManager.initialize()
+manager = DistributedManager()
+process_group = None
+if dist.is_initialized():
+    DistributedManager.create_process_subgroup("packing", size=manager.world_size)
+    process_group = manager.group("packing")
+
+packer = OverlapReliefPacker(config, device=manager.device)
+generator = CSPGenerator(
+    packer,
+    process_group=process_group,
+    gather_to_rank=0 if process_group is not None else None,
+)
+```
+
+`manager.group()` returns `None` for the default group, while `CSPGenerator`
+interprets `None` as local execution. Select `dist.group.WORLD` explicitly or
+pass an actual named group. Manager initialization in a single-process run may
+leave PyTorch distributed uninitialized; the example selects local CSP
+execution in that case. The caller keeps the group alive until generation and
+any later communication finish. See {ref}`distributed-runtime` for shared
+runtime helpers and their ordinary-failure boundaries.
 
 ## Store and relax selected candidates
 
@@ -384,8 +450,8 @@ assert asu_rows.num_structures == batch.num_graphs == 2
 fresh path when rerunning the example. `append()` adds compatible rows; an
 identical active structure ID is skipped, while conflicting data for that ID
 raises an error. `read_batch()` requires explicit row indices so a large store
-is not expanded accidentally. An empty Packer result is a valid ASU batch,
-but handle it before passing data to an optimizer.
+is not expanded accidentally. An empty `OverlapReliefPacker` result is a
+valid ASU batch, but handle it before passing data to an optimizer.
 
 The expanded `batch` can enter Toolkit dynamics. This one-step demonstration
 shows the handoff; `DemoModel` is not a physical crystal potential and its
@@ -419,47 +485,135 @@ carries these IDs and the source space group into the atomistic Batch.
 
 ### Run packing in a generation pipeline
 
-Use `AtomisticGenerator` when packing is the first stage of a workflow that
-continues with Toolkit dynamics. The Packer returns accepted structures in an
-ASU representation; FIRE2 needs a full-cell {py:class}`~nvalchemi.data.Batch`.
-The generating function expands the accepted structures before returning
-them. This example reuses `packer`, `packing_input`, and `demo_model` from
-above:
+`CSPGenerator` subclasses `AtomisticGenerator` and reuses its RNG, conditioning,
+hooks, sessions, streaming, and pipeline lifecycle. By default it expands rigid
+ASU results to full-cell {py:class}`~nvalchemi.data.Batch` objects; native Batch
+results pass through unchanged. This example reuses `packer`, `packing_input`,
+and `demo_model` above:
 
 ```python
-from nvalchemi.gen import AtomisticGenerator
+from nvalchemi.csp import CSPGenerator
 
-
-def generate_for_relaxation(formula_unit, *, num_samples, rng):
-    """Pack a formula unit and expand accepted structures for dynamics."""
-    packed = packer(formula_unit, num_samples=num_samples, rng=rng)
-    if len(packed) == 0:
-        raise RuntimeError("No packing candidate was accepted")
-    return packed.structures.to_batch()
-
-
-generator = AtomisticGenerator(
-    generator_func=generate_for_relaxation,
-    num_samples=4,
-    required_inputs=frozenset(),
-    outputs=frozenset({"positions", "atomic_numbers", "cell", "pbc"}),
-    device="cuda:0",
-    seed=79,
-)
+generator = CSPGenerator(packer, num_samples=4, seed=79)
 pipeline = generator | FIRE2(model=demo_model, dt=0.05, n_steps=1)
 with pipeline:
     relaxed = pipeline(packing_input)
 ```
 
-The generator requests four accepted structures and relaxes all those returned
-by the Packer. A finite trial budget may yield fewer, so the function checks
-for an empty result. The pipeline passes `packing_input` to the generating
-function. The empty `required_inputs` declaration means no Batch fields are
-required from that input, while `outputs` names fields in the returned Batch.
-`AFTER_GENERATE` hooks see the expanded Batch, and `GenerationPipeline` passes
-it to FIRE2. Returning the raw
-`PackingResult` instead would bypass Batch hooks and could not feed a dynamics
-stage.
+A finite budget may produce fewer structures than requested. An empty Batch
+skips downstream stages. `AFTER_GENERATE` hooks see the atomistic output;
+native results and their reports describe packing before those hooks filter
+or modify it. Collective dynamics need a separate integration when ranks have
+unequal outputs or gathered non-destination ranks have no output.
+
+Use `on_result` to inspect or persist native results before expansion, hooks,
+or dynamics. For rigid results, the existing ASU writer can persist candidates
+even if later optimization fails:
+
+```python
+with CSPZarrWriter("pipeline-candidates.zarr") as writer:
+    generator = CSPGenerator(
+        packer,
+        num_samples=4,
+        seed=79,
+        on_result=lambda packed: writer.append(packed.structures),
+    )
+    with generator | FIRE2(model=demo_model, dt=0.05, n_steps=1) as pipeline:
+        relaxed = pipeline(packing_input)
+```
+
+The callback runs once per result owner, including empty results: each rank
+in rank-local mode or only the destination in gather mode, after
+communication completes. Callback exceptions are local and callbacks must
+not require a peer collective. Native Batch payloads alias downstream
+output, so copy the payload explicitly to retain an unchanged snapshot.
+ASU storage remains for rigid representations; this change does not make
+the ASU writer a Batch store.
+
+`expand=False` returns a raw `PackingResult`, or `None` on non-destination ranks
+in gather mode. Raw results bypass Batch hooks and cannot feed dynamics.
+Expanded non-destination ranks receive an empty Batch. Driver compilation is
+unsupported: `CSPGenerator.compile()` and pipeline compilation through a CSP
+stage raise; compiled scientific internals inside a packer remain possible.
+
+### Supply another packing algorithm
+
+Implement `CrystalPacker` structurally: expose `device` and a local `pack`
+method; no Toolkit inheritance or common configuration base is required.
+The driver supplies a `PackingContext` for identity and never supplies a
+process group to the algorithm. A zero-target call returns a typed empty
+result with the same schema as a positive call and consumes no sampling RNG.
+
+The following small example repeats supplied geometry to demonstrate the
+atomistic result contract. It does not search for packings:
+
+```python
+import secrets
+import torch
+from nvalchemi.csp.packer import PackingContext, PackingReport, PackingResult
+from nvalchemi.data import Batch
+
+
+class FixedGeometryPacker:
+    def __init__(self, template):
+        self.device = template.device
+        self.template = template.clone()
+        self.template.add_system_property(
+            "csp_source_structure_id",
+            torch.zeros((1, 2), dtype=torch.int64, device=self.device),
+        )
+
+    def pack(
+        self, inputs, *, num_samples=1, rng=None, context=None, **options
+    ):
+        if options:
+            raise TypeError(f"Unknown packing options: {sorted(options)}")
+        context = context or PackingContext(secrets.randbits(63))
+        ids = context.structure_ids(num_samples, device=self.device)
+        if num_samples == 0:
+            batch = Batch.empty(
+                num_systems=0, num_nodes=0, num_edges=0,
+                template=self.template, device=self.device,
+            )
+        else:
+            rows = []
+            for ordinal in range(num_samples):
+                row = self.template.clone()
+                row["csp_source_structure_id"] = ids[ordinal:ordinal + 1]
+                rows.append(row)
+            batch = Batch.from_data_list(rows, device=self.device)
+        report = PackingReport(
+            context.rank, num_samples, num_samples, "target_reached"
+        )
+        return PackingResult(batch, context.run_id, (report,))
+```
+
+Supply an `AtomicData` template with positions, atomic numbers, cell, and PBC,
+then use `CSPGenerator(FixedGeometryPacker(template))`. Scientific packers also
+provide any fields required by subsequent dynamics. Native Batch results carry
+system-level `csp_source_structure_id` as int64 `[P, 2]`; rigid packers use the
+same IDs in `RigidMoleculeASUBatch.structure_ids`. IDs remain
+`[run_id, rank + world_size * local_accepted_ordinal]`, independent of
+sampling RNG.
+
+`PackingResult` exposes `requested_count`, `accepted_count`, `complete`, and
+ordered `reports`. `generated_count` is `None` when an algorithm does not count
+candidates. Incomplete reports may use algorithm-specific stop reasons;
+gathered results preserve these rather than attributing every shortfall to
+candidate-budget exhaustion. A rigid result must retain equivalent formula
+data, including conformer coordinates. Algorithms that change internal
+geometry beyond that library return Batch.
+
+Candidate-budget support is optional. Implement
+`resolve_candidate_budget(num_samples=..., **pack_options)` without sampling
+and accept an allocated `candidate_budget` in `pack` when that capability
+is useful. A zero allocated cap produces an empty result without sampling.
+The scientific candidate loop stays in the algorithm; overlap relief retains
+its private resumable core. Public rounds and a shared candidate controller
+are deferred until a second implementation demonstrates a common lifecycle.
+These choices follow the extensibility goal of
+[the API design discussion](https://github.com/NVIDIA/nvalchemi-toolkit/pull/207#discussion_r4128056444)
+while supporting both rigid and explicit-coordinate output.
 
 (csp-comparison)=
 
@@ -548,7 +702,7 @@ called `batch` below.
 Assume optimization has preserved molecular connectivity: the structures may
 have different geometries, but they share the same molecular topology. Retain
 the molecular-bond matrix as `template_adjacency`, using the **same atom order**
-as `packing_input.atomic_numbers`. Packer expansion records each atom's source
+as `packing_input.atomic_numbers`. ASU expansion records each atom's source
 index, which the type map uses to label relaxed structures even when they have
 different `Z` or `Z′`. Keep that index aligned with its atom during optimization
 and storage. The map checks indices and elements, but cannot establish that a
@@ -574,7 +728,7 @@ from nvalchemi.csp.comparison import RadialComparisonIndex
 
 packing_input = ...  # Formula-unit input used to generate this search pool.
 template_adjacency = ...  # Boolean bonds in packing_input.atomic_numbers order.
-batch = ...  # Toolkit Batch of optimized trial crystals with Packer source fields.
+batch = ...  # Toolkit Batch of optimized trial crystals with ASU source fields.
 
 cutoff = 15.0  # Å
 threshold = 0.05  # maximum relative distance mismatch
@@ -761,8 +915,8 @@ CUDA descriptor residency remains within one shared memory allowance.
 
 ### Compare with an experimental structure
 
-Here, `batch` contains relaxed Packer structures from `packing_input`, and
-`template_adjacency` contains formula-unit bonds in
+Here, `batch` contains relaxed `OverlapReliefPacker` structures from
+`packing_input`, and `template_adjacency` contains formula-unit bonds in
 `packing_input.atomic_numbers` order.
 
 An experimental CIF supplies cell and coordinates, but molecular bonds still
@@ -795,7 +949,7 @@ from nvalchemi.data import AtomicData, Batch
 
 packing_input = ...  # The same formula-unit input used for the candidate pool.
 template_adjacency = ...  # Its bonds in packing_input.atomic_numbers order.
-batch = ...  # Toolkit Batch of optimized trial crystals with Packer source fields.
+batch = ...  # Toolkit Batch of optimized trial crystals with ASU source fields.
 
 cutoff = 15.0  # Å
 threshold = 0.05
@@ -896,10 +1050,12 @@ after moving the original, restore the sibling `.NAME.csp-backup-*` directory
 before reopening. Custom property names cannot contain `/` or be `.`, `..`,
 or `zarr.json`.
 
-Without an explicit run ID, the Packer generates one independently of the
-Torch RNG. Distributed IDs are `[run_id, group_rank + group_size *
+Without an explicit run ID, a direct `OverlapReliefPacker` call or
+`CSPGenerator` generates one independently of the Torch RNG. Distributed IDs
+are `[run_id, group_rank + group_size *
 local_accepted_number]`; gathered rows follow rank order. For replay, retain
 the run ID, each rank's seed and settings, formula input, group size, and rank
-mapping. Changing group membership can change candidates. Catchable failures
-on live ranks are coordinated at communication points; process termination
-cannot be coordinated by the Packer.
+mapping. Changing group membership can change candidates. Startup validation
+is coordinated on live ranks; packing errors are local in rank-local mode and
+exchanged at terminal gathering. Process termination cannot be coordinated by
+`CSPGenerator`.

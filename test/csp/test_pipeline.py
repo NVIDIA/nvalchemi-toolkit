@@ -19,11 +19,13 @@ from __future__ import annotations
 import pytest
 import torch
 
+from nvalchemi.csp import CSPGenerator
 from nvalchemi.csp.comparison import RadialComparisonIndex
 from nvalchemi.csp.data import MolecularPackingInput, RigidMoleculeASUBatch
 from nvalchemi.csp.packer import (
-    CrystalPacker,
-    PackingConfig,
+    OverlapReliefConfig,
+    OverlapReliefPacker,
+    PackingReport,
     PackingResult,
     PackingStopReason,
 )
@@ -64,6 +66,58 @@ def _two_atom_formula() -> MolecularPackingInput:
         component_index=torch.tensor([0, 1], dtype=torch.int32),
         formula_unit_volume=125.0,
     )
+
+
+class _PipelineFakePacker:
+    """Small deterministic protocol fake for CSP pipeline integration."""
+
+    device = torch.device("cpu")
+
+    def __init__(self, accepted: int = 1) -> None:
+        self.accepted = accepted
+
+    def pack(self, inputs, *, num_samples, rng, context, **options):
+        del rng, options
+        count = min(num_samples, self.accepted)
+        structures = RigidMoleculeASUBatch(
+            packing_input=inputs,
+            structure_molecule_ptr=torch.arange(count + 1, dtype=torch.int32) * 2,
+            conformer_indices=torch.zeros((count * 2,), dtype=torch.int32),
+            rotations=torch.eye(3).expand(count * 2, 3, 3).clone(),
+            fractional_centers=torch.full((count * 2, 3), 0.5),
+            cells=torch.eye(3).expand(count, 3, 3).clone() * 5,
+            space_groups=torch.ones((count,), dtype=torch.int32),
+            z=torch.ones((count,), dtype=torch.int32),
+            z_prime=torch.ones((count,), dtype=torch.int32),
+            structure_ids=context.structure_ids(count, device="cpu"),
+        )
+        reason = "target_reached" if count == num_samples else "fake_shortfall"
+        return PackingResult(
+            structures=structures,
+            run_id=context.run_id,
+            reports=(
+                PackingReport(
+                    rank=context.rank,
+                    requested_count=num_samples,
+                    accepted_count=count,
+                    generated_count=count,
+                    stop_reason=reason,
+                ),
+            ),
+        )
+
+
+class _PipelineEventHook:
+    """Capture the ordinary generator hook position in the pipeline fold."""
+
+    stage = GenerationStage.AFTER_GENERATE
+    frequency = 1
+
+    def __init__(self, events: list[tuple[str, object]]) -> None:
+        self.events = events
+
+    def __call__(self, context, stage) -> None:
+        self.events.append(("after_generate", context.sample))
 
 
 class _ObserveAfterGenerate:
@@ -158,13 +212,91 @@ def test_caller_wrapper_observes_compact_then_returns_batch_to_pipeline() -> Non
         assert torch.equal(result[name], observer.source_fields[name])
 
 
+def test_csp_generator_pipeline_orders_callback_hooks_and_dynamics() -> None:
+    events: list[tuple[str, object]] = []
+
+    def on_result(result: PackingResult) -> None:
+        events.append(("callback", result))
+
+    generator = CSPGenerator(
+        _PipelineFakePacker(),
+        on_result=on_result,
+        hooks=[_PipelineEventHook(events)],
+        dedicated_stream=False,
+    )
+    fire = FIRE2(model=DemoModelWrapper(DemoModel()), dt=0.05, n_steps=1)
+    pipeline = GenerationPipeline(stages=[generator, fire])
+
+    with pipeline:
+        result = pipeline(
+            _two_atom_formula(),
+            stage_kwargs=[{"num_samples": 1, "run_id": 800}, {}],
+        )
+
+    assert isinstance(events[0][1], PackingResult)
+    assert events[0][0] == "callback"
+    assert events[1][0] == "after_generate"
+    assert isinstance(events[1][1], Batch)
+    assert result is not None and result.num_graphs == 1
+    assert fire.step_count == 1
+
+
+def test_empty_csp_batch_short_circuits_pipeline_dynamics() -> None:
+    events: list[tuple[str, object]] = []
+    callbacks: list[PackingResult] = []
+    generator = CSPGenerator(
+        _PipelineFakePacker(accepted=0),
+        on_result=callbacks.append,
+        hooks=[_PipelineEventHook(events)],
+        dedicated_stream=False,
+    )
+    fire = FIRE2(model=DemoModelWrapper(DemoModel()), dt=0.05, n_steps=1)
+    pipeline = GenerationPipeline(stages=[generator, fire])
+
+    with pipeline:
+        result = pipeline(
+            _two_atom_formula(),
+            stage_kwargs=[{"num_samples": 1, "run_id": 801}, {}],
+        )
+
+    assert len(callbacks) == 1 and callbacks[0].accepted_count == 0
+    assert isinstance(result, Batch) and result.num_graphs == 0
+    assert events == [("after_generate", result)]
+    assert fire.step_count == 0
+
+
+def test_raw_csp_result_before_dynamics_raises_and_pipeline_compile_rejects() -> None:
+    generator = CSPGenerator(
+        _PipelineFakePacker(), expand=False, dedicated_stream=False
+    )
+    fire = FIRE2(model=DemoModelWrapper(DemoModel()), dt=0.05, n_steps=1)
+    pipeline = GenerationPipeline(stages=[generator, fire])
+
+    with pytest.raises(
+        NotImplementedError, match="CSPGenerator does not support compile"
+    ):
+        pipeline.compile()
+    with pipeline, pytest.raises(TypeError, match="requires a Batch input"):
+        pipeline(
+            _two_atom_formula(),
+            stage_kwargs=[{"num_samples": 1, "run_id": 802}, {}],
+        )
+
+
 def test_compact_callback_write_survives_later_optimization_failure(tmp_path) -> None:
     compact = make_skew_compact()
     packing_result = PackingResult(
         structures=compact,
-        generated_count=compact.num_structures,
-        stop_reason=PackingStopReason.TARGET_REACHED,
         run_id=int(compact.structure_ids[0, 0]),
+        reports=(
+            PackingReport(
+                rank=0,
+                requested_count=compact.num_structures,
+                accepted_count=compact.num_structures,
+                generated_count=compact.num_structures,
+                stop_reason=PackingStopReason.TARGET_REACHED,
+            ),
+        ),
     )
     store = tmp_path / "csp.zarr"
 
@@ -242,15 +374,14 @@ def test_cpu_packing_round_trips_complete_compact_result_through_zarr(
     tmp_path,
 ) -> None:
     packing_input = _two_atom_formula()
-    result = CrystalPacker(
-        PackingConfig(
+    result = OverlapReliefPacker(
+        OverlapReliefConfig(
             z=1,
             z_prime=1,
             batch_size=2,
             max_candidates=2,
             cell_volume_range=(125.0, 125.0),
             space_groups=SpaceGroupPolicy.fixed(1),
-            min_cell_height=2.5,
             overlap_tolerance=3.25,
         ),
         device="cpu",

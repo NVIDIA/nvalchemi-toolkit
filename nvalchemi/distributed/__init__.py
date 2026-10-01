@@ -54,6 +54,15 @@ if TYPE_CHECKING:
     from nvalchemi.distributed._core.reshard import (
         reshard_by_destination as reshard_by_destination,
     )
+    from nvalchemi.distributed._runtime import (
+        CollectivePhase as CollectivePhase,
+    )
+    from nvalchemi.distributed._runtime import (
+        ProcessGroupContext as ProcessGroupContext,
+    )
+    from nvalchemi.distributed._runtime import (
+        collective_error_sync as collective_error_sync,
+    )
     from nvalchemi.distributed.config import (
         DomainConfig as DomainConfig,
     )
@@ -197,6 +206,15 @@ def __getattr__(name: str):  # noqa: ANN201
             "nvalchemi.distributed._runtime",
             "collective_device",
         ),
+        "ProcessGroupContext": (
+            "nvalchemi.distributed._runtime",
+            "ProcessGroupContext",
+        ),
+        "CollectivePhase": ("nvalchemi.distributed._runtime", "CollectivePhase"),
+        "collective_error_sync": (
+            "nvalchemi.distributed._runtime",
+            "collective_error_sync",
+        ),
     }
     if name in _imports:
         module_path, attr = _imports[name]
@@ -239,9 +257,12 @@ __all__ = [
     "SpatialPartitioner",
     "autograd_target",
     "collective_device",
+    "collective_error_sync",
+    "CollectivePhase",
     "current_dd_context",
     "DistributedManager",
     "PhysicsNeMoUninitializedDistributedManagerWarning",
+    "ProcessGroupContext",
     "resolve_global_rank",
     "resolve_world_size",
     "neighbor_refresh_adapters",

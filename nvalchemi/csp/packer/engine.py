@@ -13,24 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Single-device packing kernels with caller-managed process-group coordination."""
+"""Local overlap-relief crystal packing."""
 
 from __future__ import annotations
 
-import hashlib
-import json
-import math
 import secrets
-import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from numbers import Integral
-from typing import Any
+from typing import Any, Literal
 
 import torch
-import torch.distributed as dist
 from torch import Tensor
-from torch.distributed import ProcessGroup
 
 from nvalchemi.csp.data import MolecularPackingInput, RigidMoleculeASUBatch
 from nvalchemi.csp.packer._cells import sample_valid_cells, sampling_tables
@@ -40,15 +34,17 @@ from nvalchemi.csp.packer._contacts import (
     make_contact_maps,
 )
 from nvalchemi.csp.packer._state import WorkingState, relax_step
-from nvalchemi.csp.packer.config import PackingConfig
+from nvalchemi.csp.packer.config import OverlapReliefConfig
+from nvalchemi.csp.packer.protocol import PackingContext
 from nvalchemi.csp.packer.result import (
-    PackingProgress,
+    OverlapReliefProgress,
+    PackingReport,
     PackingResult,
     PackingStopReason,
 )
 from nvalchemi.data.level_storage import _resolve_device
 
-__all__ = ["CrystalPacker"]
+__all__ = ["OverlapReliefPacker"]
 
 _DEFAULT_CANDIDATE_MULTIPLIER = 1000
 
@@ -60,31 +56,13 @@ _REFILL_GENERATED_SEED_STRIDE = 104729
 _REFILL_COUNT_SEED_STRIDE = 9176
 
 
-def _validate_rank_vector(
-    values: Sequence[int], *, name: str, group_size: int
-) -> tuple[int, ...]:
-    """Validate one nonnegative integer value for each process-group rank."""
-    if (
-        isinstance(values, (str, bytes))
-        or not isinstance(values, Sequence)
-        or len(values) != group_size
-    ):
-        raise ValueError(f"{name} must contain one value per group rank")
-    result: list[int] = []
-    for value in values:
-        if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
-            raise ValueError(f"{name} values must be nonnegative integers")
-        result.append(int(value))
-    return tuple(result)
-
-
 @dataclass
-class _PackingCore:
+class _OverlapReliefCore:
     """Mutable local packing state advanced in bounded, resumable rounds."""
 
-    packer: CrystalPacker
+    packer: OverlapReliefPacker
     inputs: MolecularPackingInput
-    config: PackingConfig
+    config: OverlapReliefConfig
     device: torch.device
     rank: int
     world_size: int
@@ -307,7 +285,7 @@ class _PackingCore:
         return self.accepted_total >= self.local_target or not self.active_rows
 
 
-class CrystalPacker:
+class OverlapReliefPacker:
     """Generate molecular crystal starting structures from supplied conformers.
 
     The Packer selects conformers, places molecules in periodic cells, and
@@ -320,7 +298,7 @@ class CrystalPacker:
 
     Parameters
     ----------
-    config : PackingConfig
+    config : OverlapReliefConfig
         Immutable base configuration containing ``z``, ``z_prime``, sampling
         controls, candidate capacity, and the optional finite candidate
         budget. The requested accepted count belongs to each call.
@@ -328,10 +306,27 @@ class CrystalPacker:
         Explicit execution device, either ``"cpu"`` or ``"cuda:N"``.
     """
 
-    def __init__(self, config: PackingConfig, *, device: torch.device | str) -> None:
-        """Bind the packing configuration to an explicitly selected CPU or CUDA device."""
-        if not isinstance(config, PackingConfig):
-            raise TypeError("config must be a PackingConfig")
+    def __init__(
+        self, config: OverlapReliefConfig, *, device: torch.device | str
+    ) -> None:
+        """Bind the configuration to a CPU or CUDA device.
+
+        Parameters
+        ----------
+        config : OverlapReliefConfig
+            Validated cell, symmetry, and overlap-relief settings.
+        device : torch.device or str
+            Explicit local execution device.
+
+        Raises
+        ------
+        TypeError
+            If config is not an OverlapReliefConfig.
+        ValueError
+            If the selected device is unsupported or unavailable.
+        """
+        if not isinstance(config, OverlapReliefConfig):
+            raise TypeError("config must be an OverlapReliefConfig")
         target = torch.device(device)
         if target.type == "cpu":
             if target.index is not None:
@@ -354,88 +349,91 @@ class CrystalPacker:
         *,
         num_samples: int = 1,
         rng: torch.Generator | None = None,
+        context: PackingContext | None = None,
         run_id: int | None = None,
-        process_group: ProcessGroup | None = None,
-        gather_to_rank: int | None = None,
-        rank_targets: Sequence[int] | None = None,
-        rank_candidate_budgets: Sequence[int] | None = None,
-        progress_callback: Callable[[PackingProgress], None] | None = None,
+        candidate_budget: int | None | Literal["config"] = "config",
+        progress_callback: Callable[[OverlapReliefProgress], None] | None = None,
         **config_overrides: object,
-    ) -> PackingResult | None:
-        """Generate up to ``num_samples`` crystal starting structures in ASU
-        representation.
-
-        Calls :meth:`pack`; see that method for trial-budget semantics and
-        bounded pre-flight guidance.
+    ) -> PackingResult[RigidMoleculeASUBatch]:
+        """Generate up to num_samples local crystal starting structures.
 
         Parameters
         ----------
         inputs : MolecularPackingInput
             One validated formula-unit tensor input.
         num_samples : int, default=1
-            Requested number of accepted outputs; a finite candidate budget
-            may produce a shorter result.
+            Nonnegative accepted-output target.
         rng : torch.Generator, optional
-            Generator used for one int64 seed draw on ranks that generate
-            candidates. When omitted, the default Torch generator on the
-            selected device is used; zero-target or zero-budget ranks return
-            without a seed draw.
+            Random source for candidate generation.
+        context : PackingContext, optional
+            Caller-assigned run identity and rank.
         run_id : int, optional
-            Nonnegative identifier below ``2**63`` for this packing call. If
-            omitted, a random ID is generated without consuming ``rng``; output
-            rows carry ``[run_id, accepted_row_ordinal]`` identifiers in
-            single-rank mode, or ``[run_id, group_rank + group_size *
-            local_accept_ordinal]`` identifiers in group mode.
-        process_group : ProcessGroup, optional
-            Existing Gloo or NCCL group whose ranks participate in the call.
-        gather_to_rank : int, optional
-            Group-local destination for an ASU-result gather. ``None`` returns
-            the local result on each rank.
-        rank_targets : sequence of int, optional
-            Per-rank accepted-output quotas summing to ``num_samples``. Without
-            it, the target is divided by quotient and remainder.
-        rank_candidate_budgets : sequence of int, optional
-            Per-rank candidate caps summing to finite effective
-            ``max_candidates``. Custom targets require these when that global
-            candidate cap is finite. Automatic budgets are resolved from the
-            global sample target before partitioning.
+            Alternative identity for a rank-zero local call.
+        candidate_budget : int, None, or config, default=config
+            Local candidate cap, or the cap from the configuration.
         progress_callback : callable, optional
-            Called at performed convergence checks. A distributed rank with a
-            zero target or zero candidate budget may return without a callback.
+            Called at performed convergence checks.
         **config_overrides
-            Per-call :class:`PackingConfig` values. Unknown or invalid fields
-            are rejected after full effective-config validation.
+            Per-call OverlapReliefConfig values.
 
         Returns
         -------
-        PackingResult or None
-            Local ASU results on every rank when ``gather_to_rank`` is
-            ``None``; otherwise the gathered result on that group-local rank
-            and ``None`` on every other rank.
+        PackingResult[RigidMoleculeASUBatch]
+            Compact ASU structures and one rank-local report.
 
-        Raises
-        ------
-        RuntimeError
-            If cell rejection sampling cannot fill the requested candidate
-            rows in 128 rounds.
-
-        Notes
-        -----
-        On ranks that generate candidates, one Torch integer seed draw
-        initializes deterministic Warp cell and candidate rounds.
+        See Also
+        --------
+        pack : Full option and completion semantics.
         """
         return self.pack(
             inputs,
             num_samples=num_samples,
             rng=rng,
+            context=context,
             run_id=run_id,
-            process_group=process_group,
-            gather_to_rank=gather_to_rank,
-            rank_targets=rank_targets,
-            rank_candidate_budgets=rank_candidate_budgets,
+            candidate_budget=candidate_budget,
             progress_callback=progress_callback,
             **config_overrides,
         )
+
+    def resolve_candidate_budget(
+        self, *, num_samples: int, **pack_options: object
+    ) -> int | None:
+        """Resolve this call's candidate cap without drawing randomness.
+
+        The generic generation driver uses this optional capability to report
+        whether a requested output target has a finite candidate budget.
+        ``progress_callback`` is a concrete pack option and is validated before
+        configuration fields are evaluated.
+
+        Parameters
+        ----------
+        num_samples : int
+            Nonnegative number of accepted structures.
+        **pack_options
+            Configuration overrides and the optional progress callback.
+
+        Returns
+        -------
+        int or None
+            Resolved nonnegative cap, or None for unlimited candidates.
+
+        Raises
+        ------
+        TypeError
+            If the count or progress callback has an invalid type.
+        ValueError
+            If the count or effective configuration is invalid.
+        """
+        target_count = self._validate_num_samples(num_samples)
+        options = dict(pack_options)
+        callback = options.pop("progress_callback", None)
+        if callback is not None and not callable(callback):
+            raise TypeError("progress_callback must be callable or None")
+        config = self.config.effective(**options)
+        if config.max_candidates == "auto":
+            return _DEFAULT_CANDIDATE_MULTIPLIER * target_count
+        return config.max_candidates
 
     def pack(
         self,
@@ -443,373 +441,252 @@ class CrystalPacker:
         *,
         num_samples: int = 1,
         rng: torch.Generator | None = None,
+        context: PackingContext | None = None,
         run_id: int | None = None,
-        process_group: ProcessGroup | None = None,
-        gather_to_rank: int | None = None,
-        rank_targets: Sequence[int] | None = None,
-        rank_candidate_budgets: Sequence[int] | None = None,
-        progress_callback: Callable[[PackingProgress], None] | None = None,
+        candidate_budget: int | None | Literal["config"] = "config",
+        progress_callback: Callable[[OverlapReliefProgress], None] | None = None,
         **config_overrides: object,
-    ) -> PackingResult | None:
-        """Generate and return crystal starting structures in ASU representation.
+    ) -> PackingResult[RigidMoleculeASUBatch]:
+        """Generate and return compact ASU structures on this process only.
 
-        ``num_samples`` requests accepted structures; ``batch_size`` limits
-        active trials. By default, ``max_candidates="auto"`` limits initialized
-        trials to ``1000 * num_samples``. A positive integer sets a fixed cap;
-        explicit ``None`` allows unlimited trials. Finite budgets can return
-        fewer accepted structures than requested.
-
-        An unlimited search assumes reachable acceptance criteria and can keep
-        running without useful progress otherwise. Before a large or unlimited
-        search, use a short pre-flight with a finite candidate budget and the
-        intended starting-volume range, overlap tolerance, and per-candidate
-        relaxation limit. Inspect accepted versus generated counts; low or zero
-        acceptance can indicate an overly small starting volume. Revisit the
-        volume settings and repeat the pre-flight before scaling up.
+        ``num_samples`` is the accepted-output target. ``batch_size`` limits
+        the active trial state, while ``candidate_budget`` independently limits
+        total initialized candidates. The ``"config"`` default uses
+        ``OverlapReliefConfig.max_candidates`` and resolves ``"auto"`` to
+        ``1000 * num_samples``. Explicit ``None`` permits unlimited trials;
+        zero requests a typed shortfall without sampling or trial setup.
 
         Parameters
         ----------
         inputs : MolecularPackingInput
             One validated formula-unit tensor input.
         num_samples : int, default=1
-            Requested number of accepted outputs; a finite candidate budget
-            may produce a shorter result.
+            Nonnegative requested number of accepted outputs.
         rng : torch.Generator, optional
-            Generator used for one int64 seed draw on ranks that generate
-            candidates. When omitted, the default Torch generator on the
-            selected device is used; zero-target or zero-budget ranks return
-            without a seed draw.
+            Generator used for one int64 seed draw when candidates are sampled.
+            Zero target or zero candidate budget does not consume it.
+        context : PackingContext, optional
+            Call identity and rank used to assign rank-strided structure IDs.
         run_id : int, optional
-            Nonnegative identifier below ``2**63`` for this packing call. If
-            omitted, group rank zero generates it for a distributed call. IDs
-            are ``[run_id, local_ordinal]`` in one-rank mode and
-            ``[run_id, group_rank + group_size * local_ordinal]`` in a group.
-        process_group : ProcessGroup, optional
-            Existing Gloo or NCCL group whose ranks participate in the call.
-        gather_to_rank : int, optional
-            Group-local destination for an ASU-result gather. ``None`` returns
-            the local result on each rank.
-        rank_targets : sequence of int, optional
-            Per-rank accepted-output quotas summing to ``num_samples``. Without
-            it, the target is divided by quotient and remainder.
-        rank_candidate_budgets : sequence of int, optional
-            Per-rank candidate caps summing to finite effective
-            ``max_candidates``. Custom targets require these when that global
-            candidate cap is finite. Automatic budgets are resolved from the
-            global sample target before partitioning.
+            Alternative to ``context`` for a local rank-zero identity.
+        candidate_budget : int or None or {"config"}, default="config"
+            Local cap on initialized candidates; unlike the positive config cap,
+            an explicit zero is allowed.
         progress_callback : callable, optional
-            Called at performed convergence checks. A distributed rank with a
-            zero target or zero candidate budget may return without a callback.
+            Called at performed convergence checks with cumulative counters and
+            current overlap diagnostics.
         **config_overrides
-            Per-call :class:`PackingConfig` values. Unknown or invalid fields
-            are rejected after full effective-config validation.
+            Per-call :class:`OverlapReliefConfig` values.
 
         Returns
         -------
-        PackingResult or None
-            Local ASU result on every rank without a gather, or the gathered
-            ASU result on ``gather_to_rank`` and ``None`` on all
-            other ranks.
+        PackingResult[RigidMoleculeASUBatch]
+            The accepted compact structures and one rank-local completion
+            report. A finite budget can produce a shortfall.
 
         Raises
         ------
         RuntimeError
-            If cell rejection sampling cannot fill the requested candidate
-            rows in 128 rounds.
+            If cell rejection sampling cannot fill candidate rows in 128 rounds.
         """
-        grouped = process_group is not None
-        validation_error: str | None = None
-        try:
-            if not isinstance(inputs, MolecularPackingInput):
-                raise TypeError("inputs must be a MolecularPackingInput")
-            if isinstance(num_samples, bool) or not isinstance(num_samples, Integral):
-                raise TypeError("num_samples must be a positive integer")
-            target_count = int(num_samples)
-            if target_count <= 0:
-                raise ValueError("num_samples must be positive")
-            if rng is not None and not isinstance(rng, torch.Generator):
-                raise TypeError("rng must be a torch.Generator or None")
-            if run_id is not None and (
-                isinstance(run_id, bool) or not isinstance(run_id, Integral)
-            ):
-                raise TypeError("run_id must be an integer or None")
-            if run_id is not None and not 0 <= int(run_id) < 2**63:
-                raise ValueError("run_id must satisfy 0 <= run_id < 2**63")
-            if progress_callback is not None and not callable(progress_callback):
-                raise TypeError("progress_callback must be callable or None")
-            config = self.config.effective(**config_overrides)
-            if config.max_candidates == "auto":
-                config = config.effective(
-                    max_candidates=_DEFAULT_CANDIDATE_MULTIPLIER * target_count
-                )
-        except Exception as error:
-            if not grouped:
-                raise
-            validation_error = f"{type(error).__name__}: {error}"
-        if grouped:
-            if not dist.is_available() or not dist.is_initialized():
-                raise RuntimeError(
-                    "process_group requires an initialized process group"
-                )
-            validation_errors: list[Any] = [None] * dist.get_world_size(
-                group=process_group
-            )
-            dist.all_gather_object(
-                validation_errors, validation_error, group=process_group
-            )
-            errors = [value for value in validation_errors if value is not None]
-            if errors:
-                raise ValueError(f"distributed packer validation failed: {errors[0]}")
-            identity_run_id = 0 if run_id is None else int(run_id)
-        else:
-            identity_run_id = secrets.randbits(63) if run_id is None else int(run_id)
-        if not grouped and any(
-            value is not None
-            for value in (gather_to_rank, rank_targets, rank_candidate_budgets)
+        if not isinstance(inputs, MolecularPackingInput):
+            raise TypeError("inputs must be a MolecularPackingInput")
+        target_count = self._validate_num_samples(num_samples)
+        if rng is not None and not isinstance(rng, torch.Generator):
+            raise TypeError("rng must be a torch.Generator or None")
+        if context is not None and run_id is not None:
+            raise ValueError("context and run_id cannot both be provided")
+        if context is not None and not isinstance(context, PackingContext):
+            raise TypeError("context must be a PackingContext or None")
+        if run_id is not None and (
+            isinstance(run_id, bool) or not isinstance(run_id, Integral)
         ):
-            raise ValueError(
-                "gather_to_rank, rank_targets, and rank_candidate_budgets require process_group"
+            raise TypeError("run_id must be an integer or None")
+        if run_id is not None and not 0 <= int(run_id) < 2**63:
+            raise ValueError("run_id must satisfy 0 <= run_id < 2**63")
+        if progress_callback is not None and not callable(progress_callback):
+            raise TypeError("progress_callback must be callable or None")
+
+        config = self.config.effective(**config_overrides)
+        molecule_count = inputs.num_molecules * config.z_prime
+        if molecule_count * target_count > torch.iinfo(torch.int32).max:
+            raise OverflowError("structure_molecule_ptr exceeds int32 capacity")
+        if isinstance(candidate_budget, str):
+            if candidate_budget != "config":
+                raise ValueError(
+                    "candidate_budget must be a nonnegative integer, None, or 'config'"
+                )
+            budget = (
+                _DEFAULT_CANDIDATE_MULTIPLIER * target_count
+                if config.max_candidates == "auto"
+                else config.max_candidates
             )
-        group_rank = 0
-        group_size = 1
-        local_target = target_count
-        group_budget: int | None = config.max_candidates
-        destination = gather_to_rank
-        if grouped:
-            (
-                group_rank,
-                group_size,
-                local_target,
-                group_budget,
-                identity_run_id,
-            ) = self._distributed_preflight(
-                inputs=inputs,
-                num_samples=target_count,
-                config=config,
-                run_id=run_id,
-                process_group=process_group,
-                gather_to_rank=gather_to_rank,
-                rank_targets=rank_targets,
-                rank_candidate_budgets=rank_candidate_budgets,
+        elif candidate_budget is None:
+            budget = None
+        elif isinstance(candidate_budget, bool) or not isinstance(
+            candidate_budget, Integral
+        ):
+            raise TypeError(
+                "candidate_budget must be a nonnegative integer, None, or 'config'"
             )
-            destination = gather_to_rank
+        else:
+            budget = int(candidate_budget)
+            if budget < 0:
+                raise ValueError("candidate_budget must be nonnegative")
+
+        call_context = context or PackingContext(
+            run_id=secrets.randbits(63) if run_id is None else int(run_id)
+        )
+        if target_count and (
+            call_context.rank + call_context.world_size * (target_count - 1) >= 2**63
+        ):
+            raise OverflowError("rank-strided structure IDs exceed int64 capacity")
+
         device = self.device
-        if grouped and (local_target == 0 or group_budget == 0):
-            empty_reason = (
+        self._validate_input_placement(inputs, device)
+        if target_count == 0 or budget == 0:
+            stop_reason = (
                 PackingStopReason.TARGET_REACHED
-                if local_target == 0
+                if target_count == 0
                 else PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED
             )
-            self._collective_error(
-                process_group=process_group, error=None, device=device
+            report = PackingReport(
+                rank=call_context.rank,
+                requested_count=target_count,
+                accepted_count=0,
+                generated_count=0,
+                stop_reason=stop_reason.value,
             )
-            self._wait_for_group_completion(process_group=process_group, device=device)
-            empty_error: Exception | None = None
-            try:
-                result = self._make_result(
-                    inputs=inputs,
-                    config=config,
-                    accepted_blocks=[],
-                    generated=0,
-                    stop_reason=empty_reason,
-                    device=device,
-                    run_id=identity_run_id,
-                    rank=group_rank,
-                    world_size=group_size,
-                )
-            except Exception as error:
-                empty_error = error
-            self._collective_error(
-                process_group=process_group, error=empty_error, device=device
+            return self._make_result(
+                inputs=inputs,
+                config=config,
+                accepted_blocks=[],
+                report=report,
+                device=device,
+                context=call_context,
             )
-            if destination is None:
-                return result
-            return self._gather_results(
-                result,
-                process_group=process_group,
-                group_rank=group_rank,
-                group_size=group_size,
-                destination=destination,
-                requested=target_count,
-            )
-        setup_error: Exception | None = None
-        try:
-            self._validate_input_placement(inputs, device)
-            base_seed = self._draw_seed(rng, device)
-            if grouped and group_size > 1:
-                base_seed = (
-                    base_seed + group_rank * _RANK_SEED_STRIDE
-                ) % _WARP_SEED_MODULUS
-            formula = {
-                name: getattr(inputs, name).to(device=device)
-                for name in (
-                    "conformer_positions",
-                    "conformer_ptr",
-                    "molecule_conformer_ptr",
-                    "molecule_atom_ptr",
-                    "contact_distances",
-                )
-            }
-            molecule_count = inputs.num_molecules * config.z_prime
-            operation_count = config.z // config.z_prime
-            candidate_budget = group_budget if grouped else config.max_candidates
-            formula_atom_counts = (
-                formula["molecule_atom_ptr"][1:] - formula["molecule_atom_ptr"][:-1]
-            )
-            asu_atom_counts = formula_atom_counts.repeat(config.z_prime)
-            asu_molecule_atom_ptr = torch.cat(
-                (
-                    torch.zeros((1,), dtype=torch.int32, device=device),
-                    asu_atom_counts.cumsum(dim=0).to(torch.int32),
-                )
-            )
-            asu_conformer_starts = formula["molecule_conformer_ptr"][:-1].repeat(
-                config.z_prime
-            )
-            asu_conformer_stops = formula["molecule_conformer_ptr"][1:].repeat(
-                config.z_prime
-            )
-            asu_contact_distances = formula["contact_distances"].repeat(
-                config.z_prime, config.z_prime
-            )
-            max_contact_distance = float(inputs.contact_distances.max().item())
 
-            groups, probabilities, symmetry_table, op_indices, op_ptr, _ = (
-                sampling_tables(
-                    config=config,
-                    device=device,
-                )
+        base_seed = self._draw_seed(rng, device)
+        if call_context.world_size > 1:
+            base_seed = (
+                base_seed + call_context.rank * _RANK_SEED_STRIDE
+            ) % _WARP_SEED_MODULUS
+        formula = {
+            name: getattr(inputs, name).to(device=device)
+            for name in (
+                "conformer_positions",
+                "conformer_ptr",
+                "molecule_conformer_ptr",
+                "molecule_atom_ptr",
+                "contact_distances",
             )
-            count_cap = config.batch_size
-            if candidate_budget is not None:
-                count_cap = min(count_cap, candidate_budget)
-            if grouped and local_target == 0:
-                count_cap = 0
-            state = WorkingState.allocate(
-                batch_size=count_cap,
-                molecule_count=molecule_count,
-                symmetry_operation_count=operation_count,
-                device=device,
+        }
+        operation_count = config.z // config.z_prime
+        formula_atom_counts = (
+            formula["molecule_atom_ptr"][1:] - formula["molecule_atom_ptr"][:-1]
+        )
+        asu_atom_counts = formula_atom_counts.repeat(config.z_prime)
+        asu_molecule_atom_ptr = torch.cat(
+            (
+                torch.zeros((1,), dtype=torch.int32, device=device),
+                asu_atom_counts.cumsum(dim=0).to(torch.int32),
             )
-            contact_maps = make_contact_maps(asu_molecule_atom_ptr, operation_count)
-            expanded_atom_count = (
-                int(asu_molecule_atom_ptr[-1].item()) * operation_count
-            )
-            contact_workspace = ContactWorkspace.allocate(
-                batch_size=count_cap,
-                num_molecules=molecule_count,
-                expanded_atom_count=expanded_atom_count,
-                device=device,
-            )
-            core = _PackingCore(
-                packer=self,
-                inputs=inputs,
-                config=config,
-                device=device,
-                rank=group_rank,
-                world_size=group_size,
-                local_target=local_target,
-                candidate_budget=candidate_budget,
-                count_cap=count_cap,
-                base_seed=base_seed,
-                formula=formula,
-                operation_count=operation_count,
-                asu_molecule_atom_ptr=asu_molecule_atom_ptr,
-                asu_conformer_starts=asu_conformer_starts,
-                asu_conformer_stops=asu_conformer_stops,
-                asu_contact_distances=asu_contact_distances,
-                max_contact_distance=max_contact_distance,
-                groups=groups,
-                probabilities=probabilities,
-                symmetry_table=symmetry_table,
-                op_indices=op_indices,
-                op_ptr=op_ptr,
-                state=state,
-                contact_maps=contact_maps,
-                contact_workspace=contact_workspace,
-                fresh_rows=torch.zeros((count_cap,), dtype=torch.bool, device=device),
-                expiration_iterations=[None] * count_cap,
-            )
-            initial_count = min(count_cap, core.remaining_budget())
-            initial_rows = torch.arange(initial_count, dtype=torch.int64, device=device)
-            core.active_rows = core.refill(initial_rows).tolist()
-        except Exception as error:
-            setup_error = error
-        if grouped:
-            self._collective_error(
-                process_group=process_group, error=setup_error, device=device
-            )
-        elif setup_error is not None:
-            raise setup_error
-        while True:
-            round_error: Exception | None = None
-            local_done = False
-            try:
-                local_done = core.advance(
-                    max_iterations=32 if grouped else 2**31,
-                    progress_callback=progress_callback,
-                )
-            except Exception as error:
-                round_error = error
-            local_done = local_done or round_error is not None
-            if grouped:
-                control_device = (
-                    device
-                    if "nccl" in str(dist.get_backend(process_group)).lower()
-                    else torch.device("cpu")
-                )
-                control = torch.tensor(
-                    [int(round_error is not None), int(local_done)],
-                    dtype=torch.int64,
-                    device=control_device,
-                )
-                dist.all_reduce(control[0:1], op=dist.ReduceOp.MAX, group=process_group)
-                dist.all_reduce(control[1:2], op=dist.ReduceOp.MIN, group=process_group)
-                if int(control[0].item()):
-                    if round_error is not None:
-                        raise round_error
-                    raise RuntimeError(
-                        "a process-group peer failed during crystal packing"
-                    )
-                if int(control[1].item()):
-                    break
-            elif local_done:
-                if round_error is not None:
-                    raise round_error
-                break
-        result_error: Exception | None = None
-        try:
-            result = self._make_result(
-                inputs=inputs,
-                config=config,
-                accepted_blocks=core.accepted_blocks,
-                generated=core.generated,
-                stop_reason=core.stop_reason,
-                device=device,
-                run_id=identity_run_id,
-                rank=group_rank,
-                world_size=group_size,
-            )
-        except Exception as error:
-            result_error = error
-        if grouped:
-            self._collective_error(
-                process_group=process_group, error=result_error, device=device
-            )
-        elif result_error is not None:
-            raise result_error
-        if grouped:
-            if destination is None:
-                return result
-            return self._gather_results(
-                result,
-                process_group=process_group,
-                group_rank=group_rank,
-                group_size=group_size,
-                destination=destination,
-                requested=target_count,
-            )
-        return result
+        )
+        asu_conformer_starts = formula["molecule_conformer_ptr"][:-1].repeat(
+            config.z_prime
+        )
+        asu_conformer_stops = formula["molecule_conformer_ptr"][1:].repeat(
+            config.z_prime
+        )
+        asu_contact_distances = formula["contact_distances"].repeat(
+            config.z_prime, config.z_prime
+        )
+        max_contact_distance = float(inputs.contact_distances.max().item())
+
+        groups, probabilities, symmetry_table, op_indices, op_ptr, _ = sampling_tables(
+            config=config,
+            device=device,
+        )
+        count_cap = config.batch_size
+        if budget is not None:
+            count_cap = min(count_cap, budget)
+        state = WorkingState.allocate(
+            batch_size=count_cap,
+            molecule_count=molecule_count,
+            symmetry_operation_count=operation_count,
+            device=device,
+        )
+        contact_maps = make_contact_maps(asu_molecule_atom_ptr, operation_count)
+        expanded_atom_count = int(asu_molecule_atom_ptr[-1].item()) * operation_count
+        contact_workspace = ContactWorkspace.allocate(
+            batch_size=count_cap,
+            num_molecules=molecule_count,
+            expanded_atom_count=expanded_atom_count,
+            device=device,
+        )
+        core = _OverlapReliefCore(
+            packer=self,
+            inputs=inputs,
+            config=config,
+            device=device,
+            rank=call_context.rank,
+            world_size=call_context.world_size,
+            local_target=target_count,
+            candidate_budget=budget,
+            count_cap=count_cap,
+            base_seed=base_seed,
+            formula=formula,
+            operation_count=operation_count,
+            asu_molecule_atom_ptr=asu_molecule_atom_ptr,
+            asu_conformer_starts=asu_conformer_starts,
+            asu_conformer_stops=asu_conformer_stops,
+            asu_contact_distances=asu_contact_distances,
+            max_contact_distance=max_contact_distance,
+            groups=groups,
+            probabilities=probabilities,
+            symmetry_table=symmetry_table,
+            op_indices=op_indices,
+            op_ptr=op_ptr,
+            state=state,
+            contact_maps=contact_maps,
+            contact_workspace=contact_workspace,
+            fresh_rows=torch.zeros((count_cap,), dtype=torch.bool, device=device),
+            expiration_iterations=[None] * count_cap,
+        )
+        initial_count = min(count_cap, core.remaining_budget())
+        initial_rows = torch.arange(initial_count, dtype=torch.int64, device=device)
+        core.active_rows = core.refill(initial_rows).tolist()
+        while not core.advance(
+            max_iterations=32,
+            progress_callback=progress_callback,
+        ):
+            pass
+
+        report = PackingReport(
+            rank=call_context.rank,
+            requested_count=target_count,
+            accepted_count=core.accepted_total,
+            generated_count=core.generated,
+            stop_reason=core.stop_reason.value,
+        )
+        return self._make_result(
+            inputs=inputs,
+            config=config,
+            accepted_blocks=core.accepted_blocks,
+            report=report,
+            device=device,
+            context=call_context,
+        )
+
+    @staticmethod
+    def _validate_num_samples(num_samples: int) -> int:
+        """Return a validated nonnegative output target."""
+        if isinstance(num_samples, bool) or not isinstance(num_samples, Integral):
+            raise TypeError("num_samples must be a nonnegative integer")
+        target = int(num_samples)
+        if target < 0:
+            raise ValueError("num_samples must be nonnegative")
+        return target
 
     @staticmethod
     def _validate_input_placement(
@@ -831,489 +708,6 @@ class CrystalPacker:
                     f"inputs.{name} is on {input_device}; packer device is {device}. "
                     "Move the input to CPU or the selected packer device first."
                 )
-
-    def _distributed_preflight(
-        self,
-        *,
-        inputs: MolecularPackingInput,
-        num_samples: int,
-        config: PackingConfig,
-        run_id: int | None,
-        process_group: Any,
-        gather_to_rank: int | None,
-        rank_targets: Sequence[int] | None,
-        rank_candidate_budgets: Sequence[int] | None,
-    ) -> tuple[int, int, int, int | None, int]:
-        """Validate group-wide packing contracts and establish shared identity."""
-        if not dist.is_available() or not dist.is_initialized():
-            raise RuntimeError("process_group requires an initialized process group")
-        group_rank = dist.get_rank(group=process_group)
-        group_size = dist.get_world_size(group=process_group)
-        shared: tuple[Any, ...] | None = None
-        local_error: str | None = None
-        validated_run_id: int | None = None
-        try:
-            self._validate_input_placement(inputs, self.device)
-            backend = str(dist.get_backend(group=process_group)).lower()
-            if "gloo" in backend and self.device.type != "cpu":
-                raise ValueError("Gloo process groups require a CPU CrystalPacker")
-            if "nccl" in backend and self.device.type != "cuda":
-                raise ValueError("NCCL process groups require a CUDA CrystalPacker")
-            if "gloo" not in backend and "nccl" not in backend:
-                raise ValueError(
-                    "CrystalPacker supports only Gloo and NCCL process groups"
-                )
-            destination = gather_to_rank
-            if destination is not None:
-                if isinstance(destination, bool) or not isinstance(
-                    destination, Integral
-                ):
-                    raise TypeError(
-                        "gather_to_rank must be a group-local integer or None"
-                    )
-                destination = int(destination)
-                if not 0 <= destination < group_size:
-                    raise ValueError("gather_to_rank must be a valid group-local rank")
-            custom_targets = rank_targets is not None
-            if custom_targets:
-                targets = _validate_rank_vector(
-                    rank_targets, name="rank_targets", group_size=group_size
-                )
-                if sum(targets) != num_samples:
-                    raise ValueError("rank_targets must sum to num_samples")
-            else:
-                quotient, remainder = divmod(num_samples, group_size)
-                targets = tuple(
-                    quotient + (rank < remainder) for rank in range(group_size)
-                )
-            maximum_id = (
-                group_rank + group_size * (targets[group_rank] - 1)
-                if targets[group_rank]
-                else -1
-            )
-            if maximum_id >= 2**63:
-                raise OverflowError("rank-strided structure IDs exceed int64 capacity")
-            local_molecules = (
-                inputs.num_molecules * config.z_prime * targets[group_rank]
-            )
-            if local_molecules > torch.iinfo(torch.int32).max:
-                raise OverflowError(
-                    "local structure_molecule_ptr exceeds int32 capacity"
-                )
-            if rank_candidate_budgets is not None:
-                budgets = _validate_rank_vector(
-                    rank_candidate_budgets,
-                    name="rank_candidate_budgets",
-                    group_size=group_size,
-                )
-                if config.max_candidates is None:
-                    raise ValueError(
-                        "rank_candidate_budgets require finite max_candidates"
-                    )
-                if sum(budgets) != config.max_candidates:
-                    raise ValueError(
-                        "rank_candidate_budgets must sum to max_candidates"
-                    )
-            elif config.max_candidates is not None:
-                if custom_targets:
-                    raise ValueError(
-                        "custom rank_targets with finite max_candidates require explicit rank_candidate_budgets"
-                    )
-                quotient, remainder = divmod(config.max_candidates, group_size)
-                budgets = tuple(
-                    quotient + (rank < remainder) for rank in range(group_size)
-                )
-            else:
-                budgets = tuple(None for _ in range(group_size))
-            if run_id is not None:
-                if isinstance(run_id, bool) or not isinstance(run_id, Integral):
-                    raise TypeError("run_id must be an integer or None")
-                validated_run_id = int(run_id)
-                if not 0 <= validated_run_id < 2**63:
-                    raise ValueError("run_id must satisfy 0 <= run_id < 2**63")
-            shared = (
-                num_samples,
-                config.max_candidates,
-                targets,
-                budgets,
-                destination,
-                self._formula_digest(inputs),
-                backend,
-            )
-        except Exception as error:
-            local_error = f"{type(error).__name__}: {error}"
-
-        records: list[Any] = [None] * group_size
-        dist.all_gather_object(
-            records, (local_error, shared, validated_run_id), group=process_group
-        )
-        errors = [record[0] for record in records if record[0] is not None]
-        if errors:
-            raise ValueError(f"distributed packer preflight failed: {errors[0]}")
-        shared_records = [record[1] for record in records]
-        if any(value != shared_records[0] for value in shared_records[1:]):
-            raise ValueError(
-                "distributed ranks disagree on target, budget, quotas, destination, or formula input"
-            )
-        supplied_ids = [record[2] for record in records]
-        root_id = supplied_ids[0]
-        explicit_peer_ids = [value for value in supplied_ids[1:] if value is not None]
-        if root_id is not None and any(value != root_id for value in explicit_peer_ids):
-            raise ValueError("distributed ranks supplied different run_id values")
-        if group_rank == 0 and root_id is None:
-            root_id = secrets.randbits(63)
-        backend = shared_records[0][6]
-        identity_device = self.device if "nccl" in backend else torch.device("cpu")
-        identity = torch.tensor(
-            [0 if root_id is None else int(root_id)],
-            dtype=torch.int64,
-            device=identity_device,
-        )
-        dist.broadcast(
-            identity,
-            src=dist.get_global_rank(process_group, 0),
-            group=process_group,
-        )
-        actual_run_id = int(identity.item())
-        if any(value != actual_run_id for value in explicit_peer_ids):
-            raise ValueError("distributed ranks supplied different run_id values")
-        target_vector = shared_records[0][2]
-        budget_vector = shared_records[0][3]
-        return (
-            group_rank,
-            group_size,
-            target_vector[group_rank],
-            budget_vector[group_rank],
-            int(identity.item()),
-        )
-
-    @staticmethod
-    def _collective_error(
-        *, process_group: ProcessGroup, error: Exception | None, device: torch.device
-    ) -> None:
-        """Propagate one phase's catchable failure to every group rank."""
-        backend = str(dist.get_backend(group=process_group)).lower()
-        status_device = device if "nccl" in backend else torch.device("cpu")
-        failure = torch.tensor(
-            [int(error is not None)], dtype=torch.int64, device=status_device
-        )
-        dist.all_reduce(failure, op=dist.ReduceOp.MAX, group=process_group)
-        if int(failure.item()):
-            if error is not None:
-                raise error
-            raise RuntimeError("a process-group peer failed during crystal packing")
-
-    @staticmethod
-    def _wait_for_group_completion(
-        *, process_group: ProcessGroup, device: torch.device
-    ) -> None:
-        """Join bounded status rounds without allocating local candidates."""
-        backend = str(dist.get_backend(group=process_group)).lower()
-        status_device = device if "nccl" in backend else torch.device("cpu")
-        while True:
-            status = torch.tensor([0, 1], dtype=torch.int64, device=status_device)
-            dist.all_reduce(status[0:1], op=dist.ReduceOp.MAX, group=process_group)
-            dist.all_reduce(status[1:2], op=dist.ReduceOp.MIN, group=process_group)
-            if int(status[0].item()):
-                raise RuntimeError("a process-group peer failed during crystal packing")
-            if int(status[1].item()):
-                return
-
-    @staticmethod
-    def _formula_digest(inputs: MolecularPackingInput) -> str:
-        """Hash the formula tensors and metadata used for distributed input agreement."""
-        digest = hashlib.sha256()
-        for name in (
-            "conformer_positions",
-            "conformer_ptr",
-            "molecule_conformer_ptr",
-            "molecule_atom_ptr",
-            "atomic_numbers",
-            "contact_distances",
-            "component_index",
-        ):
-            tensor = getattr(inputs, name).detach().cpu().contiguous()
-            digest.update(name.encode())
-            digest.update(str(tensor.dtype).encode())
-            digest.update(json.dumps(list(tensor.shape)).encode())
-            digest.update(tensor.numpy().tobytes())
-
-        def to_jsonable(value: Any) -> Any:
-            """Convert mappings and tuples recursively to JSON-compatible containers."""
-            if isinstance(value, Mapping):
-                return {key: to_jsonable(item) for key, item in value.items()}
-            if isinstance(value, tuple):
-                return [to_jsonable(item) for item in value]
-            return value
-
-        metadata = to_jsonable(inputs.metadata)
-        digest.update(
-            json.dumps(metadata, sort_keys=True, separators=(",", ":")).encode()
-        )
-        digest.update(repr(float(inputs.formula_unit_volume)).encode())
-        return digest.hexdigest()
-
-    @staticmethod
-    def _gather_tensor_rows(
-        tensor: Tensor,
-        *,
-        process_group: ProcessGroup,
-        group_rank: int,
-        group_size: int,
-        destination: int,
-        row_counts: Sequence[int],
-    ) -> list[Tensor] | None:
-        """Gather a variable number of leading rows only to the destination."""
-        sizes = [int(value) for value in row_counts]
-        maximum = max(sizes, default=0)
-        padded_bytes = (
-            maximum
-            * (math.prod(tensor.shape[1:]) if tensor.ndim > 1 else 1)
-            * tensor.element_size()
-        )
-        size_error: Exception | None = None
-        try:
-            int32_max = torch.iinfo(torch.int32).max
-            if len(sizes) != group_size or sizes[group_rank] != tensor.shape[0]:
-                raise ValueError("compact gather row counts do not match local fields")
-            if maximum > int32_max or sum(sizes) > int32_max:
-                raise OverflowError(
-                    "gathered compact rows exceed int32 pointer capacity"
-                )
-            destination_bytes = padded_bytes * group_size
-            if destination_bytes > sys.maxsize:
-                raise OverflowError(
-                    "padded compact gather size exceeds addressable memory"
-                )
-        except Exception as error:
-            size_error = error
-        CrystalPacker._collective_error(
-            process_group=process_group,
-            error=size_error,
-            device=tensor.device,
-        )
-        if maximum == 0:
-            return [tensor[:0] for _ in sizes] if group_rank == destination else None
-        allocation_error: Exception | None = None
-        padded: Tensor | None = None
-        receive: list[Tensor] | None = None
-        try:
-            padded = torch.zeros(
-                (maximum, *tensor.shape[1:]), dtype=tensor.dtype, device=tensor.device
-            )
-            if tensor.shape[0]:
-                padded[: tensor.shape[0]].copy_(tensor)
-            receive = (
-                [torch.empty_like(padded) for _ in range(group_size)]
-                if group_rank == destination
-                else None
-            )
-        except Exception as error:
-            allocation_error = error
-        CrystalPacker._collective_error(
-            process_group=process_group,
-            error=allocation_error,
-            device=tensor.device,
-        )
-        if padded is None:
-            raise RuntimeError("compact gather buffer allocation failed")
-        dist.gather(
-            padded,
-            gather_list=receive,
-            dst=dist.get_global_rank(process_group, destination),
-            group=process_group,
-        )
-        if receive is None:
-            return None
-        return [value[:size] for value, size in zip(receive, sizes, strict=True)]
-
-    @classmethod
-    def _gather_results(
-        cls,
-        result: PackingResult,
-        *,
-        process_group: ProcessGroup,
-        group_rank: int,
-        group_size: int,
-        destination: int,
-        requested: int,
-    ) -> PackingResult | None:
-        """Gather ASU fields to one group-local destination and sync errors."""
-        structures = result.structures
-        counts_error: Exception | None = None
-        local_counts: Tensor | None = None
-        count_buffers: list[Tensor] | None = None
-        try:
-            local_counts = torch.tensor(
-                [
-                    structures.num_structures,
-                    structures.conformer_indices.shape[0],
-                ],
-                dtype=torch.int64,
-                device=structures.cells.device,
-            )
-            count_buffers = [torch.empty_like(local_counts) for _ in range(group_size)]
-        except Exception as error:
-            counts_error = error
-        cls._collective_error(
-            process_group=process_group,
-            error=counts_error,
-            device=structures.cells.device,
-        )
-        if local_counts is None or count_buffers is None:
-            raise RuntimeError("compact gather count allocation failed")
-        dist.all_gather(count_buffers, local_counts, group=process_group)
-        structure_counts: list[int] | None = None
-        molecule_counts: list[int] | None = None
-        count_error: Exception | None = None
-        try:
-            structure_counts = [int(count[0].item()) for count in count_buffers]
-            molecule_counts = [int(count[1].item()) for count in count_buffers]
-            if sum(structure_counts) > torch.iinfo(torch.int32).max:
-                raise OverflowError("gathered structure count exceeds int32 capacity")
-            if sum(molecule_counts) > torch.iinfo(torch.int32).max:
-                raise OverflowError(
-                    "gathered structure_molecule_ptr exceeds int32 capacity"
-                )
-        except Exception as error:
-            count_error = error
-        cls._collective_error(
-            process_group=process_group,
-            error=count_error,
-            device=structures.cells.device,
-        )
-        if structure_counts is None or molecule_counts is None:
-            raise RuntimeError("compact gather count decoding failed")
-        fields: tuple[Tensor, ...] | None = None
-        field_error: Exception | None = None
-        try:
-            fields = (
-                structures.cells,
-                structures.space_groups,
-                structures.z,
-                structures.z_prime,
-                structures.structure_ids,
-                structures.conformer_indices,
-                structures.rotations,
-                structures.fractional_centers,
-                structures.properties["steps"],
-                structures.properties["total_overlap"],
-                structures.properties["max_overlap"],
-                torch.tensor(
-                    [result.generated_count],
-                    dtype=torch.int64,
-                    device=structures.cells.device,
-                ),
-            )
-        except Exception as error:
-            field_error = error
-        cls._collective_error(
-            process_group=process_group,
-            error=field_error,
-            device=structures.cells.device,
-        )
-        if fields is None:
-            raise RuntimeError("compact gather field preparation failed")
-        assembly_error: Exception | None = None
-        field_counts = (
-            structure_counts,
-            structure_counts,
-            structure_counts,
-            structure_counts,
-            structure_counts,
-            molecule_counts,
-            molecule_counts,
-            molecule_counts,
-            structure_counts,
-            structure_counts,
-            structure_counts,
-            [1] * group_size,
-        )
-        gathered = [
-            cls._gather_tensor_rows(
-                field,
-                process_group=process_group,
-                group_rank=group_rank,
-                group_size=group_size,
-                destination=destination,
-                row_counts=counts,
-            )
-            for field, counts in zip(fields, field_counts, strict=True)
-        ]
-        gathered_result: PackingResult | None = None
-        if group_rank == destination:
-            try:
-                chunks = [parts for parts in gathered[:-1] if parts is not None]
-                if len(chunks) != 11:
-                    raise RuntimeError("destination did not receive compact fields")
-                rank_batches: list[RigidMoleculeASUBatch] = []
-                for rank in range(group_size):
-                    cells, groups, z, z_prime, ids = (
-                        chunks[index][rank] for index in range(5)
-                    )
-                    conformers, rotations, centers = (
-                        chunks[index][rank] for index in range(5, 8)
-                    )
-                    steps, total, maximum = (
-                        chunks[index][rank] for index in range(8, 11)
-                    )
-                    rank_molecule_counts = (
-                        structures.packing_input.num_molecules * z_prime.to(torch.int64)
-                    )
-                    if int(rank_molecule_counts.sum().item()) != molecule_counts[rank]:
-                        raise ValueError(
-                            "gathered ragged molecule count does not match z_prime"
-                        )
-                    rank_pointer = torch.cat(
-                        (
-                            torch.zeros((1,), dtype=torch.int32, device=cells.device),
-                            rank_molecule_counts.cumsum(0).to(torch.int32),
-                        )
-                    )
-                    rank_batches.append(
-                        RigidMoleculeASUBatch(
-                            packing_input=structures.packing_input,
-                            structure_molecule_ptr=rank_pointer,
-                            conformer_indices=conformers,
-                            rotations=rotations,
-                            fractional_centers=centers,
-                            cells=cells,
-                            space_groups=groups,
-                            z=z,
-                            z_prime=z_prime,
-                            structure_ids=ids,
-                            properties={
-                                "steps": steps,
-                                "total_overlap": total,
-                                "max_overlap": maximum,
-                            },
-                        )
-                    )
-                compact = RigidMoleculeASUBatch.concatenate(rank_batches)
-                generated_parts = gathered[-1]
-                if generated_parts is None:
-                    raise RuntimeError(
-                        "destination rank did not receive generated counts"
-                    )
-                generated_count = sum(int(value.item()) for value in generated_parts)
-                gathered_result = PackingResult(
-                    structures=compact,
-                    generated_count=generated_count,
-                    stop_reason=(
-                        PackingStopReason.TARGET_REACHED
-                        if compact.num_structures == requested
-                        else PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED
-                    ),
-                    run_id=result.run_id,
-                )
-            except Exception as error:
-                assembly_error = error
-        cls._collective_error(
-            process_group=process_group,
-            error=assembly_error,
-            device=structures.cells.device,
-        )
-        return gathered_result
 
     @staticmethod
     def _draw_seed(rng: torch.Generator | None, device: torch.device) -> int:
@@ -1366,7 +760,7 @@ class CrystalPacker:
         max_snapshot: Tensor | None,
         rank: int,
         world_size: int,
-    ) -> PackingProgress:
+    ) -> OverlapReliefProgress:
         """Build a progress snapshot with candidate counts and overlap summaries."""
         total = (
             float(total_snapshot.mean().item())
@@ -1378,7 +772,7 @@ class CrystalPacker:
             if max_snapshot is not None and max_snapshot.numel()
             else 0.0
         )
-        return PackingProgress(
+        return OverlapReliefProgress(
             generated_count=generated,
             accepted_count=accepted,
             active_count=active_count,
@@ -1396,15 +790,12 @@ class CrystalPacker:
     def _make_result(
         *,
         inputs: MolecularPackingInput,
-        config: PackingConfig,
+        config: OverlapReliefConfig,
         accepted_blocks: list[tuple[Tensor, ...]],
-        generated: int,
-        stop_reason: PackingStopReason,
+        report: PackingReport,
         device: torch.device,
-        run_id: int,
-        rank: int = 0,
-        world_size: int = 1,
-    ) -> PackingResult:
+        context: PackingContext,
+    ) -> PackingResult[RigidMoleculeASUBatch]:
         """Assemble accepted candidate blocks into an ASU packing result."""
         molecule_count = inputs.num_molecules * config.z_prime
         if accepted_blocks:
@@ -1434,8 +825,6 @@ class CrystalPacker:
             maximum = torch.empty((0,), dtype=torch.float32, device=device)
         if structure_count * molecule_count > torch.iinfo(torch.int32).max:
             raise OverflowError("structure_molecule_ptr exceeds int32 capacity")
-        if structure_count and rank + world_size * (structure_count - 1) >= 2**63:
-            raise OverflowError("rank-strided structure IDs exceed int64 capacity")
         structures = RigidMoleculeASUBatch(
             packing_input=inputs,
             structure_molecule_ptr=torch.arange(
@@ -1453,22 +842,12 @@ class CrystalPacker:
             z_prime=torch.full(
                 (structure_count,), config.z_prime, dtype=torch.int32, device=device
             ),
-            structure_ids=torch.stack(
-                (
-                    torch.full(
-                        (structure_count,), run_id, dtype=torch.int64, device=device
-                    ),
-                    rank
-                    + world_size
-                    * torch.arange(structure_count, dtype=torch.int64, device=device),
-                ),
-                dim=1,
-            ),
+            structure_ids=context.structure_ids(structure_count, device=device),
             properties={"steps": steps, "total_overlap": total, "max_overlap": maximum},
         )
         return PackingResult(
             structures=structures,
-            generated_count=generated,
-            stop_reason=stop_reason,
-            run_id=run_id,
+            run_id=context.run_id,
+            reports=(report,),
+            scope="local",
         )
