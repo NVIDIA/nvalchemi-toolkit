@@ -16,14 +16,16 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, TypeAlias
 
 import torch
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
-from nvalchemi._serialization import _extract_init_kwargs_from_attrs
+from nvalchemi._serialization import (
+    SerializableOptionalClass,
+    _extract_init_kwargs_from_attrs,
+)
 from nvalchemi.data import Batch
 from nvalchemi.dynamics.base import BaseDynamics
 from nvalchemi.hooks._protocol import Hook
@@ -79,11 +81,13 @@ def _build_spec_component(raw: Any, *, label: str) -> Any:
         raise ValueError(f"from_spec_dict: cannot rebuild {label}: {exc}") from exc
 
 
-class DynamicsStrategy(BaseModel, ABC):
+class DynamicsStrategy(BaseModel):
     """Base class for declarative, serializable dynamics strategies.
 
-    A strategy stores the configuration needed to construct a fresh dynamics
-    engine. :meth:`to_spec_dict` represents hooks as reconstructible constructor
+    A strategy stores the configuration needed to construct a dynamics engine.
+    By default, each :meth:`run` constructs a fresh engine. Set ``cache_engine``
+    to reuse the engine and preserve its state across runs.
+    :meth:`to_spec_dict` represents hooks as reconstructible constructor
     specs while the live model remains a runtime dependency. When restoring with
     :meth:`from_spec_dict`, ``model=`` supplies that dependency and
     ``extra_hooks=`` appends runtime hooks.
@@ -92,11 +96,20 @@ class DynamicsStrategy(BaseModel, ABC):
     ----------
     model : BaseModelMixin
         Potential model used by the dynamics engine.
+    engine : type of BaseDynamics or None, optional
+        Engine class for the default :meth:`build_engine` implementation.
+        Serialized as an importable dotted path. ``None`` requires an override.
+    engine_kwargs : dict of str to Any, optional
+        Additional engine constructor arguments. ``model``, ``hooks``, and
+        ``n_steps`` are supplied by the strategy.
     n_steps : int or None, optional
         Default number of dynamics steps. ``None`` delegates termination to
         the constructed engine.
     extra_hooks : sequence of Hook or None, optional
         Ordered runtime hooks added to the constructed engine.
+    cache_engine : bool, optional
+        Reuse the first engine built by :meth:`run`. Defaults to ``False``.
+        Cached runtime state is excluded from strategy specs.
     """
 
     model_config = ConfigDict(
@@ -113,6 +126,17 @@ class DynamicsStrategy(BaseModel, ABC):
             "strategy serialization."
         ),
     )
+    engine: SerializableOptionalClass = Field(
+        default=None,
+        description=(
+            "Dynamics engine class for the default builder; None requires a "
+            "build_engine override. Round-trips via an importable dotted path."
+        ),
+    )
+    engine_kwargs: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional keyword arguments forwarded to the engine constructor.",
+    )
     n_steps: PositiveInt | None = Field(
         default=None,
         description="Default dynamics step limit, or None for no fixed limit.",
@@ -125,6 +149,20 @@ class DynamicsStrategy(BaseModel, ABC):
             "serialization."
         ),
     )
+    cache_engine: bool = Field(
+        default=False,
+        description="Reuse the engine and its runtime state across run() calls.",
+    )
+
+    _engine: BaseDynamics | None = PrivateAttr(default=None)
+
+    @field_validator("engine")
+    @classmethod
+    def _validate_engine(cls, value: type | None) -> type[BaseDynamics] | None:
+        """Require a dynamics engine subclass when a class is configured."""
+        if value is not None and not issubclass(value, BaseDynamics):
+            raise TypeError("engine must subclass BaseDynamics")
+        return value
 
     @field_validator("extra_hooks", mode="before")
     @classmethod
@@ -136,22 +174,54 @@ class DynamicsStrategy(BaseModel, ABC):
             raise TypeError("extra_hooks must be a sequence of Hook objects or None")
         return list(value)
 
-    @abstractmethod
     def build_engine(self) -> BaseDynamics:
         """Construct a fresh dynamics engine.
+
+        The default builds one engine from :attr:`engine` and
+        :meth:`build_hooks`. Override for multi-engine or multi-stage strategies.
 
         Returns
         -------
         BaseDynamics
             Newly constructed engine configured by this strategy.
+
+        Raises
+        ------
+        NotImplementedError
+            If no engine class is configured and this method is not overridden.
         """
+        if self.engine is None:
+            raise NotImplementedError(
+                f"{type(self).__name__} must set `engine=` or override build_engine()"
+            )
+        return self.engine(
+            model=self.model,
+            hooks=self.build_hooks(),
+            n_steps=self.n_steps,
+            **self.engine_kwargs,
+        )
+
+    def build_hooks(self) -> list[Hook]:
+        """Build the ordered hook list for the default engine builder.
+
+        Returns
+        -------
+        list of Hook
+            A new list containing the configured extra hooks. Override to add
+            strategy-specific hooks.
+        """
+        return list(self.extra_hooks)
 
     def run(
         self,
         batch: Batch,
         n_steps: int | None = None,
     ) -> Batch:
-        """Build a fresh engine and run it on ``batch``.
+        """Run an engine on ``batch``, reusing it when caching is enabled.
+
+        With ``cache_engine=False``, every call builds a fresh engine. With
+        ``cache_engine=True``, only the first call builds an engine, and later
+        calls reuse its state and original configuration.
 
         Parameters
         ----------
@@ -165,7 +235,12 @@ class DynamicsStrategy(BaseModel, ABC):
         Batch
             The input batch after dynamics updates.
         """
-        engine = self.build_engine()
+        if self.cache_engine:
+            if self._engine is None:
+                self._engine = self.build_engine()
+            engine = self._engine
+        else:
+            engine = self.build_engine()
         result = engine.run(batch, n_steps=n_steps)
         if result is None:
             raise RuntimeError(
@@ -176,9 +251,9 @@ class DynamicsStrategy(BaseModel, ABC):
     def to_spec_dict(self) -> dict[str, Any]:
         """Serialize declarative strategy fields to a JSON-ready dictionary.
 
-        Hooks are represented by constructor specs. The live model and mutable
-        hook state are not included. Subclasses with arbitrary configuration
-        objects must provide Pydantic serializers or override this method.
+        Hooks are represented by constructor specs. The live model, cached
+        engine, and mutable hook state are not included. Subclasses with arbitrary
+        configuration objects must provide Pydantic serializers or override this method.
 
         Returns
         -------

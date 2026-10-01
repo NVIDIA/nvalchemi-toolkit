@@ -77,6 +77,45 @@ Each step then proceeds through these stages in order:
 {py:class}`~nvalchemi.dynamics.base.DynamicsStage` stage it should fire at and at
 what frequency, so you have fine-grained control over when callbacks execute.
 
+## Declarative dynamics strategies
+
+{py:class}`~nvalchemi.dynamics.strategy.DynamicsStrategy` stores engine
+configuration and reconstructible hook specs. For a workflow using one engine,
+set `engine` and pass additional constructor arguments in `engine_kwargs`:
+
+```python
+from nvalchemi.dynamics import DynamicsStrategy, NVTLangevin
+
+strategy = DynamicsStrategy(
+    model=model,
+    engine=NVTLangevin,
+    engine_kwargs={"dt": 1.0, "temperature": 300.0, "friction": 0.01},
+    n_steps=100,
+    cache_engine=True,
+)
+batch = strategy.run(batch)
+batch = strategy.run(batch, n_steps=200)
+```
+
+The default `build_engine()` supplies `model`, `n_steps`, and `build_hooks()`
+to the engine. Keep those three keys out of `engine_kwargs`. `build_hooks()`
+returns a new list of `extra_hooks`. Subclasses can override it to add their own
+hooks, or override `build_engine()` for workflows with multiple stages, such as
+{py:class}`~nvalchemi.dynamics.mep.NEB`. Without an `engine` or a
+`build_engine()` override, construction raises `NotImplementedError` when the
+builder is called.
+
+By default, every `run()` builds a fresh engine. With `cache_engine=True`, the
+first run builds the engine and later runs reuse its original configuration and
+runtime state, including the step counter. A subclass can opt in by declaring
+`cache_engine: bool = True`. Calling `build_engine()` directly always constructs
+a fresh engine.
+
+`to_spec_dict()` serializes the engine class as an importable dotted path and
+hooks as constructor specs. Restore it with
+`DynamicsStrategy.from_spec_dict(spec, model=model)`. The live model and cached
+engine state are excluded, so a restored strategy starts with an empty cache.
+
 ## Using dynamics as a context manager
 
 All dynamics objects (optimizers, integrators, fused stages) support Python's

@@ -144,7 +144,8 @@ Key fields:
 settings such as `dt` or `maxstep`. `NEB` sets `model`, `hooks`, `by_group`,
 `convergence_hook`, and `n_steps` itself for each stage, so passing any of
 them in `optimizer_kwargs` raises `ValueError`. Use the corresponding `NEB`
-fields instead.
+fields instead. NEB rejects a non-`None` `engine` or nonempty `engine_kwargs`.
+Configure its optimizer stages through `optimizer` and `optimizer_kwargs`.
 
 `optimizer` accepts an optimizer class derived from
 {py:class}`~nvalchemi.dynamics.BaseDynamics` that supports fixed-cell,
@@ -181,6 +182,10 @@ if it has not met the force threshold. `max_regular_steps` is only valid with
 `to_spec_dict()` / `from_spec_dict()` alongside other
 {py:class}`~nvalchemi.dynamics.strategy.DynamicsStrategy` subclasses used for
 training and fine-tuning specs.
+
+NEB appends `build_hooks()` after its neighbor and path hooks. Subclasses can override
+`build_hooks()` to customize these additional hooks without replacing NEB's
+engine construction.
 
 ### NEB methods
 

@@ -222,6 +222,39 @@ def _freeze_hook(engine: FusedStage) -> FreezeAtomsHook:
 class TestNEBConfiguration:
     """Validate strategy configuration and optimizer construction."""
 
+    def test_build_engine_uses_build_hooks(self) -> None:
+        """The engine includes hooks returned by the public hook builder."""
+        hook = _NoOpHook()
+        with patch.object(NEB, "build_hooks", return_value=[hook]):
+            engine = NEB(model=_model()).build_engine()
+        assert hook in engine.hooks
+
+    @pytest.mark.parametrize(
+        ("field", "value", "message"),
+        [
+            ("engine", _CustomOptimizer, "use optimizer instead"),
+            ("engine", "nvalchemi.dynamics.FIRE2", "use optimizer instead"),
+            ("engine_kwargs", {"dt": 0.1}, "use optimizer_kwargs instead"),
+        ],
+    )
+    def test_rejects_unused_engine_configuration(
+        self, field: str, value: Any, message: str
+    ) -> None:
+        """Construction, assignment, and restoration reject unused engine settings."""
+        with pytest.raises(ValueError, match=message):
+            NEB(model=_model(), **{field: value})
+
+        strategy = NEB(model=_model())
+        with pytest.raises(ValueError, match=message):
+            setattr(strategy, field, value)
+        assert strategy.engine is None
+        assert strategy.engine_kwargs == {}
+
+        spec = strategy.to_spec_dict()
+        spec[field] = value
+        with pytest.raises(ValueError, match=message):
+            NEB.from_spec_dict(spec, model=strategy.model)
+
     def test_custom_spring_round_trips_constructor_spec(self) -> None:
         """A custom spring keeps its constructor state and refresh policy."""
         spring = _EnergyScaledSpring(base=0.2, scale=0.05)
@@ -334,6 +367,8 @@ class TestNEBConfiguration:
         """JSON recipes preserve NEB-specific configuration."""
         strategy = NEB(
             model=_model(),
+            engine=None,
+            engine_kwargs={},
             spring=ConstantSpringConfig(0.2),
             climbing=ClimbingImageConfig(
                 regular_fmax=0.5,
@@ -354,6 +389,8 @@ class TestNEBConfiguration:
 
         restored = NEB.from_spec_dict(spec, model=strategy.model)
 
+        assert restored.engine is None
+        assert restored.engine_kwargs == {}
         assert restored.n_steps == 19
         assert restored.spring == ConstantSpringConfig(0.2)
         assert restored.spring.refresh is DynamicsStage.ON_ADMISSION
@@ -753,6 +790,17 @@ class TestNEBConfiguration:
 
 class TestNEBRun:
     """Exercise the public run entry point on grouped path batches."""
+
+    def test_runs_build_independent_engines_by_default(self) -> None:
+        """Repeated runs use fresh engines unless caching is enabled."""
+        strategy, batch = NEB(model=_model()), _bands()
+        with patch.object(FusedStage, "run", autospec=True, return_value=batch) as run:
+            assert strategy.run(batch) is batch
+            first_engine = run.call_args.args[0]
+            assert strategy.run(batch) is batch
+            assert run.call_args.args[0] is not first_engine
+        assert strategy.cache_engine is False
+        assert strategy._engine is None
 
     def test_neb_force_hook_matches_as_fused_or_substage_hook(
         self, device: str

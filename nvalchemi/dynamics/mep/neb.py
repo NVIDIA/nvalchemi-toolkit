@@ -266,6 +266,24 @@ class NEB(DynamicsStrategy):
         ),
     )
 
+    @field_validator("engine", mode="before")
+    @classmethod
+    def _reject_engine(cls, value: Any) -> None:
+        """Reject engine overrides because NEB constructs its own fused engine."""
+        if value is not None:
+            raise ValueError("NEB does not accept engine; use optimizer instead")
+        return None
+
+    @field_validator("engine_kwargs")
+    @classmethod
+    def _reject_engine_kwargs(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Reject engine arguments that NEB's custom builder would ignore."""
+        if value:
+            raise ValueError(
+                "NEB does not accept nonempty engine_kwargs; use optimizer_kwargs instead"
+            )
+        return value
+
     @field_validator("fmax", mode="before")
     @classmethod
     def _validate_fmax(cls, value: Any) -> float:
@@ -619,7 +637,7 @@ class NEB(DynamicsStrategy):
         fused_hooks = [
             *neighbor_hooks,
             *self._build_path_hooks(climbing_status=climbing_status),
-            *self.extra_hooks,
+            *self.build_hooks(),
         ]
         return FusedStage(
             sub_stages=stages,
