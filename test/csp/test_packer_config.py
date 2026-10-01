@@ -53,6 +53,14 @@ def make_config(**overrides: object) -> OverlapReliefConfig:
     return OverlapReliefConfig(**values)
 
 
+def _round_trip_config(config: OverlapReliefConfig, route: str) -> OverlapReliefConfig:
+    if route == "json_text":
+        return OverlapReliefConfig.model_validate_json(config.model_dump_json())
+    if route == "json_dict":
+        return OverlapReliefConfig.model_validate(config.model_dump(mode="json"))
+    return OverlapReliefConfig.model_validate(config.model_dump(mode="python"))
+
+
 def make_structures() -> RigidMoleculeASUBatch:
     packing_input = MolecularPackingInput(
         conformer_positions=torch.tensor([[0.0, 0.0, 0.0]], dtype=torch.float32),
@@ -172,6 +180,47 @@ def test_probability_mapping_is_copied_read_only_and_filtered() -> None:
             z=2,
             space_groups=SpaceGroupPolicy.sampled(probabilities={1: 1.0}),
         )
+
+
+@pytest.mark.parametrize("route", ["json_text", "json_dict", "python_dict"])
+def test_weighted_nested_policy_round_trip_preserves_full_prior_and_draws(
+    route: str,
+) -> None:
+    policy = SpaceGroupPolicy.sampled(
+        probabilities={1: 5.0, 2: 9.0, 3: 0.25, 4: 0.75, 14: 4.0},
+        crystal_system=CrystalSystem.MONOCLINIC,
+        sohncke_only=True,
+    )
+    config = make_config(z=2, space_groups=policy)
+
+    restored = _round_trip_config(config, route)
+    restored_policy = restored.space_groups
+
+    assert restored_policy.probabilities == policy.probabilities
+    assert restored_policy.crystal_system is CrystalSystem.MONOCLINIC
+    assert restored_policy.sohncke_only is True
+    assert set(restored_policy.draw(128, num_operations=2, seed=432).tolist()) == {
+        3,
+        4,
+    }
+    assert torch.equal(
+        restored_policy.draw(128, num_operations=2, seed=432),
+        policy.draw(128, num_operations=2, seed=432),
+    )
+    with pytest.raises(TypeError):
+        restored_policy.probabilities[3] = 0.0  # type: ignore[index]
+
+
+def test_fixed_and_default_policies_round_trip_in_nested_config() -> None:
+    default = make_config()
+    default_restored = _round_trip_config(default, "python_dict")
+    assert default_restored.space_groups.mode == "sampled"
+    assert default_restored.space_groups.probabilities is None
+
+    fixed = make_config(z=2, space_groups=SpaceGroupPolicy.fixed(2))
+    fixed_restored = _round_trip_config(fixed, "json_text")
+    assert fixed_restored.space_groups.mode == "fixed"
+    assert fixed_restored.space_groups.group == 2
 
 
 @pytest.mark.parametrize(

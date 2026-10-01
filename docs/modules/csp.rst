@@ -63,6 +63,10 @@ Estimate a starting cell-volume range and select symmetry through
 selection; ``draw`` samples compatible groups independently of packing.
 ``OverlapReliefConfig`` checks the policy against ``z / z_prime``.
 
+You can save a space-group policy or packing configuration and reload it for
+another search. Reloading preserves all supplied weights, including groups
+excluded by the current filters.
+
 .. currentmodule:: nvalchemi.csp
 
 .. autosummary::

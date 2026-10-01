@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+
 import pytest
 import torch
 from pydantic import ValidationError
@@ -135,6 +137,117 @@ def test_sampled_policy_copies_and_reuses_full_prior_with_stable_weights() -> No
         probabilities={14: 1.0e308, 19: 1.0e308}
     ).draw(20, num_operations=4, seed=7)
     assert set(huge_weight_draws.tolist()) == {14, 19}
+
+
+def _round_trip_policy(policy: SpaceGroupPolicy, route: str) -> SpaceGroupPolicy:
+    if route == "json_text":
+        return SpaceGroupPolicy.model_validate_json(policy.model_dump_json())
+    if route == "json_dict":
+        return SpaceGroupPolicy.model_validate(policy.model_dump(mode="json"))
+    return SpaceGroupPolicy.model_validate(policy.model_dump(mode="python"))
+
+
+@pytest.mark.parametrize("route", ["json_text", "json_dict", "python_dict"])
+def test_weighted_policy_round_trip_preserves_full_filtered_prior_and_draws(
+    route: str,
+) -> None:
+    policy = SpaceGroupPolicy.sampled(
+        probabilities={1: 5.0, 2: 9.0, 3: 0.25, 4: 0.75, 14: 4.0},
+        crystal_system=CrystalSystem.MONOCLINIC,
+        sohncke_only=True,
+    )
+
+    restored = _round_trip_policy(policy, route)
+
+    assert restored.probabilities == policy.probabilities
+    assert restored.crystal_system is CrystalSystem.MONOCLINIC
+    assert restored.sohncke_only is True
+    assert set(restored.draw(128, num_operations=2, seed=432).tolist()) == {3, 4}
+    assert torch.equal(
+        restored.draw(128, num_operations=2, seed=432),
+        policy.draw(128, num_operations=2, seed=432),
+    )
+    with pytest.raises(TypeError):
+        restored.probabilities[3] = 0.0  # type: ignore[index]
+
+
+def test_policy_serialization_emits_ordinary_mappings_and_restores_canonical_keys() -> (
+    None
+):
+    policy = SpaceGroupPolicy.sampled(
+        probabilities={14: 0.25, 19: 0.75},
+        crystal_system=CrystalSystem.MONOCLINIC,
+    )
+    json_value = policy.model_dump(mode="json")
+    assert json_value["probabilities"] == {"14": 0.25, "19": 0.75}
+    assert json.loads(policy.model_dump_json())["probabilities"] == {
+        "14": 0.25,
+        "19": 0.75,
+    }
+    python_value = policy.model_dump(mode="python")
+    assert python_value["probabilities"] == {14: 0.25, 19: 0.75}
+    assert type(python_value["probabilities"]) is dict
+
+    restored = SpaceGroupPolicy(
+        mode="sampled",
+        probabilities={"14": 0.25, "19": 0.75},
+        crystal_system="monoclinic",
+    )
+    assert restored.probabilities == policy.probabilities
+    assert restored.crystal_system is CrystalSystem.MONOCLINIC
+
+
+def test_policy_restoration_copies_normalized_input() -> None:
+    prior: dict[int | str, float] = {"14": 1.0, 19: 2.0}
+    policy = SpaceGroupPolicy(
+        mode="sampled", probabilities=prior, crystal_system="monoclinic"
+    )
+    prior["14"] = 10.0
+    prior["19"] = 20.0
+    assert policy.probabilities == {14: 1.0, 19: 2.0}
+
+
+@pytest.mark.parametrize(
+    "probabilities, error_type",
+    [
+        ({"01": 1.0}, ValidationError),
+        ({"+1": 1.0}, ValidationError),
+        ({" 1": 1.0}, ValidationError),
+        ({"1.0": 1.0}, ValidationError),
+        ({"٢": 1.0}, ValidationError),
+        ({"0": 1.0}, ValidationError),
+        ({"231": 1.0}, ValidationError),
+        ({14: 1.0, "14": 2.0}, ValidationError),
+        ({True: 1.0}, TypeError),
+        ({1: True}, TypeError),
+        ({1: -1.0}, ValidationError),
+        ({1: float("nan")}, ValidationError),
+        ({1: float("inf")}, ValidationError),
+    ],
+)
+def test_policy_restoration_rejects_invalid_prior_values(
+    probabilities: dict[object, object], error_type: type[Exception]
+) -> None:
+    with pytest.raises(error_type):
+        SpaceGroupPolicy(mode="sampled", probabilities=probabilities)
+
+
+def test_policy_restoration_rejects_invalid_crystal_system_and_contradictions() -> None:
+    with pytest.raises(ValidationError):
+        SpaceGroupPolicy(mode="sampled", crystal_system="not-a-system")
+    with pytest.raises(ValidationError, match="cannot include probabilities"):
+        SpaceGroupPolicy(mode="fixed", group=1, probabilities={"1": 1.0})
+    with pytest.raises(ValidationError, match="Sohncke"):
+        SpaceGroupPolicy(mode="fixed", group=2, sohncke_only=True)
+
+
+def test_sampled_constructor_and_sampling_helpers_remain_strict() -> None:
+    with pytest.raises(TypeError, match="space_group must be an integer"):
+        SpaceGroupPolicy.sampled(probabilities={"14": 1.0})  # type: ignore[dict-item]
+    with pytest.raises(TypeError, match="crystal_system"):
+        SpaceGroupPolicy.sampled(crystal_system="monoclinic")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="space_group must be an integer"):
+        sample_space_groups(1, 4, probabilities={"14": 1.0})  # type: ignore[dict-item]
 
 
 def test_policy_constructors_reject_contradictory_and_invalid_values() -> None:

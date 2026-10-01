@@ -34,7 +34,14 @@ from typing import Any, Literal, TypeAlias
 
 import numpy as np
 import torch
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 from torch import Tensor
 
 from nvalchemi.csp._data_tables import SPACE_GROUP_PROBABILITIES
@@ -150,6 +157,38 @@ def _validate_probabilities(probabilities: Mapping[int, float]) -> dict[int, flo
     return result
 
 
+def _normalize_policy_probabilities(
+    probabilities: Mapping[Any, Any],
+) -> dict[int, Any]:
+    """Normalize canonical serialized group keys and detect key collisions."""
+    if not isinstance(probabilities, Mapping):
+        raise TypeError("probabilities must be a mapping")
+
+    normalized: dict[int, Any] = {}
+    for key, value in probabilities.items():
+        if isinstance(key, str):
+            if (
+                not key
+                or not key.isascii()
+                or not key.isdecimal()
+                or (len(key) > 1 and key.startswith("0"))
+            ):
+                raise ValueError(
+                    "serialized space-group keys must be canonical decimal strings"
+                )
+            number = int(key)
+        else:
+            number = key
+
+        number = _validate_space_group(number)
+        if number in normalized:
+            raise ValueError(
+                f"probabilities contain multiple keys for space group {number}"
+            )
+        normalized[number] = value
+    return normalized
+
+
 def _validate_seed(seed: int | None) -> int | None:
     """Return a validated nonnegative seed, preserving public error categories."""
     if seed is None:
@@ -168,7 +207,12 @@ class SpaceGroupPolicy(BaseModel):
     Construct policies with :meth:`fixed` or :meth:`sampled`. A sampled
     policy stores an optional replacement prior and crystallographic filters;
     its compatibility depends on the operation count required by a packing
-    configuration or a standalone :meth:`draw` call.
+    configuration or a standalone :meth:`draw` call. Policies can be saved
+    and restored with Pydantic's JSON text, JSON-mode dictionary, or Python-mode
+    dictionary serialization routes. Restored model data accepts canonical
+    decimal string keys for ``probabilities`` and serialized
+    :class:`CrystalSystem` values; convenience sampling helpers continue to
+    require integer keys and enum values.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -182,10 +226,10 @@ class SpaceGroupPolicy(BaseModel):
     @field_validator("probabilities", mode="before")
     @classmethod
     def _copy_probabilities(cls, value: Any) -> Any:
-        """Copy and validate caller-owned prior mappings."""
+        """Normalize, copy, and validate caller-owned prior mappings."""
         if value is None:
             return None
-        return _validate_probabilities(value)
+        return _validate_probabilities(_normalize_policy_probabilities(value))
 
     @field_validator("probabilities")
     @classmethod
@@ -195,12 +239,21 @@ class SpaceGroupPolicy(BaseModel):
         """Expose the copied prior through a read-only mapping."""
         return None if value is None else MappingProxyType(dict(value))
 
+    @field_serializer("probabilities")
+    def _serialize_probabilities(
+        self, value: Mapping[int, float] | None
+    ) -> dict[int, float] | None:
+        """Return ordinary mapping data for Python and JSON serialization."""
+        return None if value is None else dict(value)
+
     @field_validator("crystal_system", mode="before")
     @classmethod
     def _validate_crystal_system(cls, value: Any) -> Any:
-        if value is not None and not isinstance(value, CrystalSystem):
-            raise TypeError("crystal_system must be a CrystalSystem or None")
-        return value
+        if value is None or isinstance(value, CrystalSystem):
+            return value
+        if isinstance(value, str):
+            return CrystalSystem(value)
+        raise TypeError("crystal_system must be a CrystalSystem or None")
 
     @model_validator(mode="after")
     def _validate_state(self) -> SpaceGroupPolicy:

@@ -275,6 +275,23 @@ configuration reports this mismatch before packing starts. A policy retains
 its supplied weights, so using it in one configuration does not discard
 groups needed by another.
 
+You can save a space-group policy or packing configuration and reload it for
+another search. Reloading preserves all supplied weights, including groups
+excluded by the current filters. The example below shows the supported
+save/reload methods.
+
+```python
+restored_json = OverlapReliefConfig.model_validate_json(weighted_config.model_dump_json())
+restored_json_dict = OverlapReliefConfig.model_validate(weighted_config.model_dump(mode="json"))
+restored_python_dict = OverlapReliefConfig.model_validate(weighted_config.model_dump(mode="python"))
+```
+
+The same methods work on `SpaceGroupPolicy` directly. Saved weights may use
+group numbers written as decimal strings, such as `"14"`, without signs,
+spaces, or leading zeros. Model validation also accepts crystal-system names,
+such as `"monoclinic"`. Fixed group numbers still require integers. Use integer
+weight keys and `CrystalSystem` members when calling sampling helpers directly.
+
 Use `config.effective(space_groups=...)` or a call-level `space_groups=...`
 override to replace the policy without changing the base configuration.
 Switching between fixed and sampled selection replaces one object. When
