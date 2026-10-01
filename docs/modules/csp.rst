@@ -37,6 +37,14 @@ also be constructed directly.
 
    MolecularPackingInput
 
+``MolecularPackingInput.sha256`` recomputes the established exact-input digest,
+including tensor dtype, shape, contents, metadata, and formula-unit volume.
+It identifies the input representation, not chemical equivalence. Device-resident
+reads may copy tensors to CPU and synchronize; use it for identity or startup,
+rather than in the packing loop.
+
+.. autoproperty:: MolecularPackingInput.sha256
+
 .. currentmodule:: nvalchemi.csp.chem
 
 .. autosummary::
@@ -170,6 +178,11 @@ Store and expand selected structures
 ``RigidMoleculeASUBatch`` holds ASU representations and expands selected
 structures to full-cell Toolkit ``Batch`` objects. The Zarr writer and reader
 persist those representations without first expanding every structure.
+``check_integrity()`` explicitly checks ASU pointer spans, multiplicities,
+bundled operation counts, and formula-molecule conformer-pool membership.
+Construction, reading, packing, and expansion do not call it automatically.
+Geometry validity remains a caller precondition. CPU checking before expansion
+avoids additional GPU readbacks; device-resident checks may synchronize.
 
 .. currentmodule:: nvalchemi.csp
 
@@ -185,6 +198,7 @@ persist those representations without first expanding every structure.
 .. autosummary::
    :nosignatures:
 
+   RigidMoleculeASUBatch.check_integrity
    RigidMoleculeASUBatch.to_batch
    RigidMoleculeASUZarrWriter.write
    RigidMoleculeASUZarrWriter.append

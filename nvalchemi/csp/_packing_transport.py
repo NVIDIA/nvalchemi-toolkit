@@ -17,8 +17,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 from typing import Any
@@ -450,34 +448,3 @@ def _assemble_result(
         reports=reports,
         scope="gathered",
     )
-
-
-def _formula_digest(inputs: MolecularPackingInput) -> str:
-    """Hash formula tensors and metadata with the established wire encoding."""
-    digest = hashlib.sha256()
-    for name in (
-        "conformer_positions",
-        "conformer_ptr",
-        "molecule_conformer_ptr",
-        "molecule_atom_ptr",
-        "atomic_numbers",
-        "contact_distances",
-        "component_index",
-    ):
-        tensor = getattr(inputs, name).detach().cpu().contiguous()
-        digest.update(name.encode())
-        digest.update(str(tensor.dtype).encode())
-        digest.update(json.dumps(list(tensor.shape)).encode())
-        digest.update(tensor.numpy().tobytes())
-
-    def to_jsonable(value: Any) -> Any:
-        if isinstance(value, Mapping):
-            return {key: to_jsonable(item) for key, item in value.items()}
-        if isinstance(value, tuple):
-            return [to_jsonable(item) for item in value]
-        return value
-
-    metadata = to_jsonable(inputs.metadata)
-    digest.update(json.dumps(metadata, sort_keys=True, separators=(",", ":")).encode())
-    digest.update(repr(float(inputs.formula_unit_volume)).encode())
-    return digest.hexdigest()

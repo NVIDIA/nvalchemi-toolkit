@@ -16,6 +16,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import numbers
 import secrets
@@ -384,6 +386,49 @@ class MolecularPackingInput(BaseModel):
     def num_components(self) -> int:
         """Number of contiguous component IDs represented in the formula unit."""
         return int(self.component_index.max().item()) + 1
+
+    @property
+    def sha256(self) -> str:
+        """Return the SHA-256 identity of the exact formula-input representation.
+
+        The established encoding hashes the ordered tensor field names, dtypes,
+        shapes, and contiguous bytes, followed by recursively JSON-compatible
+        metadata and ``repr(float(formula_unit_volume))``. This identifies the
+        exact input representation rather than chemical equivalence. The digest
+        is recomputed on every access and is not part of :meth:`state_dict`.
+
+        Reading device-resident tensors copies them to CPU and may synchronize
+        the device, so use this property for input identity or startup checks,
+        not inside a packing loop. Direct in-place tensor mutation remains
+        unsupported.
+
+        Returns
+        -------
+        str
+            Lowercase 64-character SHA-256 hexadecimal digest.
+        """
+        digest = hashlib.sha256()
+        for name in (
+            "conformer_positions",
+            "conformer_ptr",
+            "molecule_conformer_ptr",
+            "molecule_atom_ptr",
+            "atomic_numbers",
+            "contact_distances",
+            "component_index",
+        ):
+            tensor = getattr(self, name).detach().cpu().contiguous()
+            digest.update(name.encode())
+            digest.update(str(tensor.dtype).encode())
+            digest.update(json.dumps(list(tensor.shape)).encode())
+            digest.update(tensor.numpy().tobytes())
+
+        metadata = _thaw_json(self.metadata)
+        digest.update(
+            json.dumps(metadata, sort_keys=True, separators=(",", ":")).encode()
+        )
+        digest.update(repr(float(self.formula_unit_volume)).encode())
+        return digest.hexdigest()
 
     def state_dict(self) -> dict[str, object]:
         """Return version-1 canonical CPU tensors and an independent JSON copy.
@@ -774,6 +819,108 @@ class RigidMoleculeASUBatch(BaseModel):
     def num_structures(self) -> int:
         """Number of ASU structures, including zero for an empty batch."""
         return int(self.cells.shape[0])
+
+    def check_integrity(self) -> None:
+        """Check compact ASU pointer, multiplicity, symmetry, and pool indices.
+
+        This explicit check copies only the integer metadata needed for these
+        relationships to CPU. Calling it for device-resident data may
+        synchronize the device. It does not inspect rotations, fractional
+        centers, cells, or other geometry; finite coordinates, proper
+        rotations, nonsingular positive-volume cells, and cell/symmetry
+        compatibility remain caller preconditions. Success therefore does not
+        certify scientific geometry.
+
+        The check does not mutate this batch, consume RNG state, or cache a
+        validated flag. Constructors, readers, selection, concatenation,
+        expansion, and packing do not call it automatically.
+
+        The operation performs O(P + Q) integer-metadata work plus a transfer
+        of formula-molecule pool metadata. Its cost is unmeasured.
+
+        Raises
+        ------
+        ValueError
+            If the structure pointer, multiplicity, operation count, or
+            conformer-pool membership relationship is invalid.
+        """
+        from nvalchemi.csp.symmetry import get_space_group_operation_count
+
+        structure_ptr = self.structure_molecule_ptr.detach().cpu().tolist()
+        conformer_indices = self.conformer_indices.detach().cpu().tolist()
+        space_groups = self.space_groups.detach().cpu().tolist()
+        z_values = self.z.detach().cpu().tolist()
+        z_prime_values = self.z_prime.detach().cpu().tolist()
+        molecule_conformer_ptr = (
+            self.packing_input.molecule_conformer_ptr.detach().cpu().tolist()
+        )
+
+        num_structures = int(self.cells.shape[0])
+        num_asu_molecules = int(self.conformer_indices.numel())
+        num_formula_molecules = self.packing_input.num_molecules
+
+        if not structure_ptr or structure_ptr[0] != 0:
+            raise ValueError("structure_molecule_ptr must start at zero")
+        for structure_index, (left, right) in enumerate(
+            zip(structure_ptr, structure_ptr[1:])
+        ):
+            if right < left:
+                raise ValueError(
+                    "structure_molecule_ptr must be nondecreasing at "
+                    f"structure {structure_index}: {left} > {right}"
+                )
+        if structure_ptr[-1] != num_asu_molecules:
+            raise ValueError(
+                "structure_molecule_ptr must end at the conformer_indices length"
+            )
+
+        for structure_index in range(num_structures):
+            z = int(z_values[structure_index])
+            z_prime = int(z_prime_values[structure_index])
+            if z <= 0:
+                raise ValueError(f"z must be positive for structure {structure_index}")
+            if z_prime <= 0:
+                raise ValueError(
+                    f"z_prime must be positive for structure {structure_index}"
+                )
+            if z % z_prime:
+                raise ValueError(
+                    f"z_prime must divide z for structure {structure_index}"
+                )
+
+            start = int(structure_ptr[structure_index])
+            stop = int(structure_ptr[structure_index + 1])
+            expected_count = num_formula_molecules * z_prime
+            if stop - start != expected_count:
+                raise ValueError(
+                    f"structure {structure_index} span has {stop - start} ASU "
+                    f"molecules; expected {expected_count} from formula molecules "
+                    "and z_prime"
+                )
+
+            space_group = int(space_groups[structure_index])
+            if not 1 <= space_group <= 230:
+                raise ValueError(f"space_groups[{structure_index}] must be in [1, 230]")
+            operation_count = get_space_group_operation_count(space_group)
+            expected_operation_count = z // z_prime
+            if operation_count != expected_operation_count:
+                raise ValueError(
+                    f"space group {space_group} for structure {structure_index} has "
+                    f"{operation_count} operations; expected {expected_operation_count} "
+                    "from z / z_prime"
+                )
+
+            for row in range(start, stop):
+                molecule_index = (row - start) % num_formula_molecules
+                pool_start = int(molecule_conformer_ptr[molecule_index])
+                pool_stop = int(molecule_conformer_ptr[molecule_index + 1])
+                conformer_index = int(conformer_indices[row])
+                if not pool_start <= conformer_index < pool_stop:
+                    raise ValueError(
+                        f"conformer index {conformer_index} at ASU row {row} is "
+                        f"outside formula molecule {molecule_index} pool "
+                        f"[{pool_start}, {pool_stop})"
+                    )
 
     def select(self, indices: Tensor) -> RigidMoleculeASUBatch:
         """Select ASU rows in requested order, preserving repeated indices.

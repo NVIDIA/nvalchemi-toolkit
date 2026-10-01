@@ -164,6 +164,45 @@ def test_round_trip_order_repeats_metadata_and_p1(tmp_path) -> None:
             reader.read_batch(None)
 
 
+def test_external_store_wrong_formula_pool_is_rejected_explicitly(tmp_path) -> None:
+    store = tmp_path / "wrong-formula-pool.zarr"
+    packing_input = MolecularPackingInput(
+        conformer_positions=torch.zeros((2, 3), dtype=torch.float32),
+        conformer_ptr=torch.tensor([0, 1, 2], dtype=torch.int32),
+        molecule_conformer_ptr=torch.tensor([0, 1, 2], dtype=torch.int32),
+        molecule_atom_ptr=torch.tensor([0, 1, 2], dtype=torch.int32),
+        atomic_numbers=torch.tensor([6, 8], dtype=torch.int64),
+        contact_distances=torch.ones((2, 2), dtype=torch.float32),
+        component_index=torch.tensor([0, 1], dtype=torch.int32),
+        formula_unit_volume=10.0,
+    )
+    source = RigidMoleculeASUBatch(
+        packing_input=packing_input,
+        structure_molecule_ptr=torch.tensor([0, 2], dtype=torch.int32),
+        conformer_indices=torch.tensor([0, 1], dtype=torch.int32),
+        rotations=torch.eye(3, dtype=torch.float32).expand(2, 3, 3).clone(),
+        fractional_centers=torch.zeros((2, 3), dtype=torch.float32),
+        cells=torch.eye(3, dtype=torch.float32).unsqueeze(0),
+        space_groups=torch.tensor([1], dtype=torch.int32),
+        z=torch.tensor([1], dtype=torch.int32),
+        z_prime=torch.tensor([1], dtype=torch.int32),
+        structure_ids=torch.tensor([[77, 0]], dtype=torch.int64),
+    )
+    with RigidMoleculeASUZarrWriter(store) as writer:
+        writer.write(source)
+
+    root = zarr.open_group(store, mode="r+")
+    root["core"]["conformer_indices"][0] = 1
+
+    with RigidMoleculeASUZarrReader(store) as reader:
+        loaded = reader.read()
+    assert loaded.conformer_indices.tolist() == [1, 1]
+    with pytest.raises(
+        ValueError, match=r"ASU row 0 is outside formula molecule 0 pool \[0, 1\)"
+    ):
+        loaded.check_integrity()
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 def test_cuda_write_selected_compact_and_p1_round_trip(tmp_path) -> None:
     store = tmp_path / "compact-cuda.zarr"

@@ -51,6 +51,23 @@ def make_packing_input(**overrides: object) -> MolecularPackingInput:
     return MolecularPackingInput(**values)
 
 
+def make_digest_input(**overrides: object) -> MolecularPackingInput:
+    """Create a tiny formula input with a pinned, independently computed digest."""
+    values: dict[str, object] = {
+        "conformer_positions": torch.zeros((1, 3), dtype=torch.float32),
+        "conformer_ptr": torch.tensor([0, 1], dtype=torch.int32),
+        "molecule_conformer_ptr": torch.tensor([0, 1], dtype=torch.int32),
+        "molecule_atom_ptr": torch.tensor([0, 1], dtype=torch.int32),
+        "atomic_numbers": torch.tensor([6], dtype=torch.int64),
+        "contact_distances": torch.tensor([[1.25]], dtype=torch.float32),
+        "component_index": torch.tensor([0], dtype=torch.int32),
+        "formula_unit_volume": 2.5,
+        "metadata": {"source": "fixture", "values": [1, 2]},
+    }
+    values.update(overrides)
+    return MolecularPackingInput(**values)
+
+
 def make_compact(
     packing_input: MolecularPackingInput | None = None,
     *,
@@ -82,7 +99,85 @@ def make_compact(
     )
 
 
+def make_mixed_compact() -> RigidMoleculeASUBatch:
+    """Create valid mixed Z/Z-prime structures for integrity checks."""
+    return RigidMoleculeASUBatch(
+        packing_input=make_packing_input(),
+        structure_molecule_ptr=torch.tensor([0, 4, 6], dtype=torch.int32),
+        conformer_indices=torch.tensor([0, 2, 0, 2, 0, 2], dtype=torch.int32),
+        rotations=torch.eye(3, dtype=torch.float32).expand(6, 3, 3).clone(),
+        fractional_centers=torch.zeros((6, 3), dtype=torch.float32),
+        cells=torch.eye(3, dtype=torch.float32).expand(2, 3, 3).clone(),
+        space_groups=torch.tensor([2, 2], dtype=torch.int32),
+        z=torch.tensor([4, 2], dtype=torch.int32),
+        z_prime=torch.tensor([2, 1], dtype=torch.int32),
+        structure_ids=torch.tensor([[11, 0], [11, 1]], dtype=torch.int64),
+        properties={"score": torch.tensor([10.0, 20.0])},
+    )
+
+
+def _compact_with_updates(
+    compact: RigidMoleculeASUBatch, **updates: object
+) -> RigidMoleculeASUBatch:
+    """Construct through the public schema with selected semantic mutations."""
+    values: dict[str, object] = {
+        name: getattr(compact, name)
+        for name in (
+            "packing_input",
+            "structure_molecule_ptr",
+            "conformer_indices",
+            "rotations",
+            "fractional_centers",
+            "cells",
+            "space_groups",
+            "z",
+            "z_prime",
+            "structure_ids",
+            "properties",
+        )
+    }
+    values.update(updates)
+    return RigidMoleculeASUBatch(**values)
+
+
 class TestMolecularPackingInput:
+    def test_sha256_matches_frozen_encoding_without_becoming_model_state(self) -> None:
+        packing_input = make_digest_input()
+
+        # Independently computed from the documented ordered tensor bytes,
+        # sorted compact metadata JSON, and repr(float(volume)).
+        assert packing_input.sha256 == (
+            "28b1b1bc84eb12bdcbe8a036d30a11f6d8232aa80db487b0769008f0445d30a0"
+        )
+        assert len(packing_input.sha256) == 64
+        assert packing_input.sha256 == packing_input.sha256.lower()
+        assert "sha256" not in packing_input.state_dict()
+        assert "sha256" not in MolecularPackingInput.model_fields
+
+    def test_sha256_tracks_exact_input_state_and_does_not_consume_rng(self) -> None:
+        packing_input = make_digest_input()
+        expected = packing_input.sha256
+        restored = MolecularPackingInput.from_state_dict(packing_input.state_dict())
+        reordered_metadata = make_digest_input(
+            metadata={"values": [1, 2], "source": "fixture"}
+        )
+        changed_contact = make_digest_input(
+            contact_distances=torch.tensor([[1.5]], dtype=torch.float32)
+        )
+        changed_metadata = make_digest_input(
+            metadata={"source": "fixture", "values": [1, 3]}
+        )
+        changed_volume = make_digest_input(formula_unit_volume=2.75)
+        rng_state = torch.random.get_rng_state().clone()
+
+        assert restored.sha256 == expected
+        assert packing_input.to("cpu").sha256 == expected
+        assert reordered_metadata.sha256 == expected
+        assert changed_contact.sha256 != expected
+        assert changed_metadata.sha256 != expected
+        assert changed_volume.sha256 != expected
+        assert torch.equal(torch.random.get_rng_state(), rng_state)
+
     def test_constructor_owns_cpu_tensors_centers_each_conformer_and_copies_metadata(
         self,
     ) -> None:
@@ -283,6 +378,138 @@ class TestMolecularPackingInput:
 
 
 class TestRigidMoleculeASUBatch:
+    def test_check_integrity_accepts_empty_and_mixed_batches_without_side_effects(
+        self,
+    ) -> None:
+        compact = make_mixed_compact()
+        empty = compact.select(torch.empty(0, dtype=torch.int64))
+        assert empty.check_integrity() is None
+
+        names = (
+            "structure_molecule_ptr",
+            "conformer_indices",
+            "space_groups",
+            "z",
+            "z_prime",
+        )
+        snapshots = {name: getattr(compact, name).clone() for name in names}
+        formula_ptr = compact.packing_input.molecule_conformer_ptr.clone()
+        rng_state = torch.random.get_rng_state().clone()
+        before = compact.to_batch()
+
+        assert compact.check_integrity() is None
+
+        after = compact.to_batch()
+        for name, snapshot in snapshots.items():
+            torch.testing.assert_close(getattr(compact, name), snapshot)
+        torch.testing.assert_close(
+            compact.packing_input.molecule_conformer_ptr, formula_ptr
+        )
+        assert torch.equal(torch.random.get_rng_state(), rng_state)
+        for name in (
+            "positions",
+            "atomic_numbers",
+            "cell",
+            "pbc",
+            "csp_source_structure_id",
+        ):
+            torch.testing.assert_close(getattr(after, name), getattr(before, name))
+        assert after.csp_source_structure_id.tolist() == [[11, 0], [11, 1]]
+
+    @pytest.mark.parametrize(
+        ("updates", "message"),
+        [
+            (
+                {"structure_molecule_ptr": torch.tensor([1, 4, 6], dtype=torch.int32)},
+                "start at zero",
+            ),
+            (
+                {"structure_molecule_ptr": torch.tensor([0, 5, 4], dtype=torch.int32)},
+                "nondecreasing",
+            ),
+            (
+                {"structure_molecule_ptr": torch.tensor([0, 4, 5], dtype=torch.int32)},
+                "end at the conformer_indices length",
+            ),
+            (
+                {"structure_molecule_ptr": torch.tensor([0, 3, 6], dtype=torch.int32)},
+                "span has 3 ASU molecules",
+            ),
+            ({"z": torch.tensor([0, 2], dtype=torch.int32)}, "z must be positive"),
+            ({"z": torch.tensor([-1, 2], dtype=torch.int32)}, "z must be positive"),
+            (
+                {"z_prime": torch.tensor([0, 1], dtype=torch.int32)},
+                "z_prime must be positive",
+            ),
+            (
+                {"z_prime": torch.tensor([-1, 1], dtype=torch.int32)},
+                "z_prime must be positive",
+            ),
+            (
+                {
+                    "z": torch.tensor([3, 2], dtype=torch.int32),
+                    "z_prime": torch.tensor([2, 1], dtype=torch.int32),
+                },
+                "z_prime must divide z",
+            ),
+            (
+                {"space_groups": torch.tensor([231, 2], dtype=torch.int32)},
+                r"space_groups\[0\] must be in \[1, 230\]",
+            ),
+            (
+                {"space_groups": torch.tensor([1, 2], dtype=torch.int32)},
+                "has 1 operations; expected 2",
+            ),
+            (
+                {
+                    "conformer_indices": torch.tensor(
+                        [2, 2, 0, 2, 0, 2], dtype=torch.int32
+                    )
+                },
+                r"ASU row 0 is outside formula molecule 0 pool \[0, 2\)",
+            ),
+        ],
+    )
+    def test_check_integrity_rejects_invalid_index_relationships(
+        self, updates: dict[str, object], message: str
+    ) -> None:
+        compact = _compact_with_updates(make_mixed_compact(), **updates)
+        with pytest.raises(ValueError, match=message):
+            compact.check_integrity()
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
+    def test_check_integrity_on_cuda_and_digest_transfer_invariance(self) -> None:
+        cpu_input = make_packing_input()
+        device_input = cpu_input.to("cuda:0")
+        assert device_input.sha256 == cpu_input.sha256
+
+        valid = make_mixed_compact().to("cuda:0")
+        invalid = _compact_with_updates(
+            valid,
+            z_prime=torch.tensor([0, 1], dtype=torch.int32, device="cuda:0"),
+        )
+        snapshots = {
+            name: getattr(valid, name).detach().cpu().clone()
+            for name in (
+                "structure_molecule_ptr",
+                "conformer_indices",
+                "space_groups",
+                "z",
+                "z_prime",
+            )
+        }
+        cpu_rng = torch.random.get_rng_state().clone()
+        cuda_rng = torch.cuda.get_rng_state("cuda:0").clone()
+
+        assert valid.check_integrity() is None
+        with pytest.raises(ValueError, match="z_prime must be positive"):
+            invalid.check_integrity()
+
+        for name, snapshot in snapshots.items():
+            torch.testing.assert_close(getattr(valid, name).cpu(), snapshot)
+        assert torch.equal(torch.random.get_rng_state(), cpu_rng)
+        assert torch.equal(torch.cuda.get_rng_state("cuda:0"), cuda_rng)
+
     def test_schema_properties_selection_order_repetition_and_empty_selection(
         self,
     ) -> None:

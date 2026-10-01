@@ -32,7 +32,6 @@ from nvalchemi.csp._packing_transport import (
     _assemble_result,
     _describe_native,
     _empty_batch,
-    _formula_digest,
     _gather_payloads,
 )
 from nvalchemi.csp.data import (
@@ -420,9 +419,7 @@ class CSPGenerator(AtomisticGenerator):
 
         rank_allocations = tuple(int(value) for value in targets)
         rank_budgets = tuple(budgets) if self._process_group is not None else None
-        digest = (
-            _formula_digest(active_inputs) if self._process_group is not None else None
-        )
+        digest = active_inputs.sha256 if self._process_group is not None else None
         return {
             "inputs": active_inputs,
             "target": target,
