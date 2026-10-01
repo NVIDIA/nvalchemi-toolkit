@@ -983,18 +983,26 @@ class TestNEBRun:
         endpoints.status = torch.full(
             (endpoints.num_graphs, 1), endpoint_status, dtype=torch.long, device=device
         )
+        endpoints["n_steps_counter_0"] = torch.full(
+            (endpoints.num_graphs, 1), 2, dtype=torch.long, device=device
+        )
         initial = endpoints[[0]]
         final = endpoints[[2]]
         bands = interpolate_paths(initial, final, 3)
         positions = bands.positions.clone()
         bands.velocities = torch.zeros_like(bands.positions)
 
-        result = NEB(
+        engine = NEB(
             model=_CompilerFriendlyModel().to(device).eval(),
             fmax=1.0e-6,
-            n_steps=2,
+            climbing=ClimbingImageConfig(max_regular_steps=2),
             optimizer_kwargs={"device_type": device},
-        ).run(bands)
+        ).build_engine()
+        result, _ = engine.step(bands)
+        assert torch.all(result.status == 0)
+        assert torch.all(result.n_steps_counter_0 == 1)
+        engine.step(result)
+        assert torch.all(result.status == 1)
 
         assert result.positions[1, 1] < positions[1, 1]
         torch.testing.assert_close(result.positions[[0, 2]], positions[[0, 2]])

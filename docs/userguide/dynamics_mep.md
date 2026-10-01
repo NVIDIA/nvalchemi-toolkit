@@ -56,8 +56,9 @@ paths = NEB(model=IDPPModel(), fmax=0.1, n_steps=200).run(paths)
 ```
 
 `interpolate_paths` linearly interpolates positions between index-matched
-endpoint graphs and drops stale fields (`forces`, `energy`, `velocities`,
-...), so reattach `velocities` before optimizing. Set
+endpoint graphs, retaining only structural/model-input fields. Neighbor data,
+outputs, stage counters, and custom fields are dropped, so reattach `velocities`
+and any custom model inputs before optimizing. Set
 `remove_translation_and_rotation=True` to align each final structure to its
 paired initial structure first. For periodic paths, this reconciles
 minimum-image positions and removes translation without rotating the cell. An

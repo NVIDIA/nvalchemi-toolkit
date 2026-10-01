@@ -86,7 +86,7 @@ class DynamicsStrategy(BaseModel):
 
     A strategy stores the configuration needed to construct a dynamics engine.
     By default, each :meth:`run` constructs a fresh engine. Set ``cache_engine``
-    to reuse the engine and preserve its state across runs.
+    to continue the same simulation with its engine state preserved across runs.
     :meth:`to_spec_dict` represents hooks as reconstructible constructor
     specs while the live model remains a runtime dependency. When restoring with
     :meth:`from_spec_dict`, ``model=`` supplies that dependency and
@@ -108,8 +108,9 @@ class DynamicsStrategy(BaseModel):
     extra_hooks : sequence of Hook or None, optional
         Ordered runtime hooks added to the constructed engine.
     cache_engine : bool, optional
-        Reuse the first engine built by :meth:`run`. Defaults to ``False``.
-        Cached runtime state is excluded from strategy specs.
+        Reuse the first engine built by :meth:`run` to continue the same
+        simulation, preserving optimizer or thermostat state and step counts.
+        Defaults to ``False``. Cached runtime state is excluded from strategy specs.
     """
 
     model_config = ConfigDict(
@@ -221,7 +222,12 @@ class DynamicsStrategy(BaseModel):
 
         With ``cache_engine=False``, every call builds a fresh engine. With
         ``cache_engine=True``, only the first call builds an engine, and later
-        calls reuse its state and original configuration.
+        calls reuse its state and original configuration to continue the same
+        simulation. Optimizer or thermostat state and step counts are retained.
+        The caller must keep the batch's system/group membership and ordering,
+        device, and dtype aligned with the cached engine's state. Compatibility
+        is not validated automatically, and changing the batch does not reset
+        engine state. Use ``cache_engine=False`` for independent simulations.
 
         Parameters
         ----------

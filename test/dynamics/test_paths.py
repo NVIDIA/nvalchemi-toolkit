@@ -229,6 +229,8 @@ class TestInterpolatePaths:
         initial.forces = torch.ones_like(initial.positions)
         initial.velocities = torch.ones_like(initial.positions)
         initial.energy = torch.ones(initial.num_graphs, 1)
+        initial.charge = torch.tensor([[1.0], [2.0]])
+        initial["n_steps_counter_42"] = torch.full((initial.num_graphs, 1), 2)
 
         with (
             patch.object(
@@ -247,6 +249,10 @@ class TestInterpolatePaths:
         assert "forces" not in paths
         assert "velocities" not in paths
         assert "energy" not in paths
+        assert "n_steps_counter_42" not in paths
+        torch.testing.assert_close(
+            paths.charge.view(-1), torch.tensor([1.0] * 3 + [2.0] * 4)
+        )
         assert "forces" in initial
 
     def test_discards_neighbor_storage_and_edge_counts(self, device: str) -> None:
@@ -258,6 +264,10 @@ class TestInterpolatePaths:
                     atomic_numbers=torch.tensor([1, 8]),
                     neighbor_list=torch.tensor([[0, 1], [1, 0]]),
                     shifts=torch.zeros(2, 3),
+                    neighbor_list_shifts=torch.zeros(2, 3, dtype=torch.long),
+                    neighbor_matrix=torch.tensor([[1], [0]]),
+                    neighbor_matrix_shifts=torch.zeros(2, 1, 3, dtype=torch.long),
+                    num_neighbors=torch.ones(2, dtype=torch.long),
                 )
             ]
         ).to(device)
@@ -275,8 +285,16 @@ class TestInterpolatePaths:
         assert paths.num_edges_per_graph.numel() == 0
         assert paths.model_dump()["num_edges_list"] == []
         assert "edges" not in paths._storage.groups
-        assert "neighbor_list" not in paths
-        assert "shifts" not in paths
+        for key in (
+            "neighbor_list",
+            "shifts",
+            "neighbor_list_shifts",
+            "neighbor_matrix",
+            "neighbor_matrix_shifts",
+            "num_neighbors",
+        ):
+            assert key not in paths
+            assert key in initial
 
     def test_uses_minimum_image_displacement_per_graph_and_keeps_endpoints(
         self, device: str

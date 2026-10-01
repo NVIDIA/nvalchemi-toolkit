@@ -31,19 +31,21 @@ from nvalchemi.dynamics.mep._geometry import (
 
 _CELL_RTOL = 1e-5
 _CELL_ATOL = 1e-6
-_STALE_FIELDS = frozenset(
+_PATH_INPUT_FIELDS = frozenset(
     {
-        "forces",
-        "energy",
-        "stress",
-        "virial",
-        "dipole",
-        "node_embeddings",
-        "graph_embeddings",
-        "velocities",
-        "momenta",
-        "kinetic_energies",
-        "status",
+        "positions",
+        "atomic_numbers",
+        "atomic_masses",
+        "atom_categories",
+        "cell",
+        "pbc",
+        "charges",
+        "charge",
+        "node_attrs",
+        "node_alpha_spins",
+        "node_beta_spins",
+        "spin",
+        "graph_alpha_spins",
     }
 )
 
@@ -120,20 +122,6 @@ def _validate_endpoint_geometry(
     return cell, pbc, prepared_mic
 
 
-def _discard_stale_fields(batch: Batch) -> None:
-    """Remove edge data, model outputs, and dynamical state from path images."""
-    edge_group = batch._edges_group
-    edge_fields = set() if edge_group is None else set(edge_group.keys())
-    batch._storage.groups.pop("edges", None)
-    discarded = edge_fields | _STALE_FIELDS
-    for field in discarded:
-        if field in batch:
-            del batch[field]
-    if batch.keys is not None:
-        for fields in batch.keys.values():
-            fields.difference_update(discarded)
-
-
 def interpolate_paths(
     initial: Batch,
     final: Batch,
@@ -182,8 +170,11 @@ def interpolate_paths(
 
     Notes
     -----
-    Structural and model-input fields are copied from each initial graph.
-    Neighbor data, model outputs, and dynamical state are discarded.
+    Only positions, atomic numbers/masses/categories, cell/PBC, charges,
+    spin fields, and node attributes are copied from each initial graph.
+    Neighbor data, model outputs, dynamical state, and other custom fields
+    are discarded. Reattach any custom model inputs to the resulting path
+    before evaluation.
     Unless alignment is requested, endpoint coordinates are retained exactly,
     even when periodic interior images follow an unwrapped minimum-image path.
     With alignment, terminal images use the aligned final coordinates. The
@@ -247,7 +238,10 @@ def interpolate_paths(
         image_counts_tensor[image_to_path] - 1
     ).to(initial.positions.dtype)
 
-    result = initial.index_select(image_to_path)
+    discarded = {field for field, _ in initial if field not in _PATH_INPUT_FIELDS}
+    result = initial.index_select(image_to_path, drop=discarded)
+    # Dropping edge tensors alone retains their storage cardinality.
+    result._storage.groups.pop("edges", None)
     output_graph = result.batch_idx.to(torch.long)
     source_graph = image_to_path[output_graph]
     output_node = torch.arange(
@@ -265,7 +259,6 @@ def interpolate_paths(
     positions = torch.where(terminal[:, None], final_positions[source_node], positions)
 
     result.positions = positions
-    _discard_stale_fields(result)
     result.set_group_layout(image_to_path)
     return result
 
