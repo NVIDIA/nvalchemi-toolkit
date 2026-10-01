@@ -269,17 +269,93 @@ class TestDefaultsChain:
         """The ``device`` field wins over the function's ``device`` attribute."""
         func = DeviceAwareGenerate("meta")
         gen = AtomisticGenerator(generator_func=func, device="cpu")
-        assert gen._infer_device() == torch.device("cpu")
+        assert gen.device == torch.device("cpu")
 
     def test_device_function_attribute_used(self) -> None:
-        """Without a ``device`` field, the function's ``device`` attribute resolves."""
+        """Without a ``device`` field, the function's device binds at construction."""
         gen = AtomisticGenerator(generator_func=DeviceAwareGenerate("cpu"))
-        assert gen._infer_device() == torch.device("cpu")
+        assert gen.device == torch.device("cpu")
 
     def test_device_unresolved_without_sources(self) -> None:
-        """No ``device`` field and no function attribute resolves to ``None``."""
+        """No declared device leaves the generator unmanaged."""
         gen = AtomisticGenerator(generator_func=batch_generate)
-        assert gen._infer_device() is None
+        assert gen.device is None
+
+    def test_function_device_binds_once_and_stays_fixed(self, monkeypatch) -> None:
+        """Inherited bare CUDA pins to the current GPU for this instance."""
+        current_index = 1
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
+
+        def current_device() -> int:
+            return current_index
+
+        monkeypatch.setattr(torch.cuda, "current_device", current_device)
+        func = DeviceAwareGenerate("cuda")
+        gen = AtomisticGenerator(generator_func=func)
+        current_index = 0
+        func.device = "cpu"
+
+        assert gen.device == torch.device("cuda:1")
+
+    def test_explicit_device_does_not_read_unavailable_function_device(
+        self, monkeypatch
+    ) -> None:
+        """An explicit device bypasses the function's CUDA declaration."""
+        monkeypatch.setattr(
+            torch.cuda,
+            "is_available",
+            lambda: pytest.fail("the explicit CPU device does not query CUDA"),
+        )
+
+        gen = AtomisticGenerator(
+            generator_func=DeviceAwareGenerate("cuda"), device="cpu"
+        )
+
+        assert gen.device == torch.device("cpu")
+
+    def test_non_device_function_attribute_is_ignored(self) -> None:
+        """A function attribute of another type leaves placement unmanaged."""
+        func = DeviceAwareGenerate("cpu")
+        func.device = 42
+
+        gen = AtomisticGenerator(generator_func=func)
+
+        assert gen.device is None
+
+    def test_invalid_inherited_device_rejected_at_construction(self) -> None:
+        """An invalid declared device fails during generator construction."""
+
+        def generate(inputs=None, **kwargs):
+            return batch_generate(inputs, **kwargs)
+
+        generate.device = "not-a-device"
+        with pytest.raises(ValueError, match="Invalid device string"):
+            AtomisticGenerator(generator_func=generate)
+
+    def test_unavailable_inherited_cuda_rejected_at_construction(
+        self, monkeypatch
+    ) -> None:
+        """An unavailable inherited CUDA device fails during construction."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+        monkeypatch.setattr(
+            torch.cuda,
+            "current_device",
+            lambda: pytest.fail("current device must not be queried when unavailable"),
+        )
+
+        with pytest.raises(ValueError, match=r"torch.cuda.is_available\(\) is False"):
+            AtomisticGenerator(generator_func=DeviceAwareGenerate("cuda"))
+
+    def test_out_of_range_inherited_cuda_rejected_at_construction(
+        self, monkeypatch
+    ) -> None:
+        """An out-of-range inherited CUDA index fails during construction."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
+
+        with pytest.raises(ValueError, match="out of range: 2 CUDA device"):
+            AtomisticGenerator(generator_func=DeviceAwareGenerate("cuda:2"))
 
 
 class TestDeviceValidation:
@@ -303,6 +379,38 @@ class TestDeviceValidation:
         """A non-string, non-torch.device ``device`` raises at construction."""
         with pytest.raises(ValidationError, match="string or torch.device"):
             AtomisticGenerator(generator_func=batch_generate, device=42)
+
+    def test_explicit_bare_cuda_is_pinned_to_current_gpu(self, monkeypatch) -> None:
+        """An explicit bare CUDA device binds to the selected GPU at construction."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "current_device", lambda: 1)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
+
+        gen = AtomisticGenerator(generator_func=batch_generate, device="cuda")
+
+        assert gen.device == torch.device("cuda:1")
+
+    def test_explicit_cuda_index_is_preserved(self, monkeypatch) -> None:
+        """An explicit CUDA index is not replaced with the current GPU."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
+        monkeypatch.setattr(
+            torch.cuda,
+            "current_device",
+            lambda: pytest.fail("an explicit CUDA index must be retained"),
+        )
+
+        gen = AtomisticGenerator(generator_func=batch_generate, device="cuda:0")
+
+        assert gen.device == torch.device("cuda:0")
+
+    def test_cuda_index_range_uses_mocked_device_count(self, monkeypatch) -> None:
+        """An explicit CUDA index is checked against the available device count."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
+
+        with pytest.raises(ValidationError, match="out of range: 2 CUDA device"):
+            AtomisticGenerator(generator_func=batch_generate, device="cuda:2")
 
     @pytest.mark.skipif(torch.cuda.is_available(), reason="Requires a CUDA-less host.")
     def test_cuda_unavailable_raises(self) -> None:
@@ -349,8 +457,10 @@ class _OffDeviceRawGenerate:
 class TestDeviceResidency:
     """The device-residency check on returned ``Batch`` outputs."""
 
-    def test_residency_check_fires_on_mismatch(self) -> None:
+    def test_residency_check_fires_on_mismatch(self, monkeypatch) -> None:
         """A function returning a ``Batch`` on the wrong device raises."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
         gen = AtomisticGenerator(generator_func=_OffDeviceGenerate())
         with pytest.raises(ValueError, match="lives on device"):
             gen()
@@ -362,9 +472,11 @@ class TestDeviceResidency:
         assert out.num_graphs == 2
         assert out["positions"].device.type == "cpu"
 
-    def test_residency_check_skipped_for_non_batch(self) -> None:
+    def test_residency_check_skipped_for_non_batch(self, monkeypatch) -> None:
         """A non-``Batch`` output skips the residency check, even with a
         device pinned via the function's attribute."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
         gen = AtomisticGenerator(generator_func=_OffDeviceRawGenerate())
         out = gen()
         assert out["x1"].device.type == "cpu"
@@ -372,6 +484,8 @@ class TestDeviceResidency:
     def test_residency_check_skipped_under_compile(self, monkeypatch) -> None:
         """The check is skipped while ``torch.compiler.is_compiling()`` is true."""
         monkeypatch.setattr(torch.compiler, "is_compiling", lambda: True)
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
         gen = AtomisticGenerator(generator_func=_OffDeviceGenerate())
         assert gen().num_graphs == 1
 
@@ -1324,13 +1438,13 @@ class TestReviewPins:
         out = gen()
         assert out.num_graphs == 0
 
-    def test_zero_graph_batch_exempt_from_residency_check(self) -> None:
+    def test_zero_graph_batch_exempt_from_residency_check(self, monkeypatch) -> None:
         """The residency exemption: a CPU zero-graph batch under a CUDA pin passes."""
-        if torch.cuda.is_available():
-            pytest.skip("the exemption needs no CUDA device to be host-checkable")
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
 
         class _Pinned:
-            device = torch.device("cuda:0")  # attribute-declared, no host check
+            device = torch.device("cuda:0")
 
             def __call__(self, inputs=None, **kw):
                 return Batch.empty(num_systems=0, num_nodes=0, num_edges=0)

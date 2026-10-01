@@ -28,6 +28,7 @@ import torch.distributed as dist
 from pydantic import PrivateAttr
 from torch.distributed import ProcessGroup
 
+from nvalchemi._device import normalize_device
 from nvalchemi.csp._packing_transport import (
     _assemble_result,
     _describe_native,
@@ -208,10 +209,13 @@ class CSPGenerator(AtomisticGenerator):
             raise TypeError("on_result must be callable or None")
         if not callable(getattr(packer, "pack", None)):
             raise TypeError("packer must provide a callable pack method")
-        if not hasattr(packer, "device"):
-            raise TypeError("packer must provide a device")
-
-        device = self._parse_packer_device(packer.device)
+        try:
+            packer_device = packer.device
+        except AttributeError as error:
+            raise TypeError("packer must provide a device") from error
+        if not isinstance(packer_device, (torch.device, str)):
+            raise TypeError("packer.device must be a torch.device or device string")
+        device = normalize_device(packer_device)
         outputs = CSP_OUTPUT_FIELDS if expand else frozenset()
         generator_func = _CSPGeneratingFunction(device=device, outputs=outputs)
         super().__init__(
@@ -227,21 +231,6 @@ class CSPGenerator(AtomisticGenerator):
         self._expand = expand
         self._on_result = on_result
         generator_func.bind(self)
-
-    @staticmethod
-    def _parse_packer_device(value: Any) -> torch.device:
-        """Return the packer's declared device as a torch.device."""
-        if not isinstance(value, (torch.device, str)):
-            raise TypeError("packer.device must be a torch.device or device string")
-        try:
-            device = torch.device(value)
-        except (RuntimeError, TypeError) as error:
-            raise ValueError(f"invalid packer.device {value!r}: {error}") from error
-        if device.type == "cuda" and device.index is None:
-            if not torch.cuda.is_available():
-                raise ValueError("packer.device requests CUDA but CUDA is unavailable")
-            device = torch.device("cuda", torch.cuda.current_device())
-        return device
 
     @staticmethod
     def _positive_integer(value: Any, *, name: str) -> int:

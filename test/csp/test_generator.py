@@ -370,3 +370,76 @@ def test_local_startup_preserves_type_and_range_errors() -> None:
         generator.sample("not a formula input", num_samples=1)
     with pytest.raises(ValueError, match="num_samples must be positive"):
         generator.sample(_formula(), num_samples=0)
+
+
+@pytest.mark.parametrize("device_value", ["cuda", torch.device("cuda")])
+def test_constructor_pins_bare_cuda_string_or_device(monkeypatch, device_value) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "current_device", lambda: 1)
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
+
+    packer = _FakePacker()
+    packer.device = device_value
+    generator = CSPGenerator(packer, dedicated_stream=False)
+
+    assert generator.device == torch.device("cuda:1")
+
+
+@pytest.mark.parametrize("device_value", ["cuda:0", torch.device("cuda:0")])
+def test_constructor_preserves_indexed_cuda_string_or_device(
+    monkeypatch, device_value
+) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(
+        torch.cuda,
+        "current_device",
+        lambda: pytest.fail("an explicit CUDA index must be retained"),
+    )
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
+
+    packer = _FakePacker()
+    packer.device = device_value
+    generator = CSPGenerator(packer, dedicated_stream=False)
+
+    assert generator.device == torch.device("cuda:0")
+
+
+def test_constructor_rejects_unavailable_bare_cuda(monkeypatch) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(
+        torch.cuda,
+        "current_device",
+        lambda: pytest.fail(
+            "current device must not be queried when CUDA is unavailable"
+        ),
+    )
+
+    packer = _FakePacker()
+    packer.device = torch.device("cuda")
+    with pytest.raises(ValueError, match=r"torch.cuda.is_available\(\) is False"):
+        CSPGenerator(packer, dedicated_stream=False)
+
+
+def test_constructor_rejects_out_of_range_cuda_index(monkeypatch) -> None:
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
+
+    packer = _FakePacker()
+    packer.device = "cuda:1"
+    with pytest.raises(
+        ValueError, match="device=cuda:1 is out of range: 1 CUDA device"
+    ):
+        CSPGenerator(packer, dedicated_stream=False)
+
+
+def test_constructor_preserves_device_type_and_parse_errors() -> None:
+    packer = _FakePacker()
+    packer.device = 1
+    with pytest.raises(
+        TypeError, match="packer.device must be a torch.device or device string"
+    ):
+        CSPGenerator(packer, dedicated_stream=False)
+
+    packer.device = "not-a-device"
+    with pytest.raises(ValueError, match="Invalid device string"):
+        CSPGenerator(packer, dedicated_stream=False)

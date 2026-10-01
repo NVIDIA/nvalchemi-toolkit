@@ -141,6 +141,7 @@ from pydantic import (
 )
 from tensordict import TensorDictBase
 
+from nvalchemi._device import normalize_device
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.hooks import GenerationContext, Hook, HookRegistryMixin
@@ -276,12 +277,11 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         happens — the inputs pass through untouched and the
         ``BEFORE_CONDITION``/``AFTER_CONDITION`` stages do not fire.
     device
-        Optional device pin (``"cpu"``, ``"cuda"``, ``"cuda:0"``, or a
-        :class:`torch.device`). Validated at construction: ``cpu`` always
-        passes; ``cuda[:i]`` requires :func:`torch.cuda.is_available` and an
-        in-range index. When unset, the generating function's ``device``
-        attribute is used; when neither is present, no device resolves and no
-        stream or device-residency check applies.
+        Optional execution device. When unset, the generating function's
+        ``device`` attribute is used. Bare ``"cuda"`` is resolved to the
+        current GPU at construction, and that GPU remains fixed for this
+        generator. If neither declares a device, no managed device or
+        output-device check applies.
     dedicated_stream
         When ``True`` (default), entering a session creates a dedicated CUDA
         stream if the resolved device is CUDA. When ``False``, no stream is
@@ -339,9 +339,9 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
     device: torch.device | None = Field(
         default=None,
         description=(
-            "Device pin for generated batches: 'cpu' always valid, 'cuda[:i]' "
-            "validated against host availability at construction. Defaults from "
-            "generator_func.device when unset."
+            "Execution device, defaulting to generator_func.device. Bare CUDA "
+            "is pinned to the current GPU at construction; CUDA availability "
+            "and index bounds are validated."
         ),
     )
     dedicated_stream: bool = Field(
@@ -424,12 +424,16 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         return GenerationStage
 
     def model_post_init(self, __context: Any) -> None:
-        """Register hooks (validating stages) and initialize run state.
+        """Bind the execution device, register hooks, and initialize run state.
 
         Hook ``stage`` values arriving as raw ints or name strings (e.g.
         deserialized from a spec payload) are coerced to :class:`GenerationStage`
         before registration.
         """
+        if self.device is None:
+            declared_device = getattr(self.generator_func, "device", None)
+            if isinstance(declared_device, (torch.device, str)):
+                self.device = normalize_device(declared_device)
         for hook in self.hooks:
             stage = getattr(hook, "stage", None)
             if isinstance(stage, str):
@@ -447,12 +451,11 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
     @field_validator("device", mode="before")
     @classmethod
     def _validate_device(cls, value: Any) -> torch.device | None:
-        """Normalize ``device`` to a :class:`torch.device` and validate availability.
+        """Normalize an optional device and validate CUDA availability.
 
-        ``cpu`` is always valid. ``cuda[:i]`` requires
-        :func:`torch.cuda.is_available` and an index within
-        :func:`torch.cuda.device_count` when one is given. Other device types
-        (e.g. ``mps``) are accepted as parsed.
+        ``None`` leaves placement to the generating function. CUDA devices are
+        resolved to an explicit GPU index at construction. Other device types
+        are accepted as parsed.
 
         Parameters
         ----------
@@ -474,30 +477,7 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         """
         if value is None:
             return None
-        if isinstance(value, torch.device):
-            device = value
-        elif isinstance(value, str):
-            try:
-                device = torch.device(value)
-            except RuntimeError as e:
-                raise ValueError(f"Invalid device string {value!r}: {e}") from e
-        else:
-            raise ValueError(
-                f"device must be a string or torch.device, got {type(value).__name__}."
-            )
-        if device.type == "cuda":
-            if not torch.cuda.is_available():
-                raise ValueError(
-                    f"device={device} requests CUDA, but "
-                    "torch.cuda.is_available() is False on this host."
-                )
-            count = torch.cuda.device_count()
-            if device.index is not None and device.index >= count:
-                raise ValueError(
-                    f"device={device} is out of range: {count} CUDA device(s) "
-                    "available on this host."
-                )
-        return device
+        return normalize_device(value)
 
     @model_validator(mode="after")
     def _default_field_declarations(self) -> AtomisticGenerator:
@@ -610,35 +590,8 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         return self
 
     def _infer_device(self) -> torch.device | None:
-        """Resolve the device: the ``device`` field, then ``generator_func.device``.
-
-        A string attribute on the generating function is parsed via
-        :class:`torch.device`; attribute values of any other type are ignored
-        (treated as no device declared).
-
-        Returns
-        -------
-        torch.device | None
-            The resolved device, or ``None`` when neither source provides one.
-
-        Raises
-        ------
-        ValueError
-            If the generating function's ``device`` attribute is a string that
-            cannot be parsed as a device.
-        """
-        device = self.device
-        if device is None:
-            device = getattr(self.generator_func, "device", None)
-        if isinstance(device, str):
-            try:
-                device = torch.device(device)
-            except RuntimeError as e:
-                raise ValueError(
-                    f"generator_func.device attribute {device!r} is not a valid "
-                    f"device string: {e}"
-                ) from e
-        return device if isinstance(device, torch.device) else None
+        """Return the execution device bound at construction, or None."""
+        return self.device
 
     def __enter__(self) -> AtomisticGenerator:
         """Enter a generation session.
