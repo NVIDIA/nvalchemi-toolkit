@@ -34,6 +34,7 @@ from nvalchemi.csp._comparison.store import (
     build_descriptor_store,
     workspace_reserve,
 )
+from nvalchemi.csp._validation import finite_nonnegative
 from nvalchemi.data import Batch
 from nvalchemi.data.level_storage import _resolve_device
 
@@ -85,14 +86,10 @@ def _validate_threshold(value: float) -> float:
     ValueError
         If the value is boolean, nonnumeric, nonfinite, or negative.
     """
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(value)
-        or value < 0
-    ):
+    try:
+        return finite_nonnegative(value, "threshold")
+    except (TypeError, ValueError):
         raise ValueError("threshold must be a finite nonnegative fraction")
-    return float(value)
 
 
 def _conservative_summary_log_bound(threshold: float) -> float | None:

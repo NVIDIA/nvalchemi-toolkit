@@ -276,6 +276,12 @@ def test_radial_factory_validates_options(cutoff, threshold, confirm, error) -> 
         DeduplicateHook.radial(cutoff=cutoff, threshold=threshold, confirm=confirm)
 
 
+@pytest.mark.parametrize("threshold", [True, "0.1"])
+def test_radial_factory_keeps_wrong_type_threshold_error(threshold) -> None:
+    with pytest.raises(ValueError, match="threshold must be finite and nonnegative"):
+        DeduplicateHook.radial(cutoff=2.0, threshold=threshold)
+
+
 def test_radial_engine_keeps_first_duplicate_and_distinct_geometry() -> None:
     square = _square()
     rectangle = torch.tensor([[0.0, 0, 0], [2.0, 0, 0], [2.0, 1.0, 0], [0.0, 1.0, 0]])

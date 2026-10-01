@@ -16,13 +16,17 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Callable
 from typing import Protocol
 
 import torch
 from torch import Tensor
 
+from nvalchemi.csp._validation import (
+    finite_nonnegative,
+    finite_positive,
+    positive_integer,
+)
 from nvalchemi.csp.comparison import RadialComparisonIndex
 from nvalchemi.data import Batch
 from nvalchemi.gen.stages import GenerationStage
@@ -128,8 +132,10 @@ class DeduplicateHook:
             raise TypeError("engine must provide a callable deduplicate(batch) method")
         if isinstance(frequency, bool) or not isinstance(frequency, int):
             raise TypeError("frequency must be a positive integer")
-        if frequency <= 0:
-            raise ValueError("frequency must be a positive integer")
+        try:
+            positive_integer(frequency, name="frequency")
+        except ValueError:
+            raise ValueError("frequency must be a positive integer") from None
         self.engine = engine
         self.frequency = frequency
 
@@ -174,25 +180,16 @@ class DeduplicateHook:
             If ``cutoff`` is not finite and positive, ``threshold`` is not
             finite and nonnegative, or ``frequency`` is not positive.
         """
-        if (
-            isinstance(cutoff, bool)
-            or not isinstance(cutoff, (int, float))
-            or not math.isfinite(cutoff)
-            or cutoff <= 0
-        ):
-            raise ValueError("cutoff must be finite and positive")
-        if (
-            isinstance(threshold, bool)
-            or not isinstance(threshold, (int, float))
-            or not math.isfinite(threshold)
-            or threshold < 0
-        ):
-            raise ValueError("threshold must be finite and nonnegative")
+        cutoff_value = finite_positive(cutoff, "cutoff")
+        try:
+            threshold_value = finite_nonnegative(threshold, "threshold")
+        except TypeError:
+            raise ValueError("threshold must be finite and nonnegative") from None
         if confirm is not None and not callable(confirm):
             raise TypeError("confirm must be callable or None")
         return cls(
             _RadialDeduplicationEngine(
-                cutoff=float(cutoff), threshold=float(threshold), confirm=confirm
+                cutoff=cutoff_value, threshold=threshold_value, confirm=confirm
             ),
             frequency=frequency,
         )

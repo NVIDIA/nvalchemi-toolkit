@@ -250,6 +250,24 @@ def test_sampled_constructor_and_sampling_helpers_remain_strict() -> None:
         sample_space_groups(1, 4, probabilities={"14": 1.0})  # type: ignore[dict-item]
 
 
+@pytest.mark.parametrize(
+    ("num_samples", "num_operations", "error", "message"),
+    [
+        (True, 1, TypeError, "num_samples must be an integer"),
+        (1.5, 1, TypeError, "num_samples must be an integer"),
+        (1, True, TypeError, "num_operations must be an integer"),
+        (1, "1", TypeError, "num_operations must be an integer"),
+        (0, 1, ValueError, "num_samples must be positive"),
+        (1, 0, ValueError, "num_operations must be positive"),
+    ],
+)
+def test_sampling_count_validation_keeps_public_errors(
+    num_samples, num_operations, error, message
+) -> None:
+    with pytest.raises(error, match=message):
+        sample_space_groups(num_samples, num_operations)
+
+
 def test_policy_constructors_reject_contradictory_and_invalid_values() -> None:
     with pytest.raises(ValueError, match="Sohncke"):
         SpaceGroupPolicy.fixed(2, sohncke_only=True)

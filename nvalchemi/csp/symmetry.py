@@ -46,6 +46,7 @@ from torch import Tensor
 
 from nvalchemi.csp._data_tables import SPACE_GROUP_PROBABILITIES
 from nvalchemi.csp._space_group_tables import SG_OPS_IDX, SG_OPS_PTR, SYMM_OPS
+from nvalchemi.csp._validation import positive_integer
 
 Device: TypeAlias = torch.device | str | None
 # Each entry is (first space-group number, last space-group number,
@@ -99,12 +100,10 @@ def _validate_space_group(space_group: int) -> int:
 
 def _validate_positive_integer(value: int, name: str) -> int:
     """Return a positive integral value, rejecting booleans."""
-    if isinstance(value, bool) or not isinstance(value, Integral):
-        raise TypeError(f"{name} must be an integer")
-    result = int(value)
-    if result <= 0:
-        raise ValueError(f"{name} must be positive")
-    return result
+    try:
+        return positive_integer(value, name=name)
+    except TypeError:
+        raise TypeError(f"{name} must be an integer") from None
 
 
 def _validate_table() -> None:

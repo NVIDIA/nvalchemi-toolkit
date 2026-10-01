@@ -19,6 +19,7 @@ from __future__ import annotations
 import math
 import weakref
 
+import numpy as np
 import pytest
 import torch
 
@@ -809,6 +810,19 @@ def test_invalid_summary_coordinate_counts_are_rejected(
             cutoff=2.0,
             threshold=0.0,
             summary_coordinate_count=summary_coordinate_count,
+        )
+
+
+@pytest.mark.parametrize("input_batch_size", [0, True, np.int64(2)])
+def test_input_batch_size_requires_positive_python_int(input_batch_size) -> None:
+    with pytest.raises(ValueError, match="input_batch_size must be a positive integer"):
+        deduplicate_stream(
+            0,
+            lambda _: (Batch.from_data_list([]), torch.empty(0, dtype=torch.int32)),
+            type_vocabulary=[],
+            cutoff=2.0,
+            threshold=0.0,
+            input_batch_size=input_batch_size,
         )
 
 

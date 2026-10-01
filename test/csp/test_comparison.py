@@ -292,6 +292,17 @@ def test_index_uses_frozen_descriptor_snapshot_for_repeated_queries() -> None:
     assert mutated_index.deduplicate(threshold=0.0).retained_indices.tolist() == [0, 1]
 
 
+@pytest.mark.parametrize("threshold", [True, "0.1", -0.1, float("nan"), float("inf")])
+def test_find_matches_keeps_public_invalid_threshold_error(threshold) -> None:
+    batch = _batch([torch.tensor([[0.0, 0, 0], [1.0, 0, 0]], dtype=torch.float32)])
+    index = RadialComparisonIndex.build(batch, cutoff=2.0)
+
+    with pytest.raises(
+        ValueError, match="threshold must be a finite nonnegative fraction"
+    ):
+        index.find_matches(threshold=threshold)
+
+
 def test_typing_threshold_order_and_empty_pools() -> None:
     a = torch.tensor([[0.0, 0, 0], [1.0, 0, 0], [0.0, 2.0, 0]], dtype=torch.float32)
     batch = _batch([a, a + 3])

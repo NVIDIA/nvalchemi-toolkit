@@ -35,6 +35,7 @@ from nvalchemi.csp._packing_transport import (
     _empty_batch,
     _gather_payloads,
 )
+from nvalchemi.csp._validation import positive_integer
 from nvalchemi.csp.data import (
     MolecularPackingInput,
     RigidMoleculeASUBatch,
@@ -202,7 +203,7 @@ class CSPGenerator(AtomisticGenerator):
         if generator_options.get("compile_generate", False):
             raise NotImplementedError("CSPGenerator does not support compile_generate")
         if "num_samples" in generator_options:
-            self._positive_integer(generator_options["num_samples"], name="num_samples")
+            positive_integer(generator_options["num_samples"], name="num_samples")
         if not isinstance(expand, bool):
             raise TypeError("expand must be a bool")
         if on_result is not None and not callable(on_result):
@@ -231,16 +232,6 @@ class CSPGenerator(AtomisticGenerator):
         self._expand = expand
         self._on_result = on_result
         generator_func.bind(self)
-
-    @staticmethod
-    def _positive_integer(value: Any, *, name: str) -> int:
-        """Validate a positive integral generation target, excluding bool."""
-        if isinstance(value, bool) or not isinstance(value, Integral):
-            raise TypeError(f"{name} must be a positive integer")
-        result = int(value)
-        if result <= 0:
-            raise ValueError(f"{name} must be positive")
-        return result
 
     @staticmethod
     def _rank_vector(values: Any, *, name: str, world_size: int) -> tuple[int, ...]:
@@ -275,7 +266,7 @@ class CSPGenerator(AtomisticGenerator):
     ) -> dict[str, Any]:
         """Validate local startup state and return setup plus control metadata."""
         requested = prepared.num_samples
-        target = self._positive_integer(requested, name="num_samples")
+        target = positive_integer(requested, name="num_samples")
         active_inputs = prepared.ctx.inputs
         if not isinstance(active_inputs, MolecularPackingInput):
             raise TypeError("inputs must be a MolecularPackingInput")

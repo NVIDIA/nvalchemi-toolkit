@@ -31,6 +31,15 @@ from nvalchemi.csp._comparison.store import (
     available_cuda_bytes,
     build_descriptor_stores,
 )
+from nvalchemi.csp._validation import (
+    finite_nonnegative as _finite_nonnegative,
+)
+from nvalchemi.csp._validation import (
+    nonnegative_int as _nonnegative_int,
+)
+from nvalchemi.csp._validation import (
+    positive_integer,
+)
 from nvalchemi.csp.comparison import (
     DeduplicationResult,
     RadialComparisonIndex,
@@ -63,6 +72,17 @@ _LAST_STREAM_STATS: ContextVar[dict[str, Any] | None] = ContextVar(
 )
 
 
+def _positive_int(value: Any, name: str) -> int:
+    """Validate a positive Python integer stream option."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} must be a positive integer")
+    try:
+        positive_integer(value, name=name)
+    except ValueError:
+        raise ValueError(f"{name} must be a positive integer") from None
+    return value
+
+
 def _pilot_role_counts(sample_count: int) -> tuple[int, int, int]:
     """Split a pilot sample into reference, training, and holdout rows.
 
@@ -93,85 +113,6 @@ def _pilot_role_counts(sample_count: int) -> tuple[int, int, int]:
         )
     training = min(_PILOT_TRAIN_QUERY, sample_count // 2)
     return sample_count - training, training, 0
-
-
-def _positive_int(value: Any, name: str) -> int:
-    """Require a positive integer option, excluding booleans.
-
-    Parameters
-    ----------
-    value : Any
-        Value supplied for the option.
-    name : str
-        Public option name used in validation errors.
-
-    Returns
-    -------
-    int
-        Validated positive integer.
-
-    Raises
-    ------
-    ValueError
-        If ``value`` is boolean, not an integer, or not positive.
-    """
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ValueError(f"{name} must be a positive integer")
-    return value
-
-
-def _nonnegative_int(value: Any, name: str) -> int:
-    """Require a nonnegative integer option, excluding booleans.
-
-    Parameters
-    ----------
-    value : Any
-        Value supplied for the option.
-    name : str
-        Public option name used in validation errors.
-
-    Returns
-    -------
-    int
-        Validated nonnegative integer.
-
-    Raises
-    ------
-    ValueError
-        If ``value`` is boolean, not an integer, or negative.
-    """
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ValueError(f"{name} must be a nonnegative integer")
-    return value
-
-
-def _finite_nonnegative(value: Any, name: str) -> float:
-    """Normalize a finite nonnegative real option to Python float.
-
-    Parameters
-    ----------
-    value : Any
-        Value supplied for the option.
-    name : str
-        Public option name used in validation errors.
-
-    Returns
-    -------
-    float
-        Validated value normalized to Python float.
-
-    Raises
-    ------
-    TypeError
-        If the value is boolean or is not numeric.
-    ValueError
-        If the value is negative or nonfinite.
-    """
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(f"{name} must be a real number")
-    if not math.isfinite(value) or value < 0:
-        raise ValueError(f"{name} must be finite and nonnegative")
-    return float(value)
 
 
 def _get_last_stream_stats() -> dict[str, Any] | None:
