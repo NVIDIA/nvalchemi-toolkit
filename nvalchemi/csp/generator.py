@@ -143,6 +143,13 @@ class CSPGenerator(AtomisticGenerator):
     packs. A configured destination gathers native payloads and expands only
     its result when requested.
 
+    For distributed calls with custom ``rank_targets``, omitted
+    ``rank_candidate_budgets`` divide a finite global candidate cap in
+    proportion to the requested rank targets. Integer largest remainders
+    determine leftover trials, with ties assigned to the lower group-local
+    rank. Explicit budgets retain precedence, and an unlimited cap stays
+    unlimited.
+
     Parameters
     ----------
     packer
@@ -392,12 +399,20 @@ class CSPGenerator(AtomisticGenerator):
             budgets = explicit_budgets
         elif global_budget is None:
             budgets = tuple(None for _ in range(world_size))
+        elif rank_targets is not None:
+            allocations = tuple(
+                divmod(global_budget * rank_target, target) for rank_target in targets
+            )
+            budget_values = [base for base, _ in allocations]
+            remaining = global_budget - sum(budget_values)
+            remainder_order = sorted(
+                range(world_size),
+                key=lambda group_rank: (-allocations[group_rank][1], group_rank),
+            )
+            for group_rank in remainder_order[:remaining]:
+                budget_values[group_rank] += 1
+            budgets = tuple(budget_values)
         else:
-            if rank_targets is not None:
-                raise ValueError(
-                    "custom rank_targets with a finite candidate budget require "
-                    "explicit rank_candidate_budgets"
-                )
             quotient, remainder = divmod(global_budget, world_size)
             budgets = tuple(
                 quotient + (group_rank < remainder) for group_rank in range(world_size)

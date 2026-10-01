@@ -173,6 +173,59 @@ class _DriverFakePacker:
         return _fake_rigid_result(inputs, context, num_samples)
 
 
+class _BudgetProbePacker:
+    """Expose the public driver's local budget input without packing work."""
+
+    device = torch.device("cpu")
+
+    def __init__(self, global_budget: int | None | str) -> None:
+        self.global_budget = global_budget
+        self.calls: list[tuple[int, int | None]] = []
+        self.last_report: PackingReport | None = None
+
+    def resolve_candidate_budget(self, *, num_samples: int, **pack_options: Any):
+        del pack_options
+        if self.global_budget == "auto":
+            return 1000 * num_samples
+        return self.global_budget
+
+    def pack(
+        self,
+        inputs: MolecularPackingInput,
+        *,
+        num_samples: int,
+        rng: torch.Generator | None,
+        context: PackingContext,
+        candidate_budget: int | None,
+        **pack_options: Any,
+    ) -> PackingResult:
+        del rng, pack_options
+        self.calls.append((num_samples, candidate_budget))
+        generated = (
+            num_samples
+            if candidate_budget is None
+            else min(num_samples, candidate_budget)
+        )
+        local = _fake_rigid_result(inputs, context, generated)
+        reason = (
+            PackingStopReason.TARGET_REACHED
+            if generated == num_samples
+            else PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED
+        )
+        self.last_report = PackingReport(
+            rank=context.rank,
+            requested_count=num_samples,
+            accepted_count=generated,
+            generated_count=generated,
+            stop_reason=reason,
+        )
+        return PackingResult(
+            structures=local.structures,
+            run_id=context.run_id,
+            reports=(self.last_report,),
+        )
+
+
 def _driver_local_failure_worker(rank: int, world_size: int, queue: Any) -> None:
     generator = CSPGenerator(
         _DriverFakePacker(fail_rank=0),
@@ -333,6 +386,50 @@ def _driver_postcommunication_failures_worker(
     queue.put(("callbacks", rank, tuple(callbacks)))
 
 
+def _budget_allocation_worker(
+    rank: int, world_size: int, queue: Any, cases: tuple[Any, ...]
+) -> None:
+    del world_size
+    for case_index, (targets, global_budget, explicit_budgets) in enumerate(cases):
+        packer = _BudgetProbePacker(global_budget)
+        result = _CSPCall(packer)(
+            _packing_input(),
+            num_samples=sum(targets),
+            rank_targets=targets,
+            rank_candidate_budgets=explicit_budgets,
+            process_group=dist.group.WORLD,
+            gather_to_rank=1,
+            run_id=700 + case_index,
+        )
+        assert len(packer.calls) == 1
+        assert packer.last_report is not None
+        local_report = packer.last_report
+        gathered = (
+            None
+            if result is None
+            else (
+                result.requested_count,
+                result.accepted_count,
+                result.generated_count,
+                result.stop_reason.value,
+            )
+        )
+        queue.put(
+            (
+                rank,
+                case_index,
+                packer.calls[0],
+                (
+                    local_report.requested_count,
+                    local_report.accepted_count,
+                    local_report.generated_count,
+                    local_report.stop_reason,
+                ),
+                gathered,
+            )
+        )
+
+
 def _grouped_pack_worker(rank: int, world_size: int, queue: Any, mode: str) -> None:
     packer = _CSPCall(OverlapReliefPacker(_config(rank), device="cpu"))
     kwargs: dict[str, Any] = {
@@ -472,17 +569,26 @@ def _grouped_pack_worker(rank: int, world_size: int, queue: Any, mode: str) -> N
         budgeted = _CSPCall(
             OverlapReliefPacker(_config(rank, max_candidates=2), device="cpu")
         )
-        try:
-            budgeted(
-                _packing_input(),
-                num_samples=2,
-                rank_targets=[0, 2],
-                **kwargs,
+        result = budgeted(
+            _packing_input(),
+            num_samples=2,
+            rank_targets=[0, 2],
+            gather_to_rank=1,
+            **kwargs,
+        )
+        queue.put(
+            (
+                rank,
+                None
+                if result is None
+                else (
+                    len(result),
+                    result.generated_count,
+                    result.stop_reason.value,
+                    [report.generated_count for report in result.reports],
+                ),
             )
-        except ValueError as error:
-            queue.put((rank, str(error)))
-        else:
-            queue.put((rank, "missing expected validation error"))
+        )
     elif mode == "formula_mismatch":
         try:
             packer(
@@ -989,11 +1095,75 @@ def test_gloo_root_run_id_allows_unspecified_peer_id() -> None:
     ) == {0: 515, 1: 515}
 
 
-def test_gloo_finite_global_budget_requires_explicit_custom_budgets() -> None:
+def test_gloo_finite_global_budget_allocates_omitted_custom_budgets_proportionally() -> (
+    None
+):
     results = dict(run_gloo(world_size=2, fn=_grouped_pack_worker, args=("budget",)))
-    assert all(
-        "require explicit rank_candidate_budgets" in value for value in results.values()
+    assert results == {
+        0: None,
+        1: (2, 2, PackingStopReason.TARGET_REACHED.value, [0, 2]),
+    }
+
+
+def test_gloo_custom_targets_receive_proportional_finite_budgets() -> None:
+    cases = (
+        ((1, 2, 0), "auto", None),
+        ((1, 2, 0), 8, None),
+        # The larger remainder belongs to rank 1, despite its higher rank.
+        ((2, 1, 0), 8, None),
+        ((1, 1, 1), 2, None),
+        ((0, 2, 0), 0, None),
+        ((1, 2, 0), 8, (6, 2, 0)),
     )
+    results = run_gloo(world_size=3, fn=_budget_allocation_worker, args=(cases,))
+    by_rank_and_case = {
+        (rank, case_index): (call, local_report, gathered)
+        for rank, case_index, call, local_report, gathered in results
+    }
+
+    expected_budgets = (
+        (1000, 2000, 0),
+        (3, 5, 0),
+        (5, 3, 0),
+        (1, 1, 0),
+        (0, 0, 0),
+        (6, 2, 0),
+    )
+    for case_index, budgets in enumerate(expected_budgets):
+        observed = tuple(
+            by_rank_and_case[(rank, case_index)][0][1] for rank in range(3)
+        )
+        assert observed == budgets
+
+    assert sum(expected_budgets[0]) == 3000
+    assert sum(expected_budgets[1]) == 8
+    assert by_rank_and_case[(2, 3)][1] == (
+        1,
+        0,
+        0,
+        PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED.value,
+    )
+    assert by_rank_and_case[(1, 3)][2] == (
+        3,
+        2,
+        2,
+        PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED.value,
+    )
+    assert all(by_rank_and_case[(rank, 4)][1][2] == 0 for rank in range(3))
+    assert by_rank_and_case[(1, 4)][2] == (
+        2,
+        0,
+        0,
+        PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED.value,
+    )
+
+
+def test_public_zero_sample_target_is_rejected_before_packing() -> None:
+    packer = _BudgetProbePacker(8)
+    generator = CSPGenerator(packer, expand=False, dedicated_stream=False)
+    with pytest.raises(ValueError, match="num_samples must be positive"):
+        generator.sample(_packing_input(), num_samples=0)
+    assert packer.calls == []
 
 
 def test_gloo_preflight_rejects_formula_metadata_mismatch() -> None:

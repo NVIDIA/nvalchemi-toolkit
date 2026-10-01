@@ -371,11 +371,18 @@ else:
 ```
 
 `num_samples` is the global accepted-output target. Default quotas divide it
-by quotient and remainder. For budget-capable packers, resolve the global
-candidate cap before allocating it. Custom `rank_targets` must sum to the
-global target; with a finite cap they require `rank_candidate_budgets` summing
-to that cap. Unused budgets are not redistributed. Packers without candidate
-budgets need no trial counting and reject explicit rank-budget vectors.
+by quotient and remainder. For budget-capable packers, the driver resolves the
+global candidate cap before allocating it. Custom `rank_targets` must sum to
+the positive global target. When `rank_candidate_budgets` is omitted, each rank
+gets a share of a finite cap proportional to its target. Shares are rounded
+down; leftover trials go to the largest fractional shares, with lower
+group-local ranks winning ties. A zero-target rank receives zero trials. For
+example, targets `[0, 2]` receive budgets `[0, 2000]` under automatic mode.
+Explicit budgets take precedence and must sum to the global cap. Default
+targets retain quotient/remainder budget allocation; unlimited caps remain
+unlimited on each rank. Unused budgets are not redistributed. Packers without
+candidate budgets need no trial counting and reject explicit rank-budget
+vectors.
 
 `gather_to_rank` uses group-local ranks. With a destination, the native result
 contains rank-major structures and every rank's completion report. Without a

@@ -113,6 +113,12 @@ scientific loop.
 ``PackingResult`` contains rigid ASU data or a ``Batch``, plus per-rank reports.
 Expansion defaults to true; raw results bypass Batch hooks and dynamics.
 
+When a finite candidate cap has no explicit rank budgets, custom rank targets
+receive proportional shares. Shares are rounded down, and leftover trials go
+to the largest fractional shares, with lower group-local ranks winning ties.
+Explicit budgets take precedence. The global sample target remains positive;
+individual rank targets may be zero.
+
 .. currentmodule:: nvalchemi.csp
 
 .. autosummary::
