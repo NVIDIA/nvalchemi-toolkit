@@ -89,7 +89,12 @@ _CELL_PER_SYSTEM = (
     "ref_cell", "ref_cell_inv", "kappa", "phi", "phi_inv", "d_phi",
     "cell_dof_a", "cell_dof_b", "cell_force_a", "cell_force_b",
 )  # fmt: skip
-# Must match nvalchemiops' check in lbfgs_prepare_cell_state.
+# Must match nvalchemiops.dynamics.optimizers.lbfgs._check_cell_is_aligned's
+# `atol` default.  lbfgs_prepare_cell_state() (what we call) doesn't check
+# alignment itself; it calls _lbfgs_set_reference_cell(), which calls that
+# private function with its default atol=1e-10.  No public constant is
+# exported for this, so the two values are only kept in sync by this
+# comment — bump both if nvalchemiops' default ever changes.
 _ALIGN_ATOL = 1e-10
 
 
