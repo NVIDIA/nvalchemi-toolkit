@@ -1129,18 +1129,6 @@ class Batch(DataMixin):
             self.keys.setdefault("system", set()).add("group_idx")
         object.__setattr__(self, "_group_layout", GroupLayout.from_batch(self))
 
-    def normalize_group_idx(self) -> None:
-        """Normalize the stored group labels and rebuild the group layout.
-
-        This method is appropriate only when graph membership is still correct
-        and the labels merely need to be rebased to dense, zero-based indices.
-        Use :meth:`set_group_layout` when a mutation may have changed group
-        membership.
-        """
-        if "group_idx" not in self:
-            raise ValueError("Batch has no group_idx; call set_group_layout() first")
-        self.set_group_layout(self.group_idx)
-
     def _invalidate_group_layout(self) -> None:
         """Clear the cached group layout without modifying ``group_idx`` after a
         mutation that may affect grouping."""
@@ -2550,11 +2538,13 @@ class Batch(DataMixin):
         ValueError
             If key exists and *overwrite* is ``False``, if the number
             of values does not match the batch size, shape, or level
-            cardinality, or if the batch has no atom or edge group to add
-            a field at that level to.
+            cardinality, if the batch has no atom or edge group to add
+            a field at that level to, or if *key* is ``"group_idx"``.
         TypeError
             If *level* is not a string or a value is not a tensor.
         """
+        if key == "group_idx":
+            raise ValueError("group_idx must be assigned through set_group_layout()")
         if key in self._storage and not overwrite:
             raise ValueError(
                 f"Key '{key}' already exists in batch. "

@@ -53,6 +53,17 @@ class TestBatchGroupLayout:
         assert isinstance(cached, GroupLayout)
         assert batch.group_layout is cached
 
+        with pytest.raises(ValueError, match="set_group_layout"):
+            batch.add_key(
+                "group_idx",
+                [torch.tensor([label]) for label in [0, 1, 1, 1, 1]],
+                level="system",
+                overwrite=True,
+            )
+
+        assert batch.group_idx.tolist() == [0, 0, 1, 1, 1]
+        assert batch.group_layout is cached
+
     def test_group_layout_derives_all_cardinality_mappings(self):
         batch = _batch()
         batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1]))
@@ -112,13 +123,13 @@ class TestBatchGroupLayout:
         with pytest.raises(ValueError, match="dense, contiguous"):
             _ = selected.group_layout
 
-        selected.normalize_group_idx()
+        selected.set_group_layout(selected.group_idx)
 
         assert selected.group_idx.tolist() == [0, 0, 0, 1, 1]
         assert selected.group_layout.num_graphs_per_group.tolist() == [3, 2]
         assert batch.group_idx.tolist() == [0, 0, 1, 1, 1]
 
-    def test_normalize_group_idx_rejects_interleaved_groups(self):
+    def test_set_group_layout_rejects_interleaved_selected_groups(self):
         batch = _batch()
         batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1]))
 
@@ -126,7 +137,7 @@ class TestBatchGroupLayout:
 
         assert selected.group_idx.tolist() == [0, 1, 0, 1, 1]
         with pytest.raises(ValueError, match="same group must be contiguous"):
-            selected.normalize_group_idx()
+            selected.set_group_layout(selected.group_idx)
 
     def test_select_groups_returns_grouped_empty_batch(self):
         batch = _batch()
@@ -268,14 +279,14 @@ class TestBatchGroupLayout:
         with pytest.raises(ValueError, match="no group_idx"):
             _ = batch.group_layout
 
-    def test_normalize_group_idx_updates_stored_metadata(self):
+    def test_set_group_layout_normalizes_stored_metadata(self):
         batch = _batch()
         batch["group_idx"] = torch.tensor([4, 4, 1, 1, 1])
 
         with pytest.raises(ValueError, match="dense, contiguous"):
             _ = batch.group_layout
 
-        batch.normalize_group_idx()
+        batch.set_group_layout(batch.group_idx)
 
         assert batch.group_idx.tolist() == [0, 0, 1, 1, 1]
         assert batch.group_layout.num_graphs_per_group.tolist() == [2, 3]
