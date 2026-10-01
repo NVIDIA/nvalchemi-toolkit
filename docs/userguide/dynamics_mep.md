@@ -51,9 +51,14 @@ paths = interpolate_paths(
 paths.velocities = torch.zeros_like(paths.positions)  # dropped by interpolation
 
 # optional: refine with IDPP before switching to the real model
-prepare_idpp_targets(paths)
-paths = NEB(model=IDPPModel(), fmax=0.1, n_steps=200).run(paths)
+idpp_paths = paths.clone()
+prepare_idpp_targets(idpp_paths)
+idpp_paths = NEB(model=IDPPModel(), fmax=0.1, n_steps=200).run(idpp_paths)
+paths.positions.copy_(idpp_paths.positions)
 ```
+
+IDPP runs on a separate clone. Copy only its relaxed positions back so model
+NEB starts without IDPP status, neighbor data, or optimizer state.
 
 `interpolate_paths` linearly interpolates positions between index-matched
 endpoint graphs, retaining only structural/model-input fields. Neighbor data,
