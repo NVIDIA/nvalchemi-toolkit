@@ -52,12 +52,7 @@ from nvalchemi.dynamics.optimizers.lbfgs import (
 )
 from nvalchemi.hooks.periodic import WrapPeriodicHook
 
-from .test_state_management import (
-    _make_atomic_data,
-    _make_batch,
-    _make_model,
-    _MockSampler,
-)
+from .conftest import _make_atomic_data, _make_batch, _make_model, _MockSampler
 
 _SKEW = torch.tensor([[5.0, 1.0, 0.0], [0.0, 5.0, 0.0], [0.3, 0.2, 5.0]])
 
@@ -588,6 +583,22 @@ def _rows(dynamics, system):
     return rows
 
 
+def _status_batch(batch: Batch, statuses: list[int]) -> Batch:
+    """Set per-graph ``status`` (FusedStage routing) on *batch*, plus ``fmax``.
+
+    Every FusedStage test below needs ``status`` to route systems to their
+    sub-stage.  ``fmax`` is set alongside it even though none of these tests'
+    auto-registered ``ConvergenceHook`` instances read it (their default
+    criterion checks ``forces``, not ``fmax``): it mirrors the field a real
+    relaxation loop (``LoggingHook``, an explicit fmax-based
+    ``convergence_hook``) would populate, so a batch built here stays valid
+    if a test is later extended to use one.
+    """
+    batch["status"] = torch.tensor([[s] for s in statuses])
+    batch["fmax"] = torch.full((len(statuses), 1), float("inf"))
+    return batch
+
+
 class TestFusedStageMasking:
     @pytest.mark.parametrize("counts", [(3, 4), (1, 1)])
     def test_unmasked_system_state_is_bit_identical(self, counts):
@@ -698,8 +709,7 @@ class TestMaskedPostUpdateSkip:
         lbfgs.register_hook(after_hook)
         fused = lbfgs + FIRE2(model=_make_model(), dt=0.05)
         batch = _make_batch(2)
-        batch["status"] = torch.tensor([[0], [1]])
-        batch["fmax"] = torch.full((2, 1), float("inf"))
+        _status_batch(batch, [0, 1])
         fused.step(batch)
         assert before_hook.count == 1
         assert after_hook.count == 1
@@ -736,8 +746,7 @@ class TestFusedStage:
         fire2 = FIRE2(model=_make_model(), dt=0.05)
         fused = lbfgs + fire2
         batch = _make_batch(2)
-        batch["status"] = torch.tensor([[0], [1]])
-        batch["fmax"] = torch.full((2, 1), float("inf"))
+        _status_batch(batch, [0, 1])
         with patch.object(
             lbfgs, "_warm_state_levels", wraps=lbfgs._warm_state_levels
         ) as warm:
@@ -751,8 +760,7 @@ class TestFusedStage:
         lbfgs = LBFGS(model=_make_model())
         fused = lbfgs + FIRE2(model=_make_model(), dt=0.05)
         batch = _make_batch(2)
-        batch["status"] = torch.tensor([[0], [1]])
-        batch["fmax"] = torch.full((2, 1), float("inf"))
+        _status_batch(batch, [0, 1])
         for _ in range(3):
             fused.step(batch)
         assert lbfgs._state.iteration.tolist()[0] >= 1
@@ -762,8 +770,7 @@ class TestFusedStage:
         # Known limitation: without the hook, init validates every system.
         model = _make_model(needs_stress=True)
         batch = _cell_batch([None, _SKEW])
-        batch["status"] = torch.tensor([[0], [1]])
-        batch["fmax"] = torch.full((2, 1), float("inf"))
+        _status_batch(batch, [0, 1])
         fused = LBFGSVariableCell(model=model) + FIRE2VariableCell(model=model, dt=0.05)
         with pytest.raises(ValueError, match=r"\[1\].*AlignCellHook"):
             fused.step(batch)
@@ -776,8 +783,7 @@ class TestFusedStage:
     def _skew_fused(hook):
         model = _make_model(needs_stress=True)
         batch = _cell_batch([_SKEW, None])
-        batch["status"] = torch.tensor([[0], [1]])
-        batch["fmax"] = torch.full((2, 1), float("inf"))
+        _status_batch(batch, [0, 1])
         lbfgs = LBFGSVariableCell(model=model)
         fused = lbfgs + FIRE2VariableCell(model=model, dt=0.05)
         fused.register_hook(hook)  # on the FusedStage, after construction
@@ -973,12 +979,13 @@ def _relax_argon(reference=None, steps=80):
     raise AssertionError(f"not converged in {steps} steps")
 
 
-def test_stale_reference_cell_still_converges():
-    fresh_steps, fresh_edge = _relax_argon()
-    for reference in (
-        torch.diag(torch.tensor([10.0, 12.0, 13.5])),
-        torch.tensor([[11.4, 0.0, 0.0], [1.5, 11.0, 0.0], [0.8, -0.6, 12.0]]),
-    ):
-        steps, edge = _relax_argon(reference)
-        assert edge == pytest.approx(fresh_edge, abs=1e-3)
-        assert steps <= 2 * fresh_steps
+class TestStaleReferenceCell:
+    def test_stale_reference_cell_still_converges(self):
+        fresh_steps, fresh_edge = _relax_argon()
+        for reference in (
+            torch.diag(torch.tensor([10.0, 12.0, 13.5])),
+            torch.tensor([[11.4, 0.0, 0.0], [1.5, 11.0, 0.0], [0.8, -0.6, 12.0]]),
+        ):
+            steps, edge = _relax_argon(reference)
+            assert edge == pytest.approx(fresh_edge, abs=1e-3)
+            assert steps <= 2 * fresh_steps
