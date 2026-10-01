@@ -553,37 +553,39 @@ class NEB(DynamicsStrategy):
         FusedStage
             Group-aware one- or two-stage optimizer strategy.
         """
+        optimizer_kwargs = {
+            **self.optimizer_kwargs,
+            "model": self.model,
+            "by_group": True,
+        }
         if self.climbing is not None and self.climbing.mode == "after_regular":
             climbing_status = 1
+            regular_fmax = (
+                self.fmax
+                if self.climbing.regular_fmax is None
+                else self.climbing.regular_fmax
+            )
             stages = [
                 (
                     0,
                     self.optimizer(
-                        model=self.model,
+                        **optimizer_kwargs,
                         n_steps=self.climbing.max_regular_steps,
-                        by_group=True,
                         convergence_hook=self._build_convergence_hook(
-                            fmax=(
-                                self.fmax
-                                if self.climbing.regular_fmax is None
-                                else self.climbing.regular_fmax
-                            ),
+                            fmax=regular_fmax,
                             regular_stage=True,
                         ),
-                        **self.optimizer_kwargs,
                     ),
                 ),
                 (
                     1,
                     self.optimizer(
-                        model=self.model,
+                        **optimizer_kwargs,
                         n_steps=self.climbing.max_climbing_steps,
-                        by_group=True,
                         convergence_hook=self._build_convergence_hook(
                             fmax=self.fmax,
                             regular_stage=False,
                         ),
-                        **self.optimizer_kwargs,
                     ),
                 ),
             ]
@@ -594,18 +596,16 @@ class NEB(DynamicsStrategy):
                 (
                     0,
                     self.optimizer(
-                        model=self.model,
+                        **optimizer_kwargs,
                         n_steps=(
                             None
                             if self.climbing is None
                             else self.climbing.max_climbing_steps
                         ),
-                        by_group=True,
                         convergence_hook=self._build_convergence_hook(
                             fmax=self.fmax,
                             regular_stage=False,
                         ),
-                        **self.optimizer_kwargs,
                     ),
                 )
             ]
