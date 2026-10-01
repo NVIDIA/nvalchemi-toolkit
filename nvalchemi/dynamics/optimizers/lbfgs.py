@@ -243,6 +243,17 @@ class _LBFGSMixin:
         del batch, n
         return {}
 
+    def _check_hook_compatibility(self) -> None:
+        # Runs every step (see BaseDynamics._check_hook_compatibility), not
+        # just at first admission like the identical call in _init_state
+        # below: a WrapPeriodicHook registered after the first step — on
+        # this optimizer directly, or on an enclosing FusedStage — must
+        # still be caught.  The two calls can both fire on step one; that's
+        # harmless (same message, deduplicated by Python's default warning
+        # filter), and simpler than threading "already warned" state through
+        # both call sites.
+        _warn_if_wraps_positions(self)
+
     def _init_state(self, batch: Batch) -> None:
         _warn_if_wraps_positions(self)
         self._state = _build_state(

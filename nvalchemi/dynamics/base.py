@@ -2102,6 +2102,20 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         else:
             del self._state
 
+    def _check_hook_compatibility(self) -> None:
+        """Run-start checks for hooks incompatible with this dynamics' algorithm.
+
+        No-op in the base class; a subclass overrides this to warn (or raise)
+        when a hook registered on ``self.hooks`` or ``self._enclosing_hooks``
+        would corrupt its per-step state.  Called every step — standalone
+        from :meth:`step`, and per sub-stage from
+        :meth:`FusedStage.step` — rather than once at admission, so hooks
+        registered *after* the first step (directly, or on an enclosing
+        ``FusedStage``) are still caught.  Deliberately called from the
+        uncompiled driver, not from :meth:`pre_update`/:meth:`post_update`
+        themselves, which may run inside a compiled ``FusedStage`` step.
+        """
+
     def pre_update(self, batch: Batch) -> None:
         """
         Perform the first half of the integration step.
@@ -2269,6 +2283,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         """
         self._ensure_state_initialized(batch)
         self._ensure_admission_initialized(batch)
+        self._check_hook_compatibility()
 
         # Prepare status-based active-graph filtering for this step.
         status = getattr(batch, "status", None)
@@ -3893,6 +3908,11 @@ class FusedStage(BaseDynamics):
         for _, dynamics in self.sub_stages:
             dynamics._ensure_state_initialized(batch)
             dynamics._warm_state_levels()
+            # Every step, not just admission: a hook (e.g. on this
+            # FusedStage) registered after the sub-stage's first step must
+            # still be caught, and this loop already runs outside the
+            # compiled step.
+            dynamics._check_hook_compatibility()
 
         # Admission hooks remain outside of the compiled step
         self._ensure_admission_initialized(batch)

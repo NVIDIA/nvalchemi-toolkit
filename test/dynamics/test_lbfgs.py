@@ -844,6 +844,43 @@ class TestLBFGSWrapPeriodicWarning:
         with pytest.warns(UserWarning, match="WrapPeriodicHook"):
             lbfgs._ensure_state_initialized(batch)
 
+    def test_late_direct_registration_warns(self):
+        # Registered only *after* the optimizer's first check (e.g. after
+        # its first step): must still be caught, not just at admission.
+        dynamics = LBFGS(model=_make_model())
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            dynamics._check_hook_compatibility()  # no hook yet: silent
+        dynamics.register_hook(WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE))
+        with pytest.warns(UserWarning, match="WrapPeriodicHook"):
+            dynamics._check_hook_compatibility()
+
+    def test_late_enclosing_registration_warns(self):
+        # Same, but the hook is registered on the enclosing FusedStage
+        # after composition, not on the LBFGS sub-stage itself.
+        lbfgs = LBFGS(model=_make_model())
+        fused = lbfgs + FIRE2(model=_make_model(), dt=0.05)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            lbfgs._check_hook_compatibility()  # no hook on fused yet: silent
+        fused.register_hook(WrapPeriodicHook(), stage=DynamicsStage.AFTER_POST_UPDATE)
+        with pytest.warns(UserWarning, match="WrapPeriodicHook"):
+            lbfgs._check_hook_compatibility()
+
+    def test_step_rechecks_every_call(self):
+        # End-to-end: step() itself re-runs the check every call (not just
+        # via _ensure_state_initialized at first admission), so a hook
+        # registered between two step() calls is still caught.
+        batch = _make_batch(2, n_atoms_each=4, seed=9, with_cell=True)
+        batch.pbc = torch.ones(2, 3, dtype=torch.bool)
+        dynamics = LBFGS(model=_make_model(), n_steps=2)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            dynamics.step(batch)
+        dynamics.register_hook(WrapPeriodicHook(stage=DynamicsStage.AFTER_POST_UPDATE))
+        with pytest.warns(UserWarning, match="WrapPeriodicHook"):
+            dynamics.step(batch)
+
 
 # ---------------------------------------------------------------------------
 # torch.compile (fullgraph)
