@@ -470,9 +470,27 @@ def _signal_spec_dict(spec: TeacherSignal) -> str | dict[str, Any]:
 
     A ``normalize`` callable has no JSON form, so it is dropped with a
     warning. The rebuilt scorer then keeps the teacher output's own shape.
+    A signal whose companion fields that callable produces is refused
+    instead: without it, the rebuilt signal would declare companions nothing
+    produces, and :class:`~nvalchemi.training.distillation.TeacherSignal`
+    rejects such a spec on reload.
+
+    Raises
+    ------
+    ValueError
+        If *spec* declares ``extra_fields`` produced by a ``normalize``
+        callable.
     """
     if BUILTIN_SIGNALS.get(spec.name) == spec:
         return spec.name
+    if spec.extra_fields and spec.normalize is not None:
+        raise ValueError(
+            f"Teacher signal {spec.name!r} produces companion fields "
+            f"{list(spec.extra_fields)!r} through a normalize callable, which no "
+            "recipe describes, and a signal rebuilt without it would declare "
+            "companions nothing produces. Re-supply the scorer at construction, "
+            "or drop the companion fields."
+        )
     if spec.normalize is not None:
         warnings.warn(
             f"Teacher signal {spec.name!r} carries a normalize callable, which no "

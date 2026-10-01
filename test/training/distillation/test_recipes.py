@@ -539,6 +539,33 @@ class _SpecScorer(_BareScorer):
         return cls(str(spec["tag"]))
 
 
+def _forces_and_norms(value: torch.Tensor, batch: Batch) -> dict[str, torch.Tensor]:
+    """Produce a force signal beside its per-atom norm, the companion-field shape."""
+    del batch
+    return {
+        "teacher_split_forces": value,
+        "teacher_force_norms": value.norm(dim=-1, keepdim=True),
+    }
+
+
+def _keep_shape(value: torch.Tensor, batch: Batch) -> torch.Tensor:
+    """Return the teacher output unchanged, a normalize no recipe can describe."""
+    del batch
+    return value
+
+
+def _companion_signal() -> TeacherSignal:
+    """Return a custom signal whose companion field only its normalize produces."""
+    return TeacherSignal(
+        "split_forces",
+        "forces",
+        "teacher_split_forces",
+        "node",
+        normalize=_forces_and_norms,
+        extra_fields=("teacher_force_norms",),
+    )
+
+
 def _admit_all(frames: Batch) -> torch.Tensor:
     """Admission predicate keeping every frame."""
     return torch.ones(frames.num_graphs, dtype=torch.bool)
@@ -769,6 +796,66 @@ class TestOnPolicyRecipeRoundTrip:
             "teacher_site_energies",
         )
         assert config.to_spec_dict(teacher=teacher) == recipe
+
+    def test_a_signal_with_companion_fields_is_refused_at_serialization(
+        self, tmp_path: Path
+    ) -> None:
+        """A companion-field signal cannot rebuild without its producer, so the spec says so."""
+        teacher = _build_direct_force_teacher(seed=2)
+        config = _make_config(tmp_path, _build_demo_model(), teacher)
+        config.teacher_scorer = InProcessTeacherScorer(
+            teacher, ("energy", _companion_signal())
+        )
+
+        with pytest.raises(ValueError, match="'split_forces'.*companions nothing"):
+            config.to_spec_dict(teacher=teacher)
+
+    def test_a_strategy_omits_a_loop_whose_signal_cannot_be_described(
+        self, tmp_path: Path
+    ) -> None:
+        """The refusal reaches the strategy as a warning and a spec without an on_policy block."""
+        teacher = _build_direct_force_teacher(seed=2)
+        strategy = _make_strategy(
+            tmp_path, student=_build_demo_model(), teacher=teacher, num_steps=2
+        )
+        strategy.on_policy.teacher_scorer = InProcessTeacherScorer(
+            teacher, ("energy", _companion_signal())
+        )
+
+        with pytest.warns(UserWarning, match="recipe is omitted.*'split_forces'"):
+            spec = strategy.to_spec_dict()
+
+        assert "on_policy" not in spec
+
+    def test_a_normalized_signal_without_companions_still_round_trips(
+        self, tmp_path: Path
+    ) -> None:
+        """Dropping a normalize alone leaves a spec TeacherSignal accepts, with a warning."""
+        teacher = _build_direct_force_teacher(seed=2)
+        config = _make_config(tmp_path, _build_demo_model(), teacher)
+        config.teacher_scorer = InProcessTeacherScorer(
+            teacher,
+            (
+                "energy",
+                TeacherSignal(
+                    "site_energies",
+                    "atomic_energies",
+                    "teacher_site_energies",
+                    "node",
+                    normalize=_keep_shape,
+                ),
+            ),
+        )
+
+        with pytest.warns(UserWarning, match="'site_energies' carries a normalize"):
+            spec = config.to_spec_dict(teacher=teacher)
+        rebuilt = OnPolicyConfig.from_spec_dict(
+            json.loads(json.dumps(spec)), student=_build_demo_model(), teacher=teacher
+        )
+
+        assert rebuilt.teacher_scorer.signal_specs["site_energies"] == TeacherSignal(
+            "site_energies", "atomic_energies", "teacher_site_energies", "node"
+        )
 
     def test_every_knob_reaches_the_recipe(self, tmp_path: Path) -> None:
         """A setting added to ``OnPolicySettings`` cannot silently drop out of a recipe."""
