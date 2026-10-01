@@ -97,7 +97,7 @@ linear-interpolation guesses where atoms pass through each other.
 `NEB` (as above) is the normal way to do this refinement. It is a regular
 NEB optimization whose "physical" model happens to be the analytic IDPP
 potential instead of your real MLIP. See
-``examples/advanced/16_batched_neb.py`` for the full IDPP-then-MLIP workflow.
+``examples/advanced/11_batched_neb.py`` for the full IDPP-then-MLIP workflow.
 
 ## The high-level `NEB` strategy
 
@@ -267,7 +267,7 @@ Use the Gram-statistics signature when the force needs more than the tangent
 projection, for example the link vectors `d_plus` and `d_minus` and their dot
 products. The doubly nudged elastic band (DNEB,
 [Trygubenko & Wales 2004](https://doi.org/10.1063/1.1636455)) uses them to add
-a perpendicular spring correction. `examples/advanced/16_batched_neb.py` uses
+a perpendicular spring correction. `examples/advanced/11_batched_neb.py` uses
 the improved-tangent method by default; set `method = "dneb"` there to run the
 `dneb_effective_force` equation from `_dneb_method.py`.
 
@@ -460,7 +460,7 @@ whole cells. For such winding paths, provide appropriately unwrapped images.
 
 ## See also
 
-- **Example**: ``examples/advanced/16_batched_neb.py`` runs a full
+- **Example**: ``examples/advanced/11_batched_neb.py`` runs a full
   climbing-image NEB workflow (IDPP initialization, AIMNet2-rxn, diagnostics
   CSV, and a comparison against DFT reference paths) on eight batched
   reactions.

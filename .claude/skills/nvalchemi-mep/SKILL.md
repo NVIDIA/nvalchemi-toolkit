@@ -23,7 +23,7 @@ group. NEB is currently the only path-optimization method.
 Details (force equations, method signatures, a full manual-hooks example)
 live in `docs/userguide/dynamics_mep.md`. The end-to-end workflow (IDPP,
 climbing-image NEB with AIMNet2-rxn, diagnostics CSV) is
-`examples/advanced/16_batched_neb.py`. Upstream skills:
+`examples/advanced/11_batched_neb.py`. Upstream skills:
 `nvalchemi-data-structures` (`Batch`, `group_layout`),
 `nvalchemi-dynamics-api` (`FIRE2`, `FusedStage`), and
 `nvalchemi-dynamics-hooks` (hook stages and ordering).
