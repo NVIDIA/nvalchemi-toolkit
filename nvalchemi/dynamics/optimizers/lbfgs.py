@@ -237,13 +237,6 @@ def _build_state(
     )
 
 
-def _refuse(name: str) -> None:
-    raise AttributeError(
-        f"{name} is fixed when optimizer state is allocated; "
-        "construct a new optimizer to change it"
-    )
-
-
 def _warn_if_wraps_positions(dynamics: BaseDynamics) -> None:
     """Warn when ``WrapPeriodicHook`` is registered on *dynamics* or its ``FusedStage``.
 
@@ -342,7 +335,10 @@ class _LBFGSMixin:
 
     @history_size.setter
     def history_size(self, value: int) -> None:
-        _refuse("history_size")
+        raise AttributeError(
+            "history_size is fixed when optimizer state is allocated; "
+            "construct a new optimizer to change it"
+        )
 
     def _extra_state_kwargs(self, batch: Batch, n: int) -> dict[str, Any]:
         """Extra ``_build_state`` kwargs; overridden by ``LBFGSVariableCell``."""
@@ -526,7 +522,10 @@ class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
 
     @cell_force_scale.setter
     def cell_force_scale(self, value: float) -> None:
-        _refuse("cell_force_scale")
+        raise AttributeError(
+            "cell_force_scale is fixed when optimizer state is allocated; "
+            "construct a new optimizer to change it"
+        )
 
     def _reference_cells(self, batch: Batch, n: int) -> torch.Tensor:
         """Aligned cells of the last *n* systems, for the chart.  Never writes *batch*."""
