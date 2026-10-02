@@ -466,7 +466,15 @@ none of that, so it is refused — in two places, for two different failures:
 | Failure | Raised by | When |
 |---------|-----------|------|
 | The key is not one the framework can apply (`hessian`, `dipole`, anything novel) | `validate_contribution`, and `aggregate_contributions` independently | at the producer, and again before summing |
+| The shape is right but the extent is not — `[1, 3]` forces for a 4-atom batch | `validate_contribution` | at the producer, with the batch's counts |
 | The key is applicable but the batch has no buffer for it | `_check_destinations` | after aggregation, before applying |
+
+The second is why `validate_contribution` takes `num_atoms` and `num_graphs`:
+a `[1, 3]` force satisfies every rule that can be checked without a batch, and
+then *broadcasts* onto every atom when added. It has to be caught per
+contribution, because summing absorbs it — `[4, 3] + [1, 3]` is `[4, 3]`, so a
+bad bias beside a correct one yields a correctly shaped total carrying forces
+nothing computed.
 
 The first matters because aggregation keeps only the applied keys, so an
 unrecognised physical output would otherwise vanish between the bias and the

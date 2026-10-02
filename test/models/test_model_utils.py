@@ -142,6 +142,52 @@ class TestValidateContribution:
         with pytest.raises(ValueError, match="diagnostics/cv.*detached"):
             validate_contribution(_outputs(**{f"{DIAGNOSTIC_PREFIX}cv": bad}))
 
+    def test_a_single_force_row_broadcasts_and_is_refused(self) -> None:
+        """The shape rules alone accept it; the batch is what exposes it.
+
+        ``[1, 3]`` satisfies "ndim 2, three columns", and ``add_`` then
+        broadcasts that one vector onto every atom — applying a force the
+        producer never computed, with nothing raised.
+        """
+        with pytest.raises(ValueError, match=r"1 row\(s\) but the batch has 4 atom"):
+            validate_contribution(_outputs(forces=torch.ones(1, 3)), num_atoms=4)
+
+    def test_a_wrong_force_count_is_refused(
+        self,
+    ) -> None:
+        with pytest.raises(ValueError, match=r"3 row\(s\) but the batch has 4 atom"):
+            validate_contribution(_outputs(forces=torch.ones(3, 3)), num_atoms=4)
+
+    def test_a_matching_force_count_is_accepted(self) -> None:
+        validate_contribution(_outputs(forces=torch.ones(4, 3)), num_atoms=4)
+
+    @pytest.mark.parametrize(
+        ("key", "value"),
+        [
+            ("energy", torch.ones(1, 1)),
+            ("stress", torch.ones(1, 3, 3)),
+            ("virial", torch.ones(1, 3, 3)),
+        ],
+    )
+    def test_a_single_per_graph_row_broadcasts_and_is_refused(
+        self, key: str, value: Tensor
+    ) -> None:
+        """Same defect, per graph rather than per atom."""
+        with pytest.raises(ValueError, match=r"1 row\(s\) but the batch has 3 graph"):
+            validate_contribution(_outputs(**{key: value}), num_graphs=3)
+
+    def test_matching_per_graph_rows_are_accepted(self) -> None:
+        validate_contribution(
+            _outputs(energy=torch.ones(3, 1), stress=torch.ones(3, 3, 3)),
+            num_graphs=3,
+        )
+
+    def test_the_extent_checks_are_opt_in(self) -> None:
+        """A producer with no batch in hand still gets the shape rules."""
+        validate_contribution(
+            _outputs(forces=torch.ones(1, 3), energy=torch.ones(1, 1))
+        )
+
     def test_source_names_the_producer(self) -> None:
         with pytest.raises(ValueError, match="MyBias 'umbrella'"):
             validate_contribution(

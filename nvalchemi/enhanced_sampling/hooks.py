@@ -545,7 +545,16 @@ class BiasHook:
         results: dict[str, ModelOutputs] = {}
         for name, bias in self.biases.items():
             outputs = bias(batch)
-            validate_contribution(outputs, source=f"{type(bias).__name__} {name!r}")
+            # Checked per bias, not on the aggregate: summing absorbs a
+            # broadcastable shape ([4, 3] + [1, 3] is [4, 3]), so by the time
+            # the total reaches the batch it looks right and the bias that
+            # was wrong can no longer be named.
+            validate_contribution(
+                outputs,
+                source=f"{type(bias).__name__} {name!r}",
+                num_atoms=batch.num_nodes,
+                num_graphs=batch.num_graphs,
+            )
             results[name] = outputs
         self._last_results = results
         return results
@@ -691,7 +700,10 @@ class BiasHook:
                 batch.energy.add_(energy.reshape(batch.energy.shape))
             forces = total.get("forces")
             if forces is not None:
-                batch.forces.add_(forces)
+                # reshape, like energy and stress above: it raises on a numel
+                # mismatch, where a bare add_ would broadcast a single row
+                # onto every atom.
+                batch.forces.add_(forces.reshape(batch.forces.shape))
             stress = total.get("stress")
             if stress is not None:
                 batch.stress.add_(stress.reshape(batch.stress.shape))

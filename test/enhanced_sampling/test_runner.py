@@ -26,7 +26,7 @@ from collections.abc import Mapping
 
 import pytest
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
@@ -41,7 +41,7 @@ from nvalchemi.enhanced_sampling import (
 )
 from nvalchemi.hooks import BiasContext
 from nvalchemi.models._utils import DIAGNOSTIC_PREFIX
-from nvalchemi.models.base import BaseModelMixin
+from nvalchemi.models.base import BaseModelMixin, ModelConfig
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # ---------------------------------------------------------------------------
@@ -557,6 +557,92 @@ class TestUnapplicableBiasOutputs:
         runner, model = _sampling(device, {"rb": _ReportingBias()})
         runner.run(batch, model, n_steps=1)
         assert "bias/rb/hessian_trace" in runner.last_outputs
+
+
+class TestBroadcastableBiasOutputs:
+    """A contribution that would broadcast must be refused, by bias name.
+
+    ``[1, 3]`` satisfies every shape rule a contribution is checked against
+    on its own — ndim 2, three columns — and ``batch.forces.add_`` then
+    applies that one vector to every atom.  Nothing about the result looks
+    wrong afterwards, which is why it has to be caught at the producer.
+    """
+
+    class _OneVectorBias(nn.Module, BaseModelMixin):
+        """Returns a single force vector regardless of how many atoms there are."""
+
+        def __init__(self, name: str = "ov") -> None:
+            super().__init__()
+            self.name = name
+            self.model_config = ModelConfig(active_outputs={"forces"})
+
+        @property
+        def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+            """No embeddings."""
+            return {}
+
+        def compute_embeddings(self, *args: object, **kwargs: object) -> None:
+            """Not an embedding model."""
+            raise NotImplementedError
+
+        def forward(self, data: Batch, **kwargs: object) -> ModelOutputs:
+            """Return one vector for the whole batch."""
+            return OrderedDict(forces=torch.ones(1, 3, device=data.positions.device))
+
+    class _ZeroForceBias(nn.Module, BaseModelMixin):
+        """A correctly shaped bias, used to hide the broken one behind a sum."""
+
+        def __init__(self, name: str = "zero") -> None:
+            super().__init__()
+            self.name = name
+            self.model_config = ModelConfig(active_outputs={"forces"})
+
+        @property
+        def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+            """No embeddings."""
+            return {}
+
+        def compute_embeddings(self, *args: object, **kwargs: object) -> None:
+            """Not an embedding model."""
+            raise NotImplementedError
+
+        def forward(self, data: Batch, **kwargs: object) -> ModelOutputs:
+            """Return a correctly shaped zero contribution."""
+            return OrderedDict(
+                forces=torch.zeros(data.num_nodes, 3, device=data.positions.device)
+            )
+
+    def test_a_single_force_row_is_refused(self, device: str) -> None:
+        batch = _make_batch(n_graphs=1, atoms_per_graph=4, device=device)
+        runner, model = _sampling(device, {"ov": self._OneVectorBias()})
+        with pytest.raises(ValueError, match=r"_OneVectorBias 'ov'.*1 row\(s\)"):
+            runner.prime_forces(batch, model)
+
+    def test_it_is_caught_even_beside_a_correct_bias(self, device: str) -> None:
+        """The case a check on the aggregate would miss.
+
+        Summing absorbs the broadcast — ``[4, 3] + [1, 3]`` is ``[4, 3]`` —
+        so the total that reaches the batch has the right shape and carries
+        the wrong forces.  Only a per-contribution check can still name the
+        bias responsible.
+        """
+        batch = _make_batch(n_graphs=1, atoms_per_graph=4, device=device)
+        runner, model = _sampling(
+            device,
+            {"zero": self._ZeroForceBias(), "ov": self._OneVectorBias()},
+        )
+        with pytest.raises(ValueError, match=r"_OneVectorBias 'ov'.*1 row\(s\)"):
+            runner.prime_forces(batch, model)
+
+    def test_a_correctly_shaped_bias_still_applies(self, device: str) -> None:
+        """The guard must not be stricter than the contract it enforces."""
+        batch = _make_batch(n_graphs=1, atoms_per_graph=4, device=device)
+        runner, model = _sampling(device, {"cf": _ConstantForceBias(2.0, name="cf")})
+        runner.prime_forces(batch, model)
+        physical = runner.last_outputs["physical/forces"]
+        expected = torch.zeros_like(batch.forces)
+        expected[:, 0] = -2.0
+        assert torch.allclose(batch.forces - physical, expected, atol=1e-5)
 
 
 class TestMissingDestinationBuffers:

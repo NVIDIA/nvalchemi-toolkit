@@ -448,6 +448,21 @@
 
 ### Fixed
 
+- **A bias contribution could broadcast onto the whole batch** —
+  `validate_contribution` checked that `forces` had shape `[?, 3]` but never
+  compared the row count with the batch, so a bias returning `[1, 3]` passed
+  and `batch.forces.add_` then applied that one vector to every atom —
+  a force the bias never computed, with nothing raised. The same held for
+  `energy` and `stress` across a multi-graph batch. It now takes optional
+  `num_atoms` / `num_graphs`, which `BiasHook` supplies from the live batch,
+  and `_apply` reshapes `forces` the way it already reshaped `energy` and
+  `stress`, so the broadcast is no longer expressible at the addition.
+
+  Checked per contribution rather than on the aggregate, because summing
+  absorbs it: `[4, 3] + [1, 3]` is `[4, 3]`, so a bad bias standing beside a
+  correct one produces a correctly shaped total carrying wrong forces, and
+  the producer can no longer be named. The error names the bias.
+
 - **An order-dependent RMSD test, and the global it was blamed on** —
   `TestSquaredRMSD::test_identical_structures_give_zero` asserted that the
   squared RMSD of a structure with itself was below `1e-18`. For a float64

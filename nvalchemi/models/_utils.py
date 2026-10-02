@@ -494,7 +494,11 @@ def _unsupported_key_advice() -> str:
 
 
 def validate_contribution(
-    outputs: ModelOutputs, *, source: str = "ModelOutputs"
+    outputs: ModelOutputs,
+    *,
+    source: str = "ModelOutputs",
+    num_atoms: int | None = None,
+    num_graphs: int | None = None,
 ) -> None:
     """Check a :data:`~nvalchemi._typing.ModelOutputs` against its conventions.
 
@@ -527,7 +531,9 @@ def validate_contribution(
 
        Keys under :data:`DIAGNOSTIC_PREFIX` have no shape contract and are
        skipped here; they are reported, never applied.
-    5. All per-graph fields agree on the leading dimension ``B``.
+    5. All per-graph fields agree on the leading dimension ``B``, and — when
+       *num_atoms* or *num_graphs* is supplied — agree with the batch the
+       contribution will be added to.
     6. Every floating-point tensor, diagnostics included, is finite.
 
     Parameters
@@ -538,11 +544,27 @@ def validate_contribution(
         Name used in error messages to identify the producer, e.g.
         ``"HarmonicUmbrellaBias 'umbrella'"``.  Defaults to
         ``"ModelOutputs"``.
+    num_atoms : int | None, optional
+        Rows the destination ``forces`` buffer has.  Supply it whenever the
+        batch is known: a ``[1, 3]`` force passes every shape rule above and
+        then **broadcasts** onto every atom when added, applying a force the
+        producer never computed.  ``None`` skips the check.
+    num_graphs : int | None, optional
+        Rows the per-graph buffers have, for the same reason — a ``[1, 1]``
+        energy broadcasts across a multi-graph batch.  ``None`` skips the
+        check.
 
     Raises
     ------
     ValueError
         On the first violation, naming the key and what is wrong with it.
+
+    Notes
+    -----
+    The extent checks have to happen **per contribution**, before several are
+    summed.  Summing is where the broadcast is absorbed: ``[4, 3] + [1, 3]``
+    is ``[4, 3]``, so by the time an aggregate reaches the batch it is the
+    right shape and the producer that was wrong can no longer be identified.
     """
     unsupported = _unsupported_contribution_keys(outputs)
     if unsupported:
@@ -617,6 +639,28 @@ def validate_contribution(
         raise ValueError(
             f"{source}: leading batch dimension B is inconsistent across "
             f"fields: {batch_sizes}."
+        )
+
+    if num_graphs is not None:
+        for key, size in batch_sizes.items():
+            if size != num_graphs:
+                raise ValueError(
+                    f"{source}[{key!r}] has {size} row(s) but the batch has "
+                    f"{num_graphs} graph(s). A contribution is added into the "
+                    "batch element-wise, so a mismatched leading dimension "
+                    "either fails the addition or — for a single row — "
+                    "broadcasts the same value onto every graph, applying "
+                    "something the producer never computed."
+                )
+
+    forces = outputs.get("forces")
+    if num_atoms is not None and forces is not None and forces.shape[0] != num_atoms:
+        raise ValueError(
+            f"{source}['forces'] has {forces.shape[0]} row(s) but the batch "
+            f"has {num_atoms} atom(s). Forces are added per atom, so a "
+            "mismatch either fails the addition or — for a single row — "
+            "broadcasts one vector onto every atom, applying a force the "
+            "producer never computed."
         )
 
     for key, value in outputs.items():
