@@ -205,6 +205,42 @@ function that constructs a `Batch` graph-breaks at construction. For end-to-end
 capture, compile the model inside your generating function
 (`torch.compile(model, ...)`) and keep the wrapper eager.
 
+### Devices, streams, and compile
+
+The driver resolves its target device at construction time. The driver reads
+the explicit `device` field first, and then falls back to the `device` attribute
+on the generating function, with the following conditions:
+
+- If you specify a CUDA device, that device must exist
+on the host.
+- When the generating function returns a
+{class}`~nvalchemi.data.Batch`, the batch tensors must reside on the resolved
+device (i.e. the function cannot change devices).
+
+A device mismatch raises a `ValueError` during the call. In a pipeline,
+each stage resolves its own device, and its outputs pass to the next stage
+without automatic device migration.
+
+Using the context manager pattern (i.e. `with gen: ...`), the generation
+workflow will run on a CUDA stream unless `dedicated_stream` is set to `False`.
+At session entry, the new stream waits for active work
+on the current caller stream, so session operations do not race caller tasks. A
+pipeline session creates one CUDA stream and shares that stream with every stage
+that follows the `_stream` convention. These stages include generators, dynamics
+engines, and fused stages. The pipeline shares the stream only when the stage
+device matches the pipeline stream device, so mixed-device pipelines do not
+share streams across devices.
+
+The shared stream serializes stage execution within a pipeline call without
+cross-stream synchronization. One caveat however is that exiting a session
+does **not** synchronize the CUDA stream: if you dispatch operations on other
+streams, you must synchronize or
+enqueue a `wait_stream` call before you consume the results. As the session
+overview explains, `compile_generate` and `compile_kwargs` compile the
+generating function call. Because batch construction causes graph breaks in
+TorchDynamo, you must compile the neural network model inside the generating
+function for end-to-end graph capture.
+
 ## Input conditioning
 
 Conditioning prepares inputs before generation runs. It converts raw inputs (such as
