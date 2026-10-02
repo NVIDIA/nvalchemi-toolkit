@@ -87,7 +87,6 @@ class AlignCellHook:
 
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Align the current batch when any periodic cell is not triangular."""
-        del stage
         aligned = _aligned_periodic(ctx.batch, ctx.active_graph_mask)
         if aligned is not None:
             positions, cell, forces, stress = aligned
@@ -143,18 +142,9 @@ def _aligned_periodic(
     if active_graph_mask is not None:
         periodic_mask = periodic_mask & active_graph_mask
 
-    # Cheap per-system check on the *unmodified* cell, before cloning
-    # anything or launching the Warp kernel.  ``AlignCellHook`` must run
-    # every step for ``LBFGSVariableCell`` (frequency=1), and by the second
-    # step every active periodic cell is typically already aligned — the
-    # common case is "nothing to do", not "some systems are periodic".
-    # ``cell_alignment_offenders`` is the same criterion
-    # ``LBFGSVariableCell._reference_cells`` validates admitted cells
-    # against, so a cell this considers already-aligned can never then fail
-    # that check, and vice versa.  Skipping the clone + kernel launch for
-    # systems that don't need it also avoids nudging already-aligned
-    # positions by ulp-level amounts every step, which would otherwise
-    # violate L-BFGS's "don't edit positions between steps" contract.
+    # Skip the clone + kernel launch when nothing needs realigning (the
+    # common case after the first step) -- also avoids ULP-level position
+    # nudges that would violate L-BFGS's "don't edit positions" contract.
     needs_align = periodic_mask & cell_alignment_offenders(cell)
     # Eager early exit; compiled graphs run branchless (all-False is a no-op).
     if not torch.compiler.is_compiling() and not needs_align.any():
@@ -174,12 +164,9 @@ def _aligned_periodic(
     batch_idx = batch.batch_idx.to(dtype=torch.int32).contiguous()
     transform = align_cell(positions, cell, batch_idx)
 
-    # Blend by *needs_align*, not just *periodic_mask*: align_cell ran on
-    # every periodic+active system's cell above (the kernel has no
-    # per-system skip of its own), so a system that was already aligned got
-    # recomputed too and can differ from the input by a few ULP of rounding.
-    # Systems that didn't need realignment must come back bit-identical to
-    # the input, not that rounded recomputation.
+    # needs_align, not periodic_mask: align_cell recomputed every
+    # periodic+active cell above (no per-system skip), so an already-aligned
+    # one can differ from the input by a few ULP -- blend those back out.
     aligned_atoms = needs_align[batch.batch_idx].unsqueeze(-1)
     aligned_cells = needs_align[:, None, None]
 
