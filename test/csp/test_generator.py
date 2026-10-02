@@ -253,6 +253,7 @@ def test_public_export_local_conversion_and_callback_order() -> None:
             "csp_source_structure_id",
         }
     )
+    assert generator.generator_func.outputs == generator.outputs
     assert [event[0] for event in events] == [
         "condition",
         "result",
@@ -357,12 +358,52 @@ def test_neutral_native_batch_pipeline_skips_charge_contract() -> None:
         )
 
 
+@pytest.mark.parametrize(("component_charge", "expected_charge"), [(0, 0.0), (2, 2.0)])
+def test_explicit_outputs_declare_asu_charge_for_pipeline(
+    component_charge: int, expected_charge: float
+) -> None:
+    observed: list[torch.Tensor] = []
+
+    def consume_charge(inputs=None, *, num_samples=1, rng=None):
+        del num_samples, rng
+        assert isinstance(inputs, Batch)
+        observed.append(inputs["charge"].clone())
+        return inputs
+
+    producer = CSPGenerator(
+        _FakePacker(), outputs=CSP_OUTPUT_FIELDS | {"charge"}, dedicated_stream=False
+    )
+    consumer = AtomisticGenerator(
+        generator_func=consume_charge,
+        required_inputs=frozenset({"charge"}),
+        outputs=frozenset(),
+        dedicated_stream=False,
+    )
+    pipeline = GenerationPipeline(stages=[producer, consumer])
+    if component_charge:
+        with pytest.warns(UserWarning, match="Qformula=2"):
+            inputs = _formula(component_charge=component_charge)
+    else:
+        inputs = _formula()
+
+    result = pipeline(inputs, stage_kwargs=[{"num_samples": 1, "run_id": 90}, None])
+
+    assert isinstance(result, Batch)
+    assert producer.outputs == CSP_OUTPUT_FIELDS | {"charge"}
+    assert producer.generator_func.outputs == producer.outputs
+    assert len(observed) == 1
+    assert observed[0].tolist() == [[expected_charge]]
+    assert result["charge"].tolist() == [[expected_charge]]
+
+
 @pytest.mark.parametrize("total_charge", [0.0, 2.0])
 def test_native_batch_preserves_explicit_total_charge(total_charge: float) -> None:
     events: list[tuple[str, Any]] = []
     callbacks: list[PackingResult] = []
+    declared_outputs = list(CSP_OUTPUT_FIELDS | {"charge"})
     generator = CSPGenerator(
         _FakePacker(native_batch=True, native_charge=total_charge),
+        outputs=declared_outputs,
         hooks=[_AfterGenerate(events)],
         on_result=callbacks.append,
         dedicated_stream=False,
@@ -370,6 +411,8 @@ def test_native_batch_preserves_explicit_total_charge(total_charge: float) -> No
     result = generator.sample(_formula(), num_samples=1, run_id=90)
 
     assert isinstance(result, Batch)
+    assert generator.outputs == frozenset(declared_outputs)
+    assert generator.generator_func.outputs == generator.outputs
     assert len(callbacks) == 1
     assert callbacks[0].structures is result
     assert result["charge"].dtype == torch.float32
@@ -378,6 +421,17 @@ def test_native_batch_preserves_explicit_total_charge(total_charge: float) -> No
     assert callbacks[0].structures["charge"].tolist() == [[total_charge]]
     assert events == [("after_generate", result)]
     assert events[0][1]["charge"].tolist() == [[total_charge]]
+
+
+def test_native_charge_declaration_checks_nonempty_results() -> None:
+    generator = CSPGenerator(
+        _FakePacker(native_batch=True, omit_native_charge=True),
+        outputs=CSP_OUTPUT_FIELDS | {"charge"},
+        dedicated_stream=False,
+    )
+
+    with pytest.raises(ValueError, match=r"returned batch lacks \['charge'\]"):
+        generator.sample(_formula(), num_samples=1, run_id=92)
 
 
 def test_native_zero_accepted_batch_keeps_charge_omitted() -> None:
@@ -395,7 +449,11 @@ def test_compact_mode_returns_packing_result_without_batch_hooks() -> None:
     events: list[tuple[str, Any]] = []
     packer = _FakePacker()
     generator = CSPGenerator(
-        packer, expand=False, hooks=[_AfterGenerate(events)], dedicated_stream=False
+        packer,
+        expand=False,
+        outputs=[],
+        hooks=[_AfterGenerate(events)],
+        dedicated_stream=False,
     )
 
     result = generator.sample(_formula(), num_samples=1, run_id=19)
@@ -404,7 +462,13 @@ def test_compact_mode_returns_packing_result_without_batch_hooks() -> None:
     assert result.run_id == 19
     assert result.structures.structure_ids.tolist() == [[19, 0]]
     assert generator.outputs == frozenset()
+    assert generator.generator_func.outputs == generator.outputs
     assert events == []
+
+
+def test_compact_mode_rejects_nonempty_output_declarations() -> None:
+    with pytest.raises(ValueError, match="raw-result mode.*empty outputs declaration"):
+        CSPGenerator(_FakePacker(), expand=False, outputs={"charge"})
 
 
 def test_empty_result_uses_typed_batch_and_calls_owner_once() -> None:

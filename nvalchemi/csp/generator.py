@@ -164,6 +164,12 @@ class CSPGenerator(AtomisticGenerator):
     expand
         Expand rigid ASU structures to a Toolkit Batch on the owning rank.
         Existing Batch payloads pass through.
+    outputs
+        Optional complete declaration of fields guaranteed in expanded Batch
+        results. Defaults to :data:`CSP_OUTPUT_FIELDS`. Include additional
+        fields when the packer guarantees them; declarations are checked on
+        each nonempty result. Raw-result mode (``expand=False``) accepts only
+        an empty declaration.
     on_result
         Optional callable receiving the owning PackingResult after any
         communication and before optional P1 expansion or generation hooks.
@@ -186,6 +192,7 @@ class CSPGenerator(AtomisticGenerator):
         process_group: ProcessGroup | None = None,
         gather_to_rank: int | None = None,
         expand: bool = True,
+        outputs: frozenset[str] | None = None,
         on_result: Callable[[PackingResult], None] | None = None,
         **generator_options: Any,
     ) -> None:
@@ -212,8 +219,8 @@ class CSPGenerator(AtomisticGenerator):
         if not isinstance(packer_device, (torch.device, str)):
             raise TypeError("packer.device must be a torch.device or device string")
         device = normalize_device(packer_device)
-        outputs = CSP_OUTPUT_FIELDS if expand else frozenset()
-        generator_func = _CSPGeneratingFunction(device=device, outputs=outputs)
+        default_outputs = CSP_OUTPUT_FIELDS if expand else frozenset()
+        generator_func = _CSPGeneratingFunction(device=device, outputs=default_outputs)
         super().__init__(
             generator_func=generator_func,
             device=device,
@@ -221,6 +228,11 @@ class CSPGenerator(AtomisticGenerator):
             outputs=outputs,
             **generator_options,
         )
+        if not expand and self.outputs:
+            raise ValueError(
+                "raw-result mode (expand=False) accepts only an empty outputs declaration"
+            )
+        generator_func.outputs = self.outputs
         self._packer = packer
         self._process_group = process_group
         self._gather_to_rank = gather_to_rank
