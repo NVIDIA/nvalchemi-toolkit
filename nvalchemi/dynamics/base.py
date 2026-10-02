@@ -2579,19 +2579,20 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         compiling the step (:class:`FusedStage`'s ``_prime_forces``) call it
         eagerly on the first, uncompiled step so every key is allocated
         before any compiled call needs to publish it.
+
+        Allocation goes through :meth:`Batch.add_key` — the same public
+        route model wrappers use for extra outputs (see
+        ``neb_force.py``'s ``set_batch_field``) — rather than a raw storage
+        write, so the key stays visible to schema-driven consumers (e.g.
+        the Zarr writer, which enumerates ``attr_map``) and masked-out rows
+        hold this priming compute's real values instead of uninitialized
+        memory.
         """
         for key, tensor in outputs.items():
             if key not in self._OUTPUT_KEY_TO_BATCH_ATTR and tensor is not None:
                 target = getattr(batch, key, None)
                 if target is None:
-                    # Direct storage writes bypass the schema, leaving the
-                    # key invisible to schema-driven consumers (e.g. the
-                    # Zarr writer enumerates attr_map).  add_key is the
-                    # public route model wrappers already use for extra
-                    # outputs (see neb_force.py's set_batch_field), and
-                    # writing the real values rather than empty_like means
-                    # masked-out rows hold this priming compute's values
-                    # instead of uninitialized memory.
+                    # add_key, not a raw storage write -- see docstring.
                     group_name = self._infer_output_group(batch, key, tensor)
                     batch.add_key(
                         key,
