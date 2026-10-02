@@ -646,7 +646,10 @@ def _write_store(
     Parameters
     ----------
     path:
-        Destination, which must not already exist.
+        Destination, which must not already exist.  ``AtomicDataZarrWriter``
+        raises ``FileExistsError`` on a store it has already written, and
+        Zarr refuses to recreate an existing array, so this is written to a
+        fresh staging store and moved into place by :func:`save_checkpoint`.
     components:
         Name to :class:`Stateful`.
     batch:

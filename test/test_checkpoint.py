@@ -44,6 +44,7 @@ from nvalchemi._checkpoint import (
     save_checkpoint,
 )
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.data.datapipes.backends.zarr import AtomicDataZarrWriter
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -366,6 +367,38 @@ class TestSaveOverAnExistingCheckpoint:
         contents = load_checkpoint(path)
         assert contents.manifest.num_graphs == 2
         assert contents.batch.num_graphs == 2
+
+    def test_the_writer_refuses_a_store_it_has_already_written(self, tmp_path) -> None:
+        """The reason a batch may never be written in place.
+
+        ``AtomicDataZarrWriter`` is a one-shot writer: it declines a store
+        that already exists rather than merging into it.  Pinned here so the
+        constraint that shapes :func:`save_checkpoint` is visible, and so a
+        future writer that silently overwrote instead would be noticed.
+        """
+        path = tmp_path / "store.zarr"
+        AtomicDataZarrWriter(str(path)).write(_make_batch())
+        with pytest.raises(FileExistsError):
+            AtomicDataZarrWriter(str(path)).write(_make_batch())
+
+    def test_repeated_saves_of_a_batch_to_one_path(self, tmp_path) -> None:
+        """Checkpointing a running batch every epoch has to keep working.
+
+        Each save writes a fresh store beside *path* and moves it into place,
+        so the writer never meets a store it has written before.
+        """
+        path = tmp_path / "run.zarr"
+        for generation in (1, 2, 3):
+            save_checkpoint(
+                path,
+                {"counter": _Counter(generation)},
+                batch=_make_batch(),
+                batch_fields=("walker_id",),
+            )
+            contents = load_checkpoint(path)
+            assert contents.states["counter"]["count"] == generation
+            assert contents.batch is not None
+            assert contents.batch.num_graphs == 2
 
     def test_a_missing_parent_directory_is_created(self, tmp_path) -> None:
         path = tmp_path / "nested" / "deeper" / "run.zarr"
