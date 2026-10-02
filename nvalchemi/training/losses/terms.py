@@ -67,7 +67,7 @@ from nvalchemi.training.losses.composition import (
     DTypePolicy,
     ReductionContext,
 )
-from nvalchemi.training.losses.reductions import per_graph_sum
+from nvalchemi.training.losses.reductions import _require_metadata, per_graph_sum
 
 if TYPE_CHECKING:
     from nvalchemi.data.batch import Batch
@@ -79,13 +79,6 @@ _ForceTensor: TypeAlias = Forces | _PaddedForces
 _DenseForceMask: TypeAlias = Bool[torch.Tensor, "V 3"]
 _PaddedForceMask: TypeAlias = Bool[torch.Tensor, "B V_max 3"]
 _PerGraphValues: TypeAlias = Float[torch.Tensor, "B"]
-
-
-def _require_metadata(value: Any, name: str, *, loss_name: str) -> Any:
-    """Return required loss metadata or raise a focused error."""
-    if value is None:
-        raise ValueError(f"{loss_name} requires {name}=... metadata.")
-    return value
 
 
 def _node_counts(

@@ -58,6 +58,13 @@ These class-level sets drive **automatic validation**:
 * ``__provides_keys__`` documents which additional batch fields the
   integrator writes (beyond model outputs like forces and energy).
   The diagnostic helper ``_validate_batch_keys`` can verify them.
+  It also drives :meth:`~nvalchemi.dynamics.BaseDynamics.required_input_keys`:
+  every provided key other than ``positions``, plus ``atomic_masses`` when
+  ``velocities`` is provided.
+  :meth:`~nvalchemi.dynamics.BaseDynamics.check_initial_batch` checks an
+  initial batch against those keys before a run starts. A batch missing a
+  field the integrator updates in place is therefore refused up front rather
+  than inside the first step.
 
 When dynamics are composed into a :class:`~nvalchemi.dynamics.FusedStage`,
 the fused stage computes the **union** of all sub-stage keys
@@ -214,7 +221,8 @@ every call:
    4.  BEFORE_POST_UPDATE hooks →  post_update()  →  AFTER_POST_UPDATE hooks
    5.  AFTER_STEP hooks
    6.  convergence check  →  ON_CONVERGE hooks (if any samples converged)
-   7.  step_count += 1
+   7.  ON_GRADUATE hooks (with the graphs whose status reached exit_status)
+   8.  step_count += 1
 
 ``ON_ADMISSION`` runs before the per-step sequence and before initial force
 priming. In a compiled :class:`~nvalchemi.dynamics.FusedStage`, it remains

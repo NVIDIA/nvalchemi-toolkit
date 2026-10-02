@@ -190,6 +190,44 @@ def _make_charge_batch(charge: float | None = None) -> Batch:
     return Batch.from_data_list(items)
 
 
+def _split_charges(value: torch.Tensor, batch: Batch) -> dict[str, torch.Tensor]:  # noqa: ARG001
+    """Spread a charges output over its own field and a sign companion."""
+    return {"teacher_charges": value, "teacher_charges_sign": value.sign()}
+
+
+def _with_variance(value: torch.Tensor, batch: Batch) -> dict[str, torch.Tensor]:  # noqa: ARG001
+    """Spread an energy output over its own field and a zero-variance companion."""
+    return {"teacher_energy": value, "teacher_energy_variance": torch.zeros_like(value)}
+
+
+def _make_split_charges() -> TeacherSignal:
+    """Return a charges spec whose normalize fills a companion field."""
+    return TeacherSignal(
+        "charges",
+        "charges",
+        "teacher_charges",
+        "node",
+        normalize=_split_charges,
+        extra_fields=("teacher_charges_sign",),
+    )
+
+
+def _make_edge_batch() -> Batch:
+    """Return a two-system batch carrying an edge-level neighbor list."""
+    generator = torch.Generator().manual_seed(0)
+    items = []
+    for num_atoms, num_edges in ((3, 2), (2, 1)):
+        pairs = torch.randint(0, num_atoms, (num_edges, 2), generator=generator)
+        items.append(
+            AtomicData(
+                positions=torch.randn(num_atoms, 3, generator=generator),
+                atomic_numbers=torch.ones(num_atoms, dtype=torch.long),
+                neighbor_list=pairs,
+            )
+        )
+    return Batch.from_data_list(items)
+
+
 def _charge_wiring_teacher() -> PipelineModelWrapper:
     """Return a composition whose first stage wires charges into its second."""
     return PipelineModelWrapper(
@@ -387,6 +425,15 @@ class _RaisingTeacher(torch.nn.Module, BaseModelMixin):
         raise RuntimeError("teacher forward failed")
 
 
+class _EdgeDroppingModel(_ChargeSourceModel):
+    """Teacher that detaches the batch's ``edges`` level while scoring."""
+
+    def forward(self, data: Batch, **kwargs: Any) -> OrderedDict:
+        """Pop the edge level, then return the parent's outputs."""
+        data.pop_level("edges")
+        return super().forward(data, **kwargs)
+
+
 class _ChargeConsumerModel(torch.nn.Module, BaseModelMixin):
     """Pipeline stage whose energy reads the charges wired onto the batch."""
 
@@ -499,6 +546,7 @@ class TestSignalFields:
             "energy",
             "teacher_energy",
             "system",
+            normalize=_with_variance,
             extra_fields=("teacher_energy_variance",),
         )
         assert signal_fields([spec]) == ("teacher_energy", "teacher_energy_variance")
@@ -606,6 +654,7 @@ class TestSignalForField:
             "energy",
             "teacher_energy",
             "system",
+            normalize=_with_variance,
             extra_fields=("teacher_energy_variance",),
         )
         signals = [spec, "forces"]
@@ -634,7 +683,7 @@ class TestTeacherSignal:
     def test_fields_lists_the_own_field_first_then_the_companions(self) -> None:
         """``fields`` is the own field followed by the companion fields."""
         spec = TeacherSignal(
-            "hvp", "hvp", "teacher_hvp", "node", extra_fields=("teacher_hvp_probe",)
+            "hvp", None, "teacher_hvp", "node", extra_fields=("teacher_hvp_probe",)
         )
         assert spec.fields == ("teacher_hvp", "teacher_hvp_probe")
 
@@ -652,6 +701,20 @@ class TestTeacherSignal:
         """A spec at an unknown level is refused at construction."""
         with pytest.raises(ValueError, match="got level 'edge'"):
             TeacherSignal("bonds", "bonds", "teacher_bonds", "edge")
+
+    def test_companion_fields_without_a_producer_are_refused(self) -> None:
+        """A forward-read spec with ``extra_fields`` needs a normalize to fill them."""
+        with pytest.raises(ValueError, match=r"\['teacher_hvp_probe'\] that nothing"):
+            TeacherSignal(
+                "hvp", "hvp", "teacher_hvp", "node", extra_fields=("teacher_hvp_probe",)
+            )
+
+    def test_a_derived_spec_may_declare_companions_without_a_normalize(self) -> None:
+        """A spec the scorer derives itself is free to fill its companions on its own."""
+        spec = TeacherSignal(
+            "hvp", None, "teacher_hvp", "node", extra_fields=("teacher_hvp_probe",)
+        )
+        assert spec.fields == ("teacher_hvp", "teacher_hvp_probe")
 
 
 class TestInProcessTeacherScorerValidation:
@@ -761,6 +824,87 @@ class TestInProcessTeacherScorerCustomSignals:
         )
         labels = scorer.label(_make_spread_batch())
         assert labels["teacher_charges"][0].dtype == torch.float16
+
+    def test_every_field_a_signal_declares_is_emitted(self) -> None:
+        """A normalize returning a mapping fills the companion field at the same level."""
+        scorer = InProcessTeacherScorer(
+            _ChargeSourceModel(), [_make_split_charges()], dtype=torch.float16
+        )
+        batch = _make_spread_batch()
+        labels = scorer.label(batch)
+        assert set(labels) == set(scorer.label_fields)
+        values, level = labels["teacher_charges_sign"]
+        assert level == "node"
+        assert values.dtype == torch.float16
+        assert values.shape == (batch.num_nodes,)
+        torch.testing.assert_close(
+            labels["teacher_charges"][0].float(),
+            torch.full((batch.num_nodes,), _WIRED_CHARGE),
+        )
+
+    @pytest.mark.parametrize("dtype", [None, torch.float16], ids=["uncast", "cast"])
+    def test_every_label_a_normalizer_produces_is_detached(
+        self, dtype: torch.dtype | None
+    ) -> None:
+        """A mapping built from a live autograd graph is returned without gradients."""
+
+        def attached(value: torch.Tensor, batch: Batch) -> dict[str, torch.Tensor]:  # noqa: ARG001
+            scale = torch.ones((), requires_grad=True)
+            return {
+                "teacher_charges": value * scale,
+                "teacher_charges_sign": value.sign() * scale,
+            }
+
+        spec = TeacherSignal(
+            "charges",
+            "charges",
+            "teacher_charges",
+            "node",
+            normalize=attached,
+            extra_fields=("teacher_charges_sign",),
+        )
+        scorer = InProcessTeacherScorer(_ChargeSourceModel(), [spec], dtype=dtype)
+        labels = scorer.label(_make_spread_batch())
+        assert set(labels) == {"teacher_charges", "teacher_charges_sign"}
+        for value, _ in labels.values():
+            assert value.requires_grad is False
+            assert value.grad_fn is None
+
+    def test_a_single_tensor_for_a_signal_with_companions_raises(self) -> None:
+        """A normalize that forgets the companions is caught rather than silently short."""
+
+        def keep(value: torch.Tensor, batch: Batch) -> torch.Tensor:  # noqa: ARG001
+            return value
+
+        spec = TeacherSignal(
+            "charges",
+            "charges",
+            "teacher_charges",
+            "node",
+            normalize=keep,
+            extra_fields=("teacher_charges_sign",),
+        )
+        scorer = InProcessTeacherScorer(_ChargeSourceModel(), [spec])
+        with pytest.raises(RuntimeError, match="returned one tensor"):
+            scorer.label(_make_spread_batch())
+
+    def test_a_mapping_over_other_names_than_the_fields_raises(self) -> None:
+        """The produced mapping has to cover the declared fields exactly."""
+
+        def mislabeled(value: torch.Tensor, batch: Batch) -> dict[str, torch.Tensor]:  # noqa: ARG001
+            return {"teacher_charges": value, "teacher_other": value.sign()}
+
+        spec = TeacherSignal(
+            "charges",
+            "charges",
+            "teacher_charges",
+            "node",
+            normalize=mislabeled,
+            extra_fields=("teacher_charges_sign",),
+        )
+        scorer = InProcessTeacherScorer(_ChargeSourceModel(), [spec])
+        with pytest.raises(RuntimeError, match="must produce exactly"):
+            scorer.label(_make_spread_batch())
 
 
 class TestInProcessTeacherScorerLabeling:
@@ -977,6 +1121,81 @@ class TestInProcessTeacherScorerGradMode:
                 small_batch
             )
         torch.testing.assert_close(labels["teacher_forces"][0], expected)
+
+
+class TestInProcessTeacherScorerAutocast:
+    """Autocast mode the scoring pass runs the teacher under."""
+
+    def test_the_default_disables_autocast_for_the_pass(
+        self, direct_force_teacher: Any, small_batch: Batch
+    ) -> None:
+        """Labels taken inside a bfloat16 region equal the ones taken outside it."""
+        scorer = InProcessTeacherScorer(direct_force_teacher, ["energy", "forces"])
+        reference = scorer.label(small_batch)
+        with torch.autocast(device_type="cpu", dtype=torch.bfloat16):
+            probed = scorer.label(small_batch)
+        assert scorer.autocast is False
+        for field, (value, _) in reference.items():
+            assert probed[field][0].dtype == value.dtype
+            assert torch.equal(probed[field][0], value)
+
+    def test_none_leaves_the_callers_autocast_region_in_force(
+        self, direct_force_teacher: Any, small_batch: Batch
+    ) -> None:
+        """A float32 teacher labels in bfloat16 inside a bfloat16 region, float32 outside."""
+        scorer = InProcessTeacherScorer(
+            direct_force_teacher, ["energy", "forces"], autocast=None
+        )
+        assert scorer.label(small_batch)["teacher_energy"][0].dtype == torch.float32
+        with torch.autocast(device_type="cpu", dtype=torch.bfloat16):
+            labels = scorer.label(small_batch)
+        assert labels["teacher_energy"][0].dtype == torch.bfloat16
+        assert labels["teacher_forces"][0].dtype == torch.bfloat16
+
+    def test_a_dtype_enables_autocast_without_an_ambient_region(
+        self, direct_force_teacher: Any, small_batch: Batch
+    ) -> None:
+        """A bfloat16 setting labels in bfloat16 with no region open around the call."""
+        scorer = InProcessTeacherScorer(
+            direct_force_teacher, ["energy", "forces"], autocast=torch.bfloat16
+        )
+        labels = scorer.label(small_batch)
+        assert labels["teacher_energy"][0].dtype == torch.bfloat16
+        assert labels["teacher_forces"][0].dtype == torch.bfloat16
+        assert not torch.is_autocast_enabled("cpu")
+
+    def test_true_follows_the_autocast_dtype_in_force_for_the_device(
+        self, direct_force_teacher: Any, small_batch: Batch
+    ) -> None:
+        """``True`` labels at the device default outside a region, at the region's dtype inside one."""
+        scorer = InProcessTeacherScorer(direct_force_teacher, ["energy"], autocast=True)
+        default = torch.get_autocast_dtype("cpu")
+        assert scorer.label(small_batch)["teacher_energy"][0].dtype == default
+        with torch.autocast(device_type="cpu", dtype=torch.float16):
+            labels = scorer.label(small_batch)
+        assert labels["teacher_energy"][0].dtype == torch.float16
+
+    def test_the_dtype_cast_follows_the_autocast_pass(
+        self, direct_force_teacher: Any, small_batch: Batch
+    ) -> None:
+        """A ``dtype`` casts what the autocast pass produced, so the label is float32."""
+        scorer = InProcessTeacherScorer(
+            direct_force_teacher,
+            ["energy"],
+            dtype=torch.float32,
+            autocast=torch.bfloat16,
+        )
+        assert scorer.label(small_batch)["teacher_energy"][0].dtype == torch.float32
+
+    @pytest.mark.parametrize(
+        "value", [torch.int64, "bfloat16"], ids=["integer_dtype", "string"]
+    )
+    def test_an_autocast_value_that_names_no_mode_is_rejected(
+        self, direct_force_teacher: Any, value: Any
+    ) -> None:
+        """Anything but None, a bool, or a floating-point dtype is refused by name."""
+        with pytest.raises(ValueError, match="autocast must be False"):
+            InProcessTeacherScorer(direct_force_teacher, ["energy"], autocast=value)
 
 
 class TestInProcessTeacherScorerTrainingMode:
@@ -1495,6 +1714,18 @@ class TestComposedTeacherFieldIsolation:
         InProcessTeacherScorer(_charge_wiring_teacher(), ["energy"]).label(batch)
         with torch.no_grad():
             torch.testing.assert_close(student(batch)["energy"], expected)
+
+    def test_a_level_the_teacher_detached_is_reattached_with_its_fields(self) -> None:
+        """A teacher popping ``edges`` hands back the level and the very same tensor."""
+        batch = _make_edge_batch()
+        neighbor_list = batch["neighbor_list"]
+        ptr = batch.level_ptr("edges").tolist()
+
+        InProcessTeacherScorer(_EdgeDroppingModel(), ["energy"]).label(batch)
+
+        assert batch.level_keys["edges"] == {"neighbor_list"}
+        assert batch["neighbor_list"] is neighbor_list
+        assert batch.level_ptr("edges").tolist() == ptr
 
     def test_labels_match_a_direct_forward_of_the_composition(self) -> None:
         """Isolating the wired fields leaves the labels the composition produces."""

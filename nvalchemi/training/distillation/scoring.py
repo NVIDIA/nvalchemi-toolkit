@@ -18,18 +18,18 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from contextlib import contextmanager, nullcontext
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeAlias, runtime_checkable
 
 import torch
 
+from nvalchemi.data.batch import Batch
 from nvalchemi.models.base import ModelConfig, NeighborConfig, NeighborListFormat
 from nvalchemi.neighbors import compute_neighbors
 from nvalchemi.training.runtime import evaluating
 
 if TYPE_CHECKING:
-    from nvalchemi.data import Batch
     from nvalchemi.models.base import BaseModelMixin
 
 __all__ = [
@@ -38,6 +38,7 @@ __all__ = [
     "NeighborListPolicy",
     "SUPPORTED_SIGNALS",
     "SignalLevel",
+    "SignalNormalizer",
     "TeacherLabels",
     "TeacherScorer",
     "TeacherSignal",
@@ -51,6 +52,11 @@ SignalLevel: TypeAlias = Literal["node", "system"]
 
 TeacherLabels: TypeAlias = dict[str, tuple[torch.Tensor, SignalLevel]]
 """Teacher signals for one batch, keyed by the batch field they populate."""
+
+SignalNormalizer: TypeAlias = Callable[
+    [torch.Tensor, Batch], torch.Tensor | Mapping[str, torch.Tensor]
+]
+"""Callable that reshapes a raw teacher output or spreads it over a signal's fields."""
 
 NeighborListPolicy: TypeAlias = Literal["rebuild", "reuse"]
 """Where :class:`InProcessTeacherScorer` takes the teacher's neighbor list from."""
@@ -89,18 +95,22 @@ class TeacherSignal:
         Batch field the label populates; must start with ``teacher_``.
     level : SignalLevel
         ``"node"`` for one row per atom, ``"system"`` for one per graph.
-    normalize : Callable[[torch.Tensor, Batch], torch.Tensor] | None, optional
+    normalize : SignalNormalizer | None, optional
         Reshapes the detached raw output to the field's canonical shape, given
-        the batch it was produced for. Default ``None`` (keep the shape).
+        the batch it was produced for. For a signal with companion fields, it
+        instead returns a mapping from every name in :attr:`fields` to its
+        tensor, all at *level*. Default ``None`` (keep the shape).
     extra_fields : tuple[str, ...], optional
         Companion fields the signal writes beside *field*, each in the
-        ``teacher_*`` namespace. Default ``()``.
+        ``teacher_*`` namespace and produced by *normalize*. Default ``()``.
 
     Raises
     ------
     ValueError
         If *field* or a companion field falls outside the ``teacher_*``
-        namespace, or *level* is neither ``"node"`` nor ``"system"``.
+        namespace, if *level* is neither ``"node"`` nor ``"system"``, or if a
+        signal read from a model output declares companion fields without a
+        *normalize* to produce them.
 
     Examples
     --------
@@ -114,7 +124,7 @@ class TeacherSignal:
     model_output: str | None
     field: str
     level: SignalLevel
-    normalize: Callable[[torch.Tensor, Batch], torch.Tensor] | None = None
+    normalize: SignalNormalizer | None = None
     extra_fields: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -134,6 +144,16 @@ class TeacherSignal:
             raise ValueError(
                 f"Teacher signal {self.name!r} must be attached at 'node' or "
                 f"'system'; got level {self.level!r}."
+            )
+        if (
+            self.extra_fields
+            and self.model_output is not None
+            and self.normalize is None
+        ):
+            raise ValueError(
+                f"Teacher signal {self.name!r} declares companion fields "
+                f"{list(self.extra_fields)!r} that nothing produces; give it a "
+                "normalize returning a mapping over its fields."
             )
 
     @property
@@ -545,8 +565,9 @@ def _isolated_fields(batch: Batch) -> Iterator[None]:
     reference — no tensor is copied, so the cost is one dictionary per level —
     and afterwards dropping what appeared and putting back what was replaced.
     A field the teacher deleted outright is re-added at the level it came
-    from. A tensor a teacher edits in place is not recovered; nothing short
-    of cloning the batch could.
+    from. A level the teacher detached wholesale, such as ``edges``, is
+    re-attached from the same snapshot first. A tensor a teacher edits in
+    place is not recovered; nothing short of cloning the batch could.
 
     Parameters
     ----------
@@ -564,10 +585,18 @@ def _isolated_fields(batch: Batch) -> Iterator[None]:
         )
         for level, fields in batch.level_keys.items()
     }
+    groups = {
+        level: batch._storage.groups.get(level)
+        for level in levels
+        if level not in _COUNT_LEVELS
+    }
     shadows = _field_shadows(batch)
     try:
         yield
     finally:
+        for level, group in groups.items():
+            if group is not None and level not in batch._storage.groups:
+                batch.set_level(level, group)
         current = batch.level_keys
         for level in current:
             if level not in levels:
@@ -606,6 +635,13 @@ class TeacherScorer(Protocol):
     as writing every field that signal populates, so one that writes fewer,
     or one whose signals are its own, must declare ``label_fields``. The
     protocol will not grow required members.
+
+    Label precision is the scorer's decision. A consumer calls :meth:`label`
+    inside the ambient autocast region, meaning whatever autocast state is in
+    force at the call site, and opens no region of its own. An implementation
+    used in a mixed-precision workflow therefore sets its own autocast mode.
+    :class:`InProcessTeacherScorer` disables autocast unless its ``autocast``
+    setting says otherwise.
 
     See Also
     --------
@@ -670,9 +706,10 @@ class InProcessTeacherScorer:
     ``active_outputs`` to the outputs the requested signals need, builds and
     afterwards restores whatever neighbor list the teacher requires — or, on
     request, consumes the one the batch already carries — picks the grad mode
-    the teacher's autograd outputs need, detaches every result, and normalizes
-    each signal to its canonical shape. The batch is left exactly as it was
-    found, so a scorer can be called mid-training on a live batch.
+    the teacher's autograd outputs need, runs the pass under its ``autocast``
+    setting, detaches every result, and normalizes each signal to its
+    canonical shape. The batch is left exactly as it was found, so a scorer
+    can be called mid-training on a live batch.
 
     Each signal is a :class:`TeacherSignal` mapping one teacher output to one
     batch field at one level. The built-in ones (:data:`BUILTIN_SIGNALS`) are
@@ -711,6 +748,20 @@ class InProcessTeacherScorer:
         raises rather than falling back. Whether the list holds each pair once
         or twice is not recorded on the batch, so a reused list must match the
         teacher's ``half_list`` by construction. Default ``"rebuild"``.
+    autocast : bool | torch.dtype | None, optional
+        Autocast mode for the scoring pass. The ambient autocast region is
+        whatever autocast state is in force where :meth:`label` is called,
+        such as a caller's AMP region. ``False`` disables autocast for the
+        pass, so an ambient region never reaches the teacher. ``None`` leaves
+        the ambient state untouched, so the teacher runs under the caller's
+        region when one is open. ``True`` or a floating-point ``torch.dtype``
+        enables autocast for the pass, whether or not an ambient region is
+        open: a dtype sets the autocast dtype, and ``True`` keeps the autocast
+        dtype in force for the device, which is the device default when no
+        region is open and the ambient region's dtype when one is. *dtype*
+        applies after this setting: the teacher produces each label at the
+        precision this mode gives, and *dtype*, when set, then casts it.
+        Default ``False``.
 
     Raises
     ------
@@ -720,7 +771,8 @@ class InProcessTeacherScorer:
         model output the teacher does not declare, gives a custom spec no
         model output, requests ``"embeddings"`` from a teacher that publishes
         no node-embedding shape, *dtype* is not a floating-point dtype,
-        *neighbor_list* is neither ``"rebuild"`` nor ``"reuse"``, or *teacher*
+        *neighbor_list* is neither ``"rebuild"`` nor ``"reuse"``, *autocast*
+        is neither ``None``, a bool, nor a floating-point dtype, or *teacher*
         is a composition planning more than one neighbor-list source.
 
     Examples
@@ -757,6 +809,15 @@ class InProcessTeacherScorer:
     ``requires_grad`` on ``positions`` and the teacher's autograd inputs is
     restored after each call, as is every field a composed teacher writes onto
     the batch to wire one stage into the next.
+
+    Label precision is the scorer's decision. Every consumer in the package
+    calls :meth:`label` inside the ambient autocast region and opens none of
+    its own, so the *autocast* setting decides which autocast mode the teacher
+    runs under. The default disables autocast, so a label taken during a
+    mixed-precision training or generation phase equals the one
+    :func:`~nvalchemi.training.distillation.label_dataset` writes offline.
+    Inside a caller's region, ``True`` and a dtype differ: ``True`` enables
+    autocast at the region's dtype, whereas a dtype pins the pass to itself.
     """
 
     def __init__(
@@ -766,6 +827,7 @@ class InProcessTeacherScorer:
         *,
         dtype: torch.dtype | None = None,
         neighbor_list: NeighborListPolicy = "rebuild",
+        autocast: bool | torch.dtype | None = False,
     ) -> None:
         """Validate the requested signals against the teacher's declared outputs."""
         requested = list(signals)
@@ -822,6 +884,16 @@ class InProcessTeacherScorer:
             raise ValueError(
                 f"neighbor_list must be 'rebuild' or 'reuse'; got {neighbor_list!r}."
             )
+        if not (
+            autocast is None
+            or isinstance(autocast, bool)
+            or (isinstance(autocast, torch.dtype) and autocast.is_floating_point)
+        ):
+            raise ValueError(
+                "autocast must be False to disable autocast for the scoring pass, "
+                "None to leave the caller's autocast state in force, or True or a "
+                f"floating-point dtype to enable it; got {autocast!r}."
+            )
         planned = _planned_neighbor_sources(teacher)
         if planned > 1:
             raise ValueError(
@@ -837,6 +909,7 @@ class InProcessTeacherScorer:
         self.label_fields = signal_fields(specs.values())
         self.dtype = dtype
         self.neighbor_list = neighbor_list
+        self.autocast = autocast
         self._required_outputs = required
         evaluate = getattr(teacher, "eval", None)
         if callable(evaluate):
@@ -875,6 +948,7 @@ class InProcessTeacherScorer:
                 evaluating(self.teacher)
                 if isinstance(self.teacher, torch.nn.Module)
                 else nullcontext(),
+                self._autocast_scope(batch.device.type),
                 _isolated_neighbors(batch, config.neighbor_config, self.neighbor_list),
                 _isolated_fields(batch),
             ):
@@ -885,6 +959,14 @@ class InProcessTeacherScorer:
             self.teacher.set_config("active_outputs", previous_active)
             _restore_grad_flags(batch, grad_flags)
         return labels
+
+    def _autocast_scope(self, device_type: str) -> AbstractContextManager[Any]:
+        """Return the autocast context :attr:`autocast` selects for *device_type*."""
+        if self.autocast is None:
+            return nullcontext()
+        if isinstance(self.autocast, torch.dtype):
+            return torch.autocast(device_type=device_type, dtype=self.autocast)
+        return torch.autocast(device_type=device_type, enabled=self.autocast)
 
     def _forward_labels(self, batch: Batch) -> TeacherLabels:
         """Run the teacher forward pass and collect its detached signals."""
@@ -906,7 +988,7 @@ class InProcessTeacherScorer:
                     f"Teacher returned no {spec.model_output!r} output for the "
                     f"{spec.name!r} signal."
                 )
-            labels[spec.field] = (self._finalize(spec, value, batch), spec.level)
+            labels.update(self._finalize(spec, value, batch))
         del outputs
         return labels
 
@@ -942,8 +1024,7 @@ class InProcessTeacherScorer:
                     f"the batch; got {sorted(key for key in _EMBEDDING_KEYS if key in batch)!r}."
                 )
             spec = self.signal_specs["embeddings"]
-            value = self._finalize(spec, batch["node_embeddings"].clone(), batch)
-            return {spec.field: (value, spec.level)}
+            return self._finalize(spec, batch["node_embeddings"].clone(), batch)
         finally:
             for key in _EMBEDDING_KEYS:
                 if key in batch:
@@ -955,11 +1036,38 @@ class InProcessTeacherScorer:
 
     def _finalize(
         self, spec: TeacherSignal, value: torch.Tensor, batch: Batch
-    ) -> torch.Tensor:
-        """Detach *value*, normalize it to *spec*'s canonical shape, and cast it."""
+    ) -> TeacherLabels:
+        """Normalize *value* and spread it, detached and cast, over *spec*'s fields.
+
+        Raises
+        ------
+        RuntimeError
+            If ``normalize`` returns a mapping whose keys differ from
+            :attr:`TeacherSignal.fields`, or returns a single tensor for a
+            signal that declares companion fields.
+        """
         value = value.detach()
-        if spec.normalize is not None:
-            value = spec.normalize(value, batch)
-        if self.dtype is not None and value.is_floating_point():
-            value = value.to(self.dtype)
-        return value
+        produced = value if spec.normalize is None else spec.normalize(value, batch)
+        if isinstance(produced, Mapping):
+            if set(produced) != set(spec.fields):
+                raise RuntimeError(
+                    f"Teacher signal {spec.name!r} normalize must produce exactly "
+                    f"{list(spec.fields)!r}; got {sorted(produced)!r}."
+                )
+        elif spec.extra_fields:
+            raise RuntimeError(
+                f"Teacher signal {spec.name!r} normalize returned one tensor, but "
+                f"the signal declares companion fields {list(spec.extra_fields)!r}; "
+                "return a mapping over its fields."
+            )
+        else:
+            produced = {spec.field: produced}
+        return {
+            field: (
+                tensor.detach().to(self.dtype)
+                if self.dtype is not None and tensor.is_floating_point()
+                else tensor.detach(),
+                spec.level,
+            )
+            for field, tensor in produced.items()
+        }

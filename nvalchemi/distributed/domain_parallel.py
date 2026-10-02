@@ -685,12 +685,7 @@ class DomainParallel(BaseDynamics):
 
     def _active_graph_mask(self, batch: Batch) -> Bool[torch.Tensor, "B"] | None:  # noqa: F722, F821
         """Return the active-graph snapshot for a domain-parallel step."""
-        status = getattr(batch, "status", None)
-        if status is None:
-            return None
-        if status.dim() == 2:
-            status = status.squeeze(-1)
-        return status[: batch.num_graphs] < self._dynamics.exit_status
+        return self.active_graph_mask(batch, self._dynamics.exit_status)
 
     def _build_context(
         self,
