@@ -1530,6 +1530,20 @@ def _level_mask(
     return graph_mask
 
 
+def _per_graph_values(
+    batch: Batch, group_name: str, tensor: torch.Tensor
+) -> list[torch.Tensor]:
+    """Split a flat per-row tensor into one chunk per graph, for ``add_key``.
+
+    Eager-only (see callers): the ``.tolist()`` forces a host sync that
+    would break under ``torch.compile``.
+    """
+    if group_name == "system":
+        return list(tensor.split(1))
+    counts = batch._storage.groups[group_name].segment_lengths.tolist()
+    return list(tensor.split(counts))
+
+
 class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     """Base class for all dynamics simulations.
 
@@ -2570,10 +2584,20 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             if key not in self._OUTPUT_KEY_TO_BATCH_ATTR and tensor is not None:
                 target = getattr(batch, key, None)
                 if target is None:
-                    # setattr defaults an unregistered key to "system"
-                    # regardless of its real length; infer it instead.
+                    # Direct storage writes bypass the schema, leaving the
+                    # key invisible to schema-driven consumers (e.g. the
+                    # Zarr writer enumerates attr_map).  add_key is the
+                    # public route model wrappers already use for extra
+                    # outputs (see neb_force.py's set_batch_field), and
+                    # writing the real values rather than empty_like means
+                    # masked-out rows hold this priming compute's values
+                    # instead of uninitialized memory.
                     group_name = self._infer_output_group(batch, key, tensor)
-                    batch._storage.groups[group_name][key] = torch.empty_like(tensor)
+                    batch.add_key(
+                        key,
+                        _per_graph_values(batch, group_name, tensor),
+                        level=group_name,
+                    )
                     target = getattr(batch, key)
                 self._publish_model_output(
                     batch, key, target, tensor, active_graph_mask
