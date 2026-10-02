@@ -22,13 +22,16 @@ make_batch``) instead of being redefined per module.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 from tensordict import TensorDict
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models.gen import DemoDiffusionModel, DemoGANModel
+
+if TYPE_CHECKING:
+    from nvalchemi.training import BaseSpec
 
 
 def make_atomic_data(num_atoms: int = 3) -> AtomicData:
@@ -259,6 +262,29 @@ class DemoGANGenerate:
         sample = TensorDict({"x1": self.model.decode(z)}, batch_size=[n])
         return self.model.to_batch(sample, inputs)
 
+    def to_spec(self) -> BaseSpec:
+        """Capture this procedure's construction as a spec.
+
+        Returns
+        -------
+        BaseSpec
+            A spec of this sampler's class with the model captured as a
+            nested :func:`~nvalchemi.training.create_model_spec` spec.
+            Weights are never captured (they live in the checkpoint
+            machinery).
+        """
+        from nvalchemi.training import create_model_spec
+
+        return create_model_spec(
+            type(self),
+            model=create_model_spec(
+                type(self.model),
+                num_atoms=self.model.num_atoms,
+                latent_dim=self.model.latent_dim,
+                hidden=self.model.hidden,
+            ),
+        )
+
 
 class DemoDiffusionGenerate:
     """Model-owning diffusion sampler: a small self-contained EDM Euler loop.
@@ -383,3 +409,28 @@ class DemoDiffusionGenerate:
             x = x + (s_next - s_cur) * drift
         sample = TensorDict({"x1": x}, batch_size=[n])
         return self.model.to_batch(sample, inputs)
+
+    def to_spec(self) -> BaseSpec:
+        """Capture this procedure's construction as a spec.
+
+        Returns
+        -------
+        BaseSpec
+            A spec of this sampler's class with the model captured as a
+            nested :func:`~nvalchemi.training.create_model_spec` spec and
+            the constructor-bound sampler settings recorded. Weights are
+            never captured (they live in the checkpoint machinery).
+        """
+        from nvalchemi.training import create_model_spec
+
+        return create_model_spec(
+            type(self),
+            model=create_model_spec(
+                type(self.model),
+                num_atoms=self.model.num_atoms,
+                hidden=self.model.hidden,
+            ),
+            num_steps=self.num_steps,
+            sigma_max=self.sigma_max,
+            sigma_min=self.sigma_min,
+        )

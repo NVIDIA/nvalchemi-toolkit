@@ -25,7 +25,9 @@
   CUDA stream, RNG, and compile. Sequential composition via
   `gen_a | gen_b` (`GenerationPipeline`), including dynamics engines
   driven through their own `run()` loop, with per-call options addressed
-  per stage via `stage_kwargs`.
+  per stage via `stage_kwargs`. Generators and pipelines round-trip
+  through pydantic (`model_dump_json` / `model_validate_json`); weights
+  stay in the checkpoint machinery.
 - Demo generative models (`nvalchemi.models.gen.demo`): `DemoGANModel` and
   `DemoDiffusionModel` placeholders.
 
