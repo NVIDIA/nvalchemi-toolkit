@@ -28,7 +28,6 @@ import torch.distributed as dist
 from pydantic import PrivateAttr
 from torch.distributed import ProcessGroup
 
-from nvalchemi._device import normalize_device
 from nvalchemi.csp._packing_transport import (
     _assemble_result,
     _describe_native,
@@ -45,6 +44,7 @@ from nvalchemi.csp.packer.protocol import CrystalPacker, PackingContext
 from nvalchemi.csp.packer.result import PackingReport, PackingResult
 from nvalchemi.data import Batch
 from nvalchemi.distributed import ProcessGroupContext, collective_error_sync
+from nvalchemi.gen._device import normalize_device
 from nvalchemi.gen.generator import AtomisticGenerator, _PreparedGeneration
 
 __all__ = ["CSPGenerator", "CSP_OUTPUT_FIELDS"]
