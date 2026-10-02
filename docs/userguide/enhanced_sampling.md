@@ -212,6 +212,12 @@ discarded the accumulated bias is no longer the integral of everything
 deposited, the well-tempered convergence argument no longer applies, and
 `free_energy()` refuses rather than returning a number that looks fine.
 
+`max_hills` must be at least the walker count under `fifo`. One deposition
+writes one hill per walker, so a smaller ring would wrap *inside* a single
+deposition and the later walkers would overwrite the earlier ones — hills of
+the same age, not the oldest, which is the one thing the policy promises to
+discard. That is refused rather than silently applied.
+
 ### Multi-walker history
 
 `history` decides which hills a given walker feels.

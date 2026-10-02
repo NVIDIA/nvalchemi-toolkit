@@ -448,6 +448,19 @@
 
 ### Fixed
 
+- **A FIFO hill ring smaller than one deposition overwrote itself** — one
+  deposition writes one hill per walker, so with more walkers than
+  `max_hills` the ring indices repeat *within* a single call —
+  `(0, 1, 2, 0, 1)` for five walkers and three slots. The later walkers
+  overwrote the earlier ones at the same instant, which is not what
+  `storage="fifo"` promises: it discards the *oldest* hill, and here the
+  hills lost were the same age as the ones kept. `hills_written` counted all
+  five, so the ring reported history it had never stored.
+  `storage="preallocated"` already raised in this situation and
+  `storage="grow"` already resized; only the ring had no check. It now
+  refuses a capacity below the walker count, and still accepts a deposition
+  that exactly fills the ring.
+
 - **A non-positive or infinite temperature corrupted the integrator** —
   `apply_per_system_params` is a public rebinding API that a custom swap or
   an annealing schedule supplies values to, and it checked only that the

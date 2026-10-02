@@ -675,6 +675,43 @@ class TestStoragePolicies:
         assert centers == [6.0, 7.0]
         assert int(bias.hills_written) == 7
 
+    def test_fifo_refuses_a_ring_smaller_than_one_deposition(self, device: str) -> None:
+        """Eviction has to be of the *oldest* hill, which is what FIFO means.
+
+        One deposition writes one hill per walker. With more walkers than
+        slots the ring indices repeat inside a single call — ``(0,1,2,0,1)``
+        for five walkers and three slots — so the later walkers overwrite the
+        earlier ones at the same instant, and ``hills_written`` counts hills
+        the table never held.
+        """
+        bias = _metad(device, max_hills=3, storage="fifo", sigma=0.2)
+        frame = _pair_batch([1.0, 2.0, 3.0, 4.0, 5.0], device)
+        with pytest.raises(RuntimeError, match="cannot hold a single deposition"):
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
+
+    def test_fifo_accepts_a_deposition_exactly_filling_the_ring(
+        self, device: str
+    ) -> None:
+        """The guard must not be stricter than the contract it enforces."""
+        bias = _metad(device, max_hills=3, storage="fifo", sigma=0.2)
+        frame = _pair_batch([1.0, 2.0, 3.0], device)
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
+        centers = sorted(round(float(c), 3) for c in bias.hill_centers.reshape(-1))
+        assert centers == [1.0, 2.0, 3.0]
+        assert int(bias.hills_written) == 3
+
+    def test_a_multi_walker_fifo_ring_still_evicts_the_oldest(
+        self, device: str
+    ) -> None:
+        """Two walkers into a four-slot ring: two depositions fill it, the
+        third evicts the first."""
+        bias = _metad(device, max_hills=4, storage="fifo", sigma=0.2)
+        for pair in ([1.0, 2.0], [3.0, 4.0], [5.0, 6.0]):
+            frame = _pair_batch(pair, device)
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
+        centers = sorted(round(float(c), 3) for c in bias.hill_centers.reshape(-1))
+        assert centers == [3.0, 4.0, 5.0, 6.0]
+
     def test_fifo_refuses_free_energy(self, device: str) -> None:
         """Discarded hills invalidate the well-tempered relation."""
         bias = _metad(device, max_hills=2, storage="fifo")

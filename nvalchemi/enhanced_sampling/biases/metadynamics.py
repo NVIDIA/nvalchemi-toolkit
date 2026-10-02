@@ -576,13 +576,30 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
             If ``preallocated`` capacity is exhausted.  Raising rather than
             evicting is the point of the policy: silently dropping hills
             would change the physics of a converging run without saying so.
+            Also if a ``fifo`` ring is smaller than one deposition, where the
+            overwriting would be within the deposition rather than of the
+            oldest hill.
         """
         written = int(self.hills_written)
         capacity = self.capacity
 
         if self.storage == "fifo":
+            if count > capacity:
+                raise RuntimeError(
+                    f"WellTemperedMetaDynamicsBias {self.name!r}: one "
+                    f"deposition writes {count} hill(s) — one per walker — "
+                    f"but max_hills is {capacity}. A ring that cannot hold a "
+                    "single deposition does not discard the *oldest* hill, "
+                    "which is what storage='fifo' means: it would silently "
+                    "drop hills deposited at the same instant, keeping "
+                    f"whichever {capacity} of the {count} walkers happened to "
+                    "be written last. Raise max_hills to at least the walker "
+                    "count."
+                )
             # Ring buffer: hill j always lands in slot j % capacity, so the
             # oldest is the one overwritten however many times it has wrapped.
+            # count <= capacity, checked above, so the slots within one
+            # deposition are distinct and none overwrites another.
             return (
                 torch.arange(count, device=self.hill_heights.device) + written
             ) % capacity
