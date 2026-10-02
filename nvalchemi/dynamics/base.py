@@ -1530,20 +1530,6 @@ def _level_mask(
     return graph_mask
 
 
-def _per_graph_values(
-    batch: Batch, group_name: str, tensor: torch.Tensor
-) -> list[torch.Tensor]:
-    """Split a flat per-row tensor into one chunk per graph, for ``add_key``.
-
-    Eager-only (see callers): the ``.tolist()`` forces a host sync that
-    would break under ``torch.compile``.
-    """
-    if group_name == "system":
-        return list(tensor.split(1))
-    counts = batch._storage.groups[group_name].segment_lengths.tolist()
-    return list(tensor.split(counts))
-
-
 class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     """Base class for all dynamics simulations.
 
@@ -2594,11 +2580,16 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 if target is None:
                     # add_key, not a raw storage write -- see docstring.
                     group_name = self._infer_output_group(batch, key, tensor)
-                    batch.add_key(
-                        key,
-                        _per_graph_values(batch, group_name, tensor),
-                        level=group_name,
-                    )
+                    if group_name == "system":
+                        values = list(tensor.split(1))
+                    else:
+                        # Eager-only (see docstring): .tolist() forces a
+                        # host sync that would break under torch.compile.
+                        counts = batch._storage.groups[
+                            group_name
+                        ].segment_lengths.tolist()
+                        values = list(tensor.split(counts))
+                    batch.add_key(key, values, level=group_name)
                     target = getattr(batch, key)
                 self._publish_model_output(
                     batch, key, target, tensor, active_graph_mask
