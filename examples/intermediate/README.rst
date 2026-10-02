@@ -37,6 +37,3 @@ reference energies, and fine-tune ``medium-mpa-0`` with LoRA adapters.
 **09 — Offline Distillation**: Labeling a dataset with a frozen foundation
 teacher, streaming the labeled Zarr store, and distilling energy, force, and
 per-atom energy signals into a student with DistillationStrategy.
-
-**10 — Variable-Cell L-BFGS**: LBFGSVariableCell and FIRE2VariableCell with
-AlignCellHook relaxing strained, sheared FCC argon to its equilibrium lattice.
