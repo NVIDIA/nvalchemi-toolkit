@@ -495,10 +495,12 @@ class TestCellForceScale:
         assert _one_cell_step(cls, cell_force_scale=10.0) < _one_cell_step(cls)
 
     @pytest.mark.parametrize("cls", [FIRE2VariableCell, LBFGSVariableCell])
-    @pytest.mark.parametrize("scale", [0.0, -1.0])
-    def test_non_positive_rejected(self, cls, scale):
+    @pytest.mark.parametrize(
+        "scale", [0.0, -1.0, float("nan"), float("inf"), float("-inf")]
+    )
+    def test_non_positive_or_non_finite_rejected(self, cls, scale):
         kwargs = {"dt": 0.05} if cls is FIRE2VariableCell else {}
-        with pytest.raises(ValueError, match="positive"):
+        with pytest.raises(ValueError, match="finite and positive"):
             cls(model=_make_model(), cell_force_scale=scale, **kwargs)
 
     def test_positional_arguments_unchanged(self):

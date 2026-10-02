@@ -46,6 +46,7 @@ the history.  Positions must not be edited between steps (e.g. by
 
 from __future__ import annotations
 
+import math
 import warnings
 from typing import TYPE_CHECKING, Any
 
@@ -502,9 +503,9 @@ class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
         cell_force_scale: float = 1.0,
         **kwargs: Any,
     ) -> None:
-        if cell_force_scale <= 0:
+        if not math.isfinite(cell_force_scale) or cell_force_scale <= 0:
             raise ValueError(
-                f"cell_force_scale must be positive; got {cell_force_scale}"
+                f"cell_force_scale must be finite and positive; got {cell_force_scale}"
             )
         super().__init__(
             model=model,

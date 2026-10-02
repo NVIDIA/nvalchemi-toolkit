@@ -43,6 +43,7 @@ For :class:`FIRE2VariableCell`: additionally ``cell_velocities [M,3,3]``.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -301,9 +302,9 @@ class FIRE2VariableCell(BaseDynamics):
         cell_force_scale: float = 1.0,
         **kwargs: Any,
     ) -> None:
-        if cell_force_scale <= 0:
+        if not math.isfinite(cell_force_scale) or cell_force_scale <= 0:
             raise ValueError(
-                f"cell_force_scale must be positive; got {cell_force_scale}"
+                f"cell_force_scale must be finite and positive; got {cell_force_scale}"
             )
         super().__init__(
             model=model,
