@@ -16,7 +16,15 @@
 PyTorch bindings for the L-BFGS optimizer.
 
 Delegates to :mod:`nvalchemiops.torch.lbfgs`, which registers its own
-``torch.library`` custom ops.
+``torch.library`` custom ops (``nvalchemiops::lbfgs_step`` and friends
+self-register with their ``mutates_args``) — there is nothing to
+re-register here, the same pass-through shape :mod:`.fire`'s
+``fire2_step_coord``/``fire2_step_coord_cell`` use for FIRE2.  What this
+module earns its place for instead: it is the one place in the toolkit
+that imports from ``nvalchemiops.torch.lbfgs``, so it is where the
+docstrings live, where :class:`~nvalchemiops.torch.lbfgs.LBFGSState` and
+:class:`~nvalchemiops.torch.lbfgs.LBFGSCellState` get re-exported, and
+the patch point the tests use.
 
 Functions
 ---------
