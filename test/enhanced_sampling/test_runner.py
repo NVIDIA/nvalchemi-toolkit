@@ -493,6 +493,72 @@ class TestForceStepOrdering:
 # ===========================================================================
 
 
+class TestUnapplicableBiasOutputs:
+    """An output no consumer can apply must fail loudly, never silently.
+
+    The sibling of a missing destination buffer, arrived at from the other
+    side: there the field exists and the buffer does not, here the field is
+    one the framework has no buffer *for*.  Both end the same way if
+    unchecked — the bias computes a contribution, the run carries on without
+    it, and nothing says so.
+    """
+
+    def test_an_unapplicable_output_is_refused_by_bias_name(self, device: str) -> None:
+        class _HessianBias(ConservativeBias):
+            """Reports a hessian — a documented ModelOutputs key for a forward
+            pass, and not something that can be added into a batch."""
+
+            def __init__(self) -> None:
+                super().__init__(name="hb", compute_stress=False)
+
+            def energy(self, current: Batch) -> Tensor:
+                return (
+                    current.positions[:, 0]
+                    .sum()
+                    .reshape(1, 1)
+                    .expand(current.num_graphs, 1)
+                )
+
+            def forward(self, data: Batch, **kwargs: object) -> ModelOutputs:
+                outputs = super().forward(data, **kwargs)
+                outputs["hessian"] = torch.zeros(
+                    data.num_nodes * 3, data.num_nodes * 3, device=data.positions.device
+                )
+                return outputs
+
+        batch = _make_batch(n_graphs=1, device=device)
+        runner, model = _sampling(device, {"hb": _HessianBias()})
+        with pytest.raises(ValueError, match=r"_HessianBias 'hb'.*cannot be applied"):
+            runner.run(batch, model, n_steps=1)
+
+    def test_the_same_quantity_is_fine_when_reported(self, device: str) -> None:
+        """``diagnostics/`` is the documented way to carry one through."""
+
+        class _ReportingBias(ConservativeBias):
+            def __init__(self) -> None:
+                super().__init__(name="rb", compute_stress=False)
+
+            def energy(self, current: Batch) -> Tensor:
+                return (
+                    current.positions[:, 0]
+                    .sum()
+                    .reshape(1, 1)
+                    .expand(current.num_graphs, 1)
+                )
+
+            def forward(self, data: Batch, **kwargs: object) -> ModelOutputs:
+                outputs = super().forward(data, **kwargs)
+                outputs[f"{DIAGNOSTIC_PREFIX}hessian_trace"] = torch.zeros(
+                    data.num_graphs, device=data.positions.device
+                )
+                return outputs
+
+        batch = _make_batch(n_graphs=1, device=device)
+        runner, model = _sampling(device, {"rb": _ReportingBias()})
+        runner.run(batch, model, n_steps=1)
+        assert "bias/rb/hessian_trace" in runner.last_outputs
+
+
 class TestMissingDestinationBuffers:
     """A bias output with nowhere to go must fail loudly, never silently."""
 

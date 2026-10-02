@@ -4,6 +4,19 @@
 
 ### Added
 
+- `validate_contribution` now refuses a contribution carrying an output no
+  consumer can apply, and `APPLIED_OUTPUT_KEYS` is the single definition of
+  that set. `aggregate_contributions` keeps only `energy`, `forces`, `stress`
+  and `virial`, so a bias returning `hessian` or `dipole` — both documented
+  `ModelOutputs` keys for a full forward pass — had its contribution dropped
+  between the producer and the buffer, with the run continuing as though it
+  had been applied and nothing raised. The applied set is closed by design
+  (each member needs a destination buffer, a reshape rule and a combination
+  rule); it is now closed by enforcement too, with the error naming the key,
+  the producer, and both ways out — report it as `diagnostics/<key>`, or add
+  the output to the framework. The aggregation filter reads the same constant,
+  so the check and the filter cannot drift.
+
 - `PairSwapHook` and `BaseDynamics.apply_per_system_params()` — pairwise swaps
   of per-system state, with the physics taken out. Strip the thermodynamics
   from replica exchange and the mechanism is: propose pairs, evaluate an

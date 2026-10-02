@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     from nvalchemi.data import Batch
 
 __all__ = [
+    "APPLIED_OUTPUT_KEYS",
     "DIAGNOSTIC_PREFIX",
     "STATE_VERSION_KEY",
     "aggregate_contributions",
@@ -83,6 +84,16 @@ DIAGNOSTIC_PREFIX = "diagnostics/"
 #: Key holding integer state-revision IDs, shape ``[B]``, for producers whose
 #: internal state evolves during a run.
 STATE_VERSION_KEY = "state_version"
+
+#: Physical outputs an additive *contribution* may carry, and the whole of
+#: them.  A closed set by design, not by omission: an applied output needs a
+#: destination buffer, a per-graph or per-atom reshape rule, a combination
+#: rule, and a unit convention, so an open payload would be open only up to
+#: the first key a consumer could not apply.  ``ModelOutputs`` itself is
+#: wider — a full forward pass may report ``hessian`` or ``dipole`` — but a
+#: contribution is narrower than a forward pass precisely because it gets
+#: added into a buffer.
+APPLIED_OUTPUT_KEYS = ("energy", "forces", "stress", "virial")
 
 _INTEGER_DTYPES = (
     torch.int8,
@@ -449,13 +460,20 @@ def validate_contribution(
 
     Checks, in order:
 
-    1. ``stress`` and ``virial`` are mutually exclusive.  They are the same
+    1. Every key is one a consumer can act on: a member of
+       :data:`APPLIED_OUTPUT_KEYS`, :data:`STATE_VERSION_KEY`, or something
+       under :data:`DIAGNOSTIC_PREFIX`.  Anything else is refused rather than
+       dropped — :func:`aggregate_contributions` keeps only the applied keys,
+       so an unrecognised physical output would otherwise vanish between the
+       producer and the buffer with the run carrying on as though it had been
+       applied.
+    2. ``stress`` and ``virial`` are mutually exclusive.  They are the same
        physics in two conventions and converting between them needs the cell
        volume, so carrying both invites two answers that can disagree.
-    2. Every tensor is detached (``requires_grad=False`` and
+    3. Every tensor is detached (``requires_grad=False`` and
        ``grad_fn is None``).  A live graph reaching a batch buffer, a retained
        history, or a checkpoint keeps the whole forward graph alive.
-    3. Shapes match the documented conventions, for the keys that have one:
+    4. Shapes match the documented conventions, for the keys that have one:
 
        * ``energy`` — ndim 2, shape ``[B, 1]``
        * ``forces`` — ndim 2, shape ``[N, 3]``
@@ -464,8 +482,8 @@ def validate_contribution(
 
        Keys under :data:`DIAGNOSTIC_PREFIX` have no shape contract and are
        skipped here; they are reported, never applied.
-    4. All per-graph fields agree on the leading dimension ``B``.
-    5. Every floating-point tensor, diagnostics included, is finite.
+    5. All per-graph fields agree on the leading dimension ``B``.
+    6. Every floating-point tensor, diagnostics included, is finite.
 
     Parameters
     ----------
@@ -481,6 +499,25 @@ def validate_contribution(
     ValueError
         On the first violation, naming the key and what is wrong with it.
     """
+    unsupported = sorted(
+        key
+        for key in outputs
+        if key not in APPLIED_OUTPUT_KEYS
+        and key != STATE_VERSION_KEY
+        and not key.startswith(DIAGNOSTIC_PREFIX)
+    )
+    if unsupported:
+        raise ValueError(
+            f"{source}: {unsupported} cannot be applied to a batch. A "
+            f"contribution carries {list(APPLIED_OUTPUT_KEYS)}, "
+            f"{STATE_VERSION_KEY!r}, and {DIAGNOSTIC_PREFIX}<key> entries — "
+            "the applied set is closed because each member needs a "
+            "destination buffer, a reshape rule and a combination rule. "
+            f"Report it instead as '{DIAGNOSTIC_PREFIX}<key>', which is "
+            "carried through and never summed, or add the output to the "
+            "framework so a consumer knows where to put it."
+        )
+
     if outputs.get("stress") is not None and outputs.get("virial") is not None:
         raise ValueError(
             f"{source}: provide either 'stress' or 'virial', not both. "
@@ -800,11 +837,11 @@ def aggregate_contributions(contributions: list[ModelOutputs]) -> ModelOutputs:
             OrderedDict(
                 (key, value)
                 for key, value in contribution.items()
-                if key in ("energy", "forces", "stress", "virial")
+                if key in APPLIED_OUTPUT_KEYS
             )
             for contribution in contributions
         ),
-        additive_keys={"energy", "forces", "stress", "virial"},
+        additive_keys=set(APPLIED_OUTPUT_KEYS),
     )
 
     # Only physical and diagnostic keys are copied forward, which is how

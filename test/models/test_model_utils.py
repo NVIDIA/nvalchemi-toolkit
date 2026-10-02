@@ -38,7 +38,9 @@ from torch import Tensor
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.models._utils import (
+    APPLIED_OUTPUT_KEYS,
     DIAGNOSTIC_PREFIX,
+    STATE_VERSION_KEY,
     aggregate_contributions,
     isolated_energy_derivatives,
     validate_contribution,
@@ -55,6 +57,56 @@ class TestValidateContribution:
 
     def test_empty_mapping_accepted(self) -> None:
         validate_contribution(_outputs())
+
+    @pytest.mark.parametrize("key", ["hessian", "dipole", "charges"])
+    def test_an_output_nothing_can_apply_is_refused(self, key: str) -> None:
+        """Dropping it silently is the failure this check exists to stop.
+
+        ``aggregate_contributions`` keeps only the applied keys, so an
+        unrecognised physical output would otherwise vanish between the
+        producer and the buffer with the run carrying on as though it had been
+        applied. ``hessian`` and ``dipole`` are the sharp cases: both are
+        documented ``ModelOutputs`` keys for a full forward pass, and neither
+        is something a consumer can add into a batch.
+        """
+        with pytest.raises(ValueError, match=f"\\['{key}'\\] cannot be applied"):
+            validate_contribution(_outputs(**{key: torch.zeros(2, 3)}))
+
+    def test_the_refusal_lists_every_offender_at_once(self) -> None:
+        with pytest.raises(ValueError, match=r"\['dipole', 'hessian'\]"):
+            validate_contribution(
+                _outputs(hessian=torch.zeros(2, 2), dipole=torch.zeros(1, 3))
+            )
+
+    def test_the_refusal_names_both_ways_out(self) -> None:
+        """Report it, or extend the framework — not "try a different key"."""
+        with pytest.raises(ValueError) as excinfo:
+            validate_contribution(_outputs(hessian=torch.zeros(2, 2)))
+        message = str(excinfo.value)
+        assert DIAGNOSTIC_PREFIX in message
+        assert "add the output to the framework" in message
+
+    @pytest.mark.parametrize("key", [*APPLIED_OUTPUT_KEYS, STATE_VERSION_KEY])
+    def test_every_supported_key_is_accepted(self, key: str) -> None:
+        """The check must not be stricter than the set it is enforcing."""
+        value = {
+            "energy": torch.zeros(1, 1),
+            "forces": torch.zeros(3, 3),
+            "stress": torch.zeros(1, 3, 3),
+            "virial": torch.zeros(1, 3, 3),
+            STATE_VERSION_KEY: torch.zeros(1, dtype=torch.int64),
+        }[key]
+        validate_contribution(_outputs(**{key: value}))
+
+    def test_a_none_valued_unsupported_key_is_still_refused(self) -> None:
+        """A key that is present is a claim, whether or not it carries data."""
+        with pytest.raises(ValueError, match="cannot be applied"):
+            validate_contribution(_outputs(hessian=None))
+
+    def test_a_reported_namesake_is_fine(self) -> None:
+        validate_contribution(
+            _outputs(**{f"{DIAGNOSTIC_PREFIX}hessian": torch.zeros(9, 9)})
+        )
 
     def test_detached_tensors_accepted(self) -> None:
         validate_contribution(

@@ -461,13 +461,24 @@ and checked by `validate_contribution`.
 Only `energy`, `forces`, and `stress` are added into the batch. For each one
 the bias hook has to know the destination buffer, whether it is per-graph or
 per-atom, and how it combines across biases. An unrecognised *applied* key has
-none of that, so `_check_destinations` raises rather than dropping a
-contribution in silence.
+none of that, so it is refused — in two places, for two different failures:
+
+| Failure | Raised by | When |
+|---------|-----------|------|
+| The key is not one the framework can apply (`hessian`, `dipole`, anything novel) | `validate_contribution` | at the producer, before aggregation |
+| The key is applicable but the batch has no buffer for it | `_check_destinations` | after aggregation, before applying |
+
+The first matters because aggregation keeps only the applied keys, so an
+unrecognised physical output would otherwise vanish between the bias and the
+buffer with the run carrying on as though it had been applied.
+`APPLIED_OUTPUT_KEYS` is the single definition of that set, used by the check
+and by the aggregation filter, so the two cannot disagree.
 
 The cost is real: a method producing a genuinely new applied output cannot
 express it without editing the framework. That is accepted, because the
 alternative is a contribution the bias hook silently drops. Anything you only
-want to *see* goes under `diagnostics/`, which is unconstrained.
+want to *see* goes under `diagnostics/`, which is unconstrained — and
+`diagnostics/hessian_trace` is fine where `hessian` is not.
 
 ### The batteries: mixins
 
