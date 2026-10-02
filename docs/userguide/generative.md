@@ -117,6 +117,46 @@ gen = AtomisticGenerator(generator_func=random_cluster_generate, seed=42)
 batch = gen.sample(num_samples=4)  # gen(num_samples=4) is equivalent
 ```
 
+### Per-call lifecycle
+
+Every call to {meth}`~nvalchemi.gen.generator.AtomisticGenerator.sample` follows a fixed
+sequence:
+
+1. **Resolve conditioning**: If a condition function exists (`condition_func` or
+   `generator_func.condition`), the driver runs `BEFORE_CONDITION` hooks, transforms
+   `inputs`, and runs `AFTER_CONDITION` hooks.
+2. **Execute sampling**: The driver calls `generator_func` with the inputs, the resolved
+   `num_samples`, and the active `rng`.
+3. **Inspect batch output**: When `generator_func` returns a
+   {class}`~nvalchemi.data.Batch`, the driver runs `AFTER_GENERATE` hooks, tests device
+   residency, and tests declared batch fields.
+4. **Pass through raw output**: Any other return type passes through directly without
+   batch tests or `AFTER_GENERATE` hooks.
+
+Calling `gen(inputs, ...)` is direct syntactic sugar for `gen.sample(inputs, ...)`.
+
+### Driver configuration
+
+You configure the driver at initialization. The table below lists the available fields:
+
+| Field | Purpose |
+| --- | --- |
+| `generator_func` | The generating callable that runs the model. |
+| `condition_func` | Optional input transform run before generation. |
+| `hooks` | List of hooks that run at generation stages. |
+| `num_samples` | Default draw count per call. A call argument overrides it. |
+| `seed` | Base seed for random number generation. |
+| `device` | Target device, tested at initialization. |
+| `dedicated_stream` | Creates a dedicated CUDA stream inside sessions. |
+| `enable_inference_mode` | Disables gradient tracking inside sessions. |
+| `compile_generate`, `compile_kwargs` | Options to compile with `torch.compile`. |
+| `required_inputs`, `outputs` | Declared input and output batch fields. |
+
+Explicit arguments override attributes on `generator_func`. If `device`,
+`required_inputs`, or `outputs` are unset, the driver reads them from
+`generator_func`. The driver tests `device` and `compile_kwargs` at initialization.
+For the full list, see {doc}`the API reference </modules/gen>`.
+
 ### Streaming
 
 {meth}`~nvalchemi.gen.generator.AtomisticGenerator.stream` yields batches one at a time
@@ -141,26 +181,27 @@ with gen:
     second_batch = gen.sample(num_samples=4)
 ```
 
-Entering a session with `with gen:` performs four setup actions:
+Bare calls (`gen.sample(...)` or `gen(...)`) are sufficient for quick draws. Outside
+a session, each call seeds independently using `seed + step_count`.
 
-1. **Dedicated CUDA stream**: Creates and enters a private CUDA stream if the resolved
-   device is CUDA (disable with `dedicated_stream=False`). The stream waits on work
-   pending on the current stream at entry.
+Sessions (`with gen:`) manage state across multiple calls. Entering a session
+performs four setup actions:
+
+1. **Dedicated CUDA stream**: Enters a private CUDA stream on CUDA devices (disable with
+   `dedicated_stream=False`). The stream waits on pending work at entry.
 2. **Session-scoped RNG**: Initializes a `torch.Generator` from `seed` that advances
-   across draws. Outside a session, each call seeds independently using `seed +
-   step_count`.
-3. **Inference mode**: Runs the session under `torch.inference_mode` when
-   `enable_inference_mode=True`. Off by default; enable it when your sampler
-   does not need gradients.
-4. **Hook lifecycles**: Calls `__enter__` on any context-manager hooks, ensuring clean
-   teardown on exit.
+   across draws.
+3. **Inference mode**: Enters `torch.inference_mode` when `enable_inference_mode=True`
+   (off by default). Enable it when your sampler does not need gradients.
+4. **Hook lifecycles**: Calls `__enter__` on context-manager hooks for clean teardown
+   on exit.
 
 You can compile the generating function with `torch.compile` via
 `gen.compile(**compile_kwargs)` or by setting `compile_generate=True`. Compilation
-wraps the function call; hook dispatch stays eager.
+wraps the function call. Hook dispatch stays eager.
 
-Building a `Batch` runs Python and pydantic code that TorchDynamo cannot trace, so
-a function that constructs a `Batch` graph-breaks at construction. For end-to-end
+Building a `Batch` runs Python and pydantic code that TorchDynamo cannot trace, so a
+function that constructs a `Batch` graph-breaks at construction. For end-to-end
 capture, compile the model inside your generating function
 (`torch.compile(model, ...)`) and keep the wrapper eager.
 
