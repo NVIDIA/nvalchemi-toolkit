@@ -99,6 +99,88 @@ class TestBaseRefuses:
             )
 
 
+class TestTemperatureIsValidated:
+    """A target that is not a temperature must not reach the state.
+
+    None of these fail on their own: a negative target makes the velocity
+    rescale imaginary, zero makes a thermostat chain massless, infinity
+    reaches the velocities directly — and the run carries on until ``nan``
+    coordinates surface somewhere else entirely.
+    """
+
+    @pytest.mark.parametrize(
+        ("label", "value"),
+        [
+            ("negative", -100.0),
+            ("zero", 0.0),
+            ("infinite", float("inf")),
+            ("nan", float("nan")),
+        ],
+    )
+    @pytest.mark.parametrize("make", [_langevin, _nose_hoover])
+    def test_it_is_refused(
+        self, make: object, label: str, value: float, device: str
+    ) -> None:
+        batch = _make_batch(device=device)
+        dynamics = make(device)
+        dynamics._ensure_state_initialized(batch)
+        with pytest.raises(ValueError, match="positive and finite"):
+            dynamics.apply_per_system_params(
+                {"temperature": torch.tensor([value, 300.0], device=device)}, batch
+            )
+
+    @pytest.mark.parametrize("make", [_langevin, _nose_hoover])
+    def test_a_refusal_leaves_the_state_untouched(
+        self, make: object, device: str
+    ) -> None:
+        """What ``apply_per_system_params`` promises, and what the swap hook
+        builds its own atomicity on."""
+        batch = _make_batch(device=device)
+        dynamics = make(device)
+        dynamics._ensure_state_initialized(batch)
+        before_target = dynamics._state.temperature.clone()
+        before_velocities = batch.velocities.clone()
+        before_chain = (
+            dynamics._state.nhc_Q.clone() if hasattr(dynamics._state, "nhc_Q") else None
+        )
+
+        with pytest.raises(ValueError, match="positive and finite"):
+            dynamics.apply_per_system_params(
+                {"temperature": torch.tensor([-1.0, 300.0], device=device)}, batch
+            )
+
+        assert torch.equal(dynamics._state.temperature, before_target)
+        assert torch.equal(batch.velocities, before_velocities)
+        if before_chain is not None:
+            assert torch.equal(dynamics._state.nhc_Q, before_chain), (
+                "the chain masses were scaled before the target was checked"
+            )
+
+    @pytest.mark.parametrize("make", [_langevin, _nose_hoover])
+    def test_a_valid_temperature_still_applies(self, make: object, device: str) -> None:
+        """The guard must not be stricter than the contract it enforces."""
+        batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
+        batch.velocities.fill_(1.0)
+        dynamics = make(device)
+        dynamics._ensure_state_initialized(batch)
+        dynamics.apply_per_system_params(
+            {"temperature": torch.tensor([1200.0], device=device)}, batch
+        )
+        assert torch.allclose(
+            batch.velocities, torch.full_like(batch.velocities, 2.0), atol=1e-5
+        )
+
+    @pytest.mark.parametrize("make", [_langevin, _nose_hoover])
+    def test_both_integrators_share_one_check(self, make: object, device: str) -> None:
+        """Duplicated validation is validation that drifts."""
+        from nvalchemi.dynamics.base import BaseDynamics
+
+        dynamics = make(device)
+        assert type(dynamics)._validated_temperature is (
+            BaseDynamics._validated_temperature
+        )
+
+
 class TestLangevin:
     """No thermostat memory, so the rebinding is target plus velocities."""
 

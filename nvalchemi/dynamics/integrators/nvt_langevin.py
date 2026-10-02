@@ -165,19 +165,7 @@ class NVTLangevin(BaseDynamics):
                 "NVTLangevin.apply_per_system_params: integrator state is "
                 "not initialised; run or prime the dynamics first."
             )
-        unknown = sorted(set(params) - {"temperature"})
-        if unknown:
-            raise KeyError(
-                f"NVTLangevin.apply_per_system_params: cannot rebind "
-                f"{unknown}; this integrator rebinds 'temperature' only. "
-                "Silently ignoring a parameter would leave the walker "
-                "sampling the state it was supposed to leave."
-            )
-        temperature = (
-            params["temperature"]
-            .reshape(-1)
-            .to(device=state.temperature.device, dtype=state.temperature.dtype)
-        )
+        temperature = self._validated_temperature(params, state.temperature)
 
         old_kT = state.temperature.reshape(-1).clone()
         new_kT = temperature * KB_EV

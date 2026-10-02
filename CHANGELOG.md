@@ -448,6 +448,27 @@
 
 ### Fixed
 
+- **A non-positive or infinite temperature corrupted the integrator** —
+  `apply_per_system_params` is a public rebinding API that a custom swap or
+  an annealing schedule supplies values to, and it checked only that the
+  parameter *names* were ones it could rebind, never the values. None of the
+  bad ones fail on their own: a negative target makes the velocity rescale
+  `sqrt(T_new / T_old)` imaginary, so velocities come back `nan`; zero scales
+  a Nosé-Hoover chain's masses `Q ∝ kT` to zero and `eta_dot ∝ 1/sqrt(kT)` to
+  infinity; infinity reaches velocities and chain masses directly. The run
+  continued, and surfaced as `nan` coordinates somewhere else entirely.
+
+  Worse for Nosé-Hoover, the state was *partially* mutated — target copied,
+  masses scaled — before the first `nan` appeared, so a caller catching a
+  later error was already left with a corrupt thermostat, which also broke
+  the "a refused rebinding changes nothing" guarantee `PairSwapHook` builds
+  its atomicity on.
+
+  Temperature must now be positive and finite, checked before anything is
+  touched. The check and the unknown-key check both moved to one
+  `BaseDynamics._validated_temperature`, since duplicated validation across
+  two integrators is validation that drifts.
+
 - **Overlapping pairs corrupted the assignment** — `pairing` is an extension
   point, so what it returns is input, and nothing checked it. Two pairs
   sharing a slot write over each other: `[(0,1), (1,2)]` on `[0,1,2]` yields

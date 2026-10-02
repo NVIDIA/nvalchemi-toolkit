@@ -1825,6 +1825,75 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             "this."
         )
 
+    def _validated_temperature(
+        self, params: Mapping[str, torch.Tensor], reference: torch.Tensor
+    ) -> torch.Tensor:
+        """Check *params* and return the new per-graph temperature in Kelvin.
+
+        Shared by every integrator whose rebindable parameter set is exactly
+        ``{"temperature"}``, so the two checks cannot drift apart between
+        them.  Both run **before** any state is touched, which is what
+        ``apply_per_system_params`` promises: a rebinding it refuses leaves
+        the integrator and the batch as they were, and callers that permute
+        per-system state build their own atomicity on that.
+
+        Temperature is rejected unless strictly positive and finite.  It is
+        not merely out of range — it propagates:
+
+        * a negative target makes the velocity scale ``sqrt(T_new / T_old)``
+          imaginary, so velocities come back ``nan``;
+        * zero scales a Nosé-Hoover chain's masses ``Q ∝ kT`` to zero — a
+          massless thermostat — and ``eta_dot ∝ 1/sqrt(kT)`` to infinity;
+        * infinity reaches velocities and chain masses directly.
+
+        None of those raise on their own.  The run continues with ``nan``
+        coordinates a few steps later, pointing at the integrator rather than
+        at the caller that asked for the temperature.
+
+        Parameters
+        ----------
+        params : Mapping[str, torch.Tensor]
+            Parameter name to its new per-graph value.
+        reference : torch.Tensor
+            Existing per-system temperature, for device and dtype.
+
+        Returns
+        -------
+        torch.Tensor
+            The new temperature in Kelvin, shape ``[B]``.
+
+        Raises
+        ------
+        KeyError
+            If *params* names anything other than ``"temperature"``.
+        ValueError
+            If any temperature is non-positive or not finite.
+        """
+        name = type(self).__name__
+        unknown = sorted(set(params) - {"temperature"})
+        if unknown:
+            raise KeyError(
+                f"{name}.apply_per_system_params: cannot rebind {unknown}; "
+                "this integrator rebinds 'temperature' only. Silently "
+                "ignoring a parameter would leave the walker sampling the "
+                "state it was supposed to leave."
+            )
+        temperature = (
+            params["temperature"]
+            .reshape(-1)
+            .to(device=reference.device, dtype=reference.dtype)
+        )
+        if not bool(temperature.isfinite().all()) or bool((temperature <= 0).any()):
+            raise ValueError(
+                f"{name}.apply_per_system_params: temperature must be "
+                f"positive and finite, got {temperature.tolist()}. A "
+                "non-positive or infinite target does not fail here on its "
+                "own — it makes the velocity rescale imaginary or infinite "
+                "and, for a thermostat chain, its masses zero or infinite, "
+                "so the run continues and surfaces as nan coordinates later."
+            )
+        return temperature
+
     def _rescale_velocities(self, scale_per_graph: torch.Tensor, batch: Batch) -> None:
         """Scale each graph's velocities by a per-graph factor, in place.
 
