@@ -448,6 +448,24 @@
 
 ### Fixed
 
+- **An order-dependent RMSD test, and the global it was blamed on** —
+  `TestSquaredRMSD::test_identical_structures_give_zero` asserted that the
+  squared RMSD of a structure with itself was below `1e-18`. For a float64
+  computation at that scale one ulp is `7.9e-16`, so the threshold was about
+  1/750th of the representable resolution: it was asserting that the
+  cancellation `(g_x + g_y - 2 lambda_max)` rounded to *exactly* zero, not
+  that it was correct. Which side of zero the residue lands on depends on the
+  LAPACK path `eigvalsh` takes, which varies with BLAS threading and warm-up,
+  so the test failed or passed according to what had run before it. The bound
+  is now derived from the scale of the cancellation (`64 eps x` mean square
+  radius) and still catches a `1e-9` relative error in the formula with five
+  orders of magnitude to spare.
+
+  Separately, `test/models/test_pipeline.py` set
+  `torch._dynamo.config.suppress_errors = True` by assignment in two tests,
+  leaking it into every test that ran afterwards in the same session. Both
+  now use `torch._dynamo.config.patch(...)`, which restores it.
+
 - **Zero-dimensional tensors in enhanced-sampling checkpoints** — Zarr reads a
   0-d array back as shape `(1,)`, so a component holding a scalar buffer (a
   step counter, a deposition count — the kind of state a compile-safe bias

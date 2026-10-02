@@ -1140,13 +1140,38 @@ class TestSquaredRMSD:
         assert torch.allclose(got, expected, atol=1e-10)
 
     def test_identical_structures_give_zero(self) -> None:
-        """Never negative: the clamp must absorb the rounding step."""
+        """Never negative, and zero to within the rounding of the kernel.
+
+        The squared RMSD of a structure with itself is
+        ``(g_x + g_y - 2 lambda_max) / n`` where the three terms cancel
+        exactly in exact arithmetic.  In float64 they cancel to within an ulp
+        of the scale they are computed at, and which side of zero the residue
+        lands on depends on the LAPACK path ``eigvalsh`` takes — which varies
+        with BLAS threading and warm-up state.  The clamp catches the negative
+        side; this is the positive side, and the only meaningful bound on it
+        is the resolution of the arithmetic.
+
+        A fixed tiny threshold is the wrong test: ``1e-18`` here is ~1/750th
+        of ``eps * scale``, so it asserts exact cancellation rather than
+        correctness, and it fails whenever the rounding happens to land one
+        ulp high.
+        """
         torch.manual_seed(4)
         refs = torch.randn(3, 5, 3, dtype=torch.float64)
         refs = refs - refs.mean(dim=1, keepdim=True)
         diagonal = _squared_rmsd(refs, refs).diagonal()
-        assert bool((diagonal >= 0).all())
-        assert float(diagonal.abs().max()) < 1e-18
+
+        # The scale the cancellation happens at: the mean square radius, which
+        # is what g_x / n is.
+        scale = float((refs**2).sum(dim=(1, 2)).max()) / refs.shape[1]
+        tolerance = 64 * torch.finfo(torch.float64).eps * scale
+
+        assert bool((diagonal >= 0).all()), "the clamp let a negative through"
+        assert float(diagonal.abs().max()) < tolerance, (
+            f"residue {float(diagonal.abs().max()):.3e} exceeds "
+            f"{tolerance:.3e} = 64 eps x {scale:.3f}, which is far more than "
+            "rounding; the cancellation itself is wrong"
+        )
 
     def test_reflection_is_not_treated_as_identical(self) -> None:
         """A mirror image is a different structure; only proper rotations align."""
