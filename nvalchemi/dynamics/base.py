@@ -2475,6 +2475,26 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         with requires_grad_ctx(*self._autograd_input_tensors(batch)):
             return self._compute(batch, active_graph_mask)
 
+    @staticmethod
+    def _infer_output_group(batch: Batch | AtomsLike, tensor: torch.Tensor) -> str:
+        """The level *tensor*'s own length says an unregistered output belongs to.
+
+        Only returns ``"atoms"``/``"edges"`` when that group is already
+        materialized and its element count matches *tensor*'s leading
+        dimension; otherwise falls back to ``"system"`` — the same default
+        ``MultiLevelStorage.__setitem__`` uses for a key with no schema
+        entry, so a field that is genuinely graph-level (or whose level is
+        ambiguous, e.g. one atom per graph) is unaffected.
+        """
+        n = tensor.shape[0]
+        for group_name, count in (
+            ("atoms", batch.num_nodes),
+            ("edges", batch.num_edges),
+        ):
+            if group_name in batch._storage.groups and n == count:
+                return group_name
+        return "system"
+
     def _publish_model_output(
         self,
         batch: Batch | AtomsLike,
@@ -4124,7 +4144,17 @@ class FusedStage(BaseDynamics):
             if key not in self._OUTPUT_KEY_TO_BATCH_ATTR and tensor is not None:
                 target = getattr(batch, key, None)
                 if target is None:
-                    setattr(batch, key, torch.empty_like(tensor))
+                    # setattr(batch, key, ...) would route an unregistered
+                    # key through MultiLevelStorage.__setitem__, which
+                    # defaults it to "system" regardless of its actual
+                    # length -- silently wrong for a per-atom or per-edge
+                    # extra output (e.g. MACE's atomic_energies): the
+                    # _publish_model_output call below would then apply a
+                    # graph-length mask to an atom-length tensor.  Allocate
+                    # directly in the group the tensor's own length says it
+                    # belongs to instead.
+                    group_name = self._infer_output_group(batch, tensor)
+                    batch._storage.groups[group_name][key] = torch.empty_like(tensor)
                     target = getattr(batch, key)
                 self._publish_model_output(
                     batch,

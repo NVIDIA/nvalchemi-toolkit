@@ -67,6 +67,24 @@ class CountingDemoModel(DemoModelWrapper):
         return super().forward(*args, **kwargs)
 
 
+class ExtraAtomOutputModel(DemoModelWrapper):
+    """DemoModelWrapper returning an unmapped per-atom output.
+
+    Mimics a model like MACE returning ``atomic_energies`` alongside the
+    standard keys: an output not in ``_OUTPUT_KEY_TO_BATCH_ATTR``, sized by
+    atoms rather than graphs.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(DemoModel())
+
+    def adapt_output(self, model_output: Any, data: Any) -> Any:
+        """Add an unmapped, atom-length output to the standard ones."""
+        output = super().adapt_output(model_output, data)
+        output["atomic_energies"] = torch.randn(data.positions.shape[0], 1)
+        return output
+
+
 class NonConservativeDemoModel(DemoModelWrapper):
     """DemoModelWrapper with forces computed directly (not via autograd).
 
@@ -1266,6 +1284,38 @@ class TestFusedStage:
         # Sample 0's counter was reset on migration; sample 1 left via the
         # hook first, so its counter kept step 1's value.
         assert batch.n_steps_counter_0.view(-1).tolist() == [0, 1]
+
+
+class TestFusedStageExtraOutputLevel:
+    """An unmapped model output must land in the level its shape implies."""
+
+    def test_unmapped_per_atom_output_is_placed_at_atoms_level(self) -> None:
+        # More atoms than graphs: a per-graph (system-level) mask applied to
+        # this tensor would raise a shape mismatch if the output were
+        # misallocated at "system" instead of "atoms".
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.ones(n, dtype=torch.long),
+                positions=torch.randn(n, 3),
+                forces=torch.zeros(n, 3),
+                energy=torch.zeros(1, 1),
+            )
+            for n in (5, 3)
+        ]
+        batch = Batch.from_data_list(data_list)
+        batch["status"] = torch.zeros(2, 1, dtype=torch.long)
+        assert batch.num_nodes != batch.num_graphs
+
+        fused = FusedStage(
+            sub_stages=[
+                (0, DemoDynamics(model=ExtraAtomOutputModel(), n_steps=1)),
+                (1, DemoDynamics(model=ExtraAtomOutputModel(), n_steps=1)),
+            ]
+        )
+        fused.step(batch)
+
+        assert batch._storage._group_name_from_attr("atomic_energies") == "atoms"
+        assert batch.atomic_energies.shape[0] == batch.num_nodes
 
 
 class _GraduationRecorder:
