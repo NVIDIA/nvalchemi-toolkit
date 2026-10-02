@@ -255,6 +255,88 @@ class TestLBFGSState:
 
 
 # ---------------------------------------------------------------------------
+# Grouped fixed-cell optimization
+# ---------------------------------------------------------------------------
+
+
+class TestGroupedLBFGS:
+    """Groups share scalar state and curvature history over their combined atoms."""
+
+    @staticmethod
+    def _batch(device="cpu", dtype=torch.float32):
+        batch = Batch.from_data_list(
+            [_make_atomic_data(n, i) for i, n in enumerate((2, 3, 1, 4, 2))]
+        ).to(device=device, dtype=dtype)
+        batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1], device=device))
+        return batch
+
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+    @pytest.mark.parametrize(
+        "groups", [[0, 0, 1, 1, 1], [0, 1, 2, 3, 4], [0, 0, 0, 0, 0]]
+    )
+    def test_matches_concatenated_graphs(self, device, dtype, groups):
+        batch = self._batch(device, dtype)
+        batch.set_group_layout(torch.tensor(groups, device=device))
+        graph_idx = batch.batch_idx.clone()
+        node_ptr = batch.batch_ptr[batch.group_layout.group_ptr].tolist()
+        reference = Batch.from_data_list(
+            [
+                AtomicData(
+                    positions=batch.positions[lo:hi].detach().clone(),
+                    atomic_numbers=batch.atomic_numbers[lo:hi].clone(),
+                    forces=torch.zeros_like(batch.positions[lo:hi]),
+                )
+                for lo, hi in zip(node_ptr[:-1], node_ptr[1:])
+            ]
+        )
+        grouped = LBFGS(model=_make_model(), by_group=True, history_size=3)
+        ordinary = LBFGS(model=_make_model(), history_size=3)
+        grouped._ensure_state_initialized(batch)
+        ordinary._ensure_state_initialized(reference)
+        stiffness = batch.positions.new_tensor([0.3, 0.7, 1.1])
+        for _ in range(8):
+            for dynamics, data in ((grouped, batch), (ordinary, reference)):
+                data.forces = -(data.positions * stiffness + 0.05 * data.positions**3)
+                dynamics.pre_update(data)
+            torch.testing.assert_close(batch.positions, reference.positions)
+            for key, value in grouped._state:
+                torch.testing.assert_close(value, ordinary._state[key])
+        assert torch.all(grouped._state.history_count > 0)
+        assert torch.equal(batch.batch_idx, graph_idx)
+
+    @pytest.mark.parametrize("compiled", [False, True])
+    @pytest.mark.parametrize("active", [False, True])
+    def test_masking_preserves_inactive_group(self, device, compiled, active):
+        batch = self._batch(device)
+        dynamics = LBFGS(model=_make_model(), by_group=True, history_size=3)
+        dynamics._ensure_state_initialized(batch)
+        for _ in range(4):
+            batch.forces = -(0.5 * batch.positions + 0.05 * batch.positions**3)
+            dynamics.pre_update(batch)
+        dynamics._warm_state_levels()
+        positions = batch.positions.detach().clone()
+        state = {key: value.clone() for key, value in dynamics._state}
+        untouched = _rows(dynamics, 1)
+        mask = torch.tensor([active, active, False, False, False], device=device)
+        pre_update = (
+            _compile(dynamics._masked_pre_update)
+            if compiled
+            else dynamics._masked_pre_update
+        )
+        pre_update(batch, mask)
+        assert torch.equal(batch.positions[5:], positions[5:])
+        for key, value in _rows(dynamics, 1).items():
+            assert torch.equal(value, untouched[key]), key
+        if active:
+            assert int(dynamics._state.iteration[0]) == int(state["iteration"][0]) + 1
+            assert not torch.equal(batch.positions[:5], positions[:5])
+        else:
+            assert torch.equal(batch.positions, positions)
+            for key, value in dynamics._state:
+                assert torch.equal(value, state[key]), key
+
+
+# ---------------------------------------------------------------------------
 # Inflight batching
 # ---------------------------------------------------------------------------
 

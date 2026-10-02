@@ -128,6 +128,14 @@ class FIRE2(BaseDynamics):
         Initial hooks.
     convergence_hook : ConvergenceHook or dict, optional
         Convergence criterion.
+    by_group : bool, optional
+        If True, update each group of graphs as a single unit, sharing
+        the adaptive timestep, mixing parameter, and adaptation counters
+        across the graphs in that group.
+        Requires a valid layout set with ``batch.set_group_layout()``.
+        A configured convergence hook must use the same ``by_group`` setting.
+        Default False. Forwarded through ``**kwargs`` to
+        :class:`~nvalchemi.dynamics.base.BaseDynamics`.
     **kwargs
         Forwarded to :class:`~nvalchemi.dynamics.base.BaseDynamics`.
 
