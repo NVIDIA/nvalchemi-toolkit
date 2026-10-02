@@ -24,6 +24,7 @@ from torch import Tensor
 from nvalchemi.dynamics.hooks._utils import KB_EV
 from nvalchemi.enhanced_sampling._adaptive import AdaptivePotentialMixin
 from nvalchemi.enhanced_sampling._bias import ConservativeBias
+from nvalchemi.enhanced_sampling._history import DepositHistoryMixin
 from nvalchemi.enhanced_sampling.cv._periodic import periodic_difference
 
 if TYPE_CHECKING:
@@ -35,11 +36,10 @@ if TYPE_CHECKING:
 
 __all__ = ["WellTemperedMetaDynamicsBias"]
 
-_HISTORY_MODES = ("shared", "state", "walker")
-_STORAGE_POLICIES = ("preallocated", "grow", "fifo")
 
-
-class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
+class WellTemperedMetaDynamicsBias(
+    AdaptivePotentialMixin, DepositHistoryMixin, ConservativeBias
+):
     r"""Gaussian hills deposited along a CV, with well-tempered damping.
 
     .. math::
@@ -176,6 +176,25 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
     0
     """
 
+    # DepositHistoryMixin: what this bias calls a deposit, and which buffers
+    # hold the table.  hill_centers comes first, so it supplies the device.
+    _deposit_noun = "hill"
+    _capacity_option = "max_hills"
+    _full_advice = (
+        "Raise max_hills, lengthen frequency, or switch to storage='grow' "
+        "(recompiles when it resizes) or storage='fifo' (bounded memory, but "
+        "discards the oldest hills and so is no longer a converging "
+        "well-tempered run)."
+    )
+    _deposit_buffers = (
+        ("hill_centers", 0.0),
+        ("hill_heights", 0.0),
+        ("hill_owner", -1),
+        ("hill_step", -1),
+    )
+    _written_attr = "hills_written"
+    _owner_attr = "hill_owner"
+
     def __init__(
         self,
         cv: Callable[[Batch], Tensor],
@@ -195,16 +214,7 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
     ) -> None:
         super().__init__(name=name, compute_stress=compute_stress)
 
-        if storage not in _STORAGE_POLICIES:
-            raise ValueError(
-                f"WellTemperedMetaDynamicsBias: storage must be one of "
-                f"{list(_STORAGE_POLICIES)}, got {storage!r}."
-            )
-        if history not in _HISTORY_MODES:
-            raise ValueError(
-                f"WellTemperedMetaDynamicsBias: history must be one of "
-                f"{list(_HISTORY_MODES)}, got {history!r}."
-            )
+        self.validate_history_options(storage, history)
         if height <= 0.0:
             raise ValueError(
                 f"WellTemperedMetaDynamicsBias: height must be positive, got "
@@ -316,77 +326,9 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
             "deposits", torch.zeros((), dtype=torch.long, device=device)
         )
 
-    def _grow(self) -> None:
-        """Double-buffer the hill tensors by one more chunk."""
-        extra = self._capacity
-        device = self.sigma.device
-
-        def _extend(buffer: Tensor, fill: float | int) -> Tensor:
-            pad = torch.full(
-                (extra, *buffer.shape[1:]), fill, dtype=buffer.dtype, device=device
-            )
-            return torch.cat([buffer, pad], dim=0)
-
-        self.hill_centers = _extend(self.hill_centers, 0.0)
-        self.hill_heights = _extend(self.hill_heights, 0.0)
-        self.hill_owner = _extend(self.hill_owner, -1)
-        self.hill_step = _extend(self.hill_step, -1)
-
-    @property
-    def capacity(self) -> int:
-        """Return the current number of hill slots."""
-        return int(self.hill_centers.shape[0])
-
     # ------------------------------------------------------------------
     # Energy
     # ------------------------------------------------------------------
-
-    def _owner_key(self, current: Batch, n_graphs: int) -> Tensor:
-        """Return the history key per graph, shape ``[B]``.
-
-        Parameters
-        ----------
-        current:
-            The live batch.
-        n_graphs:
-            Number of graphs.
-
-        Returns
-        -------
-        Tensor
-            Per-graph key matched against ``hill_owner``.  All ``-1`` under
-            ``"shared"``, which the mask then ignores.
-        """
-        device = self.hill_owner.device
-        if self.history == "state":
-            field = "thermodynamic_state_id"
-        elif self.history == "walker":
-            field = "walker_id"
-        else:
-            return torch.full((n_graphs,), -1, dtype=torch.long, device=device)
-
-        ids = getattr(current, field, None)
-        if ids is None:
-            raise ValueError(
-                f"WellTemperedMetaDynamicsBias {self.name!r}: history="
-                f"{self.history!r} needs batch.{field}, which this batch "
-                f"does not carry. Falling back to a single owner would put "
-                f"every hill under one key and silently collapse the "
-                f"per-{field} histories into one shared history — the "
-                f"opposite of what history={self.history!r} asks for. "
-                "EnhancedSampling stamps this field on every step; a bias "
-                "driven directly must set it, or use history='shared' if "
-                "one history really is intended."
-            )
-        if ids.numel() != n_graphs:
-            raise ValueError(
-                f"WellTemperedMetaDynamicsBias {self.name!r}: batch.{field} has "
-                f"{ids.numel()} entries but the batch has {n_graphs} "
-                f"graph(s). A shorter tensor broadcasts across graphs, which "
-                f"would file every hill under one walker's key without "
-                "raising."
-            )
-        return ids.reshape(-1).to(device=device, dtype=torch.long)
 
     def _hill_scale(self, step: Tensor) -> Tensor:
         """Return each hill's ramp factor, shape ``[capacity]``.
@@ -556,68 +498,6 @@ class WellTemperedMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
             return torch.full_like(bias_at_cv, self.height)
         damping = KB_EV * self.temperature * (self.bias_factor - 1.0)
         return self.height * torch.exp(-bias_at_cv / damping)
-
-    def _next_slots(self, count: int) -> Tensor:
-        """Return the slot indices *count* new hills will occupy.
-
-        Parameters
-        ----------
-        count:
-            Number of hills about to be deposited.
-
-        Returns
-        -------
-        Tensor
-            Slot indices, shape ``[count]``.
-
-        Raises
-        ------
-        RuntimeError
-            If ``preallocated`` capacity is exhausted.  Raising rather than
-            evicting is the point of the policy: silently dropping hills
-            would change the physics of a converging run without saying so.
-            Also if a ``fifo`` ring is smaller than one deposition, where the
-            overwriting would be within the deposition rather than of the
-            oldest hill.
-        """
-        written = int(self.hills_written)
-        capacity = self.capacity
-
-        if self.storage == "fifo":
-            if count > capacity:
-                raise RuntimeError(
-                    f"WellTemperedMetaDynamicsBias {self.name!r}: one "
-                    f"deposition writes {count} hill(s) — one per walker — "
-                    f"but max_hills is {capacity}. A ring that cannot hold a "
-                    "single deposition does not discard the *oldest* hill, "
-                    "which is what storage='fifo' means: it would silently "
-                    "drop hills deposited at the same instant, keeping "
-                    f"whichever {capacity} of the {count} walkers happened to "
-                    "be written last. Raise max_hills to at least the walker "
-                    "count."
-                )
-            # Ring buffer: hill j always lands in slot j % capacity, so the
-            # oldest is the one overwritten however many times it has wrapped.
-            # count <= capacity, checked above, so the slots within one
-            # deposition are distinct and none overwrites another.
-            return (
-                torch.arange(count, device=self.hill_heights.device) + written
-            ) % capacity
-
-        if written + count > capacity:
-            if self.storage == "preallocated":
-                raise RuntimeError(
-                    f"WellTemperedMetaDynamicsBias {self.name!r}: hill storage "
-                    f"is full ({capacity} hills) and storage='preallocated'. "
-                    f"Raise max_hills, lengthen frequency, or switch to "
-                    "storage='grow' (recompiles when it resizes) or "
-                    "storage='fifo' (bounded memory, but discards the oldest "
-                    "hills and so is no longer a converging well-tempered run)."
-                )
-            while written + count > self.capacity:
-                self._grow()
-
-        return torch.arange(count, device=self.hill_heights.device) + written
 
     def update(self, ctx: BiasContext, stage: DynamicsStage) -> None:
         """Deposit one hill per walker at its current CV value.

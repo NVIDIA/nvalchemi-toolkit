@@ -23,6 +23,7 @@ from torch import Tensor
 
 from nvalchemi.enhanced_sampling._adaptive import AdaptivePotentialMixin
 from nvalchemi.enhanced_sampling._bias import ConservativeBias
+from nvalchemi.enhanced_sampling._history import DepositHistoryMixin
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -33,9 +34,6 @@ if TYPE_CHECKING:
     from nvalchemi.enhanced_sampling._adaptive import BiasContext
 
 __all__ = ["RMSDMetaDynamicsBias"]
-
-_HISTORY_MODES = ("shared", "state", "walker")
-_STORAGE_POLICIES = ("preallocated", "grow", "fifo")
 
 
 def _squared_rmsd(coords: Tensor, references: Tensor) -> Tensor:
@@ -102,7 +100,9 @@ def _squared_rmsd(coords: Tensor, references: Tensor) -> Tensor:
     return torch.clamp(msd, min=0.0)
 
 
-class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
+class RMSDMetaDynamicsBias(
+    AdaptivePotentialMixin, DepositHistoryMixin, ConservativeBias
+):
     r"""Repulsive Gaussian bias over retained reference structures.
 
     .. math::
@@ -216,6 +216,23 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
     0
     """
 
+    # DepositHistoryMixin: what this bias calls a deposit, and which buffers
+    # hold the table.  reference_coords comes first, so it supplies the device.
+    _deposit_noun = "reference"
+    _capacity_option = "max_references"
+    _full_advice = (
+        "Raise max_references, lengthen frequency, or switch to "
+        "storage='fifo', which is the xTB-compatible policy and discards the "
+        "oldest reference instead."
+    )
+    _deposit_buffers = (
+        ("reference_coords", 0.0),
+        ("reference_owner", -1),
+        ("reference_step", -1),
+    )
+    _written_attr = "references_written"
+    _owner_attr = "reference_owner"
+
     def __init__(
         self,
         k_push: float,
@@ -233,16 +250,7 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
     ) -> None:
         super().__init__(name=name, compute_stress=compute_stress)
 
-        if storage not in _STORAGE_POLICIES:
-            raise ValueError(
-                f"RMSDMetaDynamicsBias: storage must be one of "
-                f"{list(_STORAGE_POLICIES)}, got {storage!r}."
-            )
-        if history not in _HISTORY_MODES:
-            raise ValueError(
-                f"RMSDMetaDynamicsBias: history must be one of "
-                f"{list(_HISTORY_MODES)}, got {history!r}."
-            )
+        self.validate_history_options(storage, history)
         if k_push <= 0.0:
             raise ValueError(
                 f"RMSDMetaDynamicsBias: k_push must be positive, got {k_push}. "
@@ -406,65 +414,6 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         self.reference_count += count
         self.references_written += count
 
-    def _grow(self) -> None:
-        """Extend the reference buffers by one more chunk."""
-        extra = self._capacity
-        device = self.reference_coords.device
-
-        def _extend(buffer: Tensor, fill: float | int) -> Tensor:
-            pad = torch.full(
-                (extra, *buffer.shape[1:]), fill, dtype=buffer.dtype, device=device
-            )
-            return torch.cat([buffer, pad], dim=0)
-
-        self.reference_coords = _extend(self.reference_coords, 0.0)
-        self.reference_owner = _extend(self.reference_owner, -1)
-        self.reference_step = _extend(self.reference_step, -1)
-
-    @property
-    def capacity(self) -> int:
-        """Return the current number of reference slots."""
-        return int(self.reference_coords.shape[0])
-
-    def _next_slots(self, count: int) -> Tensor:
-        """Return the slot indices *count* new references will occupy.
-
-        Parameters
-        ----------
-        count:
-            Number of references about to be deposited.
-
-        Returns
-        -------
-        Tensor
-            Slot indices, shape ``[count]``.
-
-        Raises
-        ------
-        RuntimeError
-            If ``preallocated`` capacity is exhausted.
-        """
-        written = int(self.references_written)
-        device = self.reference_owner.device
-
-        if self.storage == "fifo":
-            return (torch.arange(count, device=device) + written) % self.capacity
-
-        if written + count > self.capacity:
-            if self.storage == "preallocated":
-                raise RuntimeError(
-                    f"RMSDMetaDynamicsBias {self.name!r}: reference storage is "
-                    f"full ({self.capacity} references) and "
-                    "storage='preallocated'. Raise max_references, lengthen "
-                    "frequency, or switch to storage='fifo', which is "
-                    "the xTB-compatible policy and discards the oldest "
-                    "reference instead."
-                )
-            while written + count > self.capacity:
-                self._grow()
-
-        return torch.arange(count, device=device) + written
-
     # ------------------------------------------------------------------
     # Energy
     # ------------------------------------------------------------------
@@ -495,52 +444,6 @@ class RMSDMetaDynamicsBias(AdaptivePotentialMixin, ConservativeBias):
         selection = self.atom_indices.to(positions.device)
         flat = offsets.unsqueeze(1) + selection.unsqueeze(0)  # [B, M]
         return positions[flat.reshape(-1)].reshape(offsets.numel(), -1, 3)
-
-    def _owner_key(self, current: Batch, n_graphs: int) -> Tensor:
-        """Return the history key per graph, shape ``[B]``.
-
-        Parameters
-        ----------
-        current:
-            The live batch.
-        n_graphs:
-            Number of graphs.
-
-        Returns
-        -------
-        Tensor
-            Per-graph key matched against ``reference_owner``.
-        """
-        device = self.reference_owner.device
-        if self.history == "state":
-            field = "thermodynamic_state_id"
-        elif self.history == "walker":
-            field = "walker_id"
-        else:
-            return torch.full((n_graphs,), -1, dtype=torch.long, device=device)
-
-        ids = getattr(current, field, None)
-        if ids is None:
-            raise ValueError(
-                f"RMSDMetaDynamicsBias {self.name!r}: history="
-                f"{self.history!r} needs batch.{field}, which this batch "
-                f"does not carry. Falling back to a single owner would put "
-                f"every reference under one key and silently collapse the "
-                f"per-{field} histories into one shared history — the "
-                f"opposite of what history={self.history!r} asks for. "
-                "EnhancedSampling stamps this field on every step; a bias "
-                "driven directly must set it, or use history='shared' if "
-                "one history really is intended."
-            )
-        if ids.numel() != n_graphs:
-            raise ValueError(
-                f"RMSDMetaDynamicsBias {self.name!r}: batch.{field} has "
-                f"{ids.numel()} entries but the batch has {n_graphs} "
-                f"graph(s). A shorter tensor broadcasts across graphs, which "
-                f"would file every reference under one walker's key without "
-                "raising."
-            )
-        return ids.reshape(-1).to(device=device, dtype=torch.long)
 
     def _reference_scale(self) -> Tensor:
         """Return each reference's ramp factor, shape ``[capacity]``.

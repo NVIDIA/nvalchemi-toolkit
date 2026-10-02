@@ -448,6 +448,25 @@
 
 ### Fixed
 
+- **A FIFO reference ring smaller than one deposition dropped references
+  silently** — `RMSDMetaDynamicsBias` and `WellTemperedMetaDynamicsBias` each
+  carried their own copy of the same ring-buffer subsystem, and the copies had
+  drifted: the guard refusing a `"fifo"` ring narrower than the walker count
+  was added to the hill table only. With `max_references=2` and four walkers,
+  one deposition allocated slots `(0, 1, 0, 1)`, so walkers 2 and 3 overwrote
+  walkers 0 and 1 *within the same deposition*. That is not discarding the
+  oldest reference, which is what `storage='fifo'` means; `references_written`
+  counted structures the table never held, and half the walkers were pushed
+  away from geometries they had never actually visited.
+
+  Both biases now share one implementation, `DepositHistoryMixin` in
+  `nvalchemi/enhanced_sampling/_history.py`, which owns `HISTORY_MODES`,
+  `STORAGE_POLICIES`, option validation, `capacity`, `_grow`, `_next_slots`
+  and `_owner_key`. Buffer names stay with each bias — `hill_owner` and
+  `reference_owner` are the names in every checkpoint written so far — and the
+  mixin is told which attributes to use. No behaviour changes for the hill
+  table.
+
 - **A missing energy buffer accepted every swap** — temperature acceptance
   substituted zeros when the batch carried no `energy`, where `decide()`
   raises for the same omission. Zero is not a neutral stand-in:

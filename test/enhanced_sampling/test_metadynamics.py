@@ -40,6 +40,7 @@ from nvalchemi.enhanced_sampling import (
     WellTemperedMetaDynamicsBias,
     pair_distance,
 )
+from nvalchemi.enhanced_sampling._history import DepositHistoryMixin
 from nvalchemi.enhanced_sampling.biases.rmsd_metad import _squared_rmsd
 from nvalchemi.hooks import BiasContext
 from nvalchemi.models.base import BaseModelMixin
@@ -593,6 +594,36 @@ class TestWellTemperedPeriodic:
 # ===========================================================================
 # 5. Well-tempered metadynamics: storage policies
 # ===========================================================================
+
+
+class TestOneRingBuffer:
+    """Both depositing biases run the same slot allocator, not a copy of it.
+
+    They stored different things — a CV centre and a height, a centred
+    coordinate set — but allocated slots identically, and the two copies had
+    already drifted apart in a way that cost the reference side a guard.
+    Identity checks rather than behavioural ones, because the point is that
+    there is nothing left to drift.
+    """
+
+    @pytest.mark.parametrize("method", ["_next_slots", "_grow", "_owner_key"])
+    def test_both_biases_use_the_shared_implementation(self, method: str) -> None:
+        shared = getattr(DepositHistoryMixin, method)
+        assert getattr(WellTemperedMetaDynamicsBias, method) is shared
+        assert getattr(RMSDMetaDynamicsBias, method) is shared
+
+    def test_option_validation_is_shared_too(self) -> None:
+        """A classmethod binds per class, so compare the function itself."""
+        shared = DepositHistoryMixin.validate_history_options.__func__
+        assert WellTemperedMetaDynamicsBias.validate_history_options.__func__ is shared
+        assert RMSDMetaDynamicsBias.validate_history_options.__func__ is shared
+
+    def test_capacity_is_the_shared_property(self) -> None:
+        assert (
+            WellTemperedMetaDynamicsBias.capacity
+            is RMSDMetaDynamicsBias.capacity
+            is DepositHistoryMixin.capacity
+        )
 
 
 class TestStoragePolicies:
@@ -1545,6 +1576,39 @@ class TestRMSDDeposition:
         assert float(bias(frames[0])["energy"].sum()) < float(
             bias(frames[3])["energy"].sum()
         )
+
+    def test_fifo_refuses_a_ring_smaller_than_one_deposition(self, device: str) -> None:
+        """The same guard the hill table has, for the same reason.
+
+        One deposition writes one reference per walker.  With more walkers
+        than slots the ring indices repeat inside a single call — ``(0, 1, 0,
+        1)`` for four walkers and two slots — so the later walkers overwrite
+        the earlier ones at the same instant.  That is not discarding the
+        *oldest* reference, which is what ``storage='fifo'`` promises; it is
+        keeping whichever walkers happened to be written last.
+
+        This guard lived only on the hill side until the two ring buffers
+        were made one implementation, so the reference side silently kept
+        two of four walkers.
+        """
+        bias = RMSDMetaDynamicsBias(
+            k_push=0.02, alpha=0.5, max_references=2, storage="fifo"
+        ).to(device)
+        frame = self._molecule(device, n_graphs=4)
+        with pytest.raises(RuntimeError, match="cannot hold a single deposition"):
+            bias.update(_ctx(frame, bias(frame)), bias.stage)
+
+    def test_fifo_accepts_a_deposition_exactly_filling_the_ring(
+        self, device: str
+    ) -> None:
+        """The guard must not be stricter than the contract it enforces."""
+        bias = RMSDMetaDynamicsBias(
+            k_push=0.02, alpha=0.5, max_references=4, storage="fifo"
+        ).to(device)
+        frame = self._molecule(device, n_graphs=4)
+        bias.update(_ctx(frame, bias(frame)), bias.stage)
+        assert int(bias.reference_count) == 4
+        assert sorted(bias.reference_owner.tolist()) == [-1, -1, -1, -1]
 
     def test_preallocated_overflow_raises(self, device: str) -> None:
         bias = RMSDMetaDynamicsBias(
