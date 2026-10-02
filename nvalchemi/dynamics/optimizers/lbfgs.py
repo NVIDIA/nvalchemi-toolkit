@@ -104,11 +104,7 @@ _AXIS_REVERSE = ((0.0, 0.0, 1.0), (0.0, 1.0, 0.0), (1.0, 0.0, 0.0))
 
 @functools.lru_cache(maxsize=None)
 def _axis_reverse(dtype: torch.dtype, device: torch.device) -> torch.Tensor:
-    # Cached per (dtype, device): read-only in every caller, so the same
-    # tensor is safe to share, and each cache miss is a small host-to-device
-    # copy that would otherwise repeat on every one of the six calls this
-    # makes per step, on top of the per-step launch overhead the module
-    # docstring warns about.
+    """Build (and cache) the axis-reversal tensor; read-only in every caller."""
     return torch.tensor(_AXIS_REVERSE, dtype=dtype, device=device)
 
 
@@ -538,15 +534,9 @@ class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
     def _reference_cells(self, batch: Batch, n: int) -> torch.Tensor:
         """Aligned cells of the last *n* systems, for the chart.  Never writes *batch*."""
         # Own hooks, or those of an enclosing FusedStage: both run at
-        # BEFORE_STEP, before this stage's first pre_update.
-        #
-        # KNOWN LIMITATION: `_enclosing_hooks` is a live back-pointer set by
-        # FusedStage.__init__ (nvalchemi/dynamics/base.py).  Deriving a new
-        # stage via `+` from a FusedStage this optimizer belongs to repoints
-        # `_enclosing_hooks` at the *new* stage's (possibly empty) hooks, so
-        # if you keep running the original stage afterward, an AlignCellHook
-        # registered on it can stop being found here even though it is still
-        # registered — see FusedStage.__add__ for the full explanation.
+        # BEFORE_STEP, before this stage's first pre_update.  `_enclosing_hooks`
+        # is a live back-pointer, so it can go stale after `+` — see the
+        # "retained composition" limitation in FusedStage.__add__.
         align_hooks = [
             h
             for h in (*self.hooks, *self._enclosing_hooks)

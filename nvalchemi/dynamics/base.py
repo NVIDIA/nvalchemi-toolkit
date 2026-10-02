@@ -3648,19 +3648,8 @@ class FusedStage(BaseDynamics):
         super().__init__(model=model, **kwargs)
 
         self.sub_stages = sub_stages
-        # KNOWN LIMITATION — retained composition: this is a live
-        # back-pointer onto the *same* sub-stage objects (not copies), and
-        # `+` builds its new FusedStage over those same objects. So
-        # `f2 = f1 + c` repoints every sub-stage of `f1` at `f2.hooks`,
-        # silently changing `f1`'s own hook-dependent behavior (e.g.
-        # LBFGSVariableCell._reference_cells scanning `_enclosing_hooks` for
-        # an AlignCellHook) even though `f1` itself was never reassigned.
-        # Before composing via `+` was possible, deriving a stage never
-        # mutated the stage it was derived from; retaining and continuing to
-        # run the original after deriving `f2` does now. Not fixed here —
-        # tracked separately together with stage nesting and hook/optimizer-
-        # state ownership, since a real fix changes how hooks are scoped
-        # across composition, not just this assignment.
+        # Live back-pointer onto the shared sub-stage objects, not copies —
+        # see the "retained composition" limitation in FusedStage.__add__.
         for _, dynamics in sub_stages:
             dynamics._enclosing_hooks = self.hooks
 
@@ -4160,15 +4149,8 @@ class FusedStage(BaseDynamics):
             if key not in self._OUTPUT_KEY_TO_BATCH_ATTR and tensor is not None:
                 target = getattr(batch, key, None)
                 if target is None:
-                    # setattr(batch, key, ...) would route an unregistered
-                    # key through MultiLevelStorage.__setitem__, which
-                    # defaults it to "system" regardless of its actual
-                    # length -- silently wrong for a per-atom or per-edge
-                    # extra output (e.g. MACE's atomic_energies): the
-                    # _publish_model_output call below would then apply a
-                    # graph-length mask to an atom-length tensor.  Allocate
-                    # directly in the group the tensor's own length says it
-                    # belongs to instead.
+                    # setattr defaults an unregistered key to "system"
+                    # regardless of its real length; infer it instead.
                     group_name = self._infer_output_group(batch, key, tensor)
                     batch._storage.groups[group_name][key] = torch.empty_like(tensor)
                     target = getattr(batch, key)
