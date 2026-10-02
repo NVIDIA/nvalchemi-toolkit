@@ -49,6 +49,7 @@ from nvalchemi.dynamics.optimizers.lbfgs import (
     _DOF_LEVEL,
     _PER_DOF,
     _PER_SYSTEM,
+    _anti_transpose,
     _ops_state,
 )
 from nvalchemi.hooks.periodic import WrapPeriodicHook
@@ -364,7 +365,12 @@ class TestLBFGSVariableCellAlignment:
         record = _Record(DynamicsStage.BEFORE_PRE_UPDATE)
         dynamics = self._dynamics(hooks=[AlignCellHook(), record], n_steps=1)
         dynamics.run(batch)
-        torch.testing.assert_close(dynamics._state.ref_cell, record.cells[0])
+        # dynamics._state.ref_cell is in the backend's anti-transposed
+        # convention (see _anti_transpose); the hook wrote the live
+        # batch.cell in nvalchemi's row-vector convention.
+        torch.testing.assert_close(
+            dynamics._state.ref_cell, _anti_transpose(record.cells[0])
+        )
 
     def test_aligned_cells_need_no_hook(self):
         batch = _cell_batch([None, None])
@@ -442,8 +448,10 @@ class TestLBFGSVariableCellAlignment:
         result = dynamics.refill_check(batch, exit_status=1)
         ref_cell = dynamics._state.ref_cell[-1].clone()
         dynamics.step(result)
-        # The chart is the aligned pre-step cell; the live cell moves but stays aligned.
-        torch.testing.assert_close(ref_cell, record.cells[-1][-1])
+        # The chart is the aligned pre-step cell; the live cell moves but stays
+        # aligned.  ref_cell is anti-transposed (see _anti_transpose), the
+        # recorded live batch.cell is row-convention.
+        torch.testing.assert_close(ref_cell, _anti_transpose(record.cells[-1][-1]))
         assert _aligned(result.cell)
 
     def test_stress_sign_matches_fire2(self):
@@ -839,7 +847,9 @@ class TestFusedStage:
         fused, lbfgs, batch = self._skew_fused(AlignCellHook())
         expected = _aligned_periodic(batch)[1]
         fused.step(batch)
-        torch.testing.assert_close(lbfgs._state.ref_cell, expected)
+        # ref_cell is anti-transposed (see _anti_transpose);
+        # _aligned_periodic's cell is row-convention like batch.cell.
+        torch.testing.assert_close(lbfgs._state.ref_cell, _anti_transpose(expected))
         assert _aligned(batch.cell)
 
     def test_fused_level_align_hook_frequency_must_be_one(self):
@@ -1103,3 +1113,121 @@ class TestStaleReferenceCell:
             steps, edge = _relax_argon(reference)
             assert edge == pytest.approx(fresh_edge, abs=1e-3)
             assert steps <= 2 * fresh_steps
+
+
+# ---------------------------------------------------------------------------
+# Row/column cell convention regression (finite-difference ground truth)
+# ---------------------------------------------------------------------------
+
+
+class TestLBFGSVariableCellPhysicalCorrectness:
+    """Finite-difference regression for the row/column cell convention.
+
+    ``LBFGSVariableCell`` must hand nvalchemiops' backend the cell, stress,
+    positions and forces in the convention its packed six-coordinate chart
+    (``cell_dof_a/b``, ``cell_force_a/b``) actually assumes -- see
+    ``_anti_transpose`` for the derivation.  Getting this wrong doesn't
+    raise: it silently produces a cell force that isn't
+    ``-dE/d(packed dof)``, which either converges to the wrong state or (if
+    the wrong convention also loses information structurally, as a plain
+    transpose does) never corrects a genuine shear mismatch at all --
+    see ``TestStaleReferenceCell``, which exercises that failure mode
+    end-to-end.  This test instead isolates the gradient itself: it
+    compares ``cell_force_a/b`` directly against a finite-difference
+    estimate of a real periodic Lennard-Jones energy, varying each of the
+    six packed degrees of freedom independently, for a reference cell with
+    real (non-diagonal) shear relative to the current one -- the case a
+    plain transpose structurally cannot represent.
+    """
+
+    def test_cell_force_matches_finite_difference(self):
+        from nvalchemi.dynamics.optimizers.lbfgs import _anti_transpose
+        from nvalchemi.hooks import NeighborListHook
+        from nvalchemi.models.lj import LennardJonesModelWrapper
+
+        dtype = torch.float64
+        # Both lower-triangular (aligned) and genuinely different, so the
+        # deformation gradient between them has real shear content.
+        current = torch.tensor(
+            [[11.0, 0.0, 0.0], [0.6, 10.8, 0.0], [-0.3, 0.4, 11.3]], dtype=dtype
+        )
+        reference = torch.tensor(
+            [[11.4, 0.0, 0.0], [1.5, 11.0, 0.0], [0.8, -0.6, 12.0]], dtype=dtype
+        )
+        base = torch.tensor([[0, 0, 0], [0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]])
+        shifts = torch.tensor(
+            [[i, j, k] for i in (0, 1) for j in (0, 1) for k in (0, 1)]
+        )
+        frac = ((base[None] + shifts[:, None]) / 2).reshape(-1, 3).double()
+        positions = frac @ current.T
+        positions += 0.05 * torch.randn(
+            positions.shape, generator=torch.Generator().manual_seed(1), dtype=dtype
+        )
+
+        def make_batch(cell, pos):
+            data = AtomicData(
+                positions=pos.clone(),
+                atomic_numbers=torch.full((pos.shape[0],), 18),
+                cell=cell.unsqueeze(0).clone(),
+                pbc=torch.tensor([[True] * 3]),
+                forces=torch.zeros_like(pos),
+                energy=torch.zeros(1, 1, dtype=dtype),
+                stress=torch.zeros(1, 3, 3, dtype=dtype),
+            )
+            return Batch.from_data_list([data])
+
+        model = LennardJonesModelWrapper(epsilon=0.0104, sigma=3.40, cutoff=8.5)
+        model.set_config("active_outputs", {"energy", "forces", "stress"})
+        neighbors = NeighborListHook(
+            model.model_config.neighbor_config, stage=DynamicsStage.BEFORE_COMPUTE
+        )
+        optimizer = LBFGSVariableCell(model=model, maxstep=1e-8)
+        optimizer.register_hook(neighbors, stage=DynamicsStage.BEFORE_COMPUTE)
+
+        def energy_of(cell, pos):
+            b = make_batch(cell, pos)
+            optimizer._call_hooks(DynamicsStage.BEFORE_COMPUTE, b, None)
+            optimizer.compute(b)
+            return b.energy.item()
+
+        batch = make_batch(current, positions)
+        optimizer._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch, None)
+        optimizer.compute(batch)
+        optimizer._init_state(make_batch(reference, positions))
+        optimizer.pre_update(batch)
+
+        kappa = optimizer._state.kappa[0].item()
+        predicted = torch.cat(
+            [
+                -kappa * optimizer._state.cell_force_a[0],
+                -kappa * optimizer._state.cell_force_b[0],
+            ]
+        )
+
+        # Ground truth: perturb each packed dof slot directly -- an entry of
+        # Phi = anti_transpose(current) @ anti_transpose(reference)^-1 -- and
+        # finite-difference the *real* model's energy with the reference and
+        # the fractional coordinates of `positions` (relative to `current`)
+        # held fixed, exactly what "holding the chart fixed" means.  This
+        # does not reimplement the backend's math: it only uses
+        # ``_anti_transpose`` to translate a dof slot into a physical cell.
+        ref_fed = _anti_transpose(reference)
+        phi = _anti_transpose(current) @ torch.linalg.inv(ref_fed)
+        frac_fixed = positions @ torch.linalg.inv(current)
+        slots = [(0, 0), (1, 0), (2, 0), (1, 1), (2, 1), (2, 2)]
+
+        expected = []
+        eps = 1e-6
+        for i, j in slots:
+            plus, minus = phi.clone(), phi.clone()
+            plus[i, j] += eps
+            minus[i, j] -= eps
+            cell_plus = _anti_transpose(plus @ ref_fed)
+            cell_minus = _anti_transpose(minus @ ref_fed)
+            e_plus = energy_of(cell_plus, frac_fixed @ cell_plus)
+            e_minus = energy_of(cell_minus, frac_fixed @ cell_minus)
+            expected.append((e_plus - e_minus) / (2 * eps))
+
+        torch.testing.assert_close(
+            predicted, torch.tensor(expected, dtype=dtype), atol=1e-4, rtol=1e-4
+        )

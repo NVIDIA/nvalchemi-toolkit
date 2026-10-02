@@ -92,6 +92,109 @@ _CELL_PER_SYSTEM = (
 )  # fmt: skip
 
 
+#: Axis-reversal permutation (swaps x <-> z, leaves y): the one piece
+#: ``_anti_transpose``, ``_axis_reverse_vectors`` and ``_axis_reverse_matrix``
+#: share.  Built lazily per dtype/device by those helpers rather than fixed
+#: at import time.
+_AXIS_REVERSE = ((0.0, 0.0, 1.0), (0.0, 1.0, 0.0), (1.0, 0.0, 0.0))
+
+
+def _axis_reverse(dtype: torch.dtype, device: torch.device) -> torch.Tensor:
+    return torch.tensor(_AXIS_REVERSE, dtype=dtype, device=device)
+
+
+def _anti_transpose(cell: torch.Tensor) -> torch.Tensor:
+    r"""Reflect a row-convention cell across its anti-diagonal for the backend.
+
+    ``nvalchemiops.dynamics.optimizers.lbfgs._lbfgs_step_coord_cell_impl``
+    computes the deformation gradient as ``Phi = H @ H_ref^-1`` from
+    whatever ``cell`` it is handed, packs only ``Phi``'s *lower*-triangular
+    six entries (``(0,0),(1,0),(2,0),(1,1),(2,1),(2,2)``) as the cell's
+    degrees of freedom, and reads the conjugate force off the same six
+    slots.  ``nvalchemi`` (like ASE) stores lattice vectors as rows, aligned
+    so ``a`` (row 0) is simplest and ``c`` (row 2) general; nvalchemiops'
+    own :func:`~nvalchemiops.dynamics.utils.cell_filter.align_cell` fills
+    the *same* row-major layout (verified: its kernel literally constructs
+    ``wp.mat33d(a, 0, 0,  b*cosg, b*sing, 0,  c1, c2, c3)``, i.e. row 0
+    simplest too) — so nvalchemi's row-aligned ``H`` already satisfies the
+    backend's own structural assumption, and needs no transform to reach
+    *a* valid chart.
+
+    But not *this* chart.  For two row-aligned cells ``H``, ``H0`` (both
+    lower-triangular as plain matrices), the true physical deformation
+    gradient relating them — the one whose entries actually have the
+    physical meaning the force formula below assumes — is forced to be
+    *upper*-triangular: :math:`\Phi_{\text{true}}^T = H_0^{-1} H` is a
+    product of lower-triangular matrices (lower-triangular itself), so
+    :math:`\Phi_{\text{true}}` is its transpose.  Feeding ``H`` directly
+    makes the backend's internal ``Phi`` lower-triangular but *wrong*
+    (confirmed: its force formula then only matches a from-scratch
+    finite-difference gradient to ~0.1% relative error, exact only in the
+    degenerate case ``H == H0``).  Transposing alone fixes that formula
+    exactly (machine precision, not ~0.1%) but makes ``Phi`` upper
+    triangular — so the packer's fixed lower-triangular six-slot reading
+    now sees structural zeros exactly where ``Phi``'s real shear content
+    lives, permanently losing it: an optimizer built this way cannot
+    correct a stale shear-type reference cell no matter how long it runs
+    (measured: bounded force/stress oscillation that never tightens, for
+    any nonzero shear between reference and current cell, however small).
+
+    The fix is the transform that is simultaneously (a) exact for the
+    force formula and (b) keeps the packed ``Phi`` lower-triangular: not a
+    transpose, but an *anti-transpose* — reflection across the
+    anti-diagonal, ``H -> J H^T J`` with ``J`` the axis-reversal
+    permutation (:data:`_AXIS_REVERSE`).  Equivalently: relabel which
+    physical axis is "x" vs "z" *and* which lattice vector is "a" vs "c",
+    together.  ``J (H0^{-1} H)^T J`` is then a product of two
+    anti-transposes, each of which maps lower-triangular to lower-triangular
+    (reflecting across the anti-diagonal reverses which off-diagonal
+    entries survive the same way reversing both row and column order
+    would), so the packed ``Phi`` stays lower-triangular and loses nothing.
+    Verified end-to-end against finite differences on a periodic LJ system
+    with a genuinely non-trivial (non-diagonal) reference: the backend's
+    predicted ``dE/dPhi`` under this transform matches a central-difference
+    estimate to ~1e-9 relative error, and a full relaxation from a sheared
+    stale reference converges to the correct equilibrium — see
+    ``TestLBFGSVariableCellPhysicalCorrectness`` in
+    ``test/dynamics/test_lbfgs.py``.
+
+    Positions and forces are per-atom 3-vectors, not matrices, so they
+    carry no row/column ambiguity, but *do* need the same axis relabeling
+    applied component-wise — see :func:`_axis_reverse_vectors`.  Cauchy
+    stress is symmetric (:math:`\sigma = \sigma^T`) so it needs no
+    transpose, but *does* still need the axis relabeling (conjugation by
+    ``J``, no transpose) to stay paired with the relabeled cell — see
+    :func:`_axis_reverse_matrix`.  Skipping the stress relabeling alone
+    reintroduces a large (measured: ~67% relative) force error, because
+    the force formula contracts stress against ``Phi`` in the relabeled
+    frame.
+    """
+    j = _axis_reverse(cell.dtype, cell.device)
+    return (j @ cell.transpose(-1, -2) @ j).contiguous()
+
+
+def _axis_reverse_vectors(vectors: torch.Tensor) -> torch.Tensor:
+    """Swap the x/z components of each row vector: ``vectors @ J``.
+
+    Keeps per-atom positions/forces consistent with :func:`_anti_transpose`'s
+    cell relabeling.  An involution: applying it twice is the identity, used
+    both to feed the backend and to undo the relabeling on the way out.
+    """
+    j = _axis_reverse(vectors.dtype, vectors.device)
+    return (vectors @ j).contiguous()
+
+
+def _axis_reverse_matrix(matrices: torch.Tensor) -> torch.Tensor:
+    """Conjugate each per-system matrix by the axis reversal: ``J @ M @ J``.
+
+    No transpose — unlike :func:`_anti_transpose`, this is for quantities
+    (stress) that already transform like a rank-2 Cartesian tensor rather
+    than like a cell whose rows are lattice vectors.
+    """
+    j = _axis_reverse(matrices.dtype, matrices.device)
+    return (j @ matrices @ j).contiguous()
+
+
 def _build_state(
     atoms_per_system: torch.Tensor,
     history_size: int,
@@ -115,8 +218,16 @@ def _build_state(
         atom_ptr = torch.nn.functional.pad(
             atoms_per_system.cumsum(0, dtype=torch.int32), (1, 0)
         )
+        # The anti-transpose of a row-aligned cell is itself lower-triangular
+        # (see _anti_transpose), so it passes lbfgs_prepare_cell_state's
+        # alignment gate directly — no need to admit the row form and then
+        # overwrite the chart afterward.
         cs = lbfgs_prepare_cell_state(
-            atom_ptr, cell, cell_force_scale=cell_force_scale, dtype=dtype, device=dev
+            atom_ptr,
+            _anti_transpose(cell),
+            cell_force_scale=cell_force_scale,
+            dtype=dtype,
+            device=dev,
         )
         system |= {k: getattr(cs, k) for k in _CELL_PER_SYSTEM}
         dofs |= {k: getattr(cs, k) for k in _CELL_PER_DOF}
@@ -482,14 +593,25 @@ class LBFGSVariableCell(_LBFGSMixin, BaseDynamics):
         """
         # batch.stress is tensile-positive Cauchy stress -W/V (eV/A^3);
         # ops converts it to the cell force internally.
+        #
+        # The backend wants the anti-transposed cell (see _anti_transpose)
+        # and axis-reversed positions/forces/stress to match.  It mutates
+        # positions and cell in place and requires contiguous tensors, so
+        # these must be transformed *copies*, not views — writes to a
+        # non-contiguous view would not land back in the batch, and in any
+        # case the backend rejects non-contiguous inputs outright.
+        cell_fed = _anti_transpose(batch.cell.detach())
+        positions_fed = _axis_reverse_vectors(batch.positions.detach())
         lbfgs_step_coord_cell(
-            batch.positions.detach(),
-            batch.cell.detach(),
-            batch.forces,
-            batch.stress,
+            positions_fed,
+            cell_fed,
+            _axis_reverse_vectors(batch.forces),
+            _axis_reverse_matrix(batch.stress),
             _ops_state(self._state),
             _ops_cell_state(self._state),
             batch.batch_idx.int(),
             maxstep=self.maxstep,
             curvature_eps=self.curvature_eps,
         )
+        batch.positions.detach().copy_(_axis_reverse_vectors(positions_fed))
+        batch.cell.detach().copy_(_anti_transpose(cell_fed))
