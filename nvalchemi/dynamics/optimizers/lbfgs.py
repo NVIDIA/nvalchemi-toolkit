@@ -46,6 +46,7 @@ the history.  Positions must not be edited between steps (e.g. by
 
 from __future__ import annotations
 
+import functools
 import math
 import warnings
 from typing import TYPE_CHECKING, Any
@@ -96,11 +97,18 @@ _CELL_PER_SYSTEM = (
 #: Axis-reversal permutation (swaps x <-> z, leaves y): the one piece
 #: ``_anti_transpose``, ``_axis_reverse_vectors`` and ``_axis_reverse_matrix``
 #: share.  Built lazily per dtype/device by those helpers rather than fixed
-#: at import time.
+#: at import time, and cached (see ``_axis_reverse`` below) since
+#: ``LBFGSVariableCell.pre_update`` reaches it six times a step.
 _AXIS_REVERSE = ((0.0, 0.0, 1.0), (0.0, 1.0, 0.0), (1.0, 0.0, 0.0))
 
 
+@functools.lru_cache(maxsize=None)
 def _axis_reverse(dtype: torch.dtype, device: torch.device) -> torch.Tensor:
+    # Cached per (dtype, device): read-only in every caller, so the same
+    # tensor is safe to share, and each cache miss is a small host-to-device
+    # copy that would otherwise repeat on every one of the six calls this
+    # makes per step, on top of the per-step launch overhead the module
+    # docstring warns about.
     return torch.tensor(_AXIS_REVERSE, dtype=dtype, device=device)
 
 
