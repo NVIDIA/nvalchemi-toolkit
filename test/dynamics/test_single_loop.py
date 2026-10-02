@@ -1347,6 +1347,38 @@ class TestFusedStageExtraOutputLevel:
         with pytest.raises(RuntimeError, match="more than one"):
             BaseDynamics._infer_output_group(batch, "some_output", torch.randn(8, 1))
 
+    def test_coinciding_but_matching_per_graph_counts_do_not_raise(self) -> None:
+        # Every graph has 2 atoms and 2 edges: totals coincide (6 == 6),
+        # but so do per-graph counts, so masking is identical regardless of
+        # which group is picked -- not actually ambiguous, must not raise.
+        # This is the common small-molecule case (e.g. a 2-atom dimer with
+        # one bond represented as 2 directed edges).
+        from nvalchemi.data.level_storage import SegmentedLevelStorage
+
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.ones(2, dtype=torch.long),
+                positions=torch.randn(2, 3),
+                forces=torch.zeros(2, 3),
+                energy=torch.zeros(1, 1),
+            )
+            for _ in range(3)
+        ]
+        batch = Batch.from_data_list(data_list)
+        batch._storage.groups["edges"] = SegmentedLevelStorage(
+            data={"dummy_edge_field": torch.zeros(6, 1)},
+            segment_lengths=torch.tensor([2, 2, 2], dtype=torch.int32),
+            device=batch.device,
+            attr_map=batch._storage.attr_map,
+            validate=False,
+        )
+        assert batch.num_nodes == batch.num_edges == 6
+
+        group = BaseDynamics._infer_output_group(
+            batch, "atomic_energies", torch.randn(6, 1)
+        )
+        assert group == "atoms"
+
 
 class _GraduationRecorder:
     """Record every ON_GRADUATE mask handed to this hook."""

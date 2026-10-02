@@ -2482,15 +2482,18 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         """The level *tensor*'s own length says an unregistered output belongs to.
 
         Checks every materialized segmented group (``"atoms"``, ``"edges"``)
-        whose element count matches *tensor*'s leading dimension, and uses
-        it only when exactly one group matches.  Total length alone cannot
-        disambiguate a batch whose total atom and edge counts happen to
-        coincide (even though per-graph counts differ) — guessing wrong
-        there would silently place edge values at atom rows, or vice versa,
-        rather than failing loudly, so that case raises instead.  Falls
-        back to ``"system"`` — the same default ``MultiLevelStorage``
-        uses for a key with no schema entry — only when no segmented group
-        matches at all.
+        whose element count matches *tensor*'s leading dimension.  A total
+        match alone is not decisive — two groups can have the same total
+        while differing per graph — but it is also not necessarily
+        *ambiguous*: masking only ever applies ``active_graph_mask``
+        expanded through a group's own per-graph ``segment_lengths``, so
+        two matching groups with identical ``segment_lengths`` would be
+        masked identically regardless of which is picked.  Only raise when
+        matching groups disagree on a graph; otherwise prefer ``"atoms"``
+        (the common case: a per-atom extra output like an energy
+        decomposition) over ``"edges"``.  Falls back to ``"system"`` — the
+        same default ``MultiLevelStorage`` uses for a key with no schema
+        entry — when no segmented group matches at all.
         """
         n = tensor.shape[0]
         candidates = [
@@ -2502,13 +2505,15 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             if group_name in batch._storage.groups and n == count
         ]
         if len(candidates) > 1:
-            raise RuntimeError(
-                f"Cannot determine the storage level for unregistered model "
-                f"output {key!r} of length {n}: it matches more than one of "
-                f"{candidates} by total element count alone (their per-graph "
-                "counts may still differ). Register this key's level "
-                "explicitly rather than relying on shape inference."
-            )
+            lengths = [batch._storage.groups[g].segment_lengths for g in candidates]
+            if any(not torch.equal(lengths[0], length) for length in lengths[1:]):
+                raise RuntimeError(
+                    f"Cannot determine the storage level for unregistered "
+                    f"model output {key!r} of length {n}: it matches more "
+                    f"than one of {candidates} by total element count, and "
+                    "their per-graph counts disagree. Register this key's "
+                    "level explicitly rather than relying on shape inference."
+                )
         return candidates[0] if candidates else "system"
 
     def _publish_model_output(
