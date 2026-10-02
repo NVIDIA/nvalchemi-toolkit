@@ -448,6 +448,20 @@
 
 ### Fixed
 
+- **A missing energy buffer accepted every swap** — temperature acceptance
+  substituted zeros when the batch carried no `energy`, where `decide()`
+  raises for the same omission. Zero is not a neutral stand-in:
+  `log a = (beta_i - beta_j)(U_i - U_j)` is zero for equal energies, so
+  *every* swap was accepted — a random relabelling with no energetic
+  criterion — and the per-pair acceptance rate a ladder is tuned on read
+  1.00, which looks like rungs that are too close rather than a missing
+  field. It is reachable through the documented bias-free REMD recipe, since
+  priming requires only `forces` and a batch without `energy` is otherwise
+  runnable. It now raises, and names the buffer to allocate. A non-finite
+  energy is refused too, in the one place both entry points meet, since that
+  exponent is `nan` and `nan` compares false — the silent reject rather than
+  the silent accept.
+
 - **A non-finite bias energy silently rejected every swap** — `bias_energy`,
   the evaluation umbrella acceptance needs, did not check what the biases
   returned. It is the only place a bias is scored under an assignment the run

@@ -715,6 +715,12 @@ AtomicData(
 )
 ```
 
+`energy` is required by a **bias-free** temperature ladder too, not only by a
+biased run: the acceptance rule reads it. Priming checks only `forces`, so a
+batch without `energy` is otherwise runnable — and an absent potential energy
+is refused rather than treated as zero, which would make every exponent zero
+and accept every swap.
+
 The bias hook raises a named `ValueError` naming the field, the biases that
 produced it, and how to allocate the buffer — rather than skipping the field
 and letting the contribution vanish. Because `run()` primes before the first

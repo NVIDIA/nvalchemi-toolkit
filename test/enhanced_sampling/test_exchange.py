@@ -511,6 +511,22 @@ class TestAcceptanceArithmetic:
             or True
         )  # denormal handling is platform-dependent; the cap is the point
 
+    def test_a_non_finite_energy_raises(self, device: str) -> None:
+        """The exponent would be nan, which compares false — a silent reject."""
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4), attempt_interval=2)
+        with pytest.raises(ValueError, match="non-finite potential energy"):
+            exchange.decide(
+                0,
+                torch.arange(4),
+                torch.tensor([0.0, float("nan"), 0.0, 0.0]),
+            )
+
+    def test_decide_still_refuses_energies_it_was_not_given(self) -> None:
+        """The batch-free seam and the live path agree about this."""
+        exchange = ReplicaExchange(_ladder(2), torch.arange(2))
+        with pytest.raises(ValueError, match="needs the per-walker potential"):
+            exchange.decide(0, torch.tensor([0, 1]), None)
+
     def test_umbrella_without_bias_energies_raises(self) -> None:
         exchange = ReplicaExchange(_flat_ladder(2), torch.tensor([0, 1]))
         with pytest.raises(ValueError, match="needs the bias energy"):
@@ -682,6 +698,43 @@ class TestRunnerIntegration:
                 biases={},
                 replica_exchange=exchange,
             )
+
+    def test_a_missing_energy_buffer_raises_rather_than_zero_filling(
+        self, device: str
+    ) -> None:
+        """Zero is not a neutral stand-in for an absent potential energy.
+
+        ``log a = (beta_i - beta_j)(U_i - U_j)``, so equal energies make every
+        exponent zero and every swap accepted — a random relabelling with no
+        energetic criterion, reported as a 1.00 acceptance rate, which reads
+        as rungs that are too close rather than as a missing field. A
+        bias-free ladder is where this bites: priming only requires ``forces``,
+        so a batch without ``energy`` is otherwise perfectly runnable.
+        """
+        data_list = []
+        for _ in range(4):
+            data = AtomicData(
+                positions=torch.randn(4, 3),
+                atomic_numbers=torch.full((4,), 6, dtype=torch.long),
+                atomic_masses=torch.ones(4),
+                forces=torch.zeros(4, 3),
+            )
+            data.add_node_property("velocities", torch.zeros(4, 3))
+            data_list.append(data)
+        batch = Batch.from_data_list(data_list).to(device)
+        assert getattr(batch, "energy", None) is None
+
+        runner, model, _ = self._runner(device, interval=2)
+        with pytest.raises(ValueError, match="no 'energy' field"):
+            runner.run(batch, model, n_steps=6)
+
+    def test_a_present_energy_buffer_gives_a_real_acceptance_rate(
+        self, device: str
+    ) -> None:
+        """The guard must not be stricter than the contract it enforces."""
+        runner, model, exchange = self._runner(device, interval=2)
+        runner.run(_make_batch(device=device), model, n_steps=8)
+        assert exchange.attempts > 0
 
     def test_assignment_stays_a_permutation(self, device: str) -> None:
         batch = _make_batch(device=device)

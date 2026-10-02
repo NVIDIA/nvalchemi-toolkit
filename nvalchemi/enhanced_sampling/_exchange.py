@@ -533,8 +533,17 @@ class ReplicaExchange:
                     "ReplicaExchange: temperature acceptance needs the "
                     "per-walker potential energy, but none was supplied."
                 )
+            energies = energies.reshape(-1)
+            if not bool(energies.isfinite().all()):
+                raise ValueError(
+                    f"ReplicaExchange: temperature acceptance read a "
+                    f"non-finite potential energy {energies.tolist()}. The "
+                    "exponent becomes nan, which compares false, so every "
+                    "swap would be rejected and the ladder would look merely "
+                    "badly tuned."
+                )
             log_alpha = self._log_acceptance_temperature_rows(
-                slots, rows_i, rows_j, energies.reshape(-1)
+                slots, rows_i, rows_j, energies
             )
         else:
             if bias_current is None or bias_swapped is None:
@@ -703,12 +712,9 @@ class ReplicaExchange:
         ) -> torch.Tensor:
             slots = batch[slot_field].reshape(-1).to(torch.long)
             if self._acceptance == "temperature":
-                energies = getattr(batch, "energy", None)
-                if energies is None:
-                    energies = torch.zeros(
-                        batch.num_graphs, device=batch.positions.device
-                    )
-                return self._decide_rows(slots, rows_i, rows_j, energies=energies)
+                return self._decide_rows(
+                    slots, rows_i, rows_j, energies=self._batch_energies(batch)
+                )
 
             if bias_energy_fn is None:
                 raise ValueError(
@@ -726,6 +732,45 @@ class ReplicaExchange:
             )
 
         return accept
+
+    @staticmethod
+    def _batch_energies(batch: Batch) -> torch.Tensor:
+        """Return the per-walker potential energy the rule needs.
+
+        Raises rather than substituting zeros, matching :meth:`decide`.  Zero
+        is not a neutral stand-in here: temperature acceptance is
+        ``(beta_i - beta_j)(U_i - U_j)``, so equal energies make every
+        exponent zero and **every swap accepted** — a random relabelling with
+        no energetic criterion, and an acceptance rate of 1.00 in the
+        diagnostics a ladder is tuned on, which reads as rungs that are too
+        close together rather than as a missing field.
+
+        Parameters
+        ----------
+        batch:
+            The live batch.
+
+        Returns
+        -------
+        torch.Tensor
+            Potential energy per walker, shape ``[B]``.
+
+        Raises
+        ------
+        ValueError
+            If the batch carries no ``energy``.  Finiteness is checked in
+            :meth:`_decide_rows`, where both entry points meet.
+        """
+        energies = getattr(batch, "energy", None)
+        if energies is None:
+            raise ValueError(
+                "ReplicaExchange: temperature acceptance needs the per-walker "
+                "potential energy, but the batch has no 'energy' field. "
+                "Construct it with energy=torch.zeros(1, 1) so the model can "
+                "write into it — a bias-free ladder needs the buffer just as "
+                "much as a biased one, because the acceptance rule reads it."
+            )
+        return energies.reshape(-1)
 
     def _reduced_bias_energy(
         self,
