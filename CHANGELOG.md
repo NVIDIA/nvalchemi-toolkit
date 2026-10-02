@@ -448,6 +448,24 @@
 
 ### Fixed
 
+- **A reused strategy evaluated the wrong potential** — `DynamicsStrategy`
+  caches its engine so consecutive `run()` calls continue one trajectory, but
+  `dynamics(model)` returned that cache without looking at the argument. A
+  strategy reused with a second potential therefore ran
+  `run(batch, other_model)` against the *first* one and produced a trajectory
+  for a model nobody asked for. It now refuses a changed model and names both
+  ways forward: `build(model)` for an independent engine, or a second
+  strategy. `build()` is unaffected and still returns a fresh engine every
+  call.
+
+- **`to_spec_dict()` did not produce JSON** — it copied `engine_kwargs`
+  verbatim, and `NVTLangevin` annotates `temperature` as
+  `float | torch.Tensor`, so `json.dumps(strategy.to_spec_dict())` failed for
+  a configuration the engine itself accepts. Values are now converted:
+  tensors to nested lists, dtypes, devices and paths to their string form,
+  containers element-wise. A value with no JSON form raises and names the key
+  rather than being coerced to a `repr` nothing can read back.
+
 - **Replacement walkers reused graduated identities** — `walker_id` was
   registered as a bookkeeping key with an `arange(n)` factory, so after
   `refill_check` dropped graduated graphs and appended replacements, each

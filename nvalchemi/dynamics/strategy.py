@@ -37,8 +37,11 @@ Workflows become sibling subclasses that override :meth:`build_hooks`::
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import torch
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from nvalchemi.dynamics.base import BaseDynamics
@@ -49,6 +52,54 @@ if TYPE_CHECKING:
     from nvalchemi.models.base import BaseModelMixin
 
 __all__ = ["DynamicsStrategy"]
+
+_JSON_SCALARS = (bool, int, float, str)
+
+
+def _json_ready(value: Any, where: str) -> Any:
+    """Return *value* in a form :func:`json.dumps` accepts.
+
+    Tensors become nested lists, dtypes and devices their string form, paths
+    their string form, and containers are converted element-wise.  Anything
+    else raises rather than being coerced to a ``repr``: a spec that
+    serialises to a string nothing can read back is worse than one that says
+    it cannot represent the configuration.
+
+    Parameters
+    ----------
+    value:
+        The value to convert.
+    where:
+        Dotted path to *value*, used in the error.
+
+    Returns
+    -------
+    Any
+        A JSON-representable equivalent.
+
+    Raises
+    ------
+    TypeError
+        If *value* has no JSON form.
+    """
+    if value is None or isinstance(value, _JSON_SCALARS):
+        return value
+    if isinstance(value, torch.Tensor):
+        return value.detach().cpu().tolist()
+    if isinstance(value, (torch.dtype, torch.device, Path)):
+        return str(value)
+    if isinstance(value, Mapping):
+        return {
+            str(key): _json_ready(item, f"{where}[{key!r}]")
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_json_ready(item, f"{where}[{i}]") for i, item in enumerate(value)]
+    raise TypeError(
+        f"to_spec_dict: {where} is a {type(value).__name__}, which has no "
+        "JSON form. A spec is declarative configuration; move a live object "
+        "to a runtime argument, or give the value a representable form."
+    )
 
 
 class DynamicsStrategy(BaseModel):
@@ -161,9 +212,31 @@ class DynamicsStrategy(BaseModel):
         BaseDynamics
             The engine this strategy drives.  Stable across calls, so step
             counters and thermostat state persist.
+
+        Raises
+        ------
+        ValueError
+            If *model* is not the one the cached engine was built for.  The
+            cache exists so consecutive :meth:`run` calls continue a single
+            trajectory; handing it a second potential would either return an
+            engine evaluating the first — a trajectory for the wrong model,
+            with nothing to show for it — or quietly start a second
+            trajectory sharing the first one's hooks and counters.  Call
+            :meth:`build` for an independent engine, or construct a second
+            strategy.
         """
         if self._engine is None:
             self._engine = self.build(model)
+        elif self._engine.model is not model:
+            raise ValueError(
+                f"{type(self).__name__}: this strategy is already driving an "
+                f"engine built for a {type(self._engine.model).__name__}, and "
+                f"a different {type(model).__name__} was passed. A strategy "
+                "caches its engine so consecutive run() calls continue one "
+                "trajectory, which a second potential would silently "
+                "invalidate. Use build(model) for an independent engine, or "
+                "construct a second strategy."
+            )
         return self._engine
 
     def run(
@@ -203,13 +276,24 @@ class DynamicsStrategy(BaseModel):
         Subclasses that add live fields should exclude them the same way and
         extend this dict with their own declarative settings.
 
+        ``engine_kwargs`` is converted rather than copied.  Several
+        integrators take tensor-valued controls — ``NVTLangevin`` annotates
+        ``temperature`` as ``float | torch.Tensor`` — so copying them
+        verbatim produces a dict that :func:`json.dumps` refuses, for a
+        configuration the engine itself accepts.
+
         Returns
         -------
         dict[str, Any]
             JSON-ready bundle suitable for :func:`json.dumps`.
+
+        Raises
+        ------
+        TypeError
+            If an ``engine_kwargs`` value has no JSON form, naming the key.
         """
         return {
             "engine": f"{self.engine.__module__}.{self.engine.__qualname__}",
-            "engine_kwargs": dict(self.engine_kwargs),
+            "engine_kwargs": _json_ready(dict(self.engine_kwargs), "engine_kwargs"),
             "n_steps": self.n_steps,
         }
