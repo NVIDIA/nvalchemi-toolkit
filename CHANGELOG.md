@@ -448,6 +448,19 @@
 
 ### Fixed
 
+- **A non-finite bias energy silently rejected every swap** — `bias_energy`,
+  the evaluation umbrella acceptance needs, did not check what the biases
+  returned. It is the only place a bias is scored under an assignment the run
+  is *not* in, which is exactly where a window bias overflows: finite with
+  every walker at home, infinite the moment one is scored against another's
+  window. The force path therefore never sees it. Nor does anything raise —
+  the acceptance exponent becomes `nan`, `nan` compares false, and the swap
+  is rejected, so the run reads as a ladder with poor overlap. Contributions
+  are now checked here too, naming the bias and the fact that the assignment
+  was a proposed one. The `isfinite` sync this costs is per exchange attempt,
+  not per step, so the reason `ConservativeBias.forward` skips the check does
+  not apply.
+
 - **A FIFO hill ring smaller than one deposition overwrote itself** — one
   deposition writes one hill per walker, so with more walkers than
   `max_hills` the ring indices repeat *within* a single call —

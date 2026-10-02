@@ -311,6 +311,61 @@ class TestBiasHookProtocol:
         other.load_state_dict(hook.state_dict())
         assert other._last_update_step == {"a": 3}
 
+    def test_bias_energy_checks_the_proposed_assignment(self) -> None:
+        """The only place a bias is scored under labels the run is not in.
+
+        A window bias can be finite with every walker at home and overflow
+        the moment one is scored against another's window — which is exactly
+        what umbrella acceptance asks for — so the force path never sees it.
+        Unchecked it does not raise either: the acceptance exponent becomes
+        ``nan``, ``nan`` compares false, and the swap is silently rejected.
+        """
+
+        class _Overflowing(ConservativeBias):
+            """exp((x - center_s)^2): finite at home, infinite far away."""
+
+            def __init__(self) -> None:
+                super().__init__(name="w", compute_stress=False)
+                self.register_buffer("centers", torch.tensor([0.0, 400.0]))
+
+            def energy(self, current: Batch) -> torch.Tensor:
+                """Return a per-window repulsion."""
+                state = current.thermodynamic_state_id.reshape(-1).to(torch.long)
+                x = current.positions[:, 0].reshape(current.num_graphs, -1).mean(-1)
+                return torch.exp((x - self.centers[state]) ** 2).reshape(-1, 1)
+
+        batch = _make_batch(n_graphs=2)
+        with torch.no_grad():
+            batch.positions[: batch.num_nodes // 2, 0] = 0.0
+            batch.positions[batch.num_nodes // 2 :, 0] = 400.0
+        batch["thermodynamic_state_id"] = torch.tensor([0, 1])
+
+        hook = BiasHook({"w": _Overflowing()})
+        # At home every walker is finite, so the force path would see nothing.
+        assert bool(hook.bias_energy(batch, torch.tensor([0, 1])).isfinite().all())
+        # Swapped, it is not — and that is the evaluation acceptance needs.
+        with pytest.raises(ValueError, match="proposed assignment.*NaN or Inf"):
+            hook.bias_energy(batch, torch.tensor([1, 0]))
+
+    def test_bias_energy_names_the_offending_bias(self) -> None:
+        class _NanBias(ConservativeBias):
+            def __init__(self) -> None:
+                super().__init__(name="bad", compute_stress=False)
+
+            def energy(self, current: Batch) -> torch.Tensor:
+                """Return a NaN energy."""
+                return torch.full(
+                    (current.num_graphs, 1),
+                    float("nan"),
+                    device=current.positions.device,
+                )
+
+        hook = BiasHook({"bad": _NanBias()})
+        batch = _make_batch(n_graphs=2)
+        batch["thermodynamic_state_id"] = torch.tensor([0, 1])
+        with pytest.raises(ValueError, match=r"_NanBias 'bad'"):
+            hook.bias_energy(batch, torch.tensor([1, 0]))
+
     def test_an_empty_bias_set_applies_nothing(self) -> None:
         batch = _make_batch()
         before = batch.forces.clone()

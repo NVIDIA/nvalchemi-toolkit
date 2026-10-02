@@ -1099,6 +1099,18 @@ class BiasHook:
         belongs to whatever ladder is asking, which is also what keeps this
         hook free of any temperature table.
 
+        Contributions are checked here as well as on the force path, and for
+        a reason specific to this one: it is the only place a bias is
+        evaluated under an assignment the run is *not* in.  A window bias can
+        be perfectly finite with every walker at home and overflow the moment
+        one is scored against another's window — which is precisely what
+        umbrella acceptance asks it to do — so the force path never sees it.
+        An unchecked non-finite energy here does not raise either: it makes
+        the acceptance exponent ``nan``, and ``nan`` compares false, so the
+        swap is silently rejected and the run looks like a ladder with poor
+        overlap.  The ``isfinite`` sync this costs is per exchange attempt,
+        not per step.
+
         Parameters
         ----------
         batch:
@@ -1110,6 +1122,12 @@ class BiasHook:
         -------
         torch.Tensor
             ``E_bias`` per walker in eV, shape ``[B]``.
+
+        Raises
+        ------
+        ValueError
+            If any bias returns a contribution violating the ``ModelOutputs``
+            conventions under *state_ids*, naming the bias.
         """
         original = batch.thermodynamic_state_id
         try:
@@ -1119,8 +1137,16 @@ class BiasHook:
                 dtype=batch.positions.dtype,
                 device=batch.positions.device,
             )
-            for bias in self.biases.values():
-                energy = bias(batch).get("energy")
+            for name, bias in self.biases.items():
+                outputs = bias(batch)
+                validate_contribution(
+                    outputs,
+                    source=f"{type(bias).__name__} {name!r} under the proposed "
+                    "assignment",
+                    num_atoms=batch.num_nodes,
+                    num_graphs=batch.num_graphs,
+                )
+                energy = outputs.get("energy")
                 if energy is not None:
                     total = total + energy.reshape(-1)
         finally:
