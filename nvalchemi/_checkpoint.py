@@ -45,6 +45,16 @@ last.  A checkpoint interrupted at any point therefore has no manifest, and
 torn half-state.  Checksums are verified on read, so a store that was
 truncated *after* the manifest landed is also caught.
 
+The whole store is built beside the destination and moved into place only
+once it is complete, so saving over an existing checkpoint cannot damage it.
+Writing in place would: a rewrite interrupted before the new manifest lands
+leaves the *old* manifest attesting to component data that has already been
+replaced, which fails its own checksum — so an interrupted save would destroy
+a restart point that was valid a moment earlier, which is the opposite of
+what manifest-last is for.  Writing in place also simply fails for a store
+holding arrays, because an array cannot be created where one already exists;
+saving every epoch to one path is the ordinary workflow and has to work.
+
 The cover is total.  Every component carries its own digest, and
 ``batch_checksum`` covers ``meta/``, ``core/``, and ``custom/`` — the
 positions, velocities, pointer arrays, and any extra per-graph fields that
@@ -68,8 +78,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 import numpy as np
@@ -86,7 +99,6 @@ from nvalchemi.data.datapipes.backends.zarr import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
-    from pathlib import Path
 
 __all__ = [
     "CHECKPOINT_FORMAT_VERSION",
@@ -530,6 +542,12 @@ def save_checkpoint(
     then the manifest.  An interruption anywhere before the last step leaves
     a store with no manifest, which :func:`load_checkpoint` refuses.
 
+    The store is built beside *path* and moved into place only once it is
+    complete, so an interrupted save leaves any checkpoint already there
+    intact and loadable.  Saving repeatedly to one path — every epoch, say —
+    is therefore both safe and supported.  On success whatever was at *path*
+    is replaced.
+
     Parameters
     ----------
     path:
@@ -564,6 +582,86 @@ def save_checkpoint(
     TypeError
         If any component's state holds a value that cannot be stored without
         pickling.
+    """
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = destination.with_name(f"{destination.name}.writing-{os.getpid()}")
+    shutil.rmtree(staging, ignore_errors=True)
+    try:
+        manifest = _write_store(
+            staging,
+            components,
+            batch=batch,
+            batch_fields=batch_fields,
+            compatibility=compatibility,
+            metadata=metadata,
+        )
+        _move_into_place(staging, destination)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    return manifest
+
+
+def _move_into_place(staging: Path, destination: Path) -> None:
+    """Replace *destination* with *staging*, keeping one of them whole.
+
+    Two renames rather than one, because a directory cannot be renamed onto a
+    populated directory.  The old store is moved aside first and removed only
+    after the new one is in place, so a failure at any point leaves either the
+    previous checkpoint or the new one — never a mixture of the two.
+
+    Parameters
+    ----------
+    staging:
+        The freshly written store.
+    destination:
+        Where it belongs.
+    """
+    if not destination.exists():
+        os.replace(staging, destination)
+        return
+
+    superseded = destination.with_name(f"{destination.name}.superseded-{os.getpid()}")
+    shutil.rmtree(superseded, ignore_errors=True)
+    os.replace(destination, superseded)
+    try:
+        os.replace(staging, destination)
+    except BaseException:
+        os.replace(superseded, destination)
+        raise
+    shutil.rmtree(superseded, ignore_errors=True)
+
+
+def _write_store(
+    path: Path,
+    components: Mapping[str, Stateful],
+    *,
+    batch: Batch | None,
+    batch_fields: Sequence[str],
+    compatibility: Mapping[str, Any] | None,
+    metadata: Mapping[str, Any] | None,
+) -> CheckpointManifest:
+    """Write a complete store at *path*, manifest last.
+
+    Parameters
+    ----------
+    path:
+        Destination, which must not already exist.
+    components:
+        Name to :class:`Stateful`.
+    batch:
+        Batch to save, or ``None``.
+    batch_fields:
+        Per-graph fields to persist explicitly.
+    compatibility:
+        Configuration fingerprint.
+    metadata:
+        Caller bookkeeping.
+
+    Returns
+    -------
+    CheckpointManifest
+        The manifest that was committed.
     """
     _check_names(components)
 

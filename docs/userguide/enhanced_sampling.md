@@ -835,6 +835,10 @@ The store is written batch → components → **manifest last**. The manifest is
 the commit marker:
 
 - No manifest ⇒ the write was interrupted ⇒ `load_checkpoint` refuses it.
+- The store is built beside the destination and moved into place only once it
+  is complete, so saving over an existing checkpoint cannot damage it: an
+  interrupted save leaves the previous one intact and loadable. Checkpointing
+  every epoch to one path is safe.
 - **Everything** is checksummed (SHA-256) and verified on read, so damage
   *after* the manifest landed is caught too: each component individually,
   plus a `batch_checksum` covering `meta/`, `core/`, and `custom/`. Cover is

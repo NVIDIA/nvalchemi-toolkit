@@ -448,6 +448,25 @@
 
 ### Fixed
 
+- **Saving a checkpoint over an existing one** — the store was written in
+  place, with two consequences. Saving twice to the same path *failed*
+  outright once any component held a tensor, because an array cannot be
+  created where one already exists — and checkpointing every epoch to one
+  path is the ordinary workflow. And where the write did proceed, an
+  interruption before the new manifest landed left the **old** manifest
+  attesting to component data that had already been replaced, so it failed
+  its own checksum: an interrupted save destroyed a restart point that was
+  valid a moment earlier, which is the opposite of what writing the manifest
+  last is for.
+
+  The store is now built beside the destination and moved into place only
+  once complete, via two renames so the old store is removed only after the
+  new one has landed. A failure at any point leaves either the previous
+  checkpoint or the new one, never a mixture, and no staging directory
+  behind. Saving over an existing checkpoint replaces it rather than merging
+  into it, so a stale row from a previous generation cannot survive into the
+  restored batch.
+
 - **A reused strategy evaluated the wrong potential** — `DynamicsStrategy`
   caches its engine so consecutive `run()` calls continue one trajectory, but
   `dynamics(model)` returned that cache without looking at the argument. A

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -290,7 +291,90 @@ class TestRoundTrip:
 
 
 # ===========================================================================
-# 4. Names the store cannot hold
+# 4. Saving over an existing checkpoint
+# ===========================================================================
+
+
+class TestSaveOverAnExistingCheckpoint:
+    """Writing in place is what manifest-last exists to avoid."""
+
+    def test_repeated_saves_to_one_path(self, tmp_path) -> None:
+        """Checkpointing every epoch to one path is the ordinary workflow.
+
+        Written in place it does not merely risk corruption — it fails, since
+        an array cannot be created where one already exists.
+        """
+        path = tmp_path / "run.zarr"
+        for generation in (1, 2, 3):
+            save_checkpoint(path, {"counter": _Counter(generation)})
+            assert load_checkpoint(path).states["counter"]["count"] == generation
+
+    def test_an_interrupted_rewrite_leaves_the_old_one_loadable(self, tmp_path) -> None:
+        """The restart point has to survive a failed attempt to replace it.
+
+        In place, the old manifest would still be there attesting to component
+        data that had already been overwritten — so it would fail its own
+        checksum, and an interrupted save would destroy a checkpoint that was
+        valid a moment earlier.
+        """
+        path = tmp_path / "run.zarr"
+        save_checkpoint(path, {"counter": _Counter(1)})
+
+        with (
+            patch.object(
+                CheckpointManifest, "model_dump", side_effect=KeyboardInterrupt
+            ),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            save_checkpoint(path, {"counter": _Counter(2)})
+
+        assert load_checkpoint(path).states["counter"]["count"] == 1
+
+    def test_a_failed_save_leaves_no_staging_behind(self, tmp_path) -> None:
+        path = tmp_path / "run.zarr"
+        save_checkpoint(path, {"counter": _Counter(1)})
+        with (
+            patch.object(
+                CheckpointManifest, "model_dump", side_effect=KeyboardInterrupt
+            ),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            save_checkpoint(path, {"counter": _Counter(2)})
+        assert sorted(child.name for child in tmp_path.iterdir()) == ["run.zarr"]
+
+    def test_a_successful_save_leaves_no_staging_behind(self, tmp_path) -> None:
+        path = tmp_path / "run.zarr"
+        save_checkpoint(path, {"counter": _Counter(1)})
+        save_checkpoint(path, {"counter": _Counter(2)})
+        assert sorted(child.name for child in tmp_path.iterdir()) == ["run.zarr"]
+
+    def test_the_batch_is_replaced_not_merged(self, tmp_path) -> None:
+        """A stale row from the previous generation would restore silently."""
+        path = tmp_path / "run.zarr"
+        save_checkpoint(
+            path,
+            {"counter": _Counter(1)},
+            batch=_make_batch(n_graphs=3),
+            batch_fields=("walker_id",),
+        )
+        save_checkpoint(
+            path,
+            {"counter": _Counter(2)},
+            batch=_make_batch(n_graphs=2),
+            batch_fields=("walker_id",),
+        )
+        contents = load_checkpoint(path)
+        assert contents.manifest.num_graphs == 2
+        assert contents.batch.num_graphs == 2
+
+    def test_a_missing_parent_directory_is_created(self, tmp_path) -> None:
+        path = tmp_path / "nested" / "deeper" / "run.zarr"
+        save_checkpoint(path, {"counter": _Counter(7)})
+        assert load_checkpoint(path).states["counter"]["count"] == 7
+
+
+# ===========================================================================
+# 5. Names the store cannot hold
 # ===========================================================================
 
 
@@ -325,7 +409,7 @@ class TestComponentNames:
 
 
 # ===========================================================================
-# 5. The manifest is the commit marker
+# 6. The manifest is the commit marker
 # ===========================================================================
 
 
