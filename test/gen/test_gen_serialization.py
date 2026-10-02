@@ -169,8 +169,8 @@ class TestAtomisticGeneratorDirectSerialization:
         )
         raw = json.loads(gen.model_dump_json())
         func = raw["generator_func"]
-        assert func["cls_path"].endswith("_return_importable")
-        assert func["path"].endswith("trivial_generate")
+        assert func["cls_path"].endswith("_import_callable")
+        assert func["target_path"].endswith("trivial_generate")
         assert raw["required_inputs"] == ["positions"]
         assert raw["outputs"] is None
         assert len(raw["hooks"]) == 1
@@ -261,10 +261,10 @@ class TestGenerationPipelineDirectSerialization:
         raw = json.loads(pipe.model_dump_json())
         assert len(raw["stages"]) == 2
         gen_func = raw["stages"][0]["generator_func"]
-        assert gen_func["cls_path"].endswith("_return_importable")
-        assert gen_func["path"].endswith("trivial_generate")
-        assert raw["stages"][1]["cls_path"].endswith("_return_importable")
-        assert raw["stages"][1]["path"].endswith("make_passthrough_stage")
+        assert gen_func["cls_path"].endswith("_import_callable")
+        assert gen_func["target_path"].endswith("trivial_generate")
+        assert raw["stages"][1]["cls_path"].endswith("_import_callable")
+        assert raw["stages"][1]["target_path"].endswith("make_passthrough_stage")
 
     def test_pipeline_rejects_bare_dict_stage(self) -> None:
         """A raw dict missing ``generator_func`` fails validation."""

@@ -77,14 +77,10 @@ from pydantic import (
     model_validator,
 )
 
-from nvalchemi._serialization import _callable_path_of, _return_importable
+from nvalchemi._serialization import capture_callable_spec
 from nvalchemi.data import Batch
 from nvalchemi.gen.generator import AtomisticGenerator
-from nvalchemi.training import (
-    BaseSpec,
-    create_model_spec,
-    create_model_spec_from_json,
-)
+from nvalchemi.training import create_model_spec_from_json
 
 __all__ = ["GenerationPipeline"]
 
@@ -298,18 +294,7 @@ class GenerationPipeline(BaseModel):
             if isinstance(stage, AtomisticGenerator):
                 payloads.append(stage.model_dump(mode="json"))
                 continue
-            to_spec = getattr(stage, "to_spec", None)
-            if callable(to_spec):
-                spec = to_spec()
-                if not isinstance(spec, BaseSpec):
-                    raise TypeError(
-                        "Pipeline stage to_spec() must return a BaseSpec, "
-                        f"got {type(spec).__name__}."
-                    )
-            else:
-                spec = create_model_spec(
-                    _return_importable, path=_callable_path_of(stage)
-                )
+            spec = capture_callable_spec(stage, field_name="stage")
             payloads.append(spec.model_dump(mode="json"))
         return payloads
 

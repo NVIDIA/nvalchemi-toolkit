@@ -142,19 +142,11 @@ from pydantic import (
 )
 from tensordict import TensorDictBase
 
-from nvalchemi._serialization import (
-    _callable_path_of,
-    _return_importable,
-    _wrap_custom_type,
-)
+from nvalchemi._serialization import _wrap_custom_type, capture_callable_spec
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.hooks import GenerationContext, Hook, HookRegistryMixin
-from nvalchemi.training import (
-    BaseSpec,
-    create_model_spec,
-    create_model_spec_from_json,
-)
+from nvalchemi.training import create_model_spec, create_model_spec_from_json
 
 if TYPE_CHECKING:
     from nvalchemi.gen.pipeline import GenerationPipeline
@@ -170,7 +162,11 @@ SampleT = TypeVar("SampleT")
 
 
 _SerializableOptionalDevice: TypeAlias = _wrap_custom_type(torch.device) | None
-"""``torch.device | None`` annotation reusing the registered device serializer.
+"""Field annotation for ``device`` on spec-serializable models.
+
+A plain ``torch.device | None`` cannot be dumped to JSON by pydantic, so
+this alias routes the field through the ``torch.device`` serializer
+registered in :mod:`nvalchemi._serialization`.
 
 Round-trips via :func:`str` / :class:`torch.device` — the pair registered in
 :mod:`nvalchemi._serialization` (``register_type_serializer``)."""
@@ -575,17 +571,9 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
         """
         if fn is None:
             return None
-        to_spec = getattr(fn, "to_spec", None)
-        if callable(to_spec):
-            spec = to_spec()
-            if not isinstance(spec, BaseSpec):
-                raise TypeError(
-                    f"{info.field_name}.to_spec() must return a BaseSpec, "
-                    f"got {type(spec).__name__}."
-                )
-        else:
-            spec = create_model_spec(_return_importable, path=_callable_path_of(fn))
-        return spec.model_dump(mode="json")
+        return capture_callable_spec(fn, field_name=info.field_name).model_dump(
+            mode="json"
+        )
 
     @field_serializer("hooks")
     def _serialize_hooks(self, hooks: list[Any]) -> list[dict[str, Any]]:
@@ -637,7 +625,10 @@ class AtomisticGenerator(BaseModel, HookRegistryMixin):
     def _serialize_field_declarations(
         self, value: frozenset[str] | None
     ) -> list[str] | None:
-        """Serialize field declarations as sorted lists for stable payloads.
+        """Dump the declarations as sorted lists.
+
+        Frozenset order varies between processes, so unsorted output would
+        make two dumps of the same generator compare unequal.
 
         Parameters
         ----------
