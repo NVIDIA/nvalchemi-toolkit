@@ -173,16 +173,27 @@ def cell_alignment_offenders(
     r"""Per-system bool: ``True`` where *cell* is not already aligned.
 
     "Aligned" means exactly what :func:`align_cell` would leave unchanged:
-    the strict upper triangle is (numerically) zero *and* the cell is
-    right-handed (positive determinant).  Checking only the triangle is not
-    enough — the kernel's canonical output always has a non-negative
-    diagonal (``a``, ``b sin gamma``, ``c3`` are lengths/sqrt terms by
-    construction), so a matrix that is already triangular but left-handed
-    (e.g. ``diag(-5, 5, 5)``, determinant :math:`-125`) would still be
-    flipped by :func:`align_cell`, even though its upper triangle is
-    trivially zero.  A non-positive determinant also catches degenerate
-    (zero-volume) cells, which :func:`align_cell` leaves untouched but which
-    are never a valid reference cell regardless.
+    the strict upper triangle is (numerically) zero, the cell is
+    right-handed (positive determinant), *and* the diagonal is
+    non-negative.  All three are necessary — the kernel's canonical output
+    always has a non-negative diagonal (``a``, ``b sin gamma``, ``c3`` are
+    lengths/sqrt terms by construction), and none of the first two checks
+    alone catches every matrix that violates it:
+
+    - A matrix that is already triangular but left-handed (e.g.
+      ``diag(-5, 5, 5)``, determinant :math:`-125`) would still be flipped
+      by :func:`align_cell`, even though its upper triangle is trivially
+      zero — caught by the determinant check.
+    - A matrix that is triangular *and* right-handed can still have a
+      negative diagonal entry if an even number of them are negative (e.g.
+      ``diag(-5, -5, 5)``, determinant :math:`+125`): the determinant check
+      alone calls this aligned, but :func:`align_cell` rotates it to
+      ``diag(5, 5, 5)`` — a 180-degree rotation about the third axis, not a
+      no-op — so it needs its own check.
+
+    A non-positive determinant also catches degenerate (zero-volume)
+    cells, which :func:`align_cell` leaves untouched but which are never a
+    valid reference cell regardless.
 
     This is the one criterion :class:`~nvalchemi.dynamics.hooks.AlignCellHook`
     (to decide whether calling :func:`align_cell` would be a no-op) and
@@ -207,4 +218,5 @@ def cell_alignment_offenders(
     skew = torch.triu(cell, 1).abs().amax(dim=(-2, -1))
     not_triangular = skew > atol
     not_right_handed = torch.linalg.det(cell) <= 0
-    return not_triangular | not_right_handed
+    negative_diagonal = (torch.diagonal(cell, dim1=-2, dim2=-1) < 0).any(dim=-1)
+    return not_triangular | not_right_handed | negative_diagonal

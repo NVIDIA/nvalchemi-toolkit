@@ -385,6 +385,27 @@ class TestCellAlignmentOffenders:
         ).unsqueeze(0)
         assert not cell_alignment_offenders(cell).item()
 
+    def test_negative_diagonal_right_handed_cell_is_an_offender(
+        self, device: str
+    ) -> None:
+        # Already triangular (trivially: it's diagonal) and right-handed
+        # (determinant +125 > 0: two negative entries cancel), but the
+        # diagonal itself is not the non-negative lengths/sqrt-terms
+        # align_cell's canonical form requires — it rotates this to
+        # diag(5, 5, 5), not a no-op, so the determinant check alone is not
+        # enough.
+        cell = torch.diag(
+            torch.tensor([-5.0, -5.0, 5.0], dtype=torch.float64, device=device)
+        ).unsqueeze(0)
+        assert torch.linalg.det(cell).item() > 0
+        assert cell_alignment_offenders(cell).item()
+
+        positions = torch.zeros(1, 3, dtype=torch.float64, device=device)
+        aligned = cell.clone()
+        align_cell(positions, aligned)
+        assert not torch.equal(aligned, cell)
+        assert not cell_alignment_offenders(aligned).item()
+
     def test_agrees_with_align_cell_output(self, device: str) -> None:
         """Whatever this says is already aligned, align_cell leaves alone."""
         dtype = torch.float64
