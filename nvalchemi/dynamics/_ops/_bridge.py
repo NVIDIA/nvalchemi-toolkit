@@ -130,19 +130,6 @@ def _make_two_level_state_batch(
     )
 
 
-def _state_level(state: Batch, level_name: str) -> SegmentedLevelStorage:
-    """Return the segmented level storage of a two-level state batch.
-
-    One line, but it is the only thing standing between callers and
-    ``state._storage.groups[level_name]`` — a private attribute of
-    ``Batch``.  Production code (``lbfgs.py``'s ``_ops_cell_state``) and
-    tests that need to inspect a level's raw storage both go through this
-    instead of poking that attribute directly, so there is exactly one
-    place to update if ``Batch``'s internal representation changes.
-    """
-    return state._storage.groups[level_name]
-
-
 def _to_per_system(
     val: float | torch.Tensor,
     M: int,

@@ -32,7 +32,6 @@ from nvalchemiops.torch.lbfgs import LBFGSCellState, LBFGSState
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.data.level_storage import SegmentedLevelStorage
 from nvalchemi.dynamics import ConvergenceHook, DynamicsStage
-from nvalchemi.dynamics._ops._bridge import _state_level
 from nvalchemi.dynamics._ops.cell_align import align_cell
 from nvalchemi.dynamics.base import _level_mask
 from nvalchemi.dynamics.hooks import AlignCellHook, FreezeAtomsHook
@@ -237,7 +236,7 @@ class TestLBFGSState:
         batch = _cell_batch([None] * 3)
         dynamics = LBFGSVariableCell(model=_make_model(needs_stress=True))
         dynamics._ensure_state_initialized(batch)
-        level = _state_level(dynamics._state, _DOF_LEVEL)
+        level = dynamics._state._storage.groups[_DOF_LEVEL]
         assert level.segment_lengths.tolist() == [6, 6, 6]
         assert "ext_batch_idx" not in {key for key, _ in dynamics._state}
 
@@ -293,7 +292,7 @@ class TestLBFGSInflight:
     def test_ragged_topology_is_rebuilt(self):
         dynamics, batch = self._ragged()
         trimmed = self._refill(dynamics, batch, torch.tensor([0, 2]))
-        level = _state_level(dynamics._state, _DOF_LEVEL)
+        level = dynamics._state._storage.groups[_DOF_LEVEL]
         assert level.segment_lengths.tolist() == [4, 3, 6]
         assert dynamics._state.level_ptr(_DOF_LEVEL).tolist() == [0, 4, 7, 13]
         assert int(level.segment_lengths.sum()) == trimmed.num_nodes
@@ -953,7 +952,7 @@ def _compile(fn):
 class TestCompile:
     @staticmethod
     def _assert_warm(dynamics):
-        level = _state_level(dynamics._state, _DOF_LEVEL)
+        level = dynamics._state._storage.groups[_DOF_LEVEL]
         assert level._batch_idx is not None and level._batch_ptr is not None
 
     @pytest.mark.parametrize("variable_cell", [False, True])

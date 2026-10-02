@@ -54,7 +54,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 from nvalchemi.data import Batch
-from nvalchemi.dynamics._ops._bridge import _make_two_level_state_batch, _state_level
+from nvalchemi.dynamics._ops._bridge import _make_two_level_state_batch
 from nvalchemi.dynamics._ops.cell_align import cell_alignment_offenders
 from nvalchemi.dynamics._ops.lbfgs import (
     LBFGSCellState,
@@ -277,7 +277,7 @@ def _ops_state(state: Batch) -> LBFGSState:
 def _ops_cell_state(state: Batch) -> LBFGSCellState:
     # The packed topology is the segmented level's own; never stored.
     return LBFGSCellState(
-        ext_batch_idx=_state_level(state, _DOF_LEVEL).batch_idx.int(),
+        ext_batch_idx=state._storage.groups[_DOF_LEVEL].batch_idx.int(),
         ext_atom_ptr=state.level_ptr(_DOF_LEVEL),
         **{k: state[k] for k in _CELL_PER_SYSTEM + _CELL_PER_DOF},
     )
