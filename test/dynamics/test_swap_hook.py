@@ -338,6 +338,81 @@ class TestPairSwapHook:
                 _accept_all, slot_field="slot", n_slots=4, pairing="round_robin"
             )
 
+    def test_a_refused_rebinding_commits_nothing(self) -> None:
+        """Ordering, not rollback: everything that can refuse runs first.
+
+        Committing the labels before the integrator agrees leaves a batch
+        saying a walker moved rung while the integrator still targets the old
+        one — the state the assignment says it has left.
+        """
+
+        class _Refusing:
+            def apply_per_system_params(
+                self, params: Mapping[str, torch.Tensor], batch: Batch
+            ) -> None:
+                """Refuse, the way an integrator does for a parameter it cannot
+                rebind — before touching any state."""
+                raise KeyError("cannot rebind ['timestep']")
+
+        batch = _make_batch()
+        hook = self._hook(params_fn=lambda slots: {"timestep": slots.float()})
+        hook.on_register(_Refusing())
+        with pytest.raises(KeyError):
+            hook.attempt_segment(batch, 0)
+
+        assert batch.slot.reshape(-1).tolist() == [0, 1, 2, 3], (
+            "the labels were committed although the rebinding was refused"
+        )
+
+    def test_a_failed_application_leaves_the_segment_retryable(self) -> None:
+        """Marking it attempted would skip a swap that never happened."""
+
+        class _Refusing:
+            def apply_per_system_params(
+                self, params: Mapping[str, torch.Tensor], batch: Batch
+            ) -> None:
+                """Always refuse."""
+                raise KeyError("nope")
+
+        hook = self._hook(params_fn=lambda slots: {"timestep": slots.float()})
+        hook.on_register(_Refusing())
+        with pytest.raises(KeyError):
+            hook.attempt_segment(_make_batch(), 0)
+        assert hook.attempted_segment == -1
+
+        # and the retry goes through once the parameters are acceptable
+        hook.params_fn = lambda slots: {"temperature": slots.float()}
+        hook.on_register(_RecordingEngine())
+        batch = _make_batch()
+        hook.attempt_segment(batch, 0)
+        assert hook.attempted_segment == 0
+        assert batch.slot.reshape(-1).tolist() == [1, 0, 3, 2]
+
+    def test_a_params_fn_that_raises_commits_nothing(self) -> None:
+        """The parameters are built before anything is written, for this."""
+
+        def _explode(slots: torch.Tensor) -> Mapping[str, torch.Tensor]:
+            raise RuntimeError("bad ladder")
+
+        batch = _make_batch()
+        hook = self._hook(params_fn=_explode)
+        hook.on_register(_RecordingEngine())
+        with pytest.raises(RuntimeError, match="bad ladder"):
+            hook.attempt_segment(batch, 0)
+        assert batch.slot.reshape(-1).tolist() == [0, 1, 2, 3]
+        assert hook.attempted_segment == -1
+
+    def test_on_swap_runs_after_the_labels_are_committed(self) -> None:
+        """It repairs quantities derived from the swap, so it needs the swap."""
+        seen: list[list[int]] = []
+        hook = self._hook(
+            params_fn=lambda slots: {"temperature": slots.float()},
+            on_swap=lambda batch: seen.append(batch.slot.reshape(-1).tolist()),
+        )
+        hook.on_register(_RecordingEngine())
+        hook.attempt_segment(_make_batch(), 0)
+        assert seen == [[1, 0, 3, 2]]
+
     def test_the_segment_cursor_round_trips(self) -> None:
         hook = self._hook()
         hook.attempted_segment = 7

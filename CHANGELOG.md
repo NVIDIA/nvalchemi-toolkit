@@ -448,6 +448,22 @@
 
 ### Fixed
 
+- **A refused rebinding left the labels swapped** — `PairSwapHook` wrote the
+  new slot assignment onto the batch and *then* asked the integrator to
+  rebind its parameters, so a `params_fn` naming something the integrator
+  cannot rebind left the batch saying a walker had moved rung while the
+  integrator still targeted the old one — the state the assignment says it
+  has left, which is precisely the indivisibility the hook exists to provide.
+  The segment was also marked attempted before the application ran, so the
+  swap could not be retried.
+
+  Indivisibility is now enforced by ordering rather than rollback: the
+  parameters are built and the engine given its chance to refuse before
+  anything is written, the label write itself cannot fail, and `on_swap` runs
+  last because it repairs quantities derived from a swap that has by then
+  definitely happened. `attempted_segment` advances only on success, with a
+  re-entrancy guard in place of the old mark-first idempotence.
+
 - **Saving a checkpoint over an existing one** — the store was written in
   place, with two consequences. Saving twice to the same path *failed*
   outright once any component held a tensor, because an array cannot be

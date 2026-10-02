@@ -172,6 +172,12 @@ class PairSwapHook:
     them behind would sample a state the assignment says the walker is no
     longer in — which is why the parameter rebinding goes through
     ``apply_per_system_params`` rather than being open-coded per method.
+
+    Indivisibility is enforced by ordering rather than by rollback: every
+    step that can refuse — building the parameters, the engine checking it
+    can rebind them — runs before the labels are written, and the label write
+    itself cannot fail.  ``on_swap`` runs last because it repairs quantities
+    derived from a swap that has, by then, definitely happened.
     """
 
     def __init__(
@@ -208,6 +214,7 @@ class PairSwapHook:
         self.on_swap = on_swap
         self.attempted_segment = -1
         self.dynamics: Any = None
+        self._attempting = False
 
     def on_register(self, workflow: Any) -> None:
         """Remember the engine whose per-system parameters a swap rebinds.
@@ -263,11 +270,26 @@ class PairSwapHook:
         segment:
             The completed segment.  Negative, or already attempted, is a
             no-op.
+
+        Notes
+        -----
+        A segment whose application raises stays unattempted, so a caller that
+        recovers can try it again.  The acceptance rule will have consumed a
+        draw by then, so a retry is a fresh decision rather than a replay of
+        the one that failed — which is the right trade against leaving the
+        labels and the integrator disagreeing.
         """
-        if segment < 0 or segment <= self.attempted_segment:
+        if segment < 0 or segment <= self.attempted_segment or self._attempting:
             return
+        self._attempting = True
+        try:
+            self._attempt(batch, segment)
+        finally:
+            self._attempting = False
+        # Advanced only on success: a segment whose application raised has
+        # changed nothing, so marking it attempted would skip a swap that
+        # never happened. The in-progress flag keeps that from re-entering.
         self.attempted_segment = segment
-        self._attempt(batch, segment)
 
     def _validated_slots(self, batch: Batch) -> torch.Tensor:
         """Return the assignment, or say why it cannot be swapped on.
@@ -345,7 +367,14 @@ class PairSwapHook:
             return
 
         new_slots = apply_pair_swaps(slots, rows_i, rows_j, accepted)
-        batch[self.slot_field] = new_slots
+
+        # Everything that can refuse the swap runs before anything is written.
+        # The labels are the cheapest half to commit and the most damaging to
+        # commit alone: a batch saying a walker moved rung while the
+        # integrator still targets the old one samples a state the assignment
+        # says it has left, which is exactly the indivisibility this hook
+        # exists to provide.
+        params = None
         if self.params_fn is not None:
             if self.dynamics is None:
                 raise RuntimeError(
@@ -353,6 +382,18 @@ class PairSwapHook:
                     "from on_register, so register it on the dynamics rather "
                     "than driving attempt_segment() by hand."
                 )
-            self.dynamics.apply_per_system_params(self.params_fn(new_slots), batch)
+            params = self.params_fn(new_slots)
+
+        if params is not None:
+            # Implementations validate the parameters they were handed before
+            # touching any state, so a rebinding they refuse leaves both the
+            # integrator and the batch as they were.
+            self.dynamics.apply_per_system_params(params, batch)
+
+        batch[self.slot_field] = new_slots
+
+        # Last, and deliberately after the labels: this is repair work on
+        # quantities derived from the swap — forces computed under the old
+        # parameters — so it needs the swap to have happened.
         if self.on_swap is not None:
             self.on_swap(batch)
