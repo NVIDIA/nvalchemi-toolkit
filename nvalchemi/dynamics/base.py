@@ -2549,6 +2549,36 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         )
         torch.where(output_mask, source, target, out=target)
 
+    def _publish_unmapped_outputs(
+        self,
+        batch: Batch | AtomsLike,
+        outputs: ModelOutputs,
+        active_graph_mask: Bool[torch.Tensor, "B"] | None,
+    ) -> None:
+        """Publish every model output *compute* didn't already know how to.
+
+        Allocating a never-seen key calls :meth:`_infer_output_group`, which
+        branches on tensor *values* (``torch.equal`` on ``segment_lengths``)
+        rather than shapes alone, so it cannot run inside a
+        ``torch.compile(fullgraph=True)`` graph.  This must therefore only
+        be reached for keys the batch has already seen once — callers
+        compiling the step (:class:`FusedStage`'s ``_prime_forces``) call it
+        eagerly on the first, uncompiled step so every key is allocated
+        before any compiled call needs to publish it.
+        """
+        for key, tensor in outputs.items():
+            if key not in self._OUTPUT_KEY_TO_BATCH_ATTR and tensor is not None:
+                target = getattr(batch, key, None)
+                if target is None:
+                    # setattr defaults an unregistered key to "system"
+                    # regardless of its real length; infer it instead.
+                    group_name = self._infer_output_group(batch, key, tensor)
+                    batch._storage.groups[group_name][key] = torch.empty_like(tensor)
+                    target = getattr(batch, key)
+                self._publish_model_output(
+                    batch, key, target, tensor, active_graph_mask
+                )
+
     def _compute(
         self,
         batch: Batch | AtomsLike,
@@ -4148,24 +4178,7 @@ class FusedStage(BaseDynamics):
 
         outputs: ModelOutputs = self.compute(batch, overall_active_graph_mask)
 
-        # Skip mapped outputs, which compute has already published, and None
-        # placeholders, which only churn dynamo guards.
-        for key, tensor in outputs.items():
-            if key not in self._OUTPUT_KEY_TO_BATCH_ATTR and tensor is not None:
-                target = getattr(batch, key, None)
-                if target is None:
-                    # setattr defaults an unregistered key to "system"
-                    # regardless of its real length; infer it instead.
-                    group_name = self._infer_output_group(batch, key, tensor)
-                    batch._storage.groups[group_name][key] = torch.empty_like(tensor)
-                    target = getattr(batch, key)
-                self._publish_model_output(
-                    batch,
-                    key,
-                    target,
-                    tensor,
-                    overall_active_graph_mask,
-                )
+        self._publish_unmapped_outputs(batch, outputs, overall_active_graph_mask)
 
         for (_, dynamics), active_graph_mask in zip(
             self.sub_stages, stage_active_masks, strict=True
@@ -4478,7 +4491,13 @@ class FusedStage(BaseDynamics):
                     stage_active_mask,
                 )
 
-            self.compute(batch, active_graph_mask)
+            outputs = self.compute(batch, active_graph_mask)
+            # Allocate every unmapped output's storage here, eagerly: this
+            # is the one call to _publish_unmapped_outputs that runs before
+            # any compiled step, so a key _step_impl sees for the first
+            # time is never new to a compiled call — see that method's
+            # docstring for why a never-seen key cannot be allocated there.
+            self._publish_unmapped_outputs(batch, outputs, active_graph_mask)
 
             for (_, dynamics), stage_active_mask in zip(
                 self.sub_stages, stage_active_masks, strict=True

@@ -200,6 +200,16 @@ class CompilerFriendlyAutogradModel(CompilerFriendlyModel):
         )
 
 
+class CompilerFriendlyExtraOutputModel(CompilerFriendlyModel):
+    """Analytical compile-safe model also returning an unmapped per-atom output."""
+
+    def forward(self, batch: Batch) -> dict[str, torch.Tensor]:
+        """Compute energy, forces, and an unmapped per-atom output."""
+        outputs = super().forward(batch)
+        outputs["atomic_energies"] = outputs["energy"].clone()
+        return outputs
+
+
 # -----------------------------------------------------------------------------
 # Helper Functions
 # -----------------------------------------------------------------------------
@@ -1378,6 +1388,45 @@ class TestFusedStageExtraOutputLevel:
             batch, "atomic_energies", torch.randn(6, 1)
         )
         assert group == "atoms"
+
+    def test_first_unmapped_output_publish_is_fullgraph_compile_safe(self) -> None:
+        # _infer_output_group branches on tensor values (torch.equal on
+        # segment_lengths) whenever more than one group matches by total
+        # length, which torch.compile(fullgraph=True) cannot trace. An
+        # "edges" group whose per-graph counts match "atoms" forces that
+        # branch; the first-ever allocation of an unmapped key must happen
+        # during the eager priming step, before the compiled call ever
+        # needs to resolve it.
+        from nvalchemi.data.level_storage import SegmentedLevelStorage
+
+        torch.compiler.reset()
+        try:
+            dynamics = _CompileNoOpDynamics(
+                model=CompilerFriendlyExtraOutputModel(),
+                convergence_hook=ConvergenceHook.from_fmax(1e6),
+                device_type="cpu",
+            )
+            fused = FusedStage(
+                sub_stages=[(0, dynamics)],
+                compile_step=True,
+                compile_kwargs={"backend": "eager", "fullgraph": True},
+                device_type="cpu",
+            )
+            batch = create_batch_with_status(n_graphs=3)
+            batch._storage.groups["edges"] = SegmentedLevelStorage(
+                data={"dummy_edge_field": torch.zeros(batch.num_nodes, 1)},
+                segment_lengths=torch.ones(batch.num_graphs, dtype=torch.int32),
+                device=batch.device,
+                attr_map=batch._storage.attr_map,
+                validate=False,
+            )
+
+            fused.step(batch)
+
+            assert batch._storage._group_name_from_attr("atomic_energies") == "atoms"
+            assert torch.equal(batch.atomic_energies, batch.energy)
+        finally:
+            torch.compiler.reset()
 
 
 class _GraduationRecorder:
