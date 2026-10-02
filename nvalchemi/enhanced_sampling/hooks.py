@@ -221,6 +221,114 @@ class WalkerIdentityHook:
         )
         batch["walker_id"] = ids
 
+    def _assign_state_ids(
+        self, batch: Batch, n_graphs: int, device: torch.device
+    ) -> None:
+        """Give a thermodynamic state to every graph that does not have one.
+
+        Mirrors :meth:`_assign_walker_ids`, but the value is not free: under a
+        ladder the assignment must stay a bijection, so a sentinel row takes a
+        **vacant** rung rather than a default one.  Those are exactly the rungs
+        the graduated walkers left behind, so the replacement entering a slot
+        inherits the rung that slot was holding and the ladder stays fully
+        occupied.
+
+        Parameters
+        ----------
+        batch:
+            The live batch.
+        n_graphs:
+            Number of graphs in it.
+        device:
+            Device for a newly allocated column.
+        """
+        existing = getattr(batch, "thermodynamic_state_id", None)
+        if existing is None:
+            if self.exchange is not None:
+                # Check before attaching: a ladder-sized tensor on a
+                # differently-sized batch would otherwise fail as an opaque
+                # "Length mismatch" from inside the batch storage.
+                self.exchange.validate_assignment(
+                    self.exchange.initial_state_ids,
+                    n_graphs,
+                    source="initial_state_ids",
+                )
+                batch["thermodynamic_state_id"] = self.exchange.initial_state_ids.to(
+                    device
+                )
+            else:
+                batch["thermodynamic_state_id"] = torch.zeros(
+                    n_graphs, dtype=torch.long, device=device
+                )
+            self._validated_assignment = True
+            return
+
+        ids = existing.reshape(-1).to(torch.long)
+        unassigned = ids < 0
+        if bool(unassigned.any()):
+            ids = ids.clone()
+            ids[unassigned] = self._vacant_states(ids, unassigned, device)
+            batch["thermodynamic_state_id"] = ids
+            if self.exchange is not None:
+                # Re-checked after a refill, not only on arrival: the batch
+                # membership just changed, which is the one event that can
+                # break a bijection that was valid a step ago.
+                self.exchange.validate_assignment(
+                    ids, n_graphs, source="batch.thermodynamic_state_id after refill"
+                )
+        elif self.exchange is not None and not self._validated_assignment:
+            # A batch may arrive carrying its own assignment, which never went
+            # through the constructor's check. Validate it once — a duplicate
+            # would surface later as a KeyError from the pair lookup.
+            self.exchange.validate_assignment(
+                existing, n_graphs, source="batch.thermodynamic_state_id"
+            )
+        self._validated_assignment = True
+
+    def _vacant_states(
+        self, ids: torch.Tensor, unassigned: torch.Tensor, device: torch.device
+    ) -> torch.Tensor:
+        """Return the rungs no walker is holding, for the unassigned rows.
+
+        Parameters
+        ----------
+        ids:
+            The current assignment, sentinel rows included.
+        unassigned:
+            Mask of the rows needing a state.
+        device:
+            Device for the result.
+
+        Returns
+        -------
+        torch.Tensor
+            One state per unassigned row, in ascending rung order.
+
+        Raises
+        ------
+        ValueError
+            If there are more rows to fill than rungs left to fill them with.
+        """
+        count = int(unassigned.sum())
+        if self.exchange is None:
+            # Without a ladder the field is a label, not a rung; zero is the
+            # same value a fresh batch gets.
+            return torch.zeros(count, dtype=torch.long, device=device)
+
+        held = {int(value) for value in ids[~unassigned].tolist()}
+        vacant = [
+            state for state in range(len(self.exchange.states)) if state not in held
+        ]
+        if len(vacant) < count:
+            raise ValueError(
+                f"ReplicaExchange: {count} walker(s) need a thermodynamic "
+                f"state but only {len(vacant)} rung(s) are vacant "
+                f"({vacant}). The batch has outgrown the ladder — replica "
+                "exchange presumes one walker per state, so a refill cannot "
+                "add walkers beyond the number of states."
+            )
+        return torch.tensor(vacant[:count], dtype=torch.long, device=device)
+
     def _next_ids(
         self, count: int, device: torch.device, shape: tuple[int, ...] = (-1,)
     ) -> torch.Tensor:
@@ -267,32 +375,7 @@ class WalkerIdentityHook:
 
         self._assign_walker_ids(batch, n_graphs, device)
 
-        existing = getattr(batch, "thermodynamic_state_id", None)
-        if existing is None:
-            if self.exchange is not None:
-                # Check before attaching: a ladder-sized tensor on a
-                # differently-sized batch would otherwise fail as an opaque
-                # "Length mismatch" from inside the batch storage.
-                self.exchange.validate_assignment(
-                    self.exchange.initial_state_ids,
-                    n_graphs,
-                    source="initial_state_ids",
-                )
-                batch["thermodynamic_state_id"] = self.exchange.initial_state_ids.to(
-                    device
-                )
-            else:
-                batch["thermodynamic_state_id"] = torch.zeros(
-                    n_graphs, dtype=torch.long, device=device
-                )
-        elif self.exchange is not None and not self._validated_assignment:
-            # A batch may arrive carrying its own assignment, which never went
-            # through the constructor's check. Validate it once — a duplicate
-            # would surface later as a KeyError from the pair lookup.
-            self.exchange.validate_assignment(
-                existing, n_graphs, source="batch.thermodynamic_state_id"
-            )
-        self._validated_assignment = True
+        self._assign_state_ids(batch, n_graphs, device)
 
         self.current_batch = batch
         full = torch.full((n_graphs,), step, dtype=torch.long, device=device)

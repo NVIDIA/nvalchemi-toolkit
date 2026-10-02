@@ -464,6 +464,17 @@
   caller supplied, so a batch arriving with its own identities does not
   collide with the first refill.
 
+  `thermodynamic_state_id` had the same defect with a sharper consequence: it
+  registered a `zeros` factory, so every replacement claimed rung 0 while the
+  rungs the graduates vacated were left held by nobody — not a ladder replica
+  exchange can pair on. It is now a `-1` sentinel too, and a sentinel row
+  takes a **vacant** rung, so the replacement entering a slot inherits the
+  rung that slot was holding and the bijection survives the refill. A refill
+  that would add more walkers than the ladder has rungs is refused by name,
+  and the assignment is re-validated after a refill rather than only on
+  arrival — a change of batch membership is the one event that can break a
+  bijection that was valid a step earlier.
+
 - **A bias contribution could broadcast onto the whole batch** —
   `validate_contribution` checked that `forces` had shape `[?, 3]` but never
   compared the row count with the batch, so a bias returning `[1, 3]` passed

@@ -110,6 +110,13 @@ def _context(step: int, batch: Batch | None = None) -> _Ctx:
     return _Ctx(batch, step)
 
 
+class _RecordingEngine:
+    """Stand-in for the engine a swap rebinds parameters on."""
+
+    def apply_per_system_params(self, params: object, batch: Batch) -> None:
+        """Accept the rebinding without doing anything."""
+
+
 def _ladder(n: int = 2) -> list[ThermodynamicState]:
     """Return an *n*-rung temperature ladder."""
     return [
@@ -402,12 +409,103 @@ class TestWalkerIdentityHook:
         hook.stamp(batch, 0)
         assert batch.walker_id.reshape(-1).tolist() == [43, 42, 44]
 
-    def test_the_registered_factory_writes_the_sentinel(self) -> None:
-        """The registry and the hook have to agree on what "no identity" is."""
+    @pytest.mark.parametrize("key", ["walker_id", "thermodynamic_state_id"])
+    def test_the_registered_factory_writes_the_sentinel(self, key: str) -> None:
+        """The registry and the hook have to agree on what "unset" is.
+
+        Both fields are *allocated*, not defaulted: an identity has to be
+        fresh and a rung has to be vacant, and neither is something a static
+        per-row factory can know.
+        """
         from nvalchemi.dynamics.base import BaseDynamics
 
-        factory = BaseDynamics._bookkeeping_keys["walker_id"]
+        factory = BaseDynamics._bookkeeping_keys[key]
         assert factory(3, torch.device("cpu")).reshape(-1).tolist() == [-1, -1, -1]
+
+    def test_counters_keep_a_plain_default(self) -> None:
+        """They are a function of the step and rewritten on every stamp."""
+        from nvalchemi.dynamics.base import BaseDynamics
+
+        for key in ("sampling_step", "sampling_epoch", "exchange_segment"):
+            factory = BaseDynamics._bookkeeping_keys[key]
+            assert factory(2, torch.device("cpu")).reshape(-1).tolist() == [0, 0]
+
+    def test_a_sentinel_state_without_a_ladder_becomes_zero(self) -> None:
+        """With no ladder the field is a label, not a rung."""
+        hook = WalkerIdentityHook(steps_per_epoch=4)
+        batch = _make_batch(n_graphs=3)
+        batch["thermodynamic_state_id"] = torch.tensor([0, -1, -1])
+        hook.stamp(batch, 0)
+        assert batch.thermodynamic_state_id.reshape(-1).tolist() == [0, 0, 0]
+
+
+class TestStateAssignmentThroughRefill:
+    """A graduating walker vacates a rung; its replacement must take it."""
+
+    @staticmethod
+    def _hook(n_states: int = 4) -> WalkerIdentityHook:
+        """Return an identity hook over an *n_states*-rung ladder."""
+        exchange = ReplicaExchange(_ladder(n_states), torch.arange(n_states))
+        return WalkerIdentityHook(steps_per_epoch=100, exchange=exchange)
+
+    def test_replacements_take_the_vacated_rungs(self) -> None:
+        """The only assignment that keeps the ladder a bijection.
+
+        Defaulting them to state 0 claims a rung another walker already holds
+        and leaves the vacated one empty, which is not a ladder replica
+        exchange can pair on.
+        """
+        hook = self._hook()
+        batch = _make_batch(n_graphs=4)
+        hook.stamp(batch, 0)
+        assert batch.thermodynamic_state_id.reshape(-1).tolist() == [0, 1, 2, 3]
+
+        # Swaps moved the labels; then the holders of rungs 0 and 3 graduated.
+        batch["thermodynamic_state_id"] = torch.tensor([2, 1, -1, -1])
+        hook.stamp(batch, 1)
+        assignment = batch.thermodynamic_state_id.reshape(-1).tolist()
+        assert assignment == [2, 1, 0, 3]
+        assert sorted(assignment) == [0, 1, 2, 3], "the bijection was broken"
+
+    def test_survivors_keep_the_rung_they_held(self) -> None:
+        hook = self._hook()
+        batch = _make_batch(n_graphs=4)
+        batch["thermodynamic_state_id"] = torch.tensor([3, -1, 1, -1])
+        hook.stamp(batch, 0)
+        assignment = batch.thermodynamic_state_id.reshape(-1).tolist()
+        assert assignment[0] == 3 and assignment[2] == 1
+        assert sorted(assignment) == [0, 1, 2, 3]
+
+    def test_a_batch_outgrowing_the_ladder_is_named(self) -> None:
+        hook = self._hook(n_states=3)
+        batch = _make_batch(n_graphs=4)
+        batch["thermodynamic_state_id"] = torch.tensor([0, 1, -1, -1])
+        with pytest.raises(ValueError, match="outgrown the ladder"):
+            hook.stamp(batch, 0)
+
+    def test_the_refilled_assignment_is_revalidated(self) -> None:
+        """Membership changing is the one event that can break a valid one."""
+        hook = self._hook()
+        batch = _make_batch(n_graphs=4)
+        hook.stamp(batch, 0)
+        # A duplicate among the survivors cannot be repaired by filling.
+        batch["thermodynamic_state_id"] = torch.tensor([1, 1, -1, -1])
+        with pytest.raises(ValueError, match="must be a permutation"):
+            hook.stamp(batch, 1)
+
+    def test_a_swap_still_runs_after_a_refill(self) -> None:
+        """The point of restoring the bijection: the ladder stays pairable."""
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4), attempt_interval=2)
+        hook = WalkerIdentityHook(steps_per_epoch=100, exchange=exchange)
+        batch = _make_batch(n_graphs=4)
+        hook.stamp(batch, 0)
+        batch["thermodynamic_state_id"] = torch.tensor([2, 1, -1, -1])
+        hook.stamp(batch, 1)
+
+        swap = exchange.swap_hook()
+        swap.on_register(_RecordingEngine())
+        swap.attempt_segment(batch, 0)  # must not raise
+        assert sorted(batch.thermodynamic_state_id.reshape(-1).tolist()) == [0, 1, 2, 3]
 
     def test_the_stamped_batch_is_what_checkpoint_would_save(self) -> None:
         hook = WalkerIdentityHook(steps_per_epoch=4)
@@ -486,6 +584,45 @@ class TestIdentityThroughRefill:
             ever += ids[1:]
 
         assert len(set(ever)) == len(ever), f"an identity was reused: {ever}"
+
+    def test_the_ladder_stays_a_bijection_across_a_refill(self) -> None:
+        """The state half of the same path, driven through ``refill_check``.
+
+        The registry rebuilds ``thermodynamic_state_id`` for the whole batch,
+        so a default-valued factory gives every replacement rung 0 — two
+        walkers on one rung, and the rungs the graduates vacated held by
+        nobody.  Replica exchange cannot pair on that.
+        """
+        from nvalchemi.dynamics.base import BaseDynamics
+        from nvalchemi.dynamics.sinks import HostMemory
+
+        sampler = SizeAwareSampler(
+            self._Dataset(30), max_atoms=20, max_edges=10, max_batch_size=3
+        )
+        engine = BaseDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            sampler=sampler,
+            sinks=[HostMemory(capacity=200)],
+            device_type="cpu",
+        )
+        batch = sampler.build_initial_batch()
+        batch["forces"] = torch.zeros(batch.num_nodes, 3)
+        batch["energy"] = torch.zeros(batch.num_graphs, 1)
+
+        exchange = ReplicaExchange(_ladder(3), torch.arange(3), attempt_interval=2)
+        hook = WalkerIdentityHook(steps_per_epoch=1000, exchange=exchange)
+        hook.stamp(batch, 0)
+        assert sorted(batch.thermodynamic_state_id.reshape(-1).tolist()) == [0, 1, 2]
+
+        for step in range(1, 4):
+            batch["status"] = torch.tensor([[0], [1], [1]])
+            batch = engine.refill_check(batch, exit_status=1)
+            assert batch is not None
+            hook.stamp(batch, step)
+            assignment = batch.thermodynamic_state_id.reshape(-1).tolist()
+            assert sorted(assignment) == [0, 1, 2], (
+                f"refill {step} left the ladder as {assignment}"
+            )
 
 
 # ===========================================================================

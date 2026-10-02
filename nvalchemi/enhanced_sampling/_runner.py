@@ -97,12 +97,18 @@ def _register_identity_bookkeeping() -> None:
         "walker_id",
         lambda n, dev: torch.full((n, 1), -1, dtype=torch.long, device=dev),
     )
-    for key in (
+    # Also allocated rather than defaulted, for the same reason and a
+    # different consequence: a walker graduating *vacates* its rung of the
+    # ladder, and a replacement defaulted to state 0 claims a rung another
+    # walker already holds while leaving the vacated one empty — which is not
+    # a ladder replica exchange can pair on.
+    BaseDynamics.register_bookkeeping_key(
         "thermodynamic_state_id",
-        "sampling_step",
-        "sampling_epoch",
-        "exchange_segment",
-    ):
+        lambda n, dev: torch.full((n, 1), -1, dtype=torch.long, device=dev),
+    )
+    # The counters are a function of the step and are rewritten on every
+    # stamp, so a zero default is simply overwritten.
+    for key in ("sampling_step", "sampling_epoch", "exchange_segment"):
         BaseDynamics.register_bookkeeping_key(
             key, lambda n, dev: torch.zeros(n, 1, dtype=torch.long, device=dev)
         )

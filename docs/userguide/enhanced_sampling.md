@@ -760,6 +760,18 @@ of whichever walker just graduated out of the slot, so with
 walker deposited — silently, and on every refill. Identities are never
 reused.
 
+`thermodynamic_state_id` works the same way and for a sharper reason: a
+graduating walker **vacates its rung** of the ladder. Its replacement takes
+that rung, which is the only assignment that keeps the walker↔state bijection
+replica exchange pairs on. Defaulting replacements to state 0 would put two
+walkers on one rung and leave the vacated ones held by nobody. If a refill
+would add more walkers than the ladder has rungs, that is refused by name —
+a ladder of *S* states hosts exactly *S* walkers.
+
+The replacement is of course not equilibrated at the temperature it inherits,
+which is true of any freshly seeded walker; acceptance reads current energies,
+so subsequent swaps are unaffected.
+
 ## Checkpoint and restore
 
 ```python
