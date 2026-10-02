@@ -448,6 +448,22 @@
 
 ### Fixed
 
+- **Overlapping pairs corrupted the assignment** — `pairing` is an extension
+  point, so what it returns is input, and nothing checked it. Two pairs
+  sharing a slot write over each other: `[(0,1), (1,2)]` on `[0,1,2]` yields
+  `[1,0,1]`, duplicating one label and losing another. The run then rebound
+  parameters from that — two walkers on the same rung, one rung held by
+  nobody — and only reported it on the *next* segment, after a round had
+  already been taken at temperatures nobody asked for.
+
+  The schedule is now validated before use, with the error naming the
+  pairing: a slot outside the ladder (which `row_of_slot` would answer with a
+  bare `KeyError`) and a slot in more than one pair are both refused.
+  `apply_pair_swaps` checks the same property on the rows it is about to
+  write, since it is public and its result is supposed to be a permutation —
+  on the *accepted* pairs only, so a schedule whose overlap acceptance
+  happens to resolve is still allowed.
+
 - **A refused rebinding left the labels swapped** — `PairSwapHook` wrote the
   new slot assignment onto the batch and *then* asked the integrator to
   rebind its parameters, so a `params_fn` naming something the integrator

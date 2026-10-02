@@ -151,6 +151,28 @@ class TestApplyPairSwaps:
         )
         assert sorted(new.tolist()) == [0, 1, 2, 3]
 
+    def test_overlapping_accepted_pairs_are_refused(self) -> None:
+        """Their writes overlap: one label is duplicated and another lost.
+
+        Unchecked, ``[(0,1), (1,2)]`` on ``[0,1,2]`` yields ``[1,0,1]`` — not
+        a permutation, and the error only surfaces on the *next* attempt,
+        after a round has run at parameters nobody asked for.
+        """
+        with pytest.raises(ValueError, match="appears in more than one pair"):
+            apply_pair_swaps(
+                torch.tensor([0, 1, 2]), torch.tensor([0, 1]), torch.tensor([1, 2])
+            )
+
+    def test_an_overlap_acceptance_resolves_is_allowed(self) -> None:
+        """Only the accepted pairs are written, so only those must be disjoint."""
+        out = apply_pair_swaps(
+            torch.tensor([0, 1, 2]),
+            torch.tensor([0, 1]),
+            torch.tensor([1, 2]),
+            torch.tensor([True, False]),
+        )
+        assert out.tolist() == [1, 0, 2]
+
     def test_omitting_the_mask_swaps_every_pair(self) -> None:
         """What a rule needs to score the proposal before deciding on it."""
         new = apply_pair_swaps(
@@ -412,6 +434,46 @@ class TestPairSwapHook:
         hook.on_register(_RecordingEngine())
         hook.attempt_segment(_make_batch(), 0)
         assert seen == [[1, 0, 3, 2]]
+
+    def test_an_overlapping_pairing_is_refused_before_anything_is_written(
+        self,
+    ) -> None:
+        """A pairing is an extension point, so what it returns is input."""
+        engine = _RecordingEngine()
+        hook = self._hook(
+            params_fn=lambda slots: {"temperature": slots.float()},
+            pairing=lambda segment, n: [(0, 1), (1, 2)],
+        )
+        hook.on_register(engine)
+        batch = _make_batch()
+        with pytest.raises(ValueError, match="a slot appears in more than one pair"):
+            hook.attempt_segment(batch, 0)
+
+        assert batch.slot.reshape(-1).tolist() == [0, 1, 2, 3]
+        assert engine.calls == []
+        assert hook.attempted_segment == -1, "a schedule error burned the segment"
+
+    def test_a_slot_outside_the_ladder_is_refused(self) -> None:
+        """``row_of_slot`` would answer with a bare KeyError."""
+        hook = self._hook(pairing=lambda segment, n: [(0, 9)])
+        hook.on_register(_RecordingEngine())
+        with pytest.raises(ValueError, match=r"proposed slot\(s\) \[9\]"):
+            hook.attempt_segment(_make_batch(), 0)
+
+    def test_a_self_pair_is_refused(self) -> None:
+        """Pairing a slot with itself names it twice."""
+        hook = self._hook(pairing=lambda segment, n: [(1, 1)])
+        hook.on_register(_RecordingEngine())
+        with pytest.raises(ValueError, match="appears in more than one pair"):
+            hook.attempt_segment(_make_batch(), 0)
+
+    def test_the_built_in_schedule_is_unaffected(self) -> None:
+        """The guard must not be stricter than the contract it enforces."""
+        batch = _make_batch()
+        hook = self._hook(params_fn=lambda slots: {"temperature": slots.float()})
+        hook.on_register(_RecordingEngine())
+        hook.attempt_segment(batch, 0)
+        assert batch.slot.reshape(-1).tolist() == [1, 0, 3, 2]
 
     def test_the_segment_cursor_round_trips(self) -> None:
         hook = self._hook()

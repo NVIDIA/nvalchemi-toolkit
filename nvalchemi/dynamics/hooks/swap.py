@@ -32,6 +32,10 @@ What a caller supplies
     The rule.  *i* and *j* are the graph rows holding the two slots of each
     proposed pair, so the rule reads whatever it needs off the batch — energy,
     a bias, an order parameter — and returns one decision per pair.
+``pairing(segment, n_slots) -> list[tuple[int, int]]``
+    Optional.  Which rungs to propose.  Its pairs must be disjoint — they are
+    decided simultaneously, so an overlap has no defined meaning and its
+    writes would collide — and that is checked rather than assumed.
 ``params_fn(slots) -> Mapping[str, Tensor]``
     Optional.  Maps the post-swap slot assignment to per-graph parameters for
     ``apply_per_system_params``.  Omit it when a method permutes labels only.
@@ -85,6 +89,39 @@ _PAIRINGS: dict[str, Callable[[int, int], list[tuple[int, int]]]] = {
 }
 
 
+def _require_disjoint(values: torch.Tensor, what: str, detail: str) -> None:
+    """Raise if *values* names anything twice.
+
+    A swap writes each member of a pair into the other's place, so two pairs
+    sharing a member write over each other: one label is duplicated and the
+    other lost, and what comes out is no longer a permutation.
+
+    Parameters
+    ----------
+    values:
+        Every member of every pair, flattened.
+    what:
+        What the values are, for the error.
+    detail:
+        What the caller should do about it.
+
+    Raises
+    ------
+    ValueError
+        If any value appears more than once.
+    """
+    flat = values.reshape(-1).tolist()
+    seen: set[int] = set()
+    repeated = sorted({int(v) for v in flat if int(v) in seen or seen.add(int(v))})
+    if repeated:
+        raise ValueError(
+            f"{what} appears in more than one pair: {repeated}. Pairs within "
+            "a segment have to be disjoint — they are decided simultaneously, "
+            f"and overlapping writes duplicate one label and lose another. "
+            f"{detail}"
+        )
+
+
 def apply_pair_swaps(
     slots: torch.Tensor,
     rows_i: torch.Tensor,
@@ -117,10 +154,23 @@ def apply_pair_swaps(
     -------
     torch.Tensor
         A new assignment; *slots* is not modified.
+
+    Raises
+    ------
+    ValueError
+        If two accepted pairs share a row, which would make the result
+        something other than a permutation.
     """
     if accepted is None:
         accepted = torch.ones(rows_i.numel(), dtype=torch.bool)
     take = accepted.to(dtype=torch.bool, device=slots.device)
+    # Only the accepted pairs are written, so only those have to be disjoint:
+    # a schedule may propose an overlap that acceptance happens to resolve.
+    _require_disjoint(
+        torch.cat([rows_i[take], rows_j[take]]),
+        "apply_pair_swaps: a graph row",
+        "Propose each row at most once per round.",
+    )
     new_slots = slots.clone()
     new_slots[rows_i[take]] = slots[rows_j[take]]
     new_slots[rows_j[take]] = slots[rows_i[take]]
@@ -291,6 +341,52 @@ class PairSwapHook:
         # never happened. The in-progress flag keeps that from re-entering.
         self.attempted_segment = segment
 
+    def _validated_pairs(self, segment: int) -> list[tuple[int, int]]:
+        """Return this segment's pairs, or say why they cannot be used.
+
+        A pairing is an extension point, so what it returns is input.  Two
+        pairs sharing a slot is the failure worth catching here: the writes
+        overlap, one label is duplicated and another lost, and the assignment
+        stops being a permutation — which the *next* segment reports, after a
+        round has already been run at parameters nobody asked for.
+
+        Parameters
+        ----------
+        segment:
+            Segment index.
+
+        Returns
+        -------
+        list[tuple[int, int]]
+            The proposed pairs, possibly empty.
+
+        Raises
+        ------
+        ValueError
+            If a slot is out of range or appears in more than one pair.
+        """
+        pairs = self.pairing(segment, self.n_slots)
+        if not pairs:
+            return pairs
+
+        members = [slot for pair in pairs for slot in pair]
+        out_of_range = sorted(
+            {slot for slot in members if not 0 <= slot < self.n_slots}
+        )
+        if out_of_range:
+            raise ValueError(
+                f"PairSwapHook: the pairing proposed slot(s) {out_of_range} "
+                f"for a ladder of {self.n_slots}. A slot is an index into the "
+                "ladder, so it has to name a rung that exists."
+            )
+        _require_disjoint(
+            torch.tensor(members, dtype=torch.long),
+            "PairSwapHook: a slot",
+            "Return a schedule whose pairs do not touch — the built-in "
+            "'even_odd' alternates offsets for exactly this reason.",
+        )
+        return pairs
+
     def _validated_slots(self, batch: Batch) -> torch.Tensor:
         """Return the assignment, or say why it cannot be swapped on.
 
@@ -349,7 +445,7 @@ class PairSwapHook:
         segment:
             Segment index, which selects the pairing.
         """
-        pairs = self.pairing(segment, self.n_slots)
+        pairs = self._validated_pairs(segment)
         if not pairs:
             return
 
