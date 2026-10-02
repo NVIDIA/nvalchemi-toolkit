@@ -18,6 +18,15 @@ Core classes
    Batch
    LevelSchema
 
+Device helpers
+--------------
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   resolve_device
+
 I/O and pipelines
 -----------------
 

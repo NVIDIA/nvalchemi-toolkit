@@ -923,6 +923,68 @@ class TestFire2Ops:
 
 
 # ---------------------------------------------------------------------------
+# L-BFGS ops (pass-through to nvalchemiops.torch.lbfgs)
+# ---------------------------------------------------------------------------
+
+
+class TestLBFGSOps:
+    def _make(self, M: int, N: int, dtype, device, *, cell: bool = False):
+        from nvalchemi.dynamics._ops.lbfgs import lbfgs_prepare_state
+
+        torch.manual_seed(7)
+        positions = torch.randn(N, 3, dtype=dtype, device=device)
+        forces = torch.randn(N, 3, dtype=dtype, device=device)
+        sizes = [N // M] * M
+        sizes[-1] += N - sum(sizes)
+        batch = _batch_idx(sizes, device)
+        state = lbfgs_prepare_state(
+            N + (2 * M if cell else 0), M, dtype=dtype, device=device
+        )
+        return positions, forces, state, batch, sizes
+
+    def test_lbfgs_coord_mutates_positions(self, dtype, device):
+        from nvalchemi.dynamics._ops.lbfgs import lbfgs_step_coord
+
+        pos, frc, state, batch, _ = self._make(2, 8, dtype, device)
+        pos_orig = pos.clone()
+        lbfgs_step_coord(pos, frc, state, batch)
+        assert not torch.allclose(pos, pos_orig)
+        assert (state.iteration == 0).all()
+
+    def test_lbfgs_coord_single_system(self, dtype, device):
+        from nvalchemi.dynamics._ops.lbfgs import lbfgs_step_coord
+
+        pos, frc, state, batch, _ = self._make(1, 4, dtype, device)
+        pos_orig = pos.clone()
+        lbfgs_step_coord(pos, frc, state, batch, maxstep=0.1)
+        # A first (restart) step moves the largest-force atom exactly maxstep.
+        step = (pos - pos_orig).norm(dim=-1).max()
+        assert torch.isclose(step, torch.tensor(0.1, dtype=dtype, device=device))
+
+    def test_lbfgs_coord_cell_mutates_positions_and_cell(self, dtype, device):
+        from nvalchemi.dynamics._ops.lbfgs import (
+            lbfgs_prepare_cell_state,
+            lbfgs_step_coord_cell,
+        )
+
+        M, N = 2, 6
+        pos, frc, state, batch, sizes = self._make(M, N, dtype, device, cell=True)
+        cell = 5.0 * torch.eye(3, dtype=dtype, device=device).repeat(M, 1, 1)
+        stress = 0.01 * torch.eye(3, dtype=dtype, device=device).repeat(M, 1, 1)
+        atom_ptr = torch.tensor([0, *torch.tensor(sizes).cumsum(0).tolist()])
+        cell_state = lbfgs_prepare_cell_state(
+            atom_ptr.to(device=device, dtype=torch.int32),
+            cell,
+            dtype=dtype,
+            device=device,
+        )
+        pos_orig, cell_orig = pos.clone(), cell.clone()
+        lbfgs_step_coord_cell(pos, cell, frc, stress, state, cell_state, batch)
+        assert not torch.allclose(pos, pos_orig)
+        assert not torch.allclose(cell, cell_orig)
+
+
+# ---------------------------------------------------------------------------
 # NPT/NPH ops - pressure and barostat utilities
 # ---------------------------------------------------------------------------
 

@@ -67,6 +67,24 @@ class CountingDemoModel(DemoModelWrapper):
         return super().forward(*args, **kwargs)
 
 
+class ExtraAtomOutputModel(DemoModelWrapper):
+    """DemoModelWrapper returning an unmapped per-atom output.
+
+    Mimics a model like MACE returning ``atomic_energies`` alongside the
+    standard keys: an output not in ``_OUTPUT_KEY_TO_BATCH_ATTR``, sized by
+    atoms rather than graphs.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(DemoModel())
+
+    def adapt_output(self, model_output: Any, data: Any) -> Any:
+        """Add an unmapped, atom-length output to the standard ones."""
+        output = super().adapt_output(model_output, data)
+        output["atomic_energies"] = torch.randn(data.positions.shape[0], 1)
+        return output
+
+
 class NonConservativeDemoModel(DemoModelWrapper):
     """DemoModelWrapper with forces computed directly (not via autograd).
 
@@ -180,6 +198,16 @@ class CompilerFriendlyAutogradModel(CompilerFriendlyModel):
             neighbor_config=None,
             needs_pbc=False,
         )
+
+
+class CompilerFriendlyExtraOutputModel(CompilerFriendlyModel):
+    """Analytical compile-safe model also returning an unmapped per-atom output."""
+
+    def forward(self, batch: Batch) -> dict[str, torch.Tensor]:
+        """Compute energy, forces, and an unmapped per-atom output."""
+        outputs = super().forward(batch)
+        outputs["atomic_energies"] = outputs["energy"].clone()
+        return outputs
 
 
 # -----------------------------------------------------------------------------
@@ -453,6 +481,18 @@ class TestFusedStage:
         assert isinstance(fused, FusedStage)
         assert len(fused.sub_stages) == 2
 
+    def test_plus_operator_preserves_grouped_mode(self) -> None:
+        """Grouped mode should propagate through fused-stage composition."""
+        dyn1 = BaseDynamics(model=self.model, by_group=True)
+        dyn2 = BaseDynamics(model=self.model, by_group=True)
+        dyn3 = BaseDynamics(model=self.model, by_group=True)
+
+        fused = dyn1 + dyn2
+        appended = fused + dyn3
+
+        assert fused.by_group is True
+        assert appended.by_group is True
+
     def test_auto_assigned_status_codes(self) -> None:
         """Sub-stages should have auto-assigned status codes 0, 1, ..."""
         dyn1 = BaseDynamics(model=self.model)
@@ -490,15 +530,18 @@ class TestFusedStage:
         assert model.forward_count == 1
 
     def test_masked_updates_correct_indices(self) -> None:
-        """FusedStage should dispatch updates to correct dynamics engines."""
+        """Dispatch updates and publish mixed-dtype outputs to active rows."""
+        self.model.double()
         dynamics0 = TrackingDynamics(model=self.model)
         dynamics1 = TrackingDynamics(model=self.model)
 
         fused = FusedStage(sub_stages=[(0, dynamics0), (1, dynamics1)])
 
         batch = create_batch_with_status(n_graphs=4)
-        batch.status = torch.tensor([0, 1, 0, 1])
+        batch.status = torch.tensor([0, 1, 0, 2])
         batch.fmax = torch.tensor([0.1, 0.1, 0.1, 0.1])
+        batch.energy.fill_(-13.0)
+        active_graph_mask = batch.status < fused.exit_status
 
         fused.step(batch)
 
@@ -509,8 +552,20 @@ class TestFusedStage:
 
         # dynamics1 should get mask for indices 1, 3
         assert len(dynamics1.updated_masks) == 1
-        expected_mask1 = torch.tensor([False, True, False, True])
+        expected_mask1 = torch.tensor([False, True, False, False])
         assert torch.equal(dynamics1.updated_masks[0], expected_mask1)
+
+        assert fused._last_outputs is not None
+        assert fused._last_outputs["energy"].dtype == torch.float64
+        assert batch.energy.dtype == torch.float32
+        torch.testing.assert_close(
+            batch.energy[active_graph_mask],
+            fused._last_outputs["energy"][active_graph_mask].to(batch.energy.dtype),
+        )
+        torch.testing.assert_close(
+            batch.energy[~active_graph_mask],
+            torch.full_like(batch.energy[~active_graph_mask], -13.0),
+        )
 
     def test_reprime_on_entry_delays_only_transitioning_samples(self) -> None:
         """New samples wait one iteration for force repriming while other samples continue."""
@@ -1239,6 +1294,266 @@ class TestFusedStage:
         # Sample 0's counter was reset on migration; sample 1 left via the
         # hook first, so its counter kept step 1's value.
         assert batch.n_steps_counter_0.view(-1).tolist() == [0, 1]
+
+
+class TestFusedStageExtraOutputLevel:
+    """An unmapped model output must land in the level its shape implies."""
+
+    def test_unmapped_per_atom_output_is_placed_at_atoms_level(self) -> None:
+        # More atoms than graphs: a per-graph (system-level) mask applied to
+        # this tensor would raise a shape mismatch if the output were
+        # misallocated at "system" instead of "atoms".
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.ones(n, dtype=torch.long),
+                positions=torch.randn(n, 3),
+                forces=torch.zeros(n, 3),
+                energy=torch.zeros(1, 1),
+            )
+            for n in (5, 3)
+        ]
+        batch = Batch.from_data_list(data_list)
+        batch["status"] = torch.zeros(2, 1, dtype=torch.long)
+        assert batch.num_nodes != batch.num_graphs
+
+        fused = FusedStage(
+            sub_stages=[
+                (0, DemoDynamics(model=ExtraAtomOutputModel(), n_steps=1)),
+                (1, DemoDynamics(model=ExtraAtomOutputModel(), n_steps=1)),
+            ]
+        )
+        fused.step(batch)
+
+        assert batch._storage._group_name_from_attr("atomic_energies") == "atoms"
+        assert batch.atomic_energies.shape[0] == batch.num_nodes
+        assert batch._storage.attr_map.group("atomic_energies") == "atoms"
+
+    def test_ambiguous_total_length_raises_instead_of_guessing(self) -> None:
+        # Total atom and edge counts coincide (8 == 8) even though their
+        # per-graph counts differ (5/3 atoms vs 6/2 edges): total length
+        # alone cannot say which group an unregistered length-8 output
+        # belongs to, so this must raise rather than silently pick one
+        # (which would put edge values at atom rows, or vice versa).
+        from nvalchemi.data.level_storage import SegmentedLevelStorage
+
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.ones(n, dtype=torch.long),
+                positions=torch.randn(n, 3),
+                forces=torch.zeros(n, 3),
+                energy=torch.zeros(1, 1),
+            )
+            for n in (5, 3)
+        ]
+        batch = Batch.from_data_list(data_list)
+        batch._storage.groups["edges"] = SegmentedLevelStorage(
+            data={"dummy_edge_field": torch.zeros(8, 1)},
+            segment_lengths=torch.tensor([6, 2], dtype=torch.int32),
+            device=batch.device,
+            attr_map=batch._storage.attr_map,
+            validate=False,
+        )
+        assert batch.num_nodes == batch.num_edges == 8
+
+        with pytest.raises(RuntimeError, match="more than one"):
+            BaseDynamics._infer_output_group(batch, "some_output", torch.randn(8, 1))
+
+    def test_coinciding_but_matching_per_graph_counts_do_not_raise(self) -> None:
+        # Every graph has 2 atoms and 2 edges: totals coincide (6 == 6),
+        # but so do per-graph counts, so masking is identical regardless of
+        # which group is picked -- not actually ambiguous, must not raise.
+        # This is the common small-molecule case (e.g. a 2-atom dimer with
+        # one bond represented as 2 directed edges).
+        from nvalchemi.data.level_storage import SegmentedLevelStorage
+
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.ones(2, dtype=torch.long),
+                positions=torch.randn(2, 3),
+                forces=torch.zeros(2, 3),
+                energy=torch.zeros(1, 1),
+            )
+            for _ in range(3)
+        ]
+        batch = Batch.from_data_list(data_list)
+        batch._storage.groups["edges"] = SegmentedLevelStorage(
+            data={"dummy_edge_field": torch.zeros(6, 1)},
+            segment_lengths=torch.tensor([2, 2, 2], dtype=torch.int32),
+            device=batch.device,
+            attr_map=batch._storage.attr_map,
+            validate=False,
+        )
+        assert batch.num_nodes == batch.num_edges == 6
+
+        group = BaseDynamics._infer_output_group(
+            batch, "atomic_energies", torch.randn(6, 1)
+        )
+        assert group == "atoms"
+
+    def test_first_unmapped_output_publish_is_fullgraph_compile_safe(self) -> None:
+        # _infer_output_group branches on tensor values (torch.equal on
+        # segment_lengths) whenever more than one group matches by total
+        # length, which torch.compile(fullgraph=True) cannot trace. An
+        # "edges" group whose per-graph counts match "atoms" forces that
+        # branch; the first-ever allocation of an unmapped key must happen
+        # during the eager priming step, before the compiled call ever
+        # needs to resolve it.
+        from nvalchemi.data.level_storage import SegmentedLevelStorage
+
+        torch.compiler.reset()
+        try:
+            dynamics = _CompileNoOpDynamics(
+                model=CompilerFriendlyExtraOutputModel(),
+                convergence_hook=ConvergenceHook.from_fmax(1e6),
+                device_type="cpu",
+            )
+            fused = FusedStage(
+                sub_stages=[(0, dynamics)],
+                compile_step=True,
+                compile_kwargs={"backend": "eager", "fullgraph": True},
+                device_type="cpu",
+            )
+            batch = create_batch_with_status(n_graphs=3)
+            batch._storage.groups["edges"] = SegmentedLevelStorage(
+                data={"dummy_edge_field": torch.zeros(batch.num_nodes, 1)},
+                segment_lengths=torch.ones(batch.num_graphs, dtype=torch.int32),
+                device=batch.device,
+                attr_map=batch._storage.attr_map,
+                validate=False,
+            )
+
+            fused.step(batch)
+
+            assert batch._storage._group_name_from_attr("atomic_energies") == "atoms"
+            assert torch.equal(batch.atomic_energies, batch.energy)
+        finally:
+            torch.compiler.reset()
+
+
+class _GraduationRecorder:
+    """Record every ON_GRADUATE mask handed to this hook."""
+
+    stage = DynamicsStage.ON_GRADUATE
+    frequency = 1
+
+    def __init__(self) -> None:
+        self.masks: list[list[bool]] = []
+
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:  # noqa: ARG002
+        self.masks.append(ctx.graduated_mask.tolist())
+
+
+class _MidStepGraduationHook:
+    """Move graph 0 to *target* at *stage* on step 1, once priming has passed."""
+
+    frequency = 1
+
+    def __init__(self, stage: DynamicsStage, target: int) -> None:
+        self.stage = stage
+        self.target = target
+
+    def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:  # noqa: ARG002
+        if ctx.step_count == 1:
+            ctx.batch.status.view(-1)[0] = self.target
+
+
+class TestFusedStageOnGraduate:
+    """ON_GRADUATE dispatch inside FusedStage, at both levels."""
+
+    def test_a_criterion_graduation_is_reported_once_at_both_levels(self) -> None:
+        """The step a graph converges out, sub-stage and fused hooks see it once."""
+        dynamics = BaseDynamics(
+            model=NonConservativeDemoModel(),
+            convergence_hook=ConvergenceHook(
+                criteria={"key": "energy_change", "threshold": 0.5}
+            ),
+        )
+        sub_recorder = _GraduationRecorder()
+        dynamics.register_hook(sub_recorder)
+        fused = FusedStage(sub_stages=[(0, dynamics)])
+        fused_recorder = _GraduationRecorder()
+        fused.register_hook(fused_recorder)
+
+        batch = create_batch_with_status(n_graphs=2)
+        batch.status = torch.tensor([0, 0])
+        batch.energy_change = torch.ones(2)
+        fused.step(batch)
+        batch.energy_change = torch.tensor([0.0, 1.0])
+        fused.step(batch)
+        fused.step(batch)
+
+        expected = [[False, False], [True, False], [False, False]]
+        assert sub_recorder.masks == expected
+        assert fused_recorder.masks == expected
+        assert batch.status.view(-1).tolist() == [fused.exit_status, 0]
+
+    def test_a_step_budget_graduation_is_reported_on_its_own_step(self) -> None:
+        """The budget migrates after AFTER_STEP, and ON_GRADUATE still sees it."""
+        dynamics = BaseDynamics(model=NonConservativeDemoModel(), n_steps=2)
+        fused = FusedStage(sub_stages=[(0, dynamics)])
+        recorder = _GraduationRecorder()
+        fused.register_hook(recorder)
+
+        batch = create_batch_with_status(n_graphs=2)
+        batch.status = torch.tensor([0, 0])
+        for _ in range(3):
+            fused.step(batch)
+
+        assert recorder.masks == [[False, False], [True, True], [False, False]]
+
+    @pytest.mark.parametrize(
+        "stage",
+        [DynamicsStage.AFTER_COMPUTE, DynamicsStage.AFTER_POST_UPDATE],
+        ids=["after_compute", "after_post_update"],
+    )
+    def test_a_sub_stage_hook_graduation_before_after_step_is_reported_once(
+        self, stage: DynamicsStage
+    ) -> None:
+        """A status change at an earlier boundary shows in that step's mask at both levels."""
+        dynamics = BaseDynamics(model=NonConservativeDemoModel())
+        fused = FusedStage(sub_stages=[(0, dynamics)])
+        sub_recorder, fused_recorder = _GraduationRecorder(), _GraduationRecorder()
+        dynamics.register_hook(_MidStepGraduationHook(stage, fused.exit_status))
+        dynamics.register_hook(sub_recorder)
+        fused.register_hook(fused_recorder)
+
+        batch = create_batch_with_status(n_graphs=2)
+        batch.status = torch.tensor([0, 0])
+        for _ in range(3):
+            fused.step(batch)
+
+        expected = [[False, False], [True, False], [False, False]]
+        assert sub_recorder.masks == expected
+        assert fused_recorder.masks == expected
+        assert batch.status.view(-1).tolist() == [fused.exit_status, 0]
+
+    def test_a_sub_stage_sees_only_the_graphs_it_owned(self) -> None:
+        """The sub-stage mask is restricted to the graphs it held at step start."""
+        first = BaseDynamics(model=NonConservativeDemoModel(), n_steps=1)
+        second = BaseDynamics(model=NonConservativeDemoModel(), n_steps=1)
+        first_recorder, second_recorder = _GraduationRecorder(), _GraduationRecorder()
+        first.register_hook(first_recorder)
+        second.register_hook(second_recorder)
+        fused = FusedStage(sub_stages=[(0, first), (1, second)])
+
+        batch = create_batch_with_status(n_graphs=2)
+        batch.status = torch.tensor([0, 1])
+        fused.step(batch)
+
+        assert first_recorder.masks == [[False, False]]
+        assert second_recorder.masks == [[False, True]]
+
+    def test_no_dispatch_without_a_listening_hook(self) -> None:
+        """A fused stage without ON_GRADUATE hooks builds no such context."""
+        dynamics = BaseDynamics(model=NonConservativeDemoModel(), n_steps=1)
+        fused = FusedStage(sub_stages=[(0, dynamics)])
+        batch = create_batch_with_status(n_graphs=2)
+        batch.status = torch.tensor([0, 0])
+        with patch.object(fused, "_build_context", wraps=fused._build_context) as build:
+            fused.step(batch)
+        assert all(
+            call.kwargs.get("graduated_mask") is None for call in build.call_args_list
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -2028,9 +2343,12 @@ class TestFusedStageSubstageHooks:
 
         original_compute = fused.compute
 
-        def recording_compute(batch: Batch) -> Any:
+        def recording_compute(
+            batch: Batch,
+            active_graph_mask: torch.Tensor | None = None,
+        ) -> Any:
             events.append("compute")
-            return original_compute(batch)
+            return original_compute(batch, active_graph_mask)
 
         with patch.object(
             fused, "compute", side_effect=recording_compute
@@ -2055,6 +2373,25 @@ class TestFusedStageSubstageHooks:
             assert hook.active_masks[0].tolist() == [True, False, False]
         for hook in (substage1_before, substage1_after):
             assert hook.active_masks[0].tolist() == [False, True, False]
+
+    def test_shared_compute_preserves_graduated_model_outputs(self) -> None:
+        """Fused shared forwards do not publish into globally inactive rows."""
+        model = CompilerFriendlyModel()
+        dynamics0 = _CompileNoOpDynamics(model=model)
+        dynamics1 = _CompileNoOpDynamics(model=model)
+        fused = FusedStage(sub_stages=[(0, dynamics0), (1, dynamics1)])
+
+        batch = create_batch_with_status(n_graphs=3)
+        batch.status = torch.tensor([0, 1, fused.exit_status])
+        batch.forces[2].fill_(-13.0)
+        batch.energy[2].fill_(-11.0)
+
+        fused.step(batch)
+
+        torch.testing.assert_close(batch.forces[2], torch.full((3,), -13.0))
+        torch.testing.assert_close(batch.energy[2], torch.full((1,), -11.0))
+        assert not torch.equal(batch.forces[0], torch.full((3,), -13.0))
+        assert not torch.equal(batch.forces[1], torch.full((3,), -13.0))
 
     def test_admission_hooks_ignore_frequency_across_runs(self) -> None:
         """Admission hooks refire across runs with stage-specific masks."""

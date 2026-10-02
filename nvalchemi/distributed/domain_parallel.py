@@ -456,7 +456,7 @@ class DomainParallel(BaseDynamics):
                 batch,
                 active_graph_mask,
             )
-            dyn.compute(batch)
+            dyn.compute(batch, active_graph_mask)
             dyn._call_hooks(
                 DynamicsStage.AFTER_COMPUTE,
                 batch,
@@ -545,9 +545,15 @@ class DomainParallel(BaseDynamics):
                 continue
             target = getattr(batch, batch_attr, None)
             if target is None:
-                setattr(batch, batch_attr, value.clone())
-            else:
-                target.copy_(value.view(target.shape))
+                setattr(batch, batch_attr, torch.empty_like(value))
+                target = getattr(batch, batch_attr)
+            dyn._publish_model_output(
+                batch,
+                batch_attr,
+                target,
+                value,
+                active_graph_mask,
+            )
 
         # Clear ``requires_grad`` on batch tensors that the model
         # enabled for autograd (a conservative-force model flips
@@ -685,12 +691,7 @@ class DomainParallel(BaseDynamics):
 
     def _active_graph_mask(self, batch: Batch) -> Bool[torch.Tensor, "B"] | None:  # noqa: F722, F821
         """Return the active-graph snapshot for a domain-parallel step."""
-        status = getattr(batch, "status", None)
-        if status is None:
-            return None
-        if status.dim() == 2:
-            status = status.squeeze(-1)
-        return status[: batch.num_graphs] < self._dynamics.exit_status
+        return self.active_graph_mask(batch, self._dynamics.exit_status)
 
     def _build_context(
         self,

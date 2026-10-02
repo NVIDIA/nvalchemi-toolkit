@@ -86,7 +86,7 @@ from __future__ import annotations
 import contextlib
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from typing import Any, Literal, TypeAlias
 
 import numpy as np
@@ -123,7 +123,7 @@ LevelKind: TypeAlias = Literal["uniform", "segmented", "product"]
 INDEX_DTYPE = torch.int32
 
 
-def _resolve_device(device: DeviceType | None) -> torch.device:
+def resolve_device(device: DeviceType | None) -> torch.device:
     """Return *device* with a bare ``cuda`` indexed by the current CUDA device.
 
     A storage records the device it is asked for, but ``.to("cuda")`` puts its
@@ -131,7 +131,10 @@ def _resolve_device(device: DeviceType | None) -> torch.device:
     verbatim makes the record disagree with the tensors as soon as the current
     device changes, so every later ``torch.cat`` or lazily built pointer raises
     a device mismatch. Resolving once at record time pins the storage to the
-    GPU its tensors actually reached.
+    GPU its tensors actually reached. The same resolution turns a caller's
+    index-less ``"cuda"``, which means the device a launcher pinned this
+    process to, into a concrete device that other placements can be compared
+    against.
 
     Parameters
     ----------
@@ -196,6 +199,26 @@ TORCH_DTYPE_MAP_INVERSE: dict[torch.dtype, str] = {
     torch.complex128: "complex128",
     torch.bool: "bool",
 }
+
+
+def effective_dtype(declared: str | torch.dtype | None) -> torch.dtype | str | None:
+    """Resolve known dtype aliases while preserving unknown strings.
+
+    Parameters
+    ----------
+    declared : str, torch.dtype, or None
+        Dtype name or object declared by the schema.
+
+    Returns
+    -------
+    torch.dtype, str, or None
+        The resolved dtype for a known alias, or the original value when it is
+        ``None``, a ``torch.dtype``, or an unknown string.
+    """
+    if declared is None or isinstance(declared, torch.dtype):
+        return declared
+    return TORCH_DTYPE_MAP.get(declared, declared)
+
 
 # ---------------------------------------------------------------------------
 # Domain-specific defaults (aligned with nvalchemi naming conventions)
@@ -530,6 +553,76 @@ class LevelSchema:
         self.segmented_groups.remove(group_name)
         if group_name in self.level_kinds:
             self.level_kinds[group_name] = "uniform"
+
+    def _merged_with(self, extension: LevelSchema) -> LevelSchema:
+        """Return an additive merge without modifying either input schema.
+
+        The existing schema remains authoritative for declarations it already
+        owns. New levels and fields are appended from *extension* in its
+        definition order. Equivalent dtype aliases compare through their
+        effective :class:`torch.dtype` values.
+
+        Parameters
+        ----------
+        extension : LevelSchema
+            Schema declarations to add.
+
+        Returns
+        -------
+        LevelSchema
+            Independent merged schema.
+
+        Raises
+        ------
+        TypeError
+            If *extension* is not a :class:`LevelSchema`.
+        ValueError
+            If an existing level, product, field owner, or dtype conflicts.
+        """
+        if not isinstance(extension, LevelSchema):
+            raise TypeError(
+                f"extension must be a LevelSchema, got {type(extension).__name__}"
+            )
+
+        merged = self.clone()
+        for level_name in extension.level_names:
+            kind = extension.level_kind(level_name)
+            if kind == "product":
+                left, right = extension.product_parents[level_name]
+                merged.add_product_level(level_name, left=left, right=right)
+            else:
+                merged.add_level(level_name, segmented=kind == "segmented")
+
+        for attr_name, group_name in extension.attr_to_group.items():
+            existing_group = merged.attr_to_group.get(attr_name)
+            if existing_group is not None and existing_group != group_name:
+                raise ValueError(
+                    f"Field '{attr_name}' is already assigned to level "
+                    f"'{existing_group}', not '{group_name}'"
+                )
+
+            existing_dtype = merged.dtypes.get(attr_name)
+            extension_dtype = extension.dtypes.get(attr_name)
+            if existing_dtype is not None and extension_dtype is not None:
+                existing_effective = effective_dtype(existing_dtype)
+                extension_effective = effective_dtype(extension_dtype)
+                if existing_effective != extension_effective:
+                    raise ValueError(
+                        f"Field '{attr_name}' has incompatible declared dtypes: "
+                        f"{existing_dtype} vs {extension_dtype}"
+                    )
+
+            if existing_group is None or (
+                existing_dtype is None and extension_dtype is not None
+            ):
+                merged.set(
+                    attr_name,
+                    group_name,
+                    dtype=extension_dtype,
+                    is_segmented=merged.level_kind(group_name) != "uniform",
+                )
+
+        return merged
 
     # -- Queries ------------------------------------------------------------
 
@@ -975,7 +1068,7 @@ class BaseLevelStorage(ABC):
         validate: bool = True,
     ) -> None:
         self._attr_map = attr_map if attr_map else LevelSchema()
-        self.device = _resolve_device(device)
+        self.device = resolve_device(device)
         self.validate = validate
 
         if data is None:
@@ -1056,8 +1149,8 @@ class BaseLevelStorage(ABC):
     def __len__(self) -> int: ...
 
     @abstractmethod
-    def select(self, idx: IndexType) -> BaseLevelStorage:
-        """Return a new container with only the selected samples."""
+    def select(self, idx: IndexType, *, drop: Collection[str] = ()) -> BaseLevelStorage:
+        """Return a container of only the selected samples, without *drop* keys."""
 
     @abstractmethod
     def update_at(self, key: str, value: Tensor, idx: IndexType) -> None:
@@ -1159,9 +1252,15 @@ class BaseLevelStorage(ABC):
         """Return a shallow copy (tensors are **not** cloned)."""
         return self.__class__(self._data, device=self.device, validate=False)
 
-    def clone(self) -> BaseLevelStorage:
-        """Return a deep copy including an independent attr_map clone."""
-        cloned = {k: _clone_tensor(v) for k, v in self._data.items()}
+    def clone(self, *, drop: Collection[str] = ()) -> BaseLevelStorage:
+        """Return a deep copy including an independent attr_map clone.
+
+        Parameters
+        ----------
+        drop : Collection[str], optional
+            Keys left out of the copy instead of being cloned. Default ``()``.
+        """
+        cloned = {k: _clone_tensor(v) for k, v in self._data.items() if k not in drop}
         return self.__class__(
             cloned,
             device=self.device,
@@ -1187,7 +1286,7 @@ class BaseLevelStorage(ABC):
         Self
             For method chaining.
         """
-        device = _resolve_device(device)
+        device = resolve_device(device)
         self.device = device
         self._data = self._data.to(device, non_blocking=non_blocking)
         return self
@@ -1263,13 +1362,18 @@ class UniformLevelStorage(BaseLevelStorage):
         if not self._data.is_empty() and len(value) != len(self):
             raise ValueError(f"Length mismatch: {len(value)} vs {len(self)}")
 
-    def select(self, idx: IndexType) -> UniformLevelStorage:
+    def select(
+        self, idx: IndexType, *, drop: Collection[str] = ()
+    ) -> UniformLevelStorage:
         """Select a subset of samples by index.
 
         Parameters
         ----------
         idx : int, slice, or Tensor
             Index specification.
+        drop : Collection[str], optional
+            Keys left out of the selection instead of being copied. Default
+            ``()``.
 
         Returns
         -------
@@ -1280,7 +1384,8 @@ class UniformLevelStorage(BaseLevelStorage):
         elif not isinstance(idx, slice):
             idx = self._prepare_index(idx)
 
-        selected_td = self._data[idx]
+        data = self._data.exclude(*drop) if drop else self._data
+        selected_td = data[idx]
         return self.__class__(selected_td, device=self.device, validate=False)
 
     def _prepare_index(self, idx: Any) -> Tensor:
@@ -1597,9 +1702,9 @@ class UniformLevelStorage(BaseLevelStorage):
         super().to_device(device, non_blocking=non_blocking)
         return self
 
-    def clone(self) -> UniformLevelStorage:
-        """Return a deep copy; copies _num_kept if set (e.g. after defrag)."""
-        out = super().clone()
+    def clone(self, *, drop: Collection[str] = ()) -> UniformLevelStorage:
+        """Return a deep copy minus *drop*; copies _num_kept if set (e.g. after defrag)."""
+        out = super().clone(drop=drop)
         if getattr(self, "_num_kept", None) is not None:
             object.__setattr__(out, "_num_kept", self._num_kept)
         return out
@@ -1976,13 +2081,18 @@ class SegmentedLevelStorage(BaseLevelStorage):
             return self.segment_lengths[idx]
         return self.segment_lengths[to_tensor(idx).to(device=self.device)]
 
-    def select(self, idx: IndexType) -> SegmentedLevelStorage:
+    def select(
+        self, idx: IndexType, *, drop: Collection[str] = ()
+    ) -> SegmentedLevelStorage:
         """Select a subset of segments.
 
         Parameters
         ----------
         idx : int, slice, or Tensor
             Segment-level index.
+        drop : Collection[str], optional
+            Keys left out of the selection instead of being copied. The
+            segment lengths are selected regardless. Default ``()``.
 
         Returns
         -------
@@ -1990,7 +2100,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
         """
         element_idx = self._expand_idx(idx)
         segment_lengths = self._select_segment_lengths(idx)
-        selected_td = self._data[element_idx.to(device=self.device)]
+        data = self._data.exclude(*drop) if drop else self._data
+        selected_td = data[element_idx.to(device=self.device)]
         return self.__class__(
             selected_td,
             device=self.device,
@@ -2049,9 +2160,19 @@ class SegmentedLevelStorage(BaseLevelStorage):
         self._batch_ptr_np = None
         return self
 
-    def clone(self) -> SegmentedLevelStorage:
-        """Return a deep copy with independent tensors, segment info, and attr_map."""
-        cloned_data = {k: _clone_tensor(self._data[k]) for k in self._data.keys()}
+    def clone(self, *, drop: Collection[str] = ()) -> SegmentedLevelStorage:
+        """Return a deep copy with independent tensors, segment info, and attr_map.
+
+        Parameters
+        ----------
+        drop : Collection[str], optional
+            Keys left out of the copy instead of being cloned. The segment
+            lengths, batch index, and batch pointer are cloned regardless.
+            Default ``()``.
+        """
+        cloned_data = {
+            k: _clone_tensor(self._data[k]) for k in self._data.keys() if k not in drop
+        }
         cloned_seg = _clone_tensor(self.segment_lengths)
         cloned_bidx = (
             _clone_tensor(self._batch_idx) if self._batch_idx is not None else None
@@ -2495,7 +2616,7 @@ class MultiLevelStorage:
             groups if groups is not None else {}
         )
         self.attr_map = attr_map if attr_map is not None else LevelSchema()
-        self.device = _resolve_device(device)
+        self.device = resolve_device(device)
 
         if validate and self.groups:
             self._validate_consistency()
@@ -2682,13 +2803,18 @@ class MultiLevelStorage:
 
     # -- Selection / cloning ------------------------------------------------
 
-    def select(self, idx: IndexType) -> MultiLevelStorage:
+    def select(
+        self, idx: IndexType, *, drop: Collection[str] = ()
+    ) -> MultiLevelStorage:
         """Select a subset of samples across all groups.
 
         Parameters
         ----------
         idx : IndexType
             Sample-level index specification.
+        drop : Collection[str], optional
+            Keys left out of every group's selection instead of being copied.
+            Default ``()``.
 
         Returns
         -------
@@ -2697,7 +2823,7 @@ class MultiLevelStorage:
         if isinstance(idx, int):
             idx = slice(idx, idx + 1)
         return self.__class__(
-            groups={k: v.select(idx) for k, v in self.groups.items()},
+            groups={k: v.select(idx, drop=drop) for k, v in self.groups.items()},
             attr_map=self.attr_map,
             validate=False,
         )
@@ -2724,16 +2850,23 @@ class MultiLevelStorage:
         Self
             For method chaining.
         """
-        device = _resolve_device(device)
+        device = resolve_device(device)
         self.device = device
         for group in self.groups.values():
             group.to_device(device, non_blocking=non_blocking)
         return self
 
-    def clone(self) -> MultiLevelStorage:
-        """Return a deep copy with independent groups and attr_map."""
+    def clone(self, *, drop: Collection[str] = ()) -> MultiLevelStorage:
+        """Return a deep copy with independent groups and attr_map.
+
+        Parameters
+        ----------
+        drop : Collection[str], optional
+            Keys left out of every group's copy instead of being cloned.
+            Default ``()``.
+        """
         return self.__class__(
-            groups={n: g.clone() for n, g in self.groups.items()},
+            groups={n: g.clone(drop=drop) for n, g in self.groups.items()},
             validate=False,
             attr_map=self.attr_map.clone(),
             device=self.device,

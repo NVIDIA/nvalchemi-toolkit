@@ -41,6 +41,7 @@ loop is broken into discrete stages, enumerated by
 | `AFTER_POST_UPDATE` | After the second half-step completes |
 | `AFTER_STEP` | At the very end of a step, after all operations |
 | `ON_CONVERGE` | After convergence evaluation; for fused sub-stages, runs at the hook’s configured interval |
+| `ON_GRADUATE` | After `ON_CONVERGE`; `ctx.graduated_mask` marks the systems whose status reached `exit_status` this step. Dispatched whenever a hook listens and the batch carries a `status` column, so the mask may be all `False` |
 
 When a batch is newly admitted, **ON_ADMISSION** hooks fire before force
 priming and before the first step. Admission is reset for every new `run()` and
@@ -66,11 +67,54 @@ Each step then proceeds through these stages in order:
    sub-stage's convergence mask as `ctx.converged_mask`, and must inspect it to
    determine which systems converged. Converged systems in a multi-stage
    pipeline then migrate to the next stage.
+7. **ON_GRADUATE** hooks fire, when any are registered and the batch carries a
+   `status` column. A system graduates on the step its status reaches
+   `exit_status`, whatever changed it, and `ctx.graduated_mask` marks the
+   systems that graduated during this step.
 
 `run(batch, n_steps)` calls `step()` in a loop until all systems converge or
 `n_steps` is reached. Every hook declares which
 {py:class}`~nvalchemi.dynamics.base.DynamicsStage` stage it should fire at and at
 what frequency, so you have fine-grained control over when callbacks execute.
+
+## Declarative dynamics strategies
+
+{py:class}`~nvalchemi.dynamics.strategy.DynamicsStrategy` stores engine
+configuration and reconstructible hook specs. For a workflow using one engine,
+set `engine` and pass additional constructor arguments in `engine_kwargs`:
+
+```python
+from nvalchemi.dynamics import DynamicsStrategy, NVTLangevin
+
+strategy = DynamicsStrategy(
+    model=model,
+    engine=NVTLangevin,
+    engine_kwargs={"dt": 1.0, "temperature": 300.0, "friction": 0.01},
+    n_steps=100,
+    cache_engine=True,
+)
+batch = strategy.run(batch)
+batch = strategy.run(batch, n_steps=200)
+```
+
+The default `build_engine()` supplies `model`, `n_steps`, and `build_hooks()`
+to the engine. Keep those three keys out of `engine_kwargs`. `build_hooks()`
+returns a new list of `extra_hooks`. Subclasses can override it to add their own
+hooks, or override `build_engine()` for workflows with multiple stages, such as
+{py:class}`~nvalchemi.dynamics.mep.NEB`. Without an `engine` or a
+`build_engine()` override, construction raises `NotImplementedError` when the
+builder is called.
+
+By default, every `run()` builds a fresh engine. With `cache_engine=True`, the
+first run builds the engine and later runs reuse its original configuration and
+runtime state, including the step counter. A subclass can opt in by declaring
+`cache_engine: bool = True`. Calling `build_engine()` directly always constructs
+a fresh engine.
+
+`to_spec_dict()` serializes the engine class as an importable dotted path and
+hooks as constructor specs. Restore it with
+`DynamicsStrategy.from_spec_dict(spec, model=model)`. The live model and cached
+engine state are excluded, so a restored strategy starts with an empty cache.
 
 ## Using dynamics as a context manager
 
@@ -80,9 +124,14 @@ context manager protocol. The `with` block manages a dedicated
 properly opened and closed:
 
 ```python
-from nvalchemi.dynamics import FIRE, ConvergenceHook
+from nvalchemi.dynamics import FIRE2, ConvergenceHook
 
-with FIRE(model=model, dt=0.1, n_steps=500, hooks=[ConvergenceHook.from_fmax(0.05)]) as opt:
+with FIRE2(
+    model=model,
+    dt=0.1,
+    n_steps=500,
+    convergence_hook=ConvergenceHook.from_fmax(0.05),
+) as opt:
     relaxed = opt.run(batch)
 ```
 
@@ -101,7 +150,9 @@ with the `+` operator:
 ```python
 from nvalchemi.dynamics import FIRE, NVTLangevin, ConvergenceHook
 
-relax = FIRE(model=model, dt=0.1, n_steps=200, hooks=[ConvergenceHook.from_fmax(0.05)])
+relax = FIRE(
+    model=model, dt=0.1, n_steps=200, convergence_hook=ConvergenceHook.from_fmax(0.05)
+)
 md = NVTLangevin(model=model, dt=1.0, temperature=300.0, friction=0.01, n_steps=5000)
 
 pipeline = relax + md
@@ -355,11 +406,15 @@ including multi-pipeline topologies and monitoring with persistent storage.
 :maxdepth: 1
 
 dynamics_simulations
+dynamics_mep
 dynamics_sinks
 ```
 
 - [Optimization and Integrators](dynamics_simulations) --- FIRE, NVE, NVT, NPT and
   their configuration.
+- [Reaction Paths and NEB](dynamics_mep_guide) --- batched nudged elastic band,
+  using either the high-level `NEB` strategy or hooks attached directly to an
+  optimizer.
 - [Hooks](hooks_guide) --- the hook protocol, built-in hooks, and writing custom
   hooks.
 - [Data Sinks](dynamics_sinks) --- recording trajectories and simulation results.

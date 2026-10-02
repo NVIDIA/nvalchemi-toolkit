@@ -11,27 +11,28 @@ overview --- they generally differ only in what `pre_update` and `post_update` d
 ## Geometry optimization
 
 Geometry optimization finds the nearest local energy minimum by iteratively moving
-atoms downhill on the potential energy surface. The toolkit provides the **FIRE**
-(Fast Inertial Relaxation Engine) algorithm in two variants.
+atoms downhill on the potential energy surface. The toolkit provides the **FIRE2**
+(Fast Inertial Relaxation Engine, improved variant) algorithm and the quasi-Newton
+**L-BFGS**, each with fixed- and variable-cell variants.
 
 ### Fixed-cell optimization
 
-{py:class}`~nvalchemi.dynamics.optimizers.fire.FIRE` optimizes atomic positions
+{py:class}`~nvalchemi.dynamics.optimizers.fire2.FIRE2` optimizes atomic positions
 while keeping the simulation cell fixed:
 
 ```python
-from nvalchemi.dynamics import FIRE, ConvergenceHook
+from nvalchemi.dynamics import FIRE2, ConvergenceHook
 
-with FIRE(
+with FIRE2(
     model=model,
     dt=0.1,           # initial timestep (femtoseconds)
     n_steps=500,
-    hooks=[ConvergenceHook.from_fmax(0.05)],
+    convergence_hook=ConvergenceHook.from_fmax(0.05),
 ) as opt:
     relaxed = opt.run(batch)
 ```
 
-FIRE uses an adaptive timestep and velocity mixing: when the system is moving
+FIRE2 uses an adaptive timestep and velocity mixing: when the system is moving
 downhill (forces aligned with velocities), the timestep grows and velocities are
 biased toward the force direction. When the system overshoots, the timestep shrinks
 and velocities are zeroed. This makes it robust across a wide range of systems
@@ -39,20 +40,20 @@ without manual tuning.
 
 ### Variable-cell optimization
 
-{py:class}`~nvalchemi.dynamics.optimizers.fire.FIREVariableCell` extends FIRE to
+{py:class}`~nvalchemi.dynamics.optimizers.fire2.FIRE2VariableCell` extends FIRE2 to
 simultaneously optimize both atomic positions and the simulation cell. This is
 useful for finding equilibrium crystal structures where the lattice parameters are
 not known a priori:
 
 ```python
-from nvalchemi.dynamics.optimizers.fire import FIREVariableCell
+from nvalchemi.dynamics.optimizers.fire2 import FIRE2VariableCell
 from nvalchemi.dynamics import ConvergenceHook
 
-with FIREVariableCell(
+with FIRE2VariableCell(
     model=model,
     dt=0.1,
     n_steps=500,
-    hooks=[ConvergenceHook.from_fmax(0.05)],
+    convergence_hook=ConvergenceHook.from_fmax(0.05),
 ) as opt:
     relaxed = opt.run(batch)
 ```
@@ -61,11 +62,70 @@ The cell degrees of freedom are propagated using an NPH-like scheme at zero targ
 pressure. The model must return tensile-positive `stress` in addition
 to `forces`.
 
+### L-BFGS
+
+{py:class}`~nvalchemi.dynamics.optimizers.lbfgs.LBFGS` and
+{py:class}`~nvalchemi.dynamics.optimizers.lbfgs.LBFGSVariableCell` are drop-in
+alternatives to FIRE2: one force evaluation per step, usually far fewer steps.
+
+Each L-BFGS step also launches noticeably more Warp kernels than a FIRE2 step
+(the two-loop recursion iterates over `history_size` in Python), so its
+per-step overhead is higher. With an expensive model forward pass this is
+negligible next to fewer total steps, but with a cheap model — like the LJ
+model in the examples — the per-step overhead can outweigh the reduction in
+step count, making L-BFGS slower in wall-clock time despite converging in
+fewer steps. Prefer FIRE2 when the model is cheap and steps are many;
+L-BFGS wins when the model forward pass dominates step cost.
+
+```python
+from nvalchemi.dynamics import ConvergenceHook
+from nvalchemi.dynamics.optimizers import LBFGS
+
+with LBFGS(
+    model=model,
+    history_size=6,     # stored curvature pairs
+    maxstep=0.2,        # largest displacement per step (angstroms)
+    n_steps=500,
+    convergence_hook=ConvergenceHook.from_fmax(0.05),
+) as opt:
+    relaxed = opt.run(batch)
+```
+
+- `LBFGSVariableCell` needs tensile-positive `stress` and aligned cells: a cell
+  is "aligned" when it is lower-triangular (`a` along x, `b` in the xy-plane; see
+  {py:class}`~nvalchemi.dynamics.hooks.AlignCellHook`). On admission (and again
+  on refill, for a system newly added to an inflight batch), the optimizer
+  validates the incoming cell and snapshots it as that system's reference
+  chart — raising a `ValueError` right there if it isn't lower-triangular.
+  This check runs only at admission/refill, not on every step: once a system
+  is running, nothing re-validates its cell before `pre_update`, so a cell
+  that drifts out of alignment afterward (no `AlignCellHook`, or one with
+  `frequency` other than 1) is silently used against a now-stale reference
+  chart instead of raising. Install `AlignCellHook()` (`frequency=1`), as for
+  `FIRE2VariableCell`, on the optimizer or its `FusedStage` so every step's
+  cell is re-aligned *before* it would otherwise drift — this is what keeps
+  the contract true in practice, not a runtime guard that enforces it.
+- Do not edit positions between steps (e.g. `WrapPeriodicHook`); L-BFGS builds
+  its quasi-Newton direction from `s = x_k - x_{k-1}`, so any out-of-band edit
+  (such as wrapping coordinates back into the cell) introduces a spurious jump
+  that is not the optimizer's own displacement and corrupts the stored
+  curvature pairs. `FreezeAtomsHook` is supported because it restores frozen
+  atoms to the same position every step, so their contribution to `s` is
+  always zero rather than a fictitious jump.
+- The first step after admission moves the largest-force atom by at most `maxstep`.
+- The cell reference is captured when a system is admitted. Under `FusedStage`, a
+  system entering the stage later keeps it; this stays correct but can take more
+  steps if another stage has since changed the cell shape.
+
+Both variable-cell optimizers accept `cell_force_scale` (default 1.0; larger moves
+the cell less). `FIRE2VariableCell` reads it every step; `LBFGSVariableCell` fixes
+it, like `history_size`, when state is allocated.
+
 ### Choosing between fixed and variable cell
 
-Use fixed-cell FIRE when the cell is known (e.g. a bulk crystal at experimental
+Use fixed-cell FIRE2 when the cell is known (e.g. a bulk crystal at experimental
 lattice parameters, or a molecule in vacuum where the cell is just a bounding box).
-Use variable-cell FIRE when the equilibrium cell shape or volume is unknown, such as
+Use variable-cell FIRE2 when the equilibrium cell shape or volume is unknown, such as
 when screening candidate crystal structures or computing equations of state.
 
 ## Molecular dynamics
@@ -265,5 +325,7 @@ updates:
   loop and multi-stage pipelines.
 - **Hooks**: The [Hooks guide](hooks_guide) covers convergence criteria,
   logging, and snapshots.
+- **Reaction paths**: [Reaction Paths and NEB](dynamics_mep_guide) runs batched
+  nudged elastic band calculations with a configurable optimizer.
 - **Examples**: ``basic/02_geometry_optimization.py`` demonstrates a complete relaxation
   workflow.

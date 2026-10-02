@@ -32,8 +32,10 @@ from nvalchemi.dynamics.integrators import NPH, NPT, NVE, NVTLangevin, NVTNoseHo
 from nvalchemi.dynamics.optimizers import (
     FIRE,
     FIRE2,
+    LBFGS,
     FIRE2VariableCell,
     FIREVariableCell,
+    LBFGSVariableCell,
 )
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 from nvalchemi.dynamics.sinks import (
@@ -43,6 +45,7 @@ from nvalchemi.dynamics.sinks import (
     ResizableSink,
     ZarrData,
 )
+from nvalchemi.dynamics.strategy import DynamicsStrategy
 from nvalchemi.dynamics.structure_sampler import (
     FitPolicy,
     OrderedStructureSampler,
@@ -57,6 +60,7 @@ __all__ = [
     "DemoDynamics",
     "DistributedPipeline",
     "DynamicsStage",
+    "DynamicsStrategy",
     "FIRE",
     "FIRE2",
     "FIRE2VariableCell",
@@ -66,6 +70,8 @@ __all__ = [
     "GPUBuffer",
     "Hook",
     "HostMemory",
+    "LBFGS",
+    "LBFGSVariableCell",
     "ResizableSink",
     "NPH",
     "NPT",

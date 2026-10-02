@@ -1,0 +1,286 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Public configuration for NEB."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Literal, Protocol, Self, runtime_checkable
+
+import torch
+import warp as wp
+from torch import Tensor
+
+from nvalchemi.data import Batch, GroupLayout
+from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.mep._geometry import PreparedMIC
+from nvalchemi.dynamics.mep.neb_equations import (
+    climbing_image_effective_force,
+    improved_tangent_weights,
+    neb_effective_force,
+)
+from nvalchemi.dynamics.mep.neb_ops.methods import (
+    prepare_neb_method_key,
+    resolve_neb_method,
+)
+
+__all__ = [
+    "ConstantSpringConfig",
+    "NEBMethod",
+    "SpringConfig",
+    "SpringContext",
+    "TorchNEBMethod",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class SpringContext:
+    """Read-only inputs available to spring-constant policies.
+
+    Tensor fields share storage with the active NEB state and must not be
+    modified in-place by implementations.
+
+    Parameters
+    ----------
+    energies : Tensor or None
+        Flattened physical image energies, shape ``(num_images,)``. ``None``
+        before the first model evaluation.
+    positions : Tensor
+        Packed atomic positions, shape ``(num_atoms, 3)``.
+    physical_forces : Tensor or None
+        Packed physical model forces, shape ``(num_atoms, 3)``. ``None``
+        before the first model evaluation.
+    image_ptr : Tensor
+        Atom offsets delimiting packed images, shape ``(num_images + 1,)``.
+    layout : GroupLayout
+        Mapping from packed images to NEB paths.
+    cell : Tensor
+        Representative cell for each path, shape ``(num_paths, 3, 3)``.
+    pbc : Tensor
+        Periodic-boundary flags for each path, shape ``(num_paths, 3)``.
+    step_count : int
+        Current dynamics step.
+    """
+
+    energies: Tensor | None
+    positions: Tensor
+    physical_forces: Tensor | None
+    image_ptr: Tensor
+    layout: GroupLayout
+    cell: Tensor
+    pbc: Tensor
+    step_count: int
+
+    @property
+    def num_links(self) -> int:
+        """Return the number of adjacent image pairs across all paths."""
+        return self.layout.group_idx.numel() - self.layout.num_groups
+
+
+@runtime_checkable
+class SpringConfig(Protocol):
+    """Resolve spring constants for the links in one or more NEB paths."""
+
+    refresh: Literal[
+        DynamicsStage.ON_ADMISSION,
+        DynamicsStage.AFTER_COMPUTE,
+    ]
+
+    def resolve(self, context: SpringContext) -> Tensor:
+        """Return one spring constant per adjacent image link.
+
+        Parameters
+        ----------
+        context : SpringContext
+            Read-only current NEB state.
+
+        Returns
+        -------
+        Tensor
+            Spring constants with shape ``(context.num_links,)`` on the same
+            device as ``context.positions``.
+        """
+
+
+@dataclass(frozen=True, slots=True)
+class ConstantSpringConfig:
+    """Use one constant spring value for every adjacent image pair.
+
+    Parameters
+    ----------
+    value : float
+        Positive spring constant.
+    """
+
+    value: float
+    refresh: Literal[DynamicsStage.ON_ADMISSION] = field(
+        default=DynamicsStage.ON_ADMISSION,
+        init=False,
+    )
+
+    def __post_init__(self) -> None:
+        """Normalize and validate the constant spring value."""
+        if isinstance(self.value, bool) or not isinstance(self.value, (int, float)):
+            raise TypeError(
+                "ConstantSpringConfig.value must be a number; "
+                f"got {type(self.value).__name__}"
+            )
+        value = float(self.value)
+        if not value > 0:
+            raise ValueError("ConstantSpringConfig.value must be positive")
+        object.__setattr__(self, "value", value)
+
+    def resolve(self, context: SpringContext) -> Tensor:
+        """Return constant spring values for the current path layout."""
+        return torch.full(
+            (context.num_links,),
+            self.value,
+            dtype=context.positions.dtype,
+            device=context.positions.device,
+        )
+
+
+@runtime_checkable
+class TorchNEBMethod(Protocol):
+    """Compute effective forces for a batch of paths using Torch operations."""
+
+    def __call__(
+        self,
+        batch: Batch,
+        *,
+        spring_constants: Tensor,
+        path_energy_ref: Tensor,
+        path_energy_max: Tensor,
+        mic: PreparedMIC,
+    ) -> tuple[Tensor, Tensor]:
+        """Return effective forces and forward-link lengths.
+
+        The batch provides packed positions, physical forces, energies, path
+        layout, and image force modes. Handle regular, climbing, and endpoint
+        images. Compute minimum-image link lengths with
+        ``minimum_image_displacement(..., prepared=mic)``. The hook applies
+        fixed-atom and active-path masks before publishing the returned forces.
+
+        Parameters
+        ----------
+        batch : Batch
+            Current batch of paths. ``positions`` and ``physical_forces``
+            have shape ``(num_atoms, 3)``; ``energy`` and ``force_mode`` have
+            one entry per image. Read inputs without modifying the batch.
+        spring_constants : Tensor, shape (num_images - num_paths,)
+            Per-link spring constants.
+        path_energy_ref, path_energy_max : Tensor, shape (num_paths,)
+            Endpoint reference and highest interior energy per path.
+        mic : PreparedMIC
+            Geometry for ``minimum_image_displacement(..., prepared=mic)``.
+        Returns
+        -------
+        tuple[Tensor, Tensor]
+            Effective forces with shape ``(num_atoms, 3)`` and MIC-aware
+            forward-link lengths with shape ``(num_images - num_paths,)``.
+        """
+
+
+@dataclass(frozen=True, slots=True)
+class NEBMethod:
+    """Configure the device equations used to construct NEB forces.
+
+    Equation functions must be importable module-level functions decorated with
+    :func:`warp.func`. The hook prepares their kernel key during setup.
+
+    Parameters
+    ----------
+    tangent_weights_fn : wp.Function, optional
+        Return the forward and backward weights used to construct the path
+        tangent from adjacent image displacements.
+    effective_force_fn : wp.Function, optional
+        Construct the effective force for an active, non-climbing interior
+        image using the stored-tangent or Gram-statistics signature.
+    climbing_force_fn : wp.Function, optional
+        Construct the effective force for a climbing image.
+
+    Examples
+    --------
+    Override only the tangent weighting while retaining regular NEB and
+    climbing-image force laws::
+
+        import warp as wp
+
+        from nvalchemi.dynamics.mep import NEBMethod
+
+        @wp.func
+        def central_tangent_weights(
+            energy_prev: float,
+            energy_curr: float,
+            energy_next: float,
+        ):
+            return 1.0, 1.0
+
+        method = NEBMethod(tangent_weights_fn=central_tangent_weights)
+    """
+
+    tangent_weights_fn: wp.Function = improved_tangent_weights
+    effective_force_fn: wp.Function = neb_effective_force
+    climbing_force_fn: wp.Function = climbing_image_effective_force
+
+    def __post_init__(self) -> None:
+        """Validate the setup-time method configuration."""
+        for field_name in (
+            "tangent_weights_fn",
+            "effective_force_fn",
+            "climbing_force_fn",
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, wp.Function):
+                raise TypeError(
+                    f"{field_name} must be a function decorated with warp.func; "
+                    f"got {type(value).__name__}"
+                )
+
+    def to_key(self) -> str:
+        """Return the prepared kernel key containing importable equation paths.
+
+        Returns
+        -------
+        str
+            Kernel kind and dotted paths for the three equation functions.
+        """
+        return prepare_neb_method_key(
+            self.tangent_weights_fn,
+            self.effective_force_fn,
+            self.climbing_force_fn,
+        )
+
+    @classmethod
+    def from_key(cls, key: str) -> Self:
+        """Restore the equation functions from a prepared kernel key.
+
+        Parameters
+        ----------
+        key : str
+            Key produced by :meth:`to_key`.
+
+        Returns
+        -------
+        NEBMethod
+            Method using the imported equation functions.
+        """
+        equations = resolve_neb_method(key)
+        return cls(
+            tangent_weights_fn=equations.tangent_fn,
+            effective_force_fn=equations.force_fn,
+            climbing_force_fn=equations.climbing_force_fn,
+        )

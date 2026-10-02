@@ -1502,6 +1502,82 @@ def test_empty_data_list_raises(tmp_path: Path) -> None:
         writer.write([])
 
 
+class TestHessianZarrPersistence:
+    """Test Zarr persistence and public loading of dense Hessian fields."""
+
+    def test_write_raw_read_reordered_dataset_load_and_append(
+        self, tmp_path: Path, hessian_batch_factory
+    ):
+        first = hessian_batch_factory(2, 3, 1)
+        second = hessian_batch_factory(2, 1, offset=5000.0)
+        path = tmp_path / "hessian.zarr"
+        writer = AtomicDataZarrWriter(path)
+        writer.write(first)
+
+        root = zarr.open(path, mode="r")
+        assert root.attrs["levels"]["version"] == 1
+        assert root.attrs["num_samples"] == 3
+        assert root.attrs["levels"]["definitions"]["atom_atom"] == {
+            "kind": "product",
+            "left": "atoms",
+            "right": "atoms",
+        }
+        assert root["meta"]["level_ptrs"]["atom_atom"].dtype == np.int64
+        assert root["meta"]["level_ptrs"]["atom_atom"][:].tolist() == [0, 4, 13, 14]
+        assert root["levels"]["atom_atom"]["hessian"].dtype == np.float64
+        assert root["levels"]["atom_atom"]["hessian"].shape == (14, 3, 3)
+        np.testing.assert_array_equal(
+            root["levels"]["atom_atom"]["hessian"][:], first.hessian.cpu().numpy()
+        )
+
+        reader = AtomicDataZarrReader(path)
+        assert reader.level_schema is not None
+        assert reader.level_schema.product_parents["atom_atom"] == ("atoms", "atoms")
+        assert reader.level_schema.group_to_attrs["atom_atom"] == {"hessian"}
+        assert reader.level_schema.dtypes["hessian"] == "float64"
+        for index in range(first.num_graphs):
+            raw, _ = reader[index]
+            expected = first.get_data(index).hessian
+            assert raw["hessian"].shape == expected.shape
+            torch.testing.assert_close(raw["hessian"], expected)
+        dataset = Dataset(reader, device="cpu")
+        loaded = dataset.load_batches([[2, 0, 2]])[0]
+        assert loaded.level_ptr("atom_atom").tolist() == [0, 1, 5, 6]
+        for result_index, source_index in enumerate((2, 0, 2)):
+            torch.testing.assert_close(
+                loaded.get_data(result_index).hessian,
+                first.get_data(source_index).hessian,
+            )
+        dataset.close()
+
+        writer.append(second)
+        root = zarr.open(path, mode="r")
+        assert root["meta"]["level_ptrs"]["atom_atom"][:].tolist() == [
+            0,
+            4,
+            13,
+            14,
+            18,
+            19,
+        ]
+        assert root.attrs["num_samples"] == 5
+        reader = AtomicDataZarrReader(path)
+        assert reader.level_schema is not None
+        assert reader.level_schema.product_parents["atom_atom"] == ("atoms", "atoms")
+        assert reader.level_schema.group_to_attrs["atom_atom"] == {"hessian"}
+        assert reader.level_schema.dtypes["hessian"] == "float64"
+        appended_dataset = Dataset(reader, device="cpu")
+        appended = appended_dataset.load_batches([[3, 4]])[0]
+        torch.testing.assert_close(
+            appended.get_data(0).hessian, second.get_data(0).hessian
+        )
+        torch.testing.assert_close(
+            appended.get_data(1).hessian, second.get_data(1).hessian
+        )
+        appended_dataset.close()
+        reader.close()
+
+
 class TestAtomicDataZarrReader:
     """Tests for AtomicDataZarrReader."""
 
@@ -1632,6 +1708,41 @@ class TestAtomicDataZarrReaderIntrospection:
         assert sizes["site_augmented"] == batch.cross_values.shape[0]
         assert schema["site_values"] == FieldSchema("sites", torch.float32, (2,))
         assert schema["metadata_values"] == FieldSchema("metadata", torch.float32, (1,))
+
+    def test_custom_fields_read_their_rows_from_axis_zero_whatever_their_name(
+        self, tmp_path: Path
+    ) -> None:
+        """A custom edge field named like an index keeps its rows first, and the store stays healthy."""
+        data_list = list(_data_generator(3))
+        total_edges = sum(data.neighbor_list.shape[0] for data in data_list)
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+        writer.add_custom(
+            "bond_index", torch.zeros(total_edges, 2, dtype=torch.long), "edge"
+        )
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            schema = reader.schema()
+            reader.check_integrity()
+        assert schema["bond_index"] == FieldSchema("edge", torch.int64, (2,))
+        assert schema["neighbor_list"] == FieldSchema("edge", torch.int64, (2,))
+
+    def test_check_integrity_still_names_a_torn_built_in_beside_a_custom_field(
+        self, tmp_path: Path
+    ) -> None:
+        """Reading custom rows from axis 0 does not loosen the check on built-in fields."""
+        data_list = list(_data_generator(3))
+        total_edges = sum(data.neighbor_list.shape[0] for data in data_list)
+        writer = AtomicDataZarrWriter(tmp_path / "test.zarr")
+        writer.write(data_list)
+        writer.add_custom(
+            "bond_index", torch.zeros(total_edges, 2, dtype=torch.long), "edge"
+        )
+        root = zarr.open(tmp_path / "test.zarr", mode="r+")
+        neighbor_list = root["core"]["neighbor_list"]
+        neighbor_list.resize((neighbor_list.shape[0] - 1, 2))
+        with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+            with pytest.raises(ValueError, match="neighbor_list holds"):
+                reader.check_integrity()
 
     def test_check_integrity_passes_on_a_healthy_store(self, tmp_path: Path) -> None:
         """A store the writer completed, custom levels included, is consistent."""

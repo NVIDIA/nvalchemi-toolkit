@@ -221,15 +221,17 @@ every call:
    4.  BEFORE_POST_UPDATE hooks →  post_update()  →  AFTER_POST_UPDATE hooks
    5.  AFTER_STEP hooks
    6.  convergence check  →  ON_CONVERGE hooks (if any samples converged)
-   7.  step_count += 1
+   7.  ON_GRADUATE hooks (with the graphs whose status reached exit_status)
+   8.  step_count += 1
 
 ``ON_ADMISSION`` runs before the per-step sequence and before initial force
 priming. In a compiled :class:`~nvalchemi.dynamics.FusedStage`, it remains
 outside ``_step_impl`` so validation and shape-dependent setup are not captured.
 
 ``compute()`` handles the full model pipeline: forward pass →
-``adapt_output()`` → ``_validate_model_outputs()`` → write
-forces/energy to batch via ``copy_()``.
+``adapt_output()`` → ``_validate_model_outputs()`` → publish model outputs to
+the batch. When an ``active_graph_mask`` is supplied, graph-, atom-, and
+edge-level output rows belonging to inactive graphs retain their prior values.
 
 
 Split masked updates for ``FusedStage`` compatibility

@@ -36,7 +36,7 @@ and materials science. Common use cases include:
   AIMNet2, or bring your own) behind a standardized interface and immediately use it
   in dynamics workflows.
 - **Geometry optimization** --- relax atomic structures to their minimum-energy
-  configuration using GPU-accelerated optimizers (FIRE, FIRE2).
+  configuration using GPU-accelerated optimizers (FIRE, FIRE2, L-BFGS).
 - **Multi-stage simulation pipelines** --- chain relaxation, equilibration, and
   production MD phases that share a single model forward pass, and run them
   on a single GPU.
@@ -58,7 +58,7 @@ workflow touches more than a handful of atoms, you will benefit from batching.
   compose it with existing force fields using the `+` operator, and plug it into
   any simulation workflow without modifying downstream code.
 - **Batched geometry optimization** --- relax thousands of structures in a single
-  GPU pass using FIRE or FIRE2, with automatic convergence monitoring.
+  GPU pass using FIRE, FIRE2 or L-BFGS, with automatic convergence monitoring.
 - **Molecular dynamics** --- run NVE, NVT, or NPT ensembles at scale, driven by
   any supported MLIP (MACE, AIMNet2, or your own model).
 - **Multi-stage pipelines** --- chain relaxation, equilibration, and production
@@ -123,7 +123,7 @@ own.
 ### Dynamics: optimization and MD
 
 The dynamics module provides integrators (NVE, NVT Langevin, NVT Nose--Hoover,
-NPT, NPH) and optimizers (FIRE, FIRE2) that share a common execution loop.
+NPT, NPH) and optimizers (FIRE, FIRE2, L-BFGS) that share a common execution loop.
 Each admitted batch first passes through `ON_ADMISSION`; every subsequent
 step runs from `BEFORE_STEP` through `ON_CONVERGE`, giving you full control via
 callbacks.

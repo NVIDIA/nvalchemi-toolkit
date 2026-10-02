@@ -21,7 +21,7 @@ helpers directly or construct their objects inline.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import pytest
 import torch
@@ -41,6 +41,55 @@ def _seed_torch() -> None:
     torch.manual_seed(0)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(0)
+
+
+class _FakeManager:
+    """Distributed manager reporting a fixed world size, rank, and node-local rank."""
+
+    def __init__(
+        self,
+        *,
+        world_size: int = 2,
+        rank: int = 0,
+        local_rank: int | None = None,
+        find_unused_parameters: bool = False,
+    ) -> None:
+        """Report a world of *world_size* ranks, seen from *rank*."""
+        self.world_size = world_size
+        self.rank = rank
+        self.global_rank = rank
+        self.local_rank = rank if local_rank is None else local_rank
+        self.device = torch.device("cpu")
+        self.broadcast_buffers = False
+        self.find_unused_parameters = find_unused_parameters
+
+    def is_initialized(self) -> bool:
+        """Report communication as established for any multi-rank world."""
+        return self.world_size > 1
+
+
+class _RecordingDDP(torch.nn.Module):
+    """Data-parallel stand-in counting the forwards routed through the wrapper."""
+
+    calls: ClassVar[list[dict[str, Any]]] = []
+    forwards: ClassVar[int] = 0
+
+    def __init__(self, module: torch.nn.Module, **kwargs: Any) -> None:
+        """Wrap *module* and record the data-parallel options it was given."""
+        super().__init__()
+        self.module = module
+        type(self).calls.append(kwargs)
+
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
+        """Count the pass whose gradients a real wrapper would all-reduce."""
+        type(self).forwards += 1
+        return self.module(*args, **kwargs)
+
+    @classmethod
+    def reset(cls) -> None:
+        """Forget the wrappers built and the forwards counted so far."""
+        cls.calls.clear()
+        cls.forwards = 0
 
 
 def _build_atomic_data(n_atoms: int = 3, seed: int = 0) -> AtomicData:

@@ -127,3 +127,12 @@ class TestInitialStructuresSpec:
 
         with pytest.raises(ValueError, match="OnPolicyConfig.initial_structures is a"):
             source.to_spec_dict()
+
+    def test_recycle_round_trips_through_a_spec(self, tmp_path: Path) -> None:
+        """The flag is configuration a recipe carries."""
+        source = InitialStructures(_make_store(tmp_path), recycle=True)
+
+        rebuilt = InitialStructures.from_spec_dict(source.to_spec_dict())
+
+        assert rebuilt.recycle is True
+        assert rebuilt.to_spec_dict() == source.to_spec_dict()

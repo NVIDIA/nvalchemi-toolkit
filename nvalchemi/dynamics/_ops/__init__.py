@@ -35,8 +35,10 @@ npt_nph
     NPT/NPH barostat and pressure ops.
 fire
     FIRE and FIRE2 optimizer step functions.
+lbfgs
+    L-BFGS optimizer step functions.
 cell_align
-    Cell alignment to upper-triangular form for variable-cell optimization.
+    Cell alignment to lower-triangular form for variable-cell optimization.
 thermostat_utils
     Velocity initialization, COM removal, kinetic temperature.
 """

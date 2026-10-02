@@ -37,7 +37,7 @@ Hooks are organized into the following modules:
    * - :mod:`freeze`
      - Freeze selected atoms by category during dynamics.
    * - :mod:`cell_align`
-     - Align periodic cells to upper-triangular form for variable-cell optimization.
+     - Align periodic cells to lower-triangular form for variable-cell optimization.
    * - :mod:`nvalchemi.hooks.physicsnemo_profiling`
      - PyTorch profiler trace capture through PhysicsNeMo.
 
@@ -52,7 +52,11 @@ from nvalchemi.dynamics.hooks.cell_align import AlignCellHook
 from nvalchemi.dynamics.hooks.freeze import FreezeAtomsHook
 from nvalchemi.dynamics.hooks.logging import LoggingHook
 from nvalchemi.dynamics.hooks.monitors import EnergyDriftMonitorHook
-from nvalchemi.dynamics.hooks.safety import MaxForceClampHook, NaNDetectorHook
+from nvalchemi.dynamics.hooks.safety import (
+    MaxForceClampHook,
+    NaNDetectorHook,
+    nonfinite_graph_mask,
+)
 from nvalchemi.dynamics.hooks.snapshot import ConvergedSnapshotHook, SnapshotHook
 from nvalchemi.hooks.physicsnemo_profiling import TorchProfilerHook
 from nvalchemi.hooks.stage_timing import StageTimingHook
@@ -68,6 +72,7 @@ __all__ = [
     "SnapshotHook",
     "StageTimingHook",
     "TorchProfilerHook",
+    "nonfinite_graph_mask",
 ]
 
 _REMOVED_PROFILER_HOOKS = {"ProfilerHook"}

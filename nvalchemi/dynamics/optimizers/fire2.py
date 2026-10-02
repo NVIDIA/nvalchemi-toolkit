@@ -43,6 +43,7 @@ For :class:`FIRE2VariableCell`: additionally ``cell_velocities [M,3,3]``.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -103,7 +104,8 @@ class FIRE2(BaseDynamics):
     model : BaseModelMixin
         The neural network potential model.
     dt : float or torch.Tensor
-        Initial adaptive timestep ``[M]`` or scalar.
+        Initial adaptive timestep ``[M]`` or scalar. With ``by_group=True``,
+        ``M`` is the number of graph groups rather than the number of graphs.
     delaystep : int
         Minimum steps before adaptation.  Default 60.
     dtgrow : float
@@ -175,7 +177,7 @@ class FIRE2(BaseDynamics):
         self.maxstep = maxstep
 
     def _init_state(self, batch: Batch) -> None:
-        M = batch.num_graphs
+        M = self._num_update_units(batch)
         dev = batch.device
         dtype = batch.positions.dtype
         dt = _to_per_system(self._dt_init, M, dev, dtype)
@@ -208,7 +210,7 @@ class FIRE2(BaseDynamics):
             batch.positions.detach(),
             batch.velocities,
             batch.forces,
-            batch.batch_idx.int(),
+            self._update_idx(batch),
             self._state.alpha,
             self._state.dt,
             self._state.nsteps_inc,
@@ -264,6 +266,10 @@ class FIRE2VariableCell(BaseDynamics):
         Initial hooks.
     convergence_hook : ConvergenceHook or dict, optional
         Convergence criterion.
+    cell_force_scale : float
+        Multiplier on the atom count normalizing stress-derived cell forces;
+        raise it to move the cell less per step.  Read every step.
+        Default 1.0.
     **kwargs
         Forwarded to :class:`~nvalchemi.dynamics.base.BaseDynamics`.
 
@@ -293,8 +299,14 @@ class FIRE2VariableCell(BaseDynamics):
         n_steps: int | None = None,
         hooks: list[Hook] | None = None,
         convergence_hook: ConvergenceHook | dict | None = None,
+        *,
+        cell_force_scale: float = 1.0,
         **kwargs: Any,
     ) -> None:
+        if not math.isfinite(cell_force_scale) or cell_force_scale <= 0:
+            raise ValueError(
+                f"cell_force_scale must be finite and positive; got {cell_force_scale}"
+            )
         super().__init__(
             model=model,
             n_steps=n_steps,
@@ -311,8 +323,14 @@ class FIRE2VariableCell(BaseDynamics):
         self.tmax = tmax
         self.tmin = tmin
         self.maxstep = maxstep
+        self.cell_force_scale = cell_force_scale
 
     def _init_state(self, batch: Batch) -> None:
+        if self.by_group:
+            raise NotImplementedError(
+                "FIRE2VariableCell does not support by_group=True because cell "
+                "degrees of freedom remain graph-level."
+            )
         M = batch.num_graphs
         dev = batch.device
         dtype = batch.positions.dtype
@@ -366,6 +384,7 @@ class FIRE2VariableCell(BaseDynamics):
             tmax=self.tmax,
             tmin=self.tmin,
             maxstep=self.maxstep,
+            cell_force_scale=self.cell_force_scale,
         )
 
     def post_update(self, batch: Batch) -> None:

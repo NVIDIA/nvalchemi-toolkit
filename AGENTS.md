@@ -222,7 +222,7 @@ chains are documented in `.claude/skills/README.md`.
 
 | Skill | Use when |
 |-------|----------|
-| `nvalchemi-data-structures` | Building or batching atomic systems; shape, dtype, or device errors |
+| `nvalchemi-data-structures` | Building, batching, or grouping atomic systems; shape, dtype, or device errors |
 | `nvalchemi-data-storage` | Writing, reading, composing, or streaming Zarr-backed atomic data |
 | `nvalchemi-zarr-perf` | Tuning Dataset/DataLoader throughput or Zarr chunking |
 | `nvalchemi-model-wrapping` | Wrapping an MLIP or custom PyTorch model via `BaseModelMixin` |
@@ -231,5 +231,6 @@ chains are documented in `.claude/skills/README.md`.
 | `nvalchemi-loss-api` | Choosing, weighting, masking, or implementing loss functions |
 | `nvalchemi-dynamics-api` | Any MD/relaxation/EOS simulation script or batched GPU pipeline |
 | `nvalchemi-dynamics-hooks` | Per-step callbacks: neighbor lists, convergence, logging |
+| `nvalchemi-mep` | Reaction paths and minimum-energy paths: interpolation, IDPP, batched NEB |
 | `nvalchemi-dynamics-implementation` | Implementing a new integrator, optimizer, or sampler class |
 | `nvalchemi-reporting` | Progress dashboards, TensorBoard, or CSV observability |
