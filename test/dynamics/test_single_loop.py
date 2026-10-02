@@ -1326,9 +1326,6 @@ class TestFusedStageExtraOutputLevel:
 
         assert batch._storage._group_name_from_attr("atomic_energies") == "atoms"
         assert batch.atomic_energies.shape[0] == batch.num_nodes
-        # Registered via add_key, not a raw storage write: schema-driven
-        # consumers (e.g. the Zarr writer, which enumerates attr_map) can
-        # see this key.
         assert batch._storage.attr_map.group("atomic_energies") == "atoms"
 
     def test_ambiguous_total_length_raises_instead_of_guessing(self) -> None:
