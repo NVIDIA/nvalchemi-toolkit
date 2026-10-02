@@ -21,7 +21,7 @@ from __future__ import annotations
 import csv
 from enum import Enum
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
 import pytest
 import torch
@@ -296,6 +296,98 @@ class TestLoggingHook:
         step, rows = captured[0]
         assert step == 0
         assert len(rows) == 3  # one row per graph
+
+    def test_one_row_per_group_with_custom_scalars(self, device: str) -> None:
+        hook, captured = self._capture_hook(
+            by_group=True,
+            custom_scalars={
+                "group_value": lambda ctx: torch.tensor(
+                    [1.0, 2.0], device=ctx.batch.device
+                ),
+                "constant": lambda ctx: 3.0,
+            },
+        )
+        batch = _make_batch(n_graphs=5, device=device)
+        batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1], device=device))
+        batch.__dict__["status"] = torch.tensor([4, 4, 7, 7, 7], device=device)
+        dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
+
+        with hook:
+            hook(ctx, DynamicsStage.AFTER_STEP)
+
+        rows = captured[0][1]
+        assert rows == [
+            {
+                "step": 0.0,
+                "group_idx": 0.0,
+                "status": 4.0,
+                "group_value": 1.0,
+                "constant": 3.0,
+            },
+            {
+                "step": 0.0,
+                "group_idx": 1.0,
+                "status": 7.0,
+                "group_value": 2.0,
+                "constant": 3.0,
+            },
+        ]
+
+    def test_tensorboard_uses_group_tags(self) -> None:
+        hook = LoggingHook(
+            backend="tensorboard",
+            log_path="unused",
+            by_group=True,
+        )
+        writer = Mock()
+        hook._tb_writer = writer
+
+        hook._write_tensorboard(
+            [
+                {"step": 4.0, "group_idx": 0.0, "barrier": 1.0},
+                {"step": 4.0, "group_idx": 1.0, "barrier": 2.0},
+            ],
+            step=4,
+        )
+        hook.close()
+
+        assert writer.add_scalar.call_args_list == [
+            call("barrier/group_0", 1.0, 4),
+            call("barrier/group_1", 2.0, 4),
+        ]
+
+    def test_group_logging_requires_group_layout(self, device: str) -> None:
+        hook, _ = self._capture_hook(by_group=True)
+        batch = _make_batch(device=device)
+        dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
+
+        with hook, pytest.raises(ValueError, match="set_group_layout"):
+            hook(ctx, DynamicsStage.AFTER_STEP)
+
+    def test_group_custom_scalar_rejects_graph_shape(self, device: str) -> None:
+        hook, _ = self._capture_hook(
+            by_group=True,
+            custom_scalars={
+                "wrong": lambda ctx: torch.zeros(
+                    ctx.batch.num_graphs, device=ctx.batch.device
+                )
+            },
+        )
+        batch = _make_batch(n_graphs=3, device=device)
+        batch.set_group_layout(torch.tensor([0, 0, 1], device=device))
+        dynamics = _make_dynamics(device=device)
+        ctx = _make_ctx(batch, dynamics)
+
+        with (
+            hook,
+            pytest.raises(
+                ValueError,
+                match=r"custom scalar 'wrong'.*\(2,\).*group rows.*\(3,\)",
+            ),
+        ):
+            hook(ctx, DynamicsStage.AFTER_STEP)
 
     def test_row_contains_step_graph_idx_status(self, device: str) -> None:
         hook, captured = self._capture_hook()

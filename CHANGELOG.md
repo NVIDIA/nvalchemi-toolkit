@@ -8,6 +8,9 @@
   L-BFGS in `nvalchemiops`, with the same API shape as FIRE2.
 - `cell_force_scale` on `FIRE2VariableCell` and `LBFGSVariableCell`.
 - `FusedStage` restores segmented (per-atom) integrator state level by level.
+- Add `GroupLayout` and `Batch.group_layout` for treating contiguous graphs as
+  logical groups, with graph/node mappings, group cardinalities, reductions,
+  broadcasts, cache invalidation, and grouped-batch append support.
 - Add local Hessian-vector products, reusable Hessian operators, and in-place
   dense Hessians for AIMNet2, MACE, Ewald/PME, and flat pipelines, with `Batch`
   and Zarr persistence.
@@ -33,6 +36,12 @@
   graphs skip one integrator update so the shared compute and target-stage
   `AFTER_COMPUTE` hooks can refresh forces under the new stage's context
   before it advances them.
+- **Batched minimum-energy path (MEP) workflows**: the new
+  `nvalchemi.dynamics.mep` subpackage provides endpoint interpolation with
+  optional alignment, IDPP initialization, and a GPU-first `NEB` strategy for
+  regular and climbing-image nudged elastic band. `NEB` supports custom Warp or
+  PyTorch force equations and spring policies, fixed endpoints or atoms,
+  serializable specs, and per-path diagnostics.
 
 ### Breaking Changes
 

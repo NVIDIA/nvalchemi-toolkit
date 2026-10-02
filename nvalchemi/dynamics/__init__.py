@@ -45,6 +45,7 @@ from nvalchemi.dynamics.sinks import (
     ResizableSink,
     ZarrData,
 )
+from nvalchemi.dynamics.strategy import DynamicsStrategy
 from nvalchemi.dynamics.structure_sampler import (
     FitPolicy,
     OrderedStructureSampler,
@@ -59,6 +60,7 @@ __all__ = [
     "DemoDynamics",
     "DistributedPipeline",
     "DynamicsStage",
+    "DynamicsStrategy",
     "FIRE",
     "FIRE2",
     "FIRE2VariableCell",
