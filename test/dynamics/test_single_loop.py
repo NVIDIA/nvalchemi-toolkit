@@ -1317,6 +1317,36 @@ class TestFusedStageExtraOutputLevel:
         assert batch._storage._group_name_from_attr("atomic_energies") == "atoms"
         assert batch.atomic_energies.shape[0] == batch.num_nodes
 
+    def test_ambiguous_total_length_raises_instead_of_guessing(self) -> None:
+        # Total atom and edge counts coincide (8 == 8) even though their
+        # per-graph counts differ (5/3 atoms vs 6/2 edges): total length
+        # alone cannot say which group an unregistered length-8 output
+        # belongs to, so this must raise rather than silently pick one
+        # (which would put edge values at atom rows, or vice versa).
+        from nvalchemi.data.level_storage import SegmentedLevelStorage
+
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.ones(n, dtype=torch.long),
+                positions=torch.randn(n, 3),
+                forces=torch.zeros(n, 3),
+                energy=torch.zeros(1, 1),
+            )
+            for n in (5, 3)
+        ]
+        batch = Batch.from_data_list(data_list)
+        batch._storage.groups["edges"] = SegmentedLevelStorage(
+            data={"dummy_edge_field": torch.zeros(8, 1)},
+            segment_lengths=torch.tensor([6, 2], dtype=torch.int32),
+            device=batch.device,
+            attr_map=batch._storage.attr_map,
+            validate=False,
+        )
+        assert batch.num_nodes == batch.num_edges == 8
+
+        with pytest.raises(RuntimeError, match="more than one"):
+            BaseDynamics._infer_output_group(batch, "some_output", torch.randn(8, 1))
+
 
 class _GraduationRecorder:
     """Record every ON_GRADUATE mask handed to this hook."""

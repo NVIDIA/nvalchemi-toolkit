@@ -2476,24 +2476,40 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             return self._compute(batch, active_graph_mask)
 
     @staticmethod
-    def _infer_output_group(batch: Batch | AtomsLike, tensor: torch.Tensor) -> str:
+    def _infer_output_group(
+        batch: Batch | AtomsLike, key: str, tensor: torch.Tensor
+    ) -> str:
         """The level *tensor*'s own length says an unregistered output belongs to.
 
-        Only returns ``"atoms"``/``"edges"`` when that group is already
-        materialized and its element count matches *tensor*'s leading
-        dimension; otherwise falls back to ``"system"`` — the same default
-        ``MultiLevelStorage.__setitem__`` uses for a key with no schema
-        entry, so a field that is genuinely graph-level (or whose level is
-        ambiguous, e.g. one atom per graph) is unaffected.
+        Checks every materialized segmented group (``"atoms"``, ``"edges"``)
+        whose element count matches *tensor*'s leading dimension, and uses
+        it only when exactly one group matches.  Total length alone cannot
+        disambiguate a batch whose total atom and edge counts happen to
+        coincide (even though per-graph counts differ) — guessing wrong
+        there would silently place edge values at atom rows, or vice versa,
+        rather than failing loudly, so that case raises instead.  Falls
+        back to ``"system"`` — the same default ``MultiLevelStorage``
+        uses for a key with no schema entry — only when no segmented group
+        matches at all.
         """
         n = tensor.shape[0]
-        for group_name, count in (
-            ("atoms", batch.num_nodes),
-            ("edges", batch.num_edges),
-        ):
-            if group_name in batch._storage.groups and n == count:
-                return group_name
-        return "system"
+        candidates = [
+            group_name
+            for group_name, count in (
+                ("atoms", batch.num_nodes),
+                ("edges", batch.num_edges),
+            )
+            if group_name in batch._storage.groups and n == count
+        ]
+        if len(candidates) > 1:
+            raise RuntimeError(
+                f"Cannot determine the storage level for unregistered model "
+                f"output {key!r} of length {n}: it matches more than one of "
+                f"{candidates} by total element count alone (their per-graph "
+                "counts may still differ). Register this key's level "
+                "explicitly rather than relying on shape inference."
+            )
+        return candidates[0] if candidates else "system"
 
     def _publish_model_output(
         self,
@@ -4153,7 +4169,7 @@ class FusedStage(BaseDynamics):
                     # graph-length mask to an atom-length tensor.  Allocate
                     # directly in the group the tensor's own length says it
                     # belongs to instead.
-                    group_name = self._infer_output_group(batch, tensor)
+                    group_name = self._infer_output_group(batch, key, tensor)
                     batch._storage.groups[group_name][key] = torch.empty_like(tensor)
                     target = getattr(batch, key)
                 self._publish_model_output(
