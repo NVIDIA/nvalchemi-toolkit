@@ -448,6 +448,51 @@ def sum_outputs(
     return result
 
 
+def _unsupported_contribution_keys(outputs: ModelOutputs) -> list[str]:
+    """Return the keys in *outputs* that no consumer can act on.
+
+    The single definition of "unsupported", so the producer-side check and
+    the aggregation-side one cannot disagree about what they are refusing.
+
+    Parameters
+    ----------
+    outputs : ModelOutputs
+        The mapping to inspect.
+
+    Returns
+    -------
+    list[str]
+        Offending keys, sorted; empty when there are none.
+    """
+    return sorted(
+        key
+        for key in outputs
+        if key not in APPLIED_OUTPUT_KEYS
+        and key != STATE_VERSION_KEY
+        and not key.startswith(DIAGNOSTIC_PREFIX)
+    )
+
+
+def _unsupported_key_advice() -> str:
+    """Return the shared tail of an unsupported-key error.
+
+    Returns
+    -------
+    str
+        What a contribution may carry, why the set is closed, and the two
+        ways out.
+    """
+    return (
+        f"A contribution carries {list(APPLIED_OUTPUT_KEYS)}, "
+        f"{STATE_VERSION_KEY!r}, and {DIAGNOSTIC_PREFIX}<key> entries — the "
+        "applied set is closed because each member needs a destination "
+        "buffer, a reshape rule and a combination rule. Report it instead as "
+        f"'{DIAGNOSTIC_PREFIX}<key>', which is carried through and never "
+        "summed, or add the output to the framework so a consumer knows "
+        "where to put it."
+    )
+
+
 def validate_contribution(
     outputs: ModelOutputs, *, source: str = "ModelOutputs"
 ) -> None:
@@ -499,23 +544,11 @@ def validate_contribution(
     ValueError
         On the first violation, naming the key and what is wrong with it.
     """
-    unsupported = sorted(
-        key
-        for key in outputs
-        if key not in APPLIED_OUTPUT_KEYS
-        and key != STATE_VERSION_KEY
-        and not key.startswith(DIAGNOSTIC_PREFIX)
-    )
+    unsupported = _unsupported_contribution_keys(outputs)
     if unsupported:
         raise ValueError(
-            f"{source}: {unsupported} cannot be applied to a batch. A "
-            f"contribution carries {list(APPLIED_OUTPUT_KEYS)}, "
-            f"{STATE_VERSION_KEY!r}, and {DIAGNOSTIC_PREFIX}<key> entries — "
-            "the applied set is closed because each member needs a "
-            "destination buffer, a reshape rule and a combination rule. "
-            f"Report it instead as '{DIAGNOSTIC_PREFIX}<key>', which is "
-            "carried through and never summed, or add the output to the "
-            "framework so a consumer knows where to put it."
+            f"{source}: {unsupported} cannot be applied to a batch. "
+            f"{_unsupported_key_advice()}"
         )
 
     if outputs.get("stress") is not None and outputs.get("virial") is not None:
@@ -764,6 +797,12 @@ def aggregate_contributions(contributions: list[ModelOutputs]) -> ModelOutputs:
 
     Rules
     -----
+    * Every key must be one a consumer can act on: a member of
+      :data:`APPLIED_OUTPUT_KEYS`, :data:`STATE_VERSION_KEY`, or something
+      under :data:`DIAGNOSTIC_PREFIX`.  Anything else raises, naming the
+      contribution — the physics sum below keeps only the applied keys, so a
+      novel output left to reach it would be dropped in silence, which is the
+      one thing this function exists not to do.
     * Missing and ``None`` entries are skipped — a zero contribution.
     * Every contribution that carries a cell response must use the **same**
       field: all ``stress`` or all ``virial``, never a mix.  Mixing raises
@@ -812,6 +851,21 @@ def aggregate_contributions(contributions: list[ModelOutputs]) -> ModelOutputs:
     """
     if not contributions:
         return OrderedDict()
+
+    # Refused here and not only in validate_contribution, because this
+    # function promises that nothing is dropped silently and it is reachable
+    # without that check: it is public, and its callers are whoever composes
+    # additive terms next. The filter below keeps only APPLIED_OUTPUT_KEYS,
+    # so an unsupported key left to reach it vanishes between the producer
+    # and the buffer with the caller none the wiser.
+    for index, contribution in enumerate(contributions):
+        unsupported = _unsupported_contribution_keys(contribution)
+        if unsupported:
+            raise ValueError(
+                f"aggregate_contributions: contributions[{index}] carries "
+                f"{unsupported}, which cannot be applied to a batch. "
+                f"{_unsupported_key_advice()}"
+            )
 
     # Detect stress/virial mixing up-front so the error names the offending
     # contributions, rather than surfacing later as a generic mutual-exclusion

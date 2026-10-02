@@ -465,14 +465,21 @@ none of that, so it is refused — in two places, for two different failures:
 
 | Failure | Raised by | When |
 |---------|-----------|------|
-| The key is not one the framework can apply (`hessian`, `dipole`, anything novel) | `validate_contribution` | at the producer, before aggregation |
+| The key is not one the framework can apply (`hessian`, `dipole`, anything novel) | `validate_contribution`, and `aggregate_contributions` independently | at the producer, and again before summing |
 | The key is applicable but the batch has no buffer for it | `_check_destinations` | after aggregation, before applying |
 
 The first matters because aggregation keeps only the applied keys, so an
 unrecognised physical output would otherwise vanish between the bias and the
-buffer with the run carrying on as though it had been applied.
-`APPLIED_OUTPUT_KEYS` is the single definition of that set, used by the check
-and by the aggregation filter, so the two cannot disagree.
+buffer with the run carrying on as though it had been applied. It is checked
+in both places on purpose: `aggregate_contributions` is public and promises
+that nothing is dropped silently, so it cannot rely on its caller having
+validated first. `APPLIED_OUTPUT_KEYS` is the single definition of the set and
+both checks read it, so they cannot disagree about what they refuse.
+
+`sum_outputs`, the generic composition helper, is deliberately *not* affected:
+a full model forward pass may legitimately report `hessian` or `dipole`, and
+composing two models keeps them. A contribution is narrower than a forward
+pass precisely because it gets added into a buffer.
 
 The cost is real: a method producing a genuinely new applied output cannot
 express it without editing the framework. That is accepted, because the

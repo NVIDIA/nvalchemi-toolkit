@@ -4,18 +4,26 @@
 
 ### Added
 
-- `validate_contribution` now refuses a contribution carrying an output no
-  consumer can apply, and `APPLIED_OUTPUT_KEYS` is the single definition of
-  that set. `aggregate_contributions` keeps only `energy`, `forces`, `stress`
-  and `virial`, so a bias returning `hessian` or `dipole` — both documented
+- `validate_contribution` and `aggregate_contributions` now refuse a
+  contribution carrying an output no consumer can apply, and
+  `APPLIED_OUTPUT_KEYS` is the single definition of that set.
+  `aggregate_contributions` sums only `energy`, `forces`, `stress` and
+  `virial`, so a bias returning `hessian` or `dipole` — both documented
   `ModelOutputs` keys for a full forward pass — had its contribution dropped
   between the producer and the buffer, with the run continuing as though it
   had been applied and nothing raised. The applied set is closed by design
   (each member needs a destination buffer, a reshape rule and a combination
-  rule); it is now closed by enforcement too, with the error naming the key,
-  the producer, and both ways out — report it as `diagnostics/<key>`, or add
-  the output to the framework. The aggregation filter reads the same constant,
-  so the check and the filter cannot drift.
+  rule); it is now closed by enforcement too, with the error naming the
+  offending key, the producer or contribution index, and both ways out —
+  report it as `diagnostics/<key>`, or add the output to the framework.
+
+  Checked in both places rather than only at the producer: the aggregation is
+  public and its docstring promises that nothing is dropped silently, so it
+  cannot rest that promise on a caller having validated first. Both read the
+  same constant through one predicate, so they cannot drift.
+  `sum_outputs` is deliberately unchanged — generic model composition may
+  legitimately carry `hessian` or `dipole`, and a contribution is narrower
+  than a forward pass precisely because it gets added into a buffer.
 
 - `PairSwapHook` and `BaseDynamics.apply_per_system_params()` — pairwise swaps
   of per-system state, with the physics taken out. Strip the thermodynamics

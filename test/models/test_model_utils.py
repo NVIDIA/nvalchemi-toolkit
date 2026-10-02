@@ -557,6 +557,68 @@ def _compile_kw(device: str) -> dict:
     return kw
 
 
+class TestAggregateRefusesUnapplicable:
+    """It promises nothing is dropped silently; that has to include this.
+
+    ``validate_contribution`` covers the one caller inside the toolkit, but
+    ``aggregate_contributions`` is public and its next caller is whoever
+    composes additive terms next.  The physics sum keeps only the applied
+    keys, so an unsupported key reaching it vanishes between the producer and
+    the buffer.
+    """
+
+    def test_an_unapplicable_key_raises(self) -> None:
+        with pytest.raises(ValueError, match="cannot be applied"):
+            aggregate_contributions(
+                [
+                    OrderedDict(energy=torch.ones(1, 1)),
+                    OrderedDict(energy=torch.ones(1, 1), hessian=torch.ones(6, 6)),
+                ]
+            )
+
+    def test_the_error_names_the_offending_contribution(self) -> None:
+        """Consistent with the stress/virial and duplicate-diagnostic errors."""
+        with pytest.raises(ValueError, match=r"contributions\[1\]"):
+            aggregate_contributions(
+                [
+                    OrderedDict(energy=torch.ones(1, 1)),
+                    OrderedDict(dipole=torch.ones(1, 3)),
+                ]
+            )
+
+    def test_it_refuses_before_summing_anything(self) -> None:
+        """A shape that would fail the sum must not pre-empt the real cause."""
+        with pytest.raises(ValueError, match="cannot be applied"):
+            aggregate_contributions(
+                [
+                    OrderedDict(energy=torch.ones(1, 1)),
+                    OrderedDict(energy=torch.ones(4, 1), hessian=torch.ones(2, 2)),
+                ]
+            )
+
+    def test_supported_keys_still_aggregate(self) -> None:
+        """The guard must not be stricter than the set it enforces."""
+        out = aggregate_contributions(
+            [
+                OrderedDict(
+                    energy=torch.ones(1, 1),
+                    forces=torch.ones(2, 3),
+                    **{f"{DIAGNOSTIC_PREFIX}cv": torch.ones(1)},
+                ),
+                OrderedDict(
+                    energy=torch.ones(1, 1),
+                    stress=torch.ones(1, 3, 3),
+                    state_version=torch.zeros(1, dtype=torch.int64),
+                ),
+            ]
+        )
+        assert float(out["energy"]) == 2.0
+        assert f"{DIAGNOSTIC_PREFIX}cv" in out
+
+    def test_an_empty_list_is_still_fine(self) -> None:
+        assert aggregate_contributions([]) == OrderedDict()
+
+
 class TestAggregateCompile:
     """``aggregate_contributions`` is on the compiled hot path for a biased
     run, so it must reach ``fullgraph=True`` for a fixed-size input list."""
