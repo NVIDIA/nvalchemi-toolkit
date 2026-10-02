@@ -733,7 +733,7 @@ anything that must follow a physical configuration is carried as data:
 
 | Field | Meaning |
 |-------|---------|
-| `walker_id` | Immutable identity, assigned once |
+| `walker_id` | Immutable identity, allocated once per walker |
 | `thermodynamic_state_id` | Window / temperature / energy-function state |
 | `sampling_step` | Dynamics force-evaluation step |
 | `exchange_segment` | Exchange segment, `step // attempt_interval` (see [Replica exchange](#replica-exchange)) |
@@ -742,6 +742,23 @@ anything that must follow a physical configuration is carried as data:
 A `thermodynamic_state_id` you set yourself is preserved, never overwritten.
 Without replica exchange, `exchange_segment` falls back to the epoch length,
 since there are no exchange segments to count.
+
+### Identity across a refill
+
+With a sampler attached, `refill_check` drops graduated graphs and appends
+replacements. All five fields are registered as `BaseDynamics` bookkeeping
+keys so survivors keep theirs across that change of batch membership — but
+`walker_id` is *allocated*, not defaulted, and the distinction matters.
+
+The registry rebuilds the column with a `-1` sentinel for rows it has no
+value for, exactly as `system_id` does. Those rows are the replacements, and
+the next stamp gives each a **fresh** identity, continuing the counter.
+
+That is not cosmetic. A default-valued factory hands each replacement the id
+of whichever walker just graduated out of the slot, so with
+`history="walker"` a brand-new configuration inherits the hills the departed
+walker deposited — silently, and on every refill. Identities are never
+reused.
 
 ## Checkpoint and restore
 

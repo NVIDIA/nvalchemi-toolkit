@@ -81,12 +81,21 @@ def _register_identity_bookkeeping() -> None:
     as "immutable identity that follows a physical configuration" (§4), and
     that claim needs the registry behind it.
 
+    ``walker_id`` registers a ``-1`` sentinel rather than a default value, the
+    way ``system_id`` does.  The factory runs for the *whole* batch, including
+    the replacement rows, and an identity is **allocated** rather than
+    defaulted: a factory returning ``arange(n)`` hands each replacement the id
+    of whichever walker just graduated out of that slot, so a per-walker
+    metadynamics history is inherited by an unrelated configuration — and it
+    does so on every refill, not occasionally.  The sentinel says "no identity
+    yet" and :meth:`WalkerIdentityHook.stamp` allocates a fresh one.
+
     Idempotent: registration overwrites by key, so importing this module more
     than once is harmless.
     """
     BaseDynamics.register_bookkeeping_key(
         "walker_id",
-        lambda n, dev: torch.arange(n, dtype=torch.long, device=dev).reshape(n, 1),
+        lambda n, dev: torch.full((n, 1), -1, dtype=torch.long, device=dev),
     )
     for key in (
         "thermodynamic_state_id",

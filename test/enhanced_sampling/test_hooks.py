@@ -28,7 +28,7 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics import NVE, NVTLangevin
+from nvalchemi.dynamics import NVE, NVTLangevin, SizeAwareSampler
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks import PairSwapHook
 from nvalchemi.enhanced_sampling import (
@@ -328,14 +328,6 @@ class TestWalkerIdentityHook:
         assert second.walker_id.reshape(-1).tolist() == [2, 3, 4]
         assert hook.next_walker_id == 5
 
-    def test_existing_walker_ids_are_preserved(self) -> None:
-        hook = WalkerIdentityHook(steps_per_epoch=4)
-        batch = _make_batch(n_graphs=2)
-        batch["walker_id"] = torch.tensor([7, 9])
-        hook.stamp(batch, 0)
-        assert batch.walker_id.reshape(-1).tolist() == [7, 9]
-        assert hook.next_walker_id == 0
-
     def test_counters_are_refreshed_every_stamp(self) -> None:
         hook = WalkerIdentityHook(steps_per_epoch=4)
         batch = _make_batch(n_graphs=1)
@@ -352,6 +344,71 @@ class TestWalkerIdentityHook:
         hook.stamp(batch, 7)
         assert batch.exchange_segment.reshape(-1).tolist() == [2, 2]
 
+    def test_sentinel_rows_are_given_fresh_identities(self) -> None:
+        """A refill writes ``-1`` for rows it has no value for.
+
+        Those rows are new walkers.  Handing them the id of whoever just
+        graduated out of the slot would give a replacement that walker's
+        per-walker bias history.
+        """
+        hook = WalkerIdentityHook(steps_per_epoch=4)
+        batch = _make_batch(n_graphs=3)
+        hook.stamp(batch, 0)
+        assert batch.walker_id.reshape(-1).tolist() == [0, 1, 2]
+
+        # Rows 1 and 2 graduated; the registry rebuilt the column with the
+        # sentinel for the replacements that took their slots.
+        batch["walker_id"] = torch.tensor([0, -1, -1])
+        hook.stamp(batch, 1)
+        assert batch.walker_id.reshape(-1).tolist() == [0, 3, 4]
+        assert hook.next_walker_id == 5
+
+    def test_identities_are_never_reused_across_refills(self) -> None:
+        hook = WalkerIdentityHook(steps_per_epoch=4)
+        batch = _make_batch(n_graphs=3)
+        hook.stamp(batch, 0)
+        ever = list(batch.walker_id.reshape(-1).tolist())
+        for step in range(1, 4):
+            kept = int(batch.walker_id.reshape(-1)[0])
+            batch["walker_id"] = torch.tensor([kept, -1, -1])
+            hook.stamp(batch, step)
+            ever += batch.walker_id.reshape(-1).tolist()[1:]
+        assert len(set(ever)) == len(ever), f"an identity was reused: {ever}"
+
+    def test_a_fully_assigned_column_is_left_alone(self) -> None:
+        """Immutable identity: nothing is re-stamped once it has one."""
+        hook = WalkerIdentityHook(steps_per_epoch=4)
+        batch = _make_batch(n_graphs=2)
+        batch["walker_id"] = torch.tensor([7, 9])
+        hook.stamp(batch, 0)
+        assert batch.walker_id.reshape(-1).tolist() == [7, 9]
+
+    def test_the_counter_clears_identities_the_caller_supplied(self) -> None:
+        """Otherwise the first refill allocates straight into them."""
+        hook = WalkerIdentityHook(steps_per_epoch=4)
+        batch = _make_batch(n_graphs=2)
+        batch["walker_id"] = torch.tensor([7, 9])
+        hook.stamp(batch, 0)
+        assert hook.next_walker_id == 10
+
+        batch["walker_id"] = torch.tensor([7, -1])
+        hook.stamp(batch, 1)
+        assert batch.walker_id.reshape(-1).tolist() == [7, 10]
+
+    def test_a_mix_of_supplied_and_sentinel_clears_the_supplied_ones(self) -> None:
+        hook = WalkerIdentityHook(steps_per_epoch=4)
+        batch = _make_batch(n_graphs=3)
+        batch["walker_id"] = torch.tensor([-1, 42, -1])
+        hook.stamp(batch, 0)
+        assert batch.walker_id.reshape(-1).tolist() == [43, 42, 44]
+
+    def test_the_registered_factory_writes_the_sentinel(self) -> None:
+        """The registry and the hook have to agree on what "no identity" is."""
+        from nvalchemi.dynamics.base import BaseDynamics
+
+        factory = BaseDynamics._bookkeeping_keys["walker_id"]
+        assert factory(3, torch.device("cpu")).reshape(-1).tolist() == [-1, -1, -1]
+
     def test_the_stamped_batch_is_what_checkpoint_would_save(self) -> None:
         hook = WalkerIdentityHook(steps_per_epoch=4)
         batch = _make_batch()
@@ -361,7 +418,78 @@ class TestWalkerIdentityHook:
 
 
 # ===========================================================================
-# 6. The declarative half of the strategy
+# 6. Identity across a real refill
+# ===========================================================================
+
+
+class TestIdentityThroughRefill:
+    """The path the bookkeeping registry exists for, driven end to end."""
+
+    class _Dataset:
+        """Minimal dataset the size-aware sampler can refill from."""
+
+        def __init__(self, count: int, atoms: int = 2) -> None:
+            self.count = count
+            self.atoms = atoms
+
+        def __len__(self) -> int:
+            """Return the sample count."""
+            return self.count
+
+        def get_metadata(self, index: int) -> tuple[int, int]:
+            """Return ``(num_atoms, num_edges)`` without loading."""
+            return (self.atoms, 0)
+
+        def __getitem__(self, index: int) -> tuple[AtomicData, dict]:
+            """Return one sample and an empty metadata dict."""
+            data = AtomicData(
+                positions=torch.zeros(self.atoms, 3),
+                atomic_numbers=torch.full((self.atoms,), 6, dtype=torch.long),
+            )
+            return data, {}
+
+    def test_replacements_never_inherit_a_graduated_identity(self) -> None:
+        """A replacement taking a slot must not take the identity with it.
+
+        ``walker_id`` keys a per-walker metadynamics history, so an id reused
+        across a graduation hands a fresh configuration the hills deposited by
+        the walker that just left.
+        """
+        from nvalchemi.dynamics.base import BaseDynamics
+        from nvalchemi.dynamics.sinks import HostMemory
+
+        sampler = SizeAwareSampler(
+            self._Dataset(30), max_atoms=20, max_edges=10, max_batch_size=3
+        )
+        engine = BaseDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            sampler=sampler,
+            sinks=[HostMemory(capacity=200)],
+            device_type="cpu",
+        )
+        batch = sampler.build_initial_batch()
+        batch["forces"] = torch.zeros(batch.num_nodes, 3)
+        batch["energy"] = torch.zeros(batch.num_graphs, 1)
+
+        hook = WalkerIdentityHook(steps_per_epoch=1000)
+        hook.stamp(batch, 0)
+        ever = list(batch.walker_id.reshape(-1).tolist())
+
+        for step in range(1, 4):
+            survivor = int(batch.walker_id.reshape(-1)[0])
+            batch["status"] = torch.tensor([[0], [1], [1]])
+            batch = engine.refill_check(batch, exit_status=1)
+            assert batch is not None
+            hook.stamp(batch, step)
+            ids = batch.walker_id.reshape(-1).tolist()
+            assert ids[0] == survivor, "a surviving walker lost its identity"
+            ever += ids[1:]
+
+        assert len(set(ever)) == len(ever), f"an identity was reused: {ever}"
+
+
+# ===========================================================================
+# 7. The declarative half of the strategy
 # ===========================================================================
 
 

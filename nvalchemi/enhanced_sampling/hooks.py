@@ -172,6 +172,83 @@ class WalkerIdentityHook:
         """
         self.next_walker_id = int(state.get("next_walker_id", 0))
 
+    def _assign_walker_ids(
+        self, batch: Batch, n_graphs: int, device: torch.device
+    ) -> None:
+        """Give an identity to every graph that does not have one yet.
+
+        Three cases, and the third is the one that is easy to miss:
+
+        * The field is absent — a fresh batch.  Every row is allocated.
+        * Every row holds an identity.  Nothing is touched; that is what
+          "immutable identity that follows a physical configuration" means.
+        * Some rows hold the ``-1`` sentinel.  That is a refill: graduated
+          graphs were dropped and replacements appended, and the bookkeeping
+          registry rebuilt the column with the sentinel for rows it has no
+          value for.  Those rows are **new walkers** and are allocated fresh
+          identities — reusing the id of the walker that just left the slot
+          would hand the replacement that walker's per-walker bias history.
+
+        Parameters
+        ----------
+        batch:
+            The live batch.
+        n_graphs:
+            Number of graphs in it.
+        device:
+            Device for a newly allocated column.
+        """
+        existing = getattr(batch, "walker_id", None)
+        if existing is None:
+            batch["walker_id"] = self._next_ids(n_graphs, device)
+            return
+
+        ids = existing.reshape(-1).to(torch.long)
+        unassigned = ids < 0
+        if not bool(unassigned.any()):
+            # Never hand out an id a caller already used: a batch may arrive
+            # carrying its own identities, and the counter has to clear them
+            # or the first refill would collide with one.
+            self.next_walker_id = max(self.next_walker_id, int(ids.max()) + 1)
+            return
+
+        assigned = ids[~unassigned]
+        if assigned.numel():
+            self.next_walker_id = max(self.next_walker_id, int(assigned.max()) + 1)
+        ids = ids.clone()
+        ids[unassigned] = self._next_ids(int(unassigned.sum()), device, shape=(-1,)).to(
+            ids.dtype
+        )
+        batch["walker_id"] = ids
+
+    def _next_ids(
+        self, count: int, device: torch.device, shape: tuple[int, ...] = (-1,)
+    ) -> torch.Tensor:
+        """Allocate *count* consecutive identities and advance the counter.
+
+        Parameters
+        ----------
+        count:
+            How many to issue.
+        device:
+            Device for the result.
+        shape:
+            Shape to view the result as.
+
+        Returns
+        -------
+        torch.Tensor
+            The issued identities.
+        """
+        ids = torch.arange(
+            self.next_walker_id,
+            self.next_walker_id + count,
+            dtype=torch.long,
+            device=device,
+        )
+        self.next_walker_id += count
+        return ids.reshape(shape)
+
     def stamp(self, batch: Batch, step: int) -> None:
         """Write identity and counter fields for *step* onto *batch*.
 
@@ -188,14 +265,7 @@ class WalkerIdentityHook:
         n_graphs = batch.num_graphs
         device = batch.positions.device
 
-        if getattr(batch, "walker_id", None) is None:
-            batch["walker_id"] = torch.arange(
-                self.next_walker_id,
-                self.next_walker_id + n_graphs,
-                dtype=torch.long,
-                device=device,
-            )
-            self.next_walker_id += n_graphs
+        self._assign_walker_ids(batch, n_graphs, device)
 
         existing = getattr(batch, "thermodynamic_state_id", None)
         if existing is None:

@@ -448,6 +448,22 @@
 
 ### Fixed
 
+- **Replacement walkers reused graduated identities** — `walker_id` was
+  registered as a bookkeeping key with an `arange(n)` factory, so after
+  `refill_check` dropped graduated graphs and appended replacements, each
+  replacement received the id of whichever walker had just graduated out of
+  that slot. With `WellTemperedMetaDynamicsBias(history="walker")` the new
+  configuration then inherited the departed walker's hills, and
+  `WalkerIdentityHook` left the values alone because the field was present.
+  Measured over three refills of a three-walker batch, ids `1` and `2` were
+  each handed to four different physical walkers.
+
+  `walker_id` now registers a `-1` sentinel, the way `system_id` already did,
+  and the stamp allocates a fresh identity for every sentinel row while
+  leaving assigned rows untouched. The counter also clears past any ids a
+  caller supplied, so a batch arriving with its own identities does not
+  collide with the first refill.
+
 - **A bias contribution could broadcast onto the whole batch** —
   `validate_contribution` checked that `forces` had shape `[?, 3]` but never
   compared the row count with the batch, so a bias returning `[1, 3]` passed
