@@ -323,11 +323,21 @@ class PairSwapHook:
 
         Notes
         -----
-        A segment whose application raises stays unattempted, so a caller that
+        A segment that raises **before the swap commits** — a rejected
+        rebinding, a malformed pairing — stays unattempted, so a caller that
         recovers can try it again.  The acceptance rule will have consumed a
         draw by then, so a retry is a fresh decision rather than a replay of
-        the one that failed — which is the right trade against leaving the
+        the one that failed, which is the right trade against leaving the
         labels and the integrator disagreeing.
+
+        Once the swap commits the cursor advances immediately, even if the
+        post-swap repair then raises.  Past that line the batch has already
+        moved, so a retry would not re-attempt the segment: it would decide
+        afresh and swap an already-swapped batch a second time, giving two
+        exchanges where the rule granted one.  A failed repair leaves derived
+        quantities — forces evaluated under the old parameters — stale, which
+        the next force evaluation corrects; a double swap is silent and
+        corrects nothing.
         """
         if segment < 0 or segment <= self.attempted_segment or self._attempting:
             return
@@ -336,10 +346,11 @@ class PairSwapHook:
             self._attempt(batch, segment)
         finally:
             self._attempting = False
-        # Advanced only on success: a segment whose application raised has
-        # changed nothing, so marking it attempted would skip a swap that
-        # never happened. The in-progress flag keeps that from re-entering.
-        self.attempted_segment = segment
+        # Reached when nothing was committed and nothing raised — no pairs,
+        # or none accepted. A segment that did commit advanced the cursor
+        # itself, inside _attempt. The in-progress flag keeps a hook driven
+        # re-entrantly from attempting the same segment twice.
+        self.attempted_segment = max(self.attempted_segment, segment)
 
     def _validated_pairs(self, segment: int) -> list[tuple[int, int]]:
         """Return this segment's pairs, or say why they cannot be used.
@@ -487,6 +498,13 @@ class PairSwapHook:
             self.dynamics.apply_per_system_params(params, batch)
 
         batch[self.slot_field] = new_slots
+
+        # The swap is now committed: the integrator and the labels both moved.
+        # The cursor advances here rather than after on_swap, because from
+        # this line on a retry would not re-attempt the segment, it would
+        # swap an already-swapped batch a second time — two exchanges where
+        # the acceptance rule granted one.
+        self.attempted_segment = segment
 
         # Last, and deliberately after the labels: this is repair work on
         # quantities derived from the swap — forces computed under the old

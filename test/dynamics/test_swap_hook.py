@@ -410,6 +410,57 @@ class TestPairSwapHook:
         assert hook.attempted_segment == 0
         assert batch.slot.reshape(-1).tolist() == [1, 0, 3, 2]
 
+    def test_a_failed_repair_does_not_leave_the_swap_repeatable(self) -> None:
+        """Past the commit, a retry is a second exchange, not a retry.
+
+        ``on_swap`` runs after the labels and the integrator have both moved
+        — re-evaluating forces under the new parameters, typically. If it
+        raises and the cursor has not advanced, a caller that recovers
+        re-attempts the segment, decides afresh, and swaps an already-swapped
+        batch a second time: two exchanges where the acceptance rule granted
+        one, with nothing in the trajectory to show it.
+        """
+        calls = {"n": 0}
+
+        def _explode_once(batch: Batch) -> None:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("force re-evaluation failed")
+
+        batch = _make_batch()
+        hook = self._hook(on_swap=_explode_once)
+        hook.on_register(_RecordingEngine())
+
+        with pytest.raises(RuntimeError, match="force re-evaluation failed"):
+            hook.attempt_segment(batch, 0)
+        swapped = batch.slot.reshape(-1).tolist()
+        assert swapped == [1, 0, 3, 2], "the swap should have committed"
+        assert hook.attempted_segment == 0, (
+            "a committed swap must advance the cursor even if the repair failed"
+        )
+
+        hook.attempt_segment(batch, 0)
+        assert batch.slot.reshape(-1).tolist() == swapped, (
+            "the retry swapped an already-swapped batch a second time"
+        )
+        assert calls["n"] == 1, "the segment was applied twice"
+
+    def test_a_repair_that_raises_still_leaves_a_later_segment_open(self) -> None:
+        """Advancing the cursor must not swallow the segments after it."""
+
+        def _explode(batch: Batch) -> None:
+            raise RuntimeError("boom")
+
+        batch = _make_batch()
+        hook = self._hook(on_swap=_explode)
+        hook.on_register(_RecordingEngine())
+        with pytest.raises(RuntimeError):
+            hook.attempt_segment(batch, 0)
+
+        hook.on_swap = None
+        hook.attempt_segment(batch, 1)
+        assert hook.attempted_segment == 1
+
     def test_a_params_fn_that_raises_commits_nothing(self) -> None:
         """The parameters are built before anything is written, for this."""
 

@@ -448,6 +448,29 @@
 
 ### Fixed
 
+- **A failed post-swap repair let one exchange happen twice** — `PairSwapHook`
+  advanced its segment cursor only after `_attempt` returned, but the swap
+  commits earlier: the integrator is rebound and the labels written, and only
+  then does `on_swap` run the repair that re-evaluates forces under the new
+  parameters. A repair that raised left the batch swapped and the segment
+  marked unattempted, so a caller that recovered re-attempted it, decided
+  afresh, and swapped an already-swapped batch a second time — two exchanges
+  where the acceptance rule granted one, breaking detailed balance with
+  nothing in the trajectory to show it:
+
+  ```text
+  before          : [0, 1, 2, 3]
+  on_swap raised  : force re-evaluation failed
+  after failure   : [1, 0, 3, 2] | attempted_segment = -1
+  after retry     : [0, 1, 2, 3] | attempted_segment = 0
+  ```
+
+  The cursor now advances the moment the swap commits. A failure before that
+  point — a refused rebinding, a malformed pairing — still leaves the segment
+  retryable, which is what the ordering inside `_attempt` exists to guarantee.
+  A failed repair leaves derived quantities stale, and the next force
+  evaluation corrects those; a double swap is silent and corrects nothing.
+
 - **A save killed mid-replacement hid the checkpoint** — `_move_into_place`
   renames the old store aside before renaming the new one in, and between
   those two renames nothing is at the documented path. An exception there is
