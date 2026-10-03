@@ -19,9 +19,12 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
+
+if TYPE_CHECKING:
+    from nvalchemi.data.level_storage import LevelSchema
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +84,8 @@ class Reader(ABC):
         self.pin_memory = pin_memory
         self.include_index_in_metadata = include_index_in_metadata
         self.coordinated_subsampling = coordinated_subsampling
+        # Refreshable readers increment this only after replacing cached metadata.
+        self._metadata_revision = 0
 
     def _load_sample(self, index: int) -> dict[str, torch.Tensor]:
         """Load raw tensor data for a single sample.
@@ -147,12 +152,13 @@ class Reader(ABC):
 
     @property
     def field_levels(self) -> dict[str, str]:
-        """Per-field level classification: ``"atom"``, ``"edge"``, or ``"system"``.
+        """Return the level classification for each explicitly classified field.
 
-        Override in subclasses that store explicit level metadata (e.g.
-        Zarr stores).  The default returns an empty dict, which causes
-        downstream consumers to fall back to
-        :data:`AtomicData._default_*_keys` for classification.
+        Values may be the built-in ``"atom"``, ``"edge"``, or ``"system"``
+        aliases or names registered by :attr:`level_schema`. Override this
+        property in readers that store explicit level metadata, such as Zarr
+        readers. The default empty mapping lets downstream consumers fall back
+        to the standard :class:`~nvalchemi.data.AtomicData` classifications.
 
         Returns
         -------
@@ -160,6 +166,18 @@ class Reader(ABC):
             Mapping of field name to level string.
         """
         return {}
+
+    @property
+    def level_schema(self) -> LevelSchema | None:
+        """Return the optional custom-level schema carried by this reader.
+
+        Returns
+        -------
+        LevelSchema | None
+            An independent level schema, or ``None`` when the reader has no
+            explicit level metadata.
+        """
+        return None
 
     def _get_field_names(self) -> list[str]:
         """Return field names by inspecting the first sample.

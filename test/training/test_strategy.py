@@ -203,6 +203,40 @@ class _RecordingHook:
         self._callback(ctx, stage)
 
 
+class _RegisterCountingHook:
+    """Registration-time hook that records side-effect calls."""
+
+    frequency = 1
+    stage = None
+
+    def __init__(self) -> None:
+        self.register_calls = 0
+
+    def _runs_on_stage(self, stage: Enum) -> bool:  # noqa: ARG002
+        return False
+
+    def __call__(self, ctx: HookContext, stage: Enum) -> None:  # noqa: ARG002
+        return
+
+    def on_register(self, workflow: Any) -> None:  # noqa: ARG002
+        self.register_calls += 1
+
+
+class _NoOpTrainingUpdateHook(TrainingUpdateHook):
+    """Update hook used to exercise orchestrator folding during registration."""
+
+    def _runs_on_stage(self, stage: Enum) -> bool:  # noqa: ARG002
+        return False
+
+    def __call__(
+        self,
+        ctx: TrainContext,
+        stage: TrainingStage,
+        will_skip: bool,
+    ) -> tuple[bool, torch.Tensor | None]:
+        return True, ctx.loss
+
+
 class _EveryOtherOptimizerStepHook(TrainingUpdateHook):
     """Veto optimizer steps on alternating batches."""
 
@@ -560,7 +594,29 @@ class TestTrainingStrategyRun:
         strategy.run([batch])
         assert strategy.step_count == 1
 
-    def test_dict_model_multi_device_run_raises(
+    def test_dict_model_distinct_device_run_raises(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "models": {
+                    "student": _build_demo_model(),
+                    "teacher": _build_demo_model(),
+                },
+                "optimizer_configs": {
+                    "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+                },
+                "training_fn": dict_demo_training_fn,
+                "devices": [torch.device("cuda", 0), torch.device("cuda", 1)],
+            }
+        )
+        with pytest.raises(
+            ValueError, match="Named-model training across distinct devices"
+        ):
+            strategy.run([batch])
+
+    def test_dict_model_replicated_device_run_trains(
         self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
     ) -> None:
         strategy = TrainingStrategy(
@@ -577,10 +633,41 @@ class TestTrainingStrategyRun:
                 "devices": [torch.device("cpu"), torch.device("cpu")],
             }
         )
-        with pytest.raises(
-            ValueError, match="Named-model training with multiple devices"
-        ):
-            strategy.run([batch])
+
+        strategy.run([batch])
+
+        assert strategy.step_count == 1
+        assert {
+            parameter.device.type
+            for parameter in strategy.models["teacher"].parameters()
+        } == {"cpu"}
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_an_index_less_cuda_and_the_current_device_are_one_device(
+        self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
+    ) -> None:
+        current = torch.device("cuda", torch.cuda.current_device())
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "models": {
+                    "student": _build_demo_model(),
+                    "teacher": _build_demo_model(),
+                },
+                "optimizer_configs": {
+                    "student": [OptimizerConfig(optimizer_cls=torch.optim.Adam)]
+                },
+                "training_fn": dict_demo_training_fn,
+                "devices": [torch.device("cuda"), current],
+            }
+        )
+
+        strategy.run([batch])
+
+        assert strategy.step_count == 1
+        assert {
+            parameter.device for parameter in strategy.models["teacher"].parameters()
+        } == {current}
 
     def test_moduledict_models_are_accepted_as_named_models(
         self, baseline_strategy_kwargs: dict[str, Any], batch: Batch
@@ -981,6 +1068,25 @@ def _snapshot_ctx(ctx: HookContext) -> _LossSnapshot:
 
 
 class TestTrainingStrategyHookOrder:
+    def test_update_hook_folding_does_not_reregister_existing_hooks(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        """Folding update hooks must not replay registration side effects."""
+        hook = _RegisterCountingHook()
+
+        strategy = TrainingStrategy(
+            **{
+                **baseline_strategy_kwargs,
+                "hooks": [hook, _NoOpTrainingUpdateHook()],
+            }
+        )
+
+        assert hook.register_calls == 1
+        assert [type(registered).__name__ for registered in strategy.hooks] == [
+            "_RegisterCountingHook",
+            "TrainingUpdateOrchestrator",
+        ]
+
     def test_strategy_context_manager_nests_without_reentry(
         self, baseline_strategy_kwargs: dict[str, Any]
     ) -> None:
@@ -1390,6 +1496,67 @@ class TestTrainingStrategySpecRoundTrip:
         with pytest.warns(UserWarning, match="Omitting non-importable training_fn"):
             spec = strategy.to_spec_dict()
         assert "training_fn" not in spec
+
+
+class _RuntimeObjectStrategy(TrainingStrategy):
+    """Strategy whose ``from_spec_dict`` takes a live object no spec carries."""
+
+    received: Any = None
+
+    @classmethod
+    def from_spec_dict(
+        cls,
+        spec: Mapping[str, Any],
+        *,
+        models: Any = None,
+        hooks: Any = None,
+        training_fn: Any = None,
+        marker: object | None = None,
+    ) -> TrainingStrategy:
+        """Record *marker* and rebuild through the base class."""
+        cls.received = marker
+        return super().from_spec_dict(
+            spec, models=models, hooks=hooks, training_fn=training_fn
+        )
+
+
+class TestRuntimeOverrides:
+    """Runtime overrides that a checkpoint rebuild forwards to ``from_spec_dict``."""
+
+    def test_base_from_spec_dict_refuses_unknown_overrides_by_name(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        """A misspelled keyword is refused rather than dropped."""
+        spec = TrainingStrategy(**baseline_strategy_kwargs).to_spec_dict()
+        with pytest.raises(TypeError, match=r"\['on_polcy'\]"):
+            TrainingStrategy.from_spec_dict(
+                spec, models=_build_demo_model(), hooks=[], on_polcy=object()
+            )
+
+    def test_from_checkpoint_dict_forwards_overrides_to_the_subclass(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        """The subclass a spec names receives the override through the base rebuild."""
+        spec = _RuntimeObjectStrategy(**baseline_strategy_kwargs).to_checkpoint_dict()
+        marker = object()
+        _RuntimeObjectStrategy.received = None
+
+        restored = TrainingStrategy.from_checkpoint_dict(
+            spec, models=_build_demo_model(), hooks=[], marker=marker
+        )
+
+        assert isinstance(restored, _RuntimeObjectStrategy)
+        assert _RuntimeObjectStrategy.received is marker
+
+    def test_from_checkpoint_dict_refuses_an_override_the_subclass_lacks(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        """An override the named class cannot take surfaces as a TypeError."""
+        spec = _RuntimeObjectStrategy(**baseline_strategy_kwargs).to_checkpoint_dict()
+        with pytest.raises(TypeError, match="unexpected keyword argument 'other'"):
+            TrainingStrategy.from_checkpoint_dict(
+                spec, models=_build_demo_model(), hooks=[], other=object()
+            )
 
 
 class TestValidationCapabilities:

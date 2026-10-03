@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from nvalchemi.dynamics import hooks, integrators, optimizers
 from nvalchemi.dynamics._ops.thermostat_utils import initialize_velocities
+from nvalchemi.dynamics._units import KB_EV
 from nvalchemi.dynamics.base import (
     BaseDynamics,
     ConvergenceHook,
@@ -25,18 +26,33 @@ from nvalchemi.dynamics.base import (
     DynamicsStage,
     FusedStage,
     Hook,
+    requires_grad_ctx,
 )
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.integrators import NPH, NPT, NVE, NVTLangevin, NVTNoseHoover
 from nvalchemi.dynamics.optimizers import (
     FIRE,
     FIRE2,
+    LBFGS,
     FIRE2VariableCell,
     FIREVariableCell,
+    LBFGSVariableCell,
 )
 from nvalchemi.dynamics.sampler import SizeAwareSampler
-from nvalchemi.dynamics.sinks import DataSink, GPUBuffer, HostMemory, ZarrData
+from nvalchemi.dynamics.sinks import (
+    DataSink,
+    GPUBuffer,
+    HostMemory,
+    ResizableSink,
+    ZarrData,
+)
 from nvalchemi.dynamics.strategy import DynamicsStrategy
+from nvalchemi.dynamics.structure_sampler import (
+    FitPolicy,
+    OrderedStructureSampler,
+    StructureSource,
+    WithinBudget,
+)
 
 __all__ = [
     "BaseDynamics",
@@ -50,19 +66,28 @@ __all__ = [
     "FIRE2",
     "FIRE2VariableCell",
     "FIREVariableCell",
+    "FitPolicy",
     "FusedStage",
     "GPUBuffer",
     "Hook",
     "HostMemory",
+    "KB_EV",
+    "LBFGS",
+    "LBFGSVariableCell",
+    "ResizableSink",
     "NPH",
     "NPT",
     "NVE",
     "NVTLangevin",
     "NVTNoseHoover",
+    "OrderedStructureSampler",
     "SizeAwareSampler",
+    "StructureSource",
+    "WithinBudget",
     "ZarrData",
     "hooks",
     "initialize_velocities",
     "integrators",
     "optimizers",
+    "requires_grad_ctx",
 ]

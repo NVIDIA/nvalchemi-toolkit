@@ -287,6 +287,7 @@ class InMemoryDataset:
                 raise ValueError(f"chunk_size must be positive, got {chunk_size}")
 
             reader_field_levels = getattr(reader, "field_levels", None)
+            reader_level_schema = getattr(reader, "level_schema", None)
             transform = InMemoryDataset._build_batch_transform(batch_transforms)
             reader_len = len(reader)
             if reader_len <= 0:
@@ -299,12 +300,14 @@ class InMemoryDataset:
                     chunk = Batch.from_raw_dicts(
                         raw_dicts,
                         device="cpu",
+                        attr_map=reader_level_schema,
                         field_levels=reader_field_levels,
                     )
                 else:
                     chunk = Batch.from_data_list(
                         [AtomicData.model_validate(data) for data in raw_dicts],
                         device="cpu",
+                        attr_map=reader_level_schema,
                         field_levels=reader_field_levels,
                     )
                 if transform is not None:

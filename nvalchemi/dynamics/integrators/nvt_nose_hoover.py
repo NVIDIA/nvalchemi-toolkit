@@ -51,9 +51,8 @@ from nvalchemi.dynamics._ops.nose_hoover import (
     nhc_position_update,
     nhc_velocity_half_step,
 )
-from nvalchemi.dynamics._units import fs_to_internal_time
+from nvalchemi.dynamics._units import KB_EV, fs_to_internal_time
 from nvalchemi.dynamics.base import BaseDynamics
-from nvalchemi.dynamics.hooks._utils import KB_EV
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.base import ConvergenceHook

@@ -281,7 +281,7 @@ class DynamicsDistributionCoordinator:
 
 
 def _kb_ev() -> float:
-    from nvalchemi.dynamics.hooks._utils import KB_EV  # noqa: PLC0415
+    from nvalchemi.dynamics._units import KB_EV  # noqa: PLC0415
 
     return KB_EV
 

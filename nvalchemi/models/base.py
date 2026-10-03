@@ -18,15 +18,28 @@ from __future__ import annotations
 import abc
 import warnings
 from collections import OrderedDict
+from collections.abc import Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models._derivatives import (
+    DerivativeNotSupported,
+    HessianOperator,
+    _attach_hessian_blocks,
+    _dense_hessian_blocks,
+    _DerivativeRequest,
+    _position_gradient,
+    _prepare_derivative_graph,
+    _validate_hessian_vector,
+    _ValidatedDenseHessianRequest,
+)
 
 if TYPE_CHECKING:
     from nvalchemi.distributed.config import StrategyKind
@@ -347,6 +360,8 @@ class BaseModelMixin(abc.ABC):
       collect input dict.
     - ``adapt_output()`` — map raw model output to :class:`ModelOutputs`
       ordered dict.
+    - ``narrowed_outputs()`` — narrow ``active_outputs`` for the duration
+      of a block and restore it afterwards.
     """
 
     # model_config must be set as an instance attribute in each subclass __init__:
@@ -500,6 +515,253 @@ class BaseModelMixin(abc.ABC):
         """
         return set()
 
+    # ------------------------------------------------------------------
+    # Derivative graph preparation
+    # ------------------------------------------------------------------
+
+    def _copy_derivative_runtime_data(
+        self,
+        source: Batch,
+        working: Batch,
+    ) -> None:
+        """Copy wrapper-owned runtime inputs into a derivative snapshot.
+
+        The structured contents of *source* have already been cloned into
+        *working*. Wrappers that consume derivative-relevant runtime attributes
+        outside normal :class:`Batch` storage may override this hook to copy
+        only those attributes. Implementations must not mutate *source*, replace
+        the prepared position leaf, execute the model, or rebuild neighbors.
+
+        Parameters
+        ----------
+        source : Batch
+            Caller-owned batch being snapshotted.
+        working : Batch
+            Independent derivative batch to receive runtime inputs.
+        """
+
+    def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
+        """Reject second-order derivatives until a wrapper supports them.
+
+        Parameters
+        ----------
+        request : _DerivativeRequest
+            Contextual derivative request to validate.
+
+        Raises
+        ------
+        DerivativeNotSupported
+            Always, unless a wrapper that supports derivatives overrides it.
+        """
+        raise DerivativeNotSupported(
+            model_name=type(self).__name__,
+            operation=request.operation,
+            execution=request.execution,
+            strategy=request.strategy,
+            reason="the wrapper does not support second-order derivatives",
+        )
+
+    def _derivative_energy(self, data: Batch) -> torch.Tensor:
+        """Run the ordinary wrapper path and return connected system energies.
+
+        Parameters
+        ----------
+        data : Batch
+            Independent working batch configured for position gradients.
+
+        Returns
+        -------
+        torch.Tensor
+            Per-system energy tensor. Graph validation is handled by the shared
+            derivative preparation boundary.
+
+        Raises
+        ------
+        RuntimeError
+            If the ordinary wrapper output does not contain an energy value.
+        """
+        output = self(data)  # type: ignore[operator]
+        if not isinstance(output, Mapping) or output.get("energy") is None:
+            raise RuntimeError(
+                f"{type(self).__name__} derivative evaluation did not return energy"
+            )
+        return output["energy"]
+
+    def prepare_hessian(self, batch: Batch) -> HessianOperator:
+        """Prepare an immediately active matrix-free Hessian.
+
+        The operator represents the second derivative of total energy with
+        respect to Cartesian positions, ``d^2 E / dR^2``, at the supplied
+        geometry. It copies the batch inputs and retains a derivative graph
+        evaluated with the current model. Keep model parameters, buffers,
+        execution mode, and pipeline wiring unchanged while using it. Close the
+        operator explicitly or use it as a context manager.
+
+        Parameters
+        ----------
+        batch : Batch
+            Caller-owned batch to snapshot for repeated Hessian-vector products.
+
+        Returns
+        -------
+        HessianOperator
+            Operator retaining one private derivative graph. Close it explicitly
+            or use it as a context manager.
+
+        Raises
+        ------
+        TypeError
+            If ``batch`` is not a :class:`Batch`.
+        DerivativeNotSupported
+            If this wrapper or execution context does not support HVPs.
+        RuntimeError
+            If energy does not satisfy the connected derivative contract.
+        """
+        request = _DerivativeRequest(
+            operation="hvp",
+            execution="distributed" if self._dist_ctx is not None else "local",
+            strategy=None,
+        )
+        context = _prepare_derivative_graph(self, batch, request)
+        return HessianOperator(context)
+
+    def compute_hessian(
+        self,
+        batch: Batch,
+        *,
+        strategy: Literal["vmap", "loop"] = "vmap",
+        row_chunk_size: int | None = None,
+    ) -> Batch:
+        """Materialize the dense Hessian on a batch in place.
+
+        The model evaluates an independent snapshot, then attaches or replaces
+        ``batch["hessian"]`` on the ``atoms x atoms`` product level. To keep a
+        simulation batch unchanged, supply a separate analysis batch with its
+        required neighbor data already prepared. For system ``i``, the logical
+        field shape is ``[N_i, N_i, 3, 3]`` with axes
+        ``[atom_out, atom_in, xyz_out, xyz_in]``; the packed batch shape is
+        ``[sum(N_i**2), 3, 3]``. The detached result is ``d^2 E / dR^2``, so
+        the directional force Jacobian is ``-H @ v``.
+
+        Neighbor membership is held fixed at the topology supplied by
+        ``batch``. The method does not run neighbor-list hooks or differentiate
+        the discrete neighbor-selection operation.
+
+        Parameters
+        ----------
+        batch : Batch
+            Caller-owned batch to update after successful materialization.
+        strategy : {"vmap", "loop"}, optional
+            Whether each row chunk uses batched vector-Jacobian products or
+            evaluates one row at a time. Defaults to ``"vmap"``.
+        row_chunk_size : int, optional
+            Maximum number of flattened Cartesian rows per chunk, within each
+            system. ``None`` uses one chunk per system. ``"vmap"`` evaluates
+            the chunk together; ``"loop"`` evaluates its rows individually.
+
+        Returns
+        -------
+        Batch
+            The same object supplied as *batch*, with a detached canonical
+            ``hessian`` field.
+
+        Raises
+        ------
+        TypeError
+            If *batch* or an argument has the wrong type.
+        ValueError
+            If tensor layout, storage declarations, strategy, or chunk size is
+            incompatible with dense Hessian materialization.
+        DerivativeNotSupported
+            If this wrapper or execution context does not support the requested
+            dense strategy.
+        RuntimeError
+            If energy does not satisfy the connected derivative contract.
+        """
+        request = _ValidatedDenseHessianRequest.build(
+            batch,
+            strategy,
+            row_chunk_size,
+        )
+        derivative_request = _DerivativeRequest(
+            operation="dense_hessian",
+            execution="distributed" if self._dist_ctx is not None else "local",
+            strategy=request.strategy,
+        )
+
+        with _prepare_derivative_graph(self, batch, derivative_request) as graph:
+            gradient = _position_gradient(graph)
+            blocks = _dense_hessian_blocks(
+                graph,
+                gradient,
+                request.num_nodes,
+                strategy=request.strategy,
+                row_chunk_size=request.row_chunk_size,
+            )
+
+        with torch.inference_mode(False):
+            _attach_hessian_blocks(batch, blocks, dtype=request.positions.dtype)
+        return batch
+
+    def hessian_vector_product(
+        self,
+        batch: Batch,
+        vectors: torch.Tensor,
+        *,
+        create_graph: bool = False,
+    ) -> torch.Tensor:
+        """Compute a Hessian-vector product from one energy-only forward.
+
+        This evaluates ``(d^2 E / dR^2) @ vectors`` for the supplied, fixed
+        neighbor topology. It does not rebuild neighbors or differentiate
+        neighbor membership. The force directional derivative has the
+        opposite sign.
+
+        Parameters
+        ----------
+        batch : Batch
+            Caller-owned batch to evaluate without mutation.
+        vectors : torch.Tensor
+            One vector with the same shape, dtype, and device as
+            ``batch.positions``.
+        create_graph : bool, optional
+            Keep the product attached to the graph of the forward this method
+            runs, so a loss can backpropagate through it to the model
+            parameters. Default ``False`` returns a detached product.
+
+        Returns
+        -------
+        torch.Tensor
+            Hessian-vector product aligned with ``batch.positions``.
+
+        Raises
+        ------
+        TypeError
+            If ``batch`` is not a :class:`Batch` or ``vectors`` is not a
+            floating-point tensor.
+        ValueError
+            If vector shape, dtype, or device does not match positions.
+        DerivativeNotSupported
+            If this wrapper or execution context does not support HVPs.
+
+        Notes
+        -----
+        The forward pass runs on this wrapper directly, so a DDP wrapper
+        around it does not see it and gradients from an attached product are
+        not reduced across ranks. For that case, take the energy from the
+        training forward and use
+        :meth:`HessianOperator.from_energy <nvalchemi.models.HessianOperator.from_energy>`.
+        """
+        if not isinstance(batch, Batch):
+            raise TypeError(f"batch must be a Batch, got {type(batch).__name__}")
+        positions = getattr(batch, "positions", None)
+        if not isinstance(positions, torch.Tensor):
+            raise RuntimeError("Hessian-vector products require tensor positions")
+        _validate_hessian_vector(vectors, positions)
+
+        with self.prepare_hessian(batch) as operator:
+            return operator.matvec(vectors, create_graph=create_graph)
+
     def set_config(self, key: str, value: Any) -> None:
         """Set a mutable field on :attr:`model_config`.
 
@@ -526,6 +788,40 @@ class BaseModelMixin(abc.ABC):
                 f"Available fields: {list(self.model_config.model_fields)}"
             )
         setattr(self.model_config, key, value)
+
+    @contextmanager
+    def narrowed_outputs(self, outputs: Iterable[str]) -> Iterator[None]:
+        """Compute only *outputs* for the duration of a block.
+
+        ``active_outputs`` is set to *outputs* on entry and restored on exit,
+        whether the block returns or raises. A caller that needs one output
+        of a model configured for several, such as an energy to differentiate
+        twice while the forces stay off, narrows the pass this way and hands
+        the model back as it found it.
+
+        Parameters
+        ----------
+        outputs : Iterable[str]
+            Output keys to leave active inside the block.
+
+        Yields
+        ------
+        None
+            Control while the narrowed ``active_outputs`` is in force.
+
+        Examples
+        --------
+        >>> with model.narrowed_outputs({"energy"}):  # doctest: +SKIP
+        ...     energy = model(batch)["energy"]
+        >>> "forces" in model.model_config.active_outputs  # doctest: +SKIP
+        True
+        """
+        previous = set(self.model_config.active_outputs)
+        self.set_config("active_outputs", set(outputs))
+        try:
+            yield
+        finally:
+            self.set_config("active_outputs", previous)
 
     def adapt_input(
         self, data: AtomicData | Batch | AtomsLike, **kwargs: Any

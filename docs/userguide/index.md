@@ -45,6 +45,7 @@ For install options, refer to the install guide below.
 - {doc}`Reporting: Summaries and Dashboards <reporting>`
 - [Dynamics: Optimization and MD](dynamics)
 - {doc}`Enhanced Sampling: Biases and Free Energy <enhanced_sampling>`
+- {doc}`Generative Models <generative>`
 
 ## Distributed Simulations
 
@@ -86,6 +87,7 @@ hooks
 reporting
 dynamics
 enhanced_sampling
+generative
 ```
 
 ```{toctree}

@@ -26,7 +26,7 @@ import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import torch
 from torch import distributed as dist
@@ -198,6 +198,30 @@ class DataSink(ABC):
         return rank
 
 
+@runtime_checkable
+class ResizableSink(Protocol):
+    """Sink that a consumer can grow to the capacity it needs.
+
+    A :class:`DataSink` fixes its capacity at construction. A sink that also
+    satisfies this protocol can be grown with ``resize``. A consumer that
+    knows how many frames it is about to write, such as the on-policy
+    distillation segment loop, calls ``resize`` first instead of rejecting a
+    sink that is too small.
+
+    Examples
+    --------
+    >>> from nvalchemi.dynamics import HostMemory, ResizableSink
+    >>> isinstance(HostMemory(capacity=1), ResizableSink)
+    False
+    """
+
+    capacity: int
+
+    def resize(self, capacity: int) -> None:
+        """Grow the sink so it holds at least *capacity* frames."""
+        ...
+
+
 class GPUBuffer(DataSink):
     """GPU-resident buffer for storing batched atomic data.
 
@@ -307,40 +331,6 @@ class GPUBuffer(DataSink):
         self._dest_mask = torch.zeros(
             self._capacity, dtype=torch.bool, device=self._device
         )
-        # Trigger lazy init of _batch_ptr for all groups so zero() can preserve it
-        for group in self._buffer._storage.groups.values():
-            if hasattr(group, "_lazy_init_batch_ptr"):
-                group._lazy_init_batch_ptr()
-        # Extend _batch_ptr to capacity + 2 (Batch.empty uses capacity + 1,
-        # but compute_put_per_system_fit_mask requires capacity + 2)
-        self._restore_batch_ptr_capacity()
-
-    def _restore_batch_ptr_capacity(self) -> None:
-        """Restore ``_batch_ptr`` to full pre-allocated capacity after put.
-
-        :meth:`SegmentedLevelStorage.put` trims ``_batch_ptr`` to the number
-        of active segments via ``.clone()``, which destroys the headroom
-        needed for subsequent appends.  This method re-extends each
-        segmented group's ``_batch_ptr`` to ``capacity + 2`` while
-        preserving the meaningful prefix written by the Warp kernels.
-
-        The ``+2`` accounts for the formula used by
-        :meth:`SegmentedLevelStorage.compute_put_per_system_fit_mask`:
-        it requires ``num_dest_segments + n_seg + 2`` entries to
-        accommodate segment boundaries plus safety margin.
-        """
-        if self._buffer is None:
-            return
-        # Need capacity + 2 to satisfy compute_put_per_system_fit_mask formula
-        batch_ptr_cap = self._capacity + 2
-        for group in self._buffer._storage.groups.values():
-            if not hasattr(group, "segment_lengths"):
-                continue  # skip UniformLevelStorage
-            bp = group._batch_ptr
-            if bp is not None and bp.shape[0] < batch_ptr_cap:
-                new_bp = torch.zeros(batch_ptr_cap, dtype=bp.dtype, device=bp.device)
-                new_bp[: bp.shape[0]] = bp
-                group._batch_ptr = new_bp
 
     def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
         """Store atomic data into the buffer.
@@ -350,7 +340,8 @@ class GPUBuffer(DataSink):
         in *batch* are copied.
 
         Uses :meth:`Batch.put` for efficient in-place copying without
-        tensor allocation.
+        tensor allocation. A batch arriving on another device is moved to the
+        buffer's device first, as :class:`HostMemory` moves its items to CPU.
 
         This method will set values for ``_copied_mask`` and ``_dest_mask``.
 
@@ -375,6 +366,11 @@ class GPUBuffer(DataSink):
         if num_total == 0:
             return
 
+        # Ensure buffer is allocated with full capacity (lazy init on first write)
+        self._ensure_buffer(template=batch)
+        if batch.device != self._buffer.device:
+            batch = batch.to(self._buffer.device)
+
         # Build mask if not provided
         if mask is None:
             mask = torch.ones(num_total, dtype=torch.bool, device=batch.device)
@@ -384,8 +380,6 @@ class GPUBuffer(DataSink):
                 raise ValueError(
                     f"mask length {mask.shape[0]} != num_graphs {num_total}"
                 )
-        # Ensure buffer is allocated with full capacity (lazy init on first write)
-        self._ensure_buffer(template=batch)
 
         # Count how many graphs we're trying to write
         num_to_write = int(mask.sum().item())
@@ -430,9 +424,6 @@ class GPUBuffer(DataSink):
             copied_mask=self._copied_mask,
             dest_mask=self._dest_mask,
         )
-
-        # Restore _batch_ptr capacity after put() trims it
-        self._restore_batch_ptr_capacity()
 
     def read(self) -> Batch:
         """Retrieve stored (non-padding) data as a single Batch.

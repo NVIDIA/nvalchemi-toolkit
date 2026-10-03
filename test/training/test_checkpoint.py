@@ -21,17 +21,18 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
 import torch.nn as nn
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.models.base import BaseModelMixin
-from nvalchemi.training import EnergyMSELoss, FineTuningStrategy, TrainingStage
+from nvalchemi.models.base import BaseModelMixin, ModelConfig
+from nvalchemi.training import EMAHook, EnergyMSELoss, FineTuningStrategy, TrainingStage
 from nvalchemi.training._checkpoint import (
     CheckpointManifest,
+    _filter_snapshot_to_trainable_state,
     load_checkpoint,
     save_checkpoint,
 )
@@ -124,12 +125,55 @@ class NotModule:
     arg_b: str
 
 
+class PartialStateModel(nn.Module, BaseModelMixin):
+    """Small model with selected, non-selected, frozen, and buffer state."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy"}),
+            autograd_outputs=frozenset(),
+            needs_pbc=False,
+            active_outputs={"energy"},
+        )
+        self.selected = nn.Linear(2, 1, bias=False)
+        self.non_selected = nn.Linear(2, 1, bias=False)
+        self.frozen = nn.Linear(2, 1, bias=False)
+        self.register_buffer("running_scale", torch.ones(1))
+        self.frozen.weight.requires_grad_(False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Return a scalar output for generic training smoke tests."""
+        return (
+            self.selected(x) + self.non_selected(x) + self.frozen(x)
+        ) * self.running_scale
+
+    @property
+    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
+        """Return no embedding outputs for checkpoint filtering tests."""
+        return {}
+
+    def compute_embeddings(
+        self, data: AtomicData | Batch, **kwargs: Any
+    ) -> AtomicData | Batch:
+        """Embedding computation is unused by these checkpoint tests."""
+        raise NotImplementedError
+
+
 def checkpoint_training_fn(
     model: BaseModelMixin,
     batch: Batch,
 ) -> dict[str, torch.Tensor]:
     """Importable training function used by strategy checkpoint tests."""
     return default_training_fn(model, batch)
+
+
+def checkpoint_mapping_training_fn(
+    models: dict[str, BaseModelMixin],
+    batch: Batch,
+) -> dict[str, torch.Tensor]:
+    """Importable mapping-mode training function for strategy checkpoint tests."""
+    return default_training_fn(models["main"], batch)
 
 
 class _NoOpCheckpointHook:
@@ -157,7 +201,9 @@ def _make_checkpoint_batch(n_atoms: int = 3, seed: int = 0) -> Batch:
     return Batch.from_data_list([data])
 
 
-def _make_checkpoint_strategy(num_steps: int = 4) -> TrainingStrategy:
+def _make_checkpoint_strategy(
+    num_steps: int = 4, device: torch.device | str = "cpu"
+) -> TrainingStrategy:
     """Create a serializable demo training strategy for checkpoint tests."""
     from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
@@ -174,8 +220,18 @@ def _make_checkpoint_strategy(num_steps: int = 4) -> TrainingStrategy:
         num_steps=num_steps,
         training_fn=checkpoint_training_fn,
         loss_fn=EnergyMSELoss(),
-        devices=[torch.device("cpu")],
+        devices=[torch.device(device)],
     )
+
+
+def _optimizer_state_devices(strategy: TrainingStrategy) -> set[str]:
+    """Return the devices every per-parameter optimizer state tensor sits on."""
+    return {
+        str(value.device)
+        for state in strategy._optimizers[0].state.values()
+        for value in state.values()
+        if isinstance(value, torch.Tensor)
+    }
 
 
 def _make_multi_optimizer_checkpoint_strategy() -> TrainingStrategy:
@@ -1658,3 +1714,452 @@ class TestStrategyCheckpoint:
         assert kwargs["enable_cueq"] is False
         assert kwargs["compile_model"] is False
         assert kwargs["dtype"] is torch.float32
+
+    def test_trainable_only_checkpoint_saves_selected_parameters_and_buffers(
+        self, tmp_path: Path
+    ) -> None:
+        """Partial model state keeps optimizer-selected parameters plus buffers."""
+        model = PartialStateModel()
+        strategy = TrainingStrategy(
+            models=model,
+            optimizer_configs=OptimizerConfig(
+                optimizer_cls=torch.optim.Adam,
+                optimizer_kwargs={"lr": 1e-3},
+            ),
+            num_steps=1,
+            training_fn=checkpoint_training_fn,
+            loss_fn=EnergyMSELoss(),
+            devices=[torch.device("cpu")],
+        )
+        strategy.set_optimizer_parameter_filter({"main.selected.weight"})
+
+        with pytest.warns(
+            UserWarning,
+            match="save_trainable_state_only=True stores only optimizer-selected "
+            "parameters and buffers",
+        ):
+            save_checkpoint(
+                tmp_path,
+                strategy=strategy,
+                save_trainable_state_only=True,
+            )
+
+        state = torch.load(
+            tmp_path / "models" / "main" / "checkpoints" / "0.pt",
+            weights_only=True,
+            map_location="cpu",
+        )
+        metadata = json.loads(
+            (tmp_path / "strategy" / "checkpoints" / "0.json").read_text()
+        )
+
+        assert set(state) == {"running_scale", "selected.weight"}
+        torch.testing.assert_close(state["selected.weight"], model.selected.weight)
+        torch.testing.assert_close(state["running_scale"], model.running_scale)
+        assert "non_selected.weight" not in state
+        assert "frozen.weight" not in state
+        assert metadata["model_state_load"] == "partial"
+
+    def test_trainable_only_checkpoint_filters_ema_hook_state(self) -> None:
+        """EMA hook state follows partial model-state filtering semantics."""
+        model = PartialStateModel()
+        ema = EMAHook(model_key="main", decay=0.5)
+        ema(
+            Mock(
+                models={"main": model},
+                step_count=0,
+                optimizers=[],
+                loss=None,
+                workflow=object(),
+            ),
+            TrainingStage.AFTER_OPTIMIZER_STEP,
+        )
+
+        state = ema.state_dict()
+        snapshot = {
+            "models": {"main": (model.state_dict(), None)},
+            "hook_states": {
+                f"{type(ema).__module__}.{type(ema).__qualname__}:0": state,
+            },
+            "strategy_metadata": {},
+        }
+        _filter_snapshot_to_trainable_state(
+            snapshot,
+            Mock(
+                models={"main": model},
+                _optimizer_parameter_names={"main.selected.weight"},
+            ),
+        )
+        averaged_state = state["averaged_model_state"]
+
+        assert set(averaged_state) == {
+            "module.running_scale",
+            "module.selected.weight",
+        }
+        assert "module.non_selected.weight" not in averaged_state
+        assert "module.frozen.weight" not in averaged_state
+        assert state["averaged_model_state_load"] == "partial"
+
+    def test_trainable_only_checkpoint_allows_frozen_teacher_model(
+        self, tmp_path: Path
+    ) -> None:
+        """A frozen named model can be restored from spec with empty partial state."""
+        from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+        def training_fn(
+            models: dict[str, BaseModelMixin],
+            batch: Batch,
+        ) -> dict[str, torch.Tensor]:
+            return default_training_fn(models["student"], batch)
+
+        student = DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8))
+        teacher = DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8))
+        strategy = TrainingStrategy(
+            models={"student": student, "teacher": teacher},
+            optimizer_configs={
+                "student": [
+                    OptimizerConfig(
+                        optimizer_cls=torch.optim.Adam,
+                        optimizer_kwargs={"lr": 1e-3},
+                    ),
+                ],
+            },
+            num_steps=1,
+            training_fn=training_fn,
+            loss_fn=EnergyMSELoss(),
+            devices=[torch.device("cpu")],
+        )
+        student_parameter_names = {
+            f"student.{name}" for name, _parameter in student.named_parameters()
+        }
+        strategy.set_optimizer_parameter_filter(student_parameter_names)
+
+        with pytest.warns(
+            UserWarning,
+            match="save_trainable_state_only=True stores only optimizer-selected parameters and buffers",
+        ):
+            idx = save_checkpoint(
+                tmp_path,
+                strategy=strategy,
+                save_trainable_state_only=True,
+            )
+
+        assert idx == 0
+        metadata = json.loads(
+            (tmp_path / "strategy" / "checkpoints" / "0.json").read_text()
+        )
+        student_state = torch.load(
+            tmp_path / "models" / "student" / "checkpoints" / "0.pt",
+            weights_only=True,
+            map_location="cpu",
+        )
+        teacher_state = torch.load(
+            tmp_path / "models" / "teacher" / "checkpoints" / "0.pt",
+            weights_only=True,
+            map_location="cpu",
+        )
+        saved_student_state = {
+            name: value.detach().clone() for name, value in student.state_dict().items()
+        }
+
+        assert metadata["model_state_load"] == "partial"
+        assert set(student_state) == set(saved_student_state)
+        assert not teacher_state
+
+        loaded = load_checkpoint(tmp_path, training_fn=training_fn)
+        restored = loaded["strategy"]
+        assert set(restored.models) == {"student", "teacher"}
+        assert isinstance(restored.models["student"], DemoModelWrapper)
+        assert isinstance(restored.models["teacher"], DemoModelWrapper)
+
+
+class _RuntimeObjectStrategy(TrainingStrategy):
+    """Strategy whose ``from_spec_dict`` takes a live object no spec carries."""
+
+    received: Any = None
+
+    @classmethod
+    def from_spec_dict(
+        cls,
+        spec: dict[str, Any],
+        *,
+        models: Any = None,
+        hooks: Any = None,
+        training_fn: Any = None,
+        marker: object | None = None,
+    ) -> TrainingStrategy:
+        """Record *marker* and rebuild through the base class."""
+        cls.received = marker
+        return super().from_spec_dict(
+            spec, models=models, hooks=hooks, training_fn=training_fn
+        )
+
+
+def _make_runtime_object_strategy() -> _RuntimeObjectStrategy:
+    """Return a serializable strategy of the subclass taking a runtime object."""
+    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+    torch.manual_seed(0)
+    return _RuntimeObjectStrategy(
+        models=DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8)),
+        optimizer_configs=OptimizerConfig(
+            optimizer_cls=torch.optim.Adam, optimizer_kwargs={"lr": 1e-3}
+        ),
+        num_steps=2,
+        training_fn=checkpoint_training_fn,
+        loss_fn=EnergyMSELoss(),
+        devices=[torch.device("cpu")],
+    )
+
+
+class TestLoadCheckpointRuntimeOverrides:
+    """Runtime overrides travel from the loader to the saved class's ``from_spec_dict``."""
+
+    def test_overrides_reach_the_rebuilt_strategy(self, tmp_path: Path) -> None:
+        """A rebuild from metadata hands the override to the subclass."""
+        save_checkpoint(tmp_path, strategy=_make_runtime_object_strategy())
+        marker = object()
+        _RuntimeObjectStrategy.received = None
+
+        loaded = load_checkpoint(tmp_path, marker=marker)
+
+        assert isinstance(loaded["strategy"], _RuntimeObjectStrategy)
+        assert _RuntimeObjectStrategy.received is marker
+
+    def test_strategy_load_checkpoint_forwards_overrides(self, tmp_path: Path) -> None:
+        """The classmethod wrapper forwards the same keywords."""
+        save_checkpoint(tmp_path, strategy=_make_runtime_object_strategy())
+        marker = object()
+        _RuntimeObjectStrategy.received = None
+
+        restored = _RuntimeObjectStrategy.load_checkpoint(tmp_path, marker=marker)
+
+        assert isinstance(restored, _RuntimeObjectStrategy)
+        assert _RuntimeObjectStrategy.received is marker
+
+    def test_overrides_are_refused_for_a_live_strategy_restore(
+        self, tmp_path: Path
+    ) -> None:
+        """A live restore rebuilds nothing, so an override would be silently lost."""
+        strategy = _make_runtime_object_strategy()
+        save_checkpoint(tmp_path, strategy=strategy)
+        with pytest.raises(TypeError, match=r"\['marker'\]"):
+            load_checkpoint(tmp_path, strategy=strategy, marker=object())
+
+    def test_overrides_are_refused_for_a_component_only_checkpoint(
+        self, tmp_path: Path
+    ) -> None:
+        """A checkpoint without strategy metadata has no ``from_spec_dict`` to reach."""
+        model = nn.Linear(4, 2)
+        spec = create_model_spec(nn.Linear, in_features=4, out_features=2)
+        save_checkpoint(tmp_path, models={"m": (model, spec)})
+        with pytest.raises(TypeError, match="carries no strategy metadata"):
+            load_checkpoint(tmp_path, marker=object())
+
+    def test_base_strategy_checkpoint_refuses_unknown_overrides(
+        self, tmp_path: Path
+    ) -> None:
+        """The base ``from_spec_dict`` names the keys it was not expecting."""
+        save_checkpoint(tmp_path, strategy=_make_checkpoint_strategy())
+        with pytest.raises(TypeError, match=r"\['marker'\]"):
+            load_checkpoint(tmp_path, marker=object())
+
+
+def _make_fresh_demo_model(seed: int = 1) -> Any:
+    """Return a demo model whose weights differ from the saved strategy's."""
+    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+    torch.manual_seed(seed)
+    return DemoModelWrapper(DemoModel(num_atom_types=20, hidden_dim=8))
+
+
+class TestLoadCheckpointCallerModels:
+    """Live models a caller passes receive the checkpoint's weights."""
+
+    def test_caller_models_receive_the_checkpoint_weights(self, tmp_path: Path) -> None:
+        """The rebuilt strategy holds the caller's object, loaded with the saved weights."""
+        strategy = _make_checkpoint_strategy()
+        save_checkpoint(tmp_path, strategy=strategy)
+        fresh = _make_fresh_demo_model()
+        saved = [
+            parameter.detach().clone()
+            for parameter in strategy.models["main"].parameters()
+        ]
+        assert not torch.equal(next(fresh.parameters()), saved[0])
+
+        loaded = load_checkpoint(tmp_path, models=fresh)
+
+        assert loaded["strategy"].models["main"] is fresh
+        for restored, expected in zip(fresh.parameters(), saved, strict=True):
+            torch.testing.assert_close(restored, expected)
+
+    def test_strategy_load_checkpoint_forwards_caller_models(
+        self, tmp_path: Path
+    ) -> None:
+        """The classmethod wrapper hands the same models to the loader."""
+        save_checkpoint(tmp_path, strategy=_make_checkpoint_strategy())
+        fresh = _make_fresh_demo_model()
+
+        restored = TrainingStrategy.load_checkpoint(tmp_path, models=fresh)
+
+        assert restored.models["main"] is fresh
+
+    def test_a_named_caller_model_keeps_a_single_model_checkpoint_call_mode(
+        self, tmp_path: Path
+    ) -> None:
+        """``{"main": model}`` restores a strategy saved from a bare model as single-model."""
+        save_checkpoint(tmp_path, strategy=_make_checkpoint_strategy(num_steps=1))
+        fresh = _make_fresh_demo_model()
+
+        loaded = load_checkpoint(tmp_path, models={"main": fresh})
+
+        restored = loaded["strategy"]
+        assert restored.single_model_input is True
+        assert restored.models["main"] is fresh
+        restored.run([_make_checkpoint_batch(seed=1)])
+        assert restored.step_count == 1
+
+    def test_a_bare_caller_model_keeps_a_mapping_checkpoint_call_mode(
+        self, tmp_path: Path
+    ) -> None:
+        """A bare model restores a strategy saved from ``{"main": model}`` as a mapping."""
+        strategy = _make_checkpoint_strategy(num_steps=1)
+        mapping_strategy = TrainingStrategy(
+            models={"main": strategy.models["main"]},
+            optimizer_configs={"main": strategy.optimizer_configs["main"]},
+            num_steps=1,
+            training_fn=checkpoint_mapping_training_fn,
+            loss_fn=EnergyMSELoss(),
+            devices=[torch.device("cpu")],
+        )
+        assert mapping_strategy.single_model_input is False
+        save_checkpoint(tmp_path, strategy=mapping_strategy)
+        fresh = _make_fresh_demo_model()
+
+        loaded = load_checkpoint(tmp_path, models=fresh)
+
+        restored = loaded["strategy"]
+        assert restored.single_model_input is False
+        assert restored.models["main"] is fresh
+        restored.run([_make_checkpoint_batch(seed=1)])
+        assert restored.step_count == 1
+
+    def test_caller_models_with_other_names_are_refused(self, tmp_path: Path) -> None:
+        """A name set that is not the checkpoint's is refused, naming both."""
+        save_checkpoint(tmp_path, strategy=_make_checkpoint_strategy())
+        with pytest.raises(ValueError, match=r"\['main'\].*\['student'\]"):
+            load_checkpoint(tmp_path, models={"student": _make_fresh_demo_model()})
+
+    def test_caller_models_are_refused_for_a_live_strategy_restore(
+        self, tmp_path: Path
+    ) -> None:
+        """A live restore rebuilds nothing, so the models would go nowhere."""
+        strategy = _make_checkpoint_strategy()
+        save_checkpoint(tmp_path, strategy=strategy)
+        with pytest.raises(TypeError, match=r"\['models'\]"):
+            load_checkpoint(
+                tmp_path, strategy=strategy, models=_make_fresh_demo_model()
+            )
+
+    def test_caller_models_are_refused_for_a_component_only_checkpoint(
+        self, tmp_path: Path
+    ) -> None:
+        """A checkpoint without strategy metadata rebuilds no strategy to hold them."""
+        model = nn.Linear(4, 2)
+        spec = create_model_spec(nn.Linear, in_features=4, out_features=2)
+        save_checkpoint(tmp_path, models={"m": (model, spec)})
+        with pytest.raises(TypeError, match="carries no strategy metadata"):
+            load_checkpoint(tmp_path, models={"m": nn.Linear(4, 2)})
+
+
+class TestCheckpointDeviceRestore:
+    """Restoring a checkpoint into a strategy that lives on another device."""
+
+    @staticmethod
+    def _save_trained_checkpoint(root: Path, device: torch.device | str) -> None:
+        """Train one step on *device* and save a strategy checkpoint under *root*."""
+        strategy = _make_checkpoint_strategy(num_steps=2, device=device)
+        strategy.run([_make_checkpoint_batch(seed=1), _make_checkpoint_batch(seed=2)])
+        save_checkpoint(root, strategy=strategy)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_live_restore_loads_onto_live_device(self, tmp_path: Path) -> None:
+        """A live restore follows the live strategy, not the recorded device."""
+        self._save_trained_checkpoint(tmp_path, "cuda:0")
+        recorded = json.loads((tmp_path / "strategy.json").read_text())["devices"]
+        assert recorded == ["cuda:0"]
+
+        live = _make_checkpoint_strategy(num_steps=4, device="cpu")
+        live.restore_checkpoint(tmp_path)
+
+        assert _optimizer_state_devices(live) == {"cpu"}
+        assert next(live.models["main"].parameters()).device.type == "cpu"
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_run_after_restore_rehomes_optimizer_state(self, tmp_path: Path) -> None:
+        """Resumed optimizer state follows a device change made after the restore."""
+        self._save_trained_checkpoint(tmp_path, "cpu")
+        live = _make_checkpoint_strategy(num_steps=4, device="cpu")
+        live.restore_checkpoint(tmp_path, map_location="cpu")
+        live.devices = [torch.device("cuda", 0)]
+
+        live.run([_make_checkpoint_batch(seed=3), _make_checkpoint_batch(seed=4)])
+
+        assert live.step_count == 4
+        assert _optimizer_state_devices(live) <= {"cuda:0", "cpu"}
+        assert next(live.models["main"].parameters()).device == torch.device("cuda", 0)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_train_batch_after_restore_rehomes_optimizer_state(
+        self, tmp_path: Path
+    ) -> None:
+        """A one-batch resume rehomes its optimizer just like a full run."""
+        self._save_trained_checkpoint(tmp_path, "cpu")
+        live = _make_checkpoint_strategy(num_steps=4, device="cpu")
+        live.restore_checkpoint(tmp_path, map_location="cpu")
+        live.devices = [torch.device("cuda", 0)]
+
+        live.train_batch(_make_checkpoint_batch(seed=3))
+
+        assert live.step_count == 3
+        assert _optimizer_state_devices(live) == {"cuda:0", "cpu"}
+        assert next(live.models["main"].parameters()).device == torch.device("cuda", 0)
+
+    @pytest.mark.multigpu
+    def test_run_after_restore_rehomes_state_across_gpus(self, tmp_path: Path) -> None:
+        """Re-pinning a restored strategy to a second GPU carries its state along."""
+        self._save_trained_checkpoint(tmp_path, "cuda:0")
+        live = _make_checkpoint_strategy(num_steps=4, device="cuda:0")
+        live.restore_checkpoint(tmp_path)
+        live.devices = [torch.device("cuda", 1)]
+
+        live.run([_make_checkpoint_batch(seed=3), _make_checkpoint_batch(seed=4)])
+
+        assert live.step_count == 4
+        assert _optimizer_state_devices(live) <= {"cuda:1", "cpu"}
+
+    @pytest.mark.multigpu
+    def test_live_restore_of_a_second_gpu_strategy(self, tmp_path: Path) -> None:
+        """A `cuda:0` checkpoint restored into a `cuda:1` strategy trains on."""
+        self._save_trained_checkpoint(tmp_path, "cuda:0")
+        live = _make_checkpoint_strategy(num_steps=4, device="cuda:1")
+        live.restore_checkpoint(tmp_path)
+
+        live.run([_make_checkpoint_batch(seed=3), _make_checkpoint_batch(seed=4)])
+
+        assert live.step_count == 4
+        assert _optimizer_state_devices(live) <= {"cuda:1", "cpu"}
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_restored_metadata_reports_the_live_devices(self, tmp_path: Path) -> None:
+        """An explicit map_location stages the load; the metadata reports the strategy."""
+        self._save_trained_checkpoint(tmp_path, "cuda:0")
+        live = _make_checkpoint_strategy(num_steps=4, device="cpu")
+
+        loaded = live.restore_checkpoint(tmp_path, map_location="cuda:0")
+        live.train_batch(_make_checkpoint_batch(seed=3))
+
+        assert loaded["strategy_metadata"]["devices"] == ["cpu"]
+        assert live.devices == [torch.device("cpu")]
+        assert next(live.models["main"].parameters()).device.type == "cpu"
+        assert _optimizer_state_devices(live) == {"cpu"}

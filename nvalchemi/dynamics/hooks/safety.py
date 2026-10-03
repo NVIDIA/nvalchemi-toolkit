@@ -24,19 +24,85 @@ Provides two post-compute hooks:
 
 Both hooks fire at :attr:`~DynamicsStage.AFTER_COMPUTE`, immediately
 after the model forward pass writes forces and energy to the batch.
+The module also provides :func:`nonfinite_graph_mask`, a per-graph finiteness
+check that any hook or workflow can call directly.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from enum import Enum
 
 import torch
+from jaxtyping import Bool
 
 from nvalchemi.data import Batch
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.hooks._context import DynamicsContext
 
-__all__ = ["MaxForceClampHook", "NaNDetectorHook"]
+__all__ = ["MaxForceClampHook", "NaNDetectorHook", "nonfinite_graph_mask"]
+
+
+def nonfinite_graph_mask(
+    batch: Batch, keys: Iterable[str] = ("positions", "forces")
+) -> Bool[torch.Tensor, "G"]:
+    """Flag the graphs of *batch* holding a NaN or infinite value under any of *keys*.
+
+    A key the batch does not carry is skipped. A non-finite value in a
+    node-level tensor flags the graph its atom belongs to, and one in a
+    graph-level tensor flags its own graph. The check runs on the concatenated
+    tensors without a host synchronization, so it can run inside a compiled
+    step. It only returns the mask; a caller that must act on the result
+    inspects the mask itself.
+
+    Parameters
+    ----------
+    batch : Batch
+        Batch to inspect.
+    keys : Iterable[str], optional
+        Batch fields to inspect. Default ``("positions", "forces")``.
+
+    Returns
+    -------
+    Bool[torch.Tensor, "G"]
+        One flag per graph of *batch*, ``True`` where any inspected value is
+        not finite.
+
+    Raises
+    ------
+    ValueError
+        If a present key holds a zero-dimensional tensor, or one whose
+        leading dimension is neither the batch's atom count nor its graph
+        count, so its values cannot be attributed to graphs.
+
+    Examples
+    --------
+    >>> from nvalchemi.dynamics.hooks import nonfinite_graph_mask
+    >>> nonfinite_graph_mask(batch)  # doctest: +SKIP
+    tensor([False,  True, False])
+    >>> nonfinite_graph_mask(batch, keys=("energy", "stress"))  # doctest: +SKIP
+    tensor([False, False, False])
+    """
+    flagged = torch.zeros(batch.num_graphs, dtype=torch.bool, device=batch.device)
+    for key in keys:
+        tensor = getattr(batch, key, None)
+        if tensor is None:
+            continue
+        shape = tuple(tensor.shape)
+        if not shape or shape[0] not in (batch.num_nodes, batch.num_graphs):
+            held = f"{shape[0]!r} rows" if shape else "no rows"
+            raise ValueError(
+                f"Field {key!r} holds {held}, shape {shape!r}; it has to have "
+                f"{batch.num_nodes!r} rows, one per atom, or {batch.num_graphs!r}, "
+                "one per graph, for its values to be attributed to graphs."
+            )
+        bad = ~torch.isfinite(tensor).reshape(shape[0], -1).all(dim=1)
+        if shape[0] == batch.num_nodes:
+            hits = torch.zeros_like(flagged, dtype=torch.long)
+            hits.index_add_(0, batch.batch_idx.long(), bad.long())
+            bad = hits > 0
+        flagged |= bad
+    return flagged
 
 
 class NaNDetectorHook:
@@ -102,6 +168,10 @@ class NaNDetectorHook:
     * The check uses ``torch.isfinite`` and operates on the full
       concatenated tensors, so the overhead scales with total atom
       count rather than batch size.
+    * The check synchronizes CUDA execution whenever it runs so that it can
+      raise immediately with detailed diagnostics. It therefore requires graph
+      breaks under ``torch.compile`` and is not compatible with
+      ``fullgraph=True`` or uninterrupted CUDA graph capture.
     * For production runs where overhead is a concern, set
       ``frequency=10`` or ``frequency=100`` to amortize the cost.
     * Consider pairing with :class:`MaxForceClampHook` as a first
@@ -119,10 +189,34 @@ class NaNDetectorHook:
         self.stage = stage
         self.extra_keys: list[str] = extra_keys if extra_keys is not None else []
 
+    @staticmethod
+    def _get_non_finite_mask(
+        batch: Batch,
+        tensor: torch.Tensor,
+        active_graph_mask: torch.Tensor | None,
+    ) -> torch.Tensor:
+        """Return non-finite elements restricted to active graphs."""
+        non_finite_mask = ~torch.isfinite(tensor)
+        if active_graph_mask is None:
+            return non_finite_mask
+
+        active_values: torch.Tensor | None = None
+        if tensor.shape[0] == batch.num_nodes:
+            active_values = active_graph_mask[batch.batch_idx]
+        elif tensor.shape[0] == batch.num_graphs:
+            active_values = active_graph_mask
+
+        if active_values is None:
+            return non_finite_mask
+
+        mask_shape = (active_values.shape[0],) + (1,) * (tensor.ndim - 1)
+        return non_finite_mask & active_values.reshape(mask_shape)
+
     def _check_finite(
         self,
         batch: Batch,
         step_count: int,
+        active_graph_mask: torch.Tensor | None = None,
     ) -> None:
         """Check forces, energy, and extra keys for NaN/Inf values.
 
@@ -155,21 +249,27 @@ class NaNDetectorHook:
             return
 
         # Single-pass finiteness check — one bool per tensor
-        # torch.isfinite(t).all() returns a scalar bool tensor
-        all_finite = torch.stack([torch.isfinite(t).all() for t in tensors])
+        all_finite = torch.stack(
+            [
+                ~self._get_non_finite_mask(batch, tensor, active_graph_mask).any()
+                for tensor in tensors
+            ]
+        )
 
-        # Early exit if everything is finite (hot path — no CPU sync)
+        # TODO: Move this scalar check to an eager post-step validation phase.
+        # Here it requires CUDA synchronization and prevents full-graph compilation/CUDA
+        # graph capture.
         if all_finite.all():
             return
 
         # --- Cold diagnostic path (only on failure) ---
         self._raise_with_diagnostics(
-            batch, step_count, present_keys, tensors, all_finite
+            batch, step_count, present_keys, tensors, all_finite, active_graph_mask
         )
 
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Check forces, energy, and extra keys for NaN/Inf values."""
-        self._check_finite(ctx.batch, ctx.step_count)
+        self._check_finite(ctx.batch, ctx.step_count, ctx.active_graph_mask)
 
     @torch.compiler.disable
     def _raise_with_diagnostics(
@@ -179,6 +279,7 @@ class NaNDetectorHook:
         keys: list[str],
         tensors: list[torch.Tensor],
         all_finite: torch.Tensor,
+        active_graph_mask: torch.Tensor | None = None,
     ) -> None:
         """Build diagnostic message and raise RuntimeError.
 
@@ -197,20 +298,25 @@ class NaNDetectorHook:
                 continue
 
             bad_fields.append(key)
-            non_finite_mask = ~torch.isfinite(tensor)
-            counts.append(non_finite_mask.sum())
+            non_finite_mask = self._get_non_finite_mask(
+                batch, tensor, active_graph_mask
+            )
 
             # Map back to graph indices
             if tensor.shape[0] == batch.num_nodes:
+                counts.append(non_finite_mask.sum())
                 # Node-level tensor: find which atoms have non-finite values
-                affected_nodes = non_finite_mask.any(dim=-1)  # (V,)
+                affected_nodes = non_finite_mask.reshape(tensor.shape[0], -1).any(dim=1)
                 affected_graphs = batch.batch_idx[affected_nodes].unique()
             else:
+                counts.append(non_finite_mask.sum())
                 # Graph-level tensor
-                affected_graphs = non_finite_mask.any(dim=-1).nonzero().squeeze(-1)
-                # Ensure 1-D even for scalar case
-                if affected_graphs.dim() == 0:
-                    affected_graphs = affected_graphs.unsqueeze(0)
+                affected_graphs = (
+                    non_finite_mask.reshape(tensor.shape[0], -1)
+                    .any(dim=1)
+                    .nonzero()
+                    .squeeze(-1)
+                )
 
             graph_lists.append(affected_graphs)
 
@@ -307,12 +413,17 @@ class MaxForceClampHook:
 
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Clamp force vectors exceeding ``max_force`` in-place."""
-        self._clamp_forces(ctx.batch)
+        self._clamp_forces(ctx.batch, ctx.active_graph_mask)
 
-    def _clamp_forces(self, batch: Batch) -> None:
+    def _clamp_forces(
+        self, batch: Batch, active_graph_mask: torch.Tensor | None = None
+    ) -> None:
         """Clamp force vectors exceeding ``max_force`` in-place."""
         norms = torch.linalg.vector_norm(batch.forces, dim=-1, keepdim=True)  # (V, 1)
         needs_clamp = norms > self.max_force  # (V, 1) bool
+        if active_graph_mask is not None:
+            active_atoms = active_graph_mask[batch.batch_idx].unsqueeze(-1)
+            needs_clamp = needs_clamp & active_atoms
 
         # Always compute and apply scale unconditionally (torch.compile-friendly).
         # torch.where is a no-op when nothing needs clamping.

@@ -36,7 +36,7 @@ potentials:
 | {py:class}`~nvalchemi.models.demo.DemoModelWrapper` | {py:class}`~nvalchemi.models.demo.DemoModel` | Non-invariant demo; useful for testing and tutorials |
 | {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` | {py:class}`~aimnet.calculators.AIMNet2Calculator` | Requires the `aimnet2` optional dependency |
 | {py:class}`~nvalchemi.models.mace.MACEWrapper` | Any MACE variant | Requires the `mace` optional dependency with a CUDA extra, such as `cu13` or `cu12` |
-| {py:class}`~nvalchemi.models.uma.UMAWrapper` | fairchem-core UMA (`MLIPPredictUnit`) | Requires the `uma` optional dependency; conflicts with `mace` (incompatible `e3nn` pins) |
+| {py:class}`~nvalchemi.models.uma.UMAWrapper` | fairchem-core UMA (`MLIPPredictUnit`) | Requires `uma` with a CUDA extra; conflicts with `mace` (incompatible `e3nn` pins) |
 
 {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper`, {py:class}`~nvalchemi.models.mace.MACEWrapper`,
 and {py:class}`~nvalchemi.models.uma.UMAWrapper`
@@ -44,28 +44,21 @@ are lazily imported --- they only load when accessed, so missing dependencies wi
 break other imports.
 
 ````{note}
-**UMA resolves to a different torch than the `cu12` / `cu13` GPU stack.**
-`fairchem-core` caps torch below 2.9 (`fairchem-core>=2.8` requires
-`torch>=2.8,<2.9`), while the `cu12` / `cu13` extras pull
-`nvalchemi-toolkit-ops[torch-cuXX]`, which floors torch at `>=2.11`. The
-`uma` extra is therefore declared mutually exclusive with `cu12`, `cu13`,
-and `mace`, and `uv sync --extra uma` forks a standalone resolution that
-installs a PyPI CUDA torch wheel (~2.8) instead of the NVIDIA-indexed
-`cuXX` build. Keep UMA in its own environment, e.g.:
+**Install the UMA CUDA variant that matches the host.** Fairchem 2.22 uses
+torch 2.13.0. The standalone `uma-cu12` and `uma-cu13` extras pair UMA with the
+matching torch wheel in its own environment; the standard CUDA extras no longer
+pull a RAPIDS stack.
+UMA also conflicts with MACE and the default `build` group, so keep it in its
+own environment, e.g.:
 
 ```bash
-uv venv .venv-uma && uv sync --extra uma           # UMA (fairchem's torch)
+UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 \
+  uv sync --extra uma-cu12 --no-group build  # UMA on CUDA 12
 uv venv .venv-mace && uv sync --extra cu13 --extra mace   # MACE on the cu13 GPU stack
 ```
 
-The core `nvalchemi-toolkit-ops` package (and its Warp kernels) is still
-installed in the UMA environment --- only the `cuXX` GPU-acceleration
-extras (cuEquivariance, cuML, the NVIDIA-indexed torch build) are dropped,
-none of which UMA uses, since it builds its neighbor graph inside
-fairchem. The toolkit-ops `torch-cuXX` extras pin `torch>=2.11`, but that
-tracks the `cuXX` wheel builds rather than a toolkit-ops API requirement
---- the base package already declares `torch>=2.8`, so the Warp path is
-expected to work against the ~2.8 torch in the UMA environment.
+Use `--extra uma-cu13` instead on a CUDA 13 host. Do not combine an UMA extra
+with `cu12`, `cu13`, or `mace` in one environment.
 ````
 
 ### MACE checkpoints in training
@@ -147,12 +140,13 @@ catalysis (`oc20`), direct air capture (`odac`), and molecular crystals
 construction; `active_outputs` is `{energy, forces}` for molecular tasks and
 `{energy, forces, stress}` for periodic ones.
 
-**1. Install the optional dependency** (in its own environment, per the note
-above):
+**1. Install the optional dependency** with the CUDA extra for the host (in its
+own environment, per the note above):
 
 ```bash
-uv venv .venv-uma && uv sync --extra uma
-# or, with pip:  pip install 'nvalchemi-toolkit[uma]'
+UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 \
+  uv sync --extra uma-cu12 --no-group build
+# or, with pip:  pip install 'nvalchemi-toolkit[uma-cu12]'
 ```
 
 **2. Get HuggingFace access.** UMA checkpoints live in the **gated**
@@ -198,13 +192,14 @@ Registered checkpoint names (see
 | `uma-s-1p2` | small | Updated small release |
 | `uma-m-1p1` | medium | Higher accuracy, larger / slower |
 
-**`torch.compile` / turbo.** `UMAWrapper` does not add a `compile_model`
+**Inference settings.** `UMAWrapper` does not add a `compile_model`
 flag (unlike the MACE / AIMNet2 wrappers) because fairchem owns compilation
 internally as a field on its `InferenceSettings`. Reach it through
-`from_checkpoint`'s `inference_settings` argument --- pass `"turbo"` for
-fairchem's compiled preset (`torch.compile` + TF32 + MoLE merge, for runs
-with fixed atomic composition), or an `InferenceSettings` instance for finer
-control:
+`from_checkpoint`'s `inference_settings` argument. In fairchem 2.22,
+`"default"` enables `torch.compile` and MoLE merging in FP32, `"batch"` keeps
+eager execution for changing batch composition, and `"turbo"` also enables
+TF32. Pass an `InferenceSettings` instance when a run needs explicit,
+reproducible controls:
 
 ```python
 fast = UMAWrapper.from_checkpoint(
@@ -509,9 +504,11 @@ The standard output shapes are:
 | `energy` | `[B, 1]` | Per-graph total energy |
 | `forces` | `[V, 3]` | Per-atom forces |
 | `stress` | `[B, 3, 3]` | Per-graph stress tensor |
-| `hessian` | `[V, 3, 3]` | Per-atom Hessian |
 | `dipole` | `[B, 3]` | Per-graph dipole moment |
 | `charges` | `[V]` | Per-atom partial charges |
+
+For Hessians and Hessian-vector products, see
+{ref}`Hessians and Hessian-vector products <hessians>`.
 
 ### Step 6 --- Implement `compute_embeddings`
 
@@ -893,24 +890,124 @@ outputs.
 See {doc}`about/conventions` for the project-wide virial, stress, and pressure
 sign conventions.
 
-#### Example: Hessians and Jacobians
+(hessians)=
 
-These are standard ``torch.autograd`` operations --- nvalchemi does not
-wrap them:
+### Hessians and Hessian-vector products
+
+Here, the Hessian is the matrix of second derivatives of total energy with
+respect to Cartesian positions:
+
+$$H = \frac{\partial^2 E}{\partial R^2}.$$
+
+Because forces are $F=-\partial E/\partial R$, a directional force Jacobian is
+`-H @ vector`. A one-shot Hessian-vector product (HVP) accepts and returns the
+same packed shape as positions, `[sum(N_i), 3]`:
 
 ```python
-# Hessian (second derivative of energy w.r.t. positions)
-# Models expect a Batch, not raw positions — define a closure.
-def energy_fn(pos):
-    data.positions = pos
-    return model(data)["energy"].sum()
+vector = torch.randn_like(batch.positions)
+hv = model.hessian_vector_product(batch, vector)
+```
 
-hessian = torch.autograd.functional.hessian(energy_fn, data.positions)
+HVPs avoid the quadratic storage cost of a dense Hessian and can be used in
+iterative normal-mode analysis, transition-state searches, and Newton--Krylov
+methods.
 
-# Born effective charges (Jacobian of dipoles w.r.t. positions)
-dipoles = model(data)["dipole"]  # [B, 3]
+When several products are needed at one unchanged geometry, retain one private
+derivative graph with a prepared operator:
+
+```python
+with model.prepare_hessian(batch) as operator:
+    hv_1 = operator.matvec(vector_1)
+    hv_2 = operator.matvec(vector_2)
+```
+
+The operator copies the batch inputs and retains the derivative graph built during
+preparation. Keep model parameters, buffers, training mode, and pipeline wiring
+unchanged while using it. Prepare a new operator for a different geometry or model
+state. The operator closes automatically on context exit.
+
+For explicit analysis or dataset generation, materialize the dense Hessian in
+place:
+
+```python
+result = model.compute_hessian(
+    batch,
+    strategy="vmap",
+    row_chunk_size=32,
+)
+assert result is batch
+```
+
+To keep a simulation batch unchanged, supply a separate analysis batch with its
+required neighbor data already prepared.
+
+For system `i`, `get_data(i).hessian` has logical shape
+`[N_i, N_i, 3, 3]`, with axes
+`[atom_out, atom_in, xyz_out, xyz_in]`. The batch stores only within-system
+blocks, packed as `[sum(N_i**2), 3, 3]`; it does not store padded cross-system
+zeros. Returned HVPs and dense Hessians are detached.
+
+`strategy="vmap"` evaluates a chunk of Cartesian rows with batched
+vector-Jacobian products. `strategy="loop"` evaluates one row at a time: a
+system with `N` atoms has `3N` Cartesian rows and requires `3N`
+second-derivative traversals of the retained model graph. The graph is built
+once, not rebuilt for each row. `row_chunk_size` counts flattened Cartesian
+rows, not atoms, and no strategy silently falls back to another.
+
+Both APIs differentiate the energy for the neighbor topology already supplied on
+the batch. They do not run neighbor hooks, rebuild lists, or differentiate the
+discrete membership decision. Rebuild neighbors outside the derivative call when
+the geometry changes; hold topology fixed when comparing to finite differences.
+
+#### Supported configurations
+
+The table shows support in this release. "Yes" applies to local eager execution:
+
+| Configuration | HVP | Dense loop | Dense vmap |
+|---|---:|---:|---:|
+| AIMNet2 | Yes | Yes | Yes |
+| MACE without cuEquivariance | Yes | Yes | Yes |
+| MACE with cuEquivariance | Yes | Yes | No |
+| Ewald/PME with `hybrid_forces=False`, `slab_correction=False` | Yes | Yes | Yes |
+| Flat pipeline whose participating steps accept the request | Yes | Yes | Context-dependent |
+| DFT-D3 | No | No | No |
+| Distributed execution | No | No | No |
+| Compiled execution | No | No | No |
+| Explicitly nested pipelines | No | No | No |
+
+cuEquivariance dense `vmap` is unsupported because `cuequivariance::uniform_1d`
+does not provide the required batching rule; use `strategy="loop"`. Ewald and
+PME require differentiable-energy mode:
+`hybrid_forces=True` supplies analytical first derivatives from detached geometry
+and cannot produce the complete Hessian with respect to positions. Slab
+correction is not supported. DFT-D3's current analytical Warp derivative path
+does not expose the required energy double backward.
+
+Compiled derivative execution is not supported. Toolkit does not identify
+compiled modules, reject them before evaluation, or fall back to eager
+execution. A call may fail after model evaluation begins when PyTorch requests
+a second derivative. The first-gradient connectivity guard rejects a wholly
+disconnected position gradient; it does not establish correctness for every
+model contribution.
+
+A flat {py:class}`~nvalchemi.models.pipeline.PipelineModelWrapper` differentiates
+one connected total-energy graph. Wired outputs remain connected, so an
+AIMNet2-to-charges-to-Ewald/PME pipeline includes charge response and mixed
+geometry-charge terms. If any participating energy contributor rejects the
+request, the pipeline fails before execution rather than returning a partial
+Hessian.
+
+`compute_hessian()` stores its result on the supplied `Batch`; it is separate from
+`forward()` and `ModelConfig.active_outputs`.
+
+#### Other Jacobians
+
+Other derivatives, such as Born effective charges, remain ordinary PyTorch
+autograd operations defined by the caller:
+
+```python
 Z_star = torch.autograd.functional.jacobian(
-    lambda pos: model_dipoles(pos), data.positions
+    lambda pos: model_dipoles(pos), batch.positions
 )
 ```
 
@@ -945,10 +1042,10 @@ expand it (add ``"stress"``) or narrow it (remove ``"forces"``).
 forces as ``-dE/dr`` and stresses via the affine strain trick.  This
 covers the vast majority of inference use cases.
 
-**Custom `derivative_fn`:** For anything beyond forces and stresses,
-provide a custom function that receives the summed energy, the batch, and
-the set of requested keys.  You write whatever ``torch.autograd.grad``
-calls you want --- the same power as a single-model wrapper's
+**Custom `derivative_fn`:** To customize the derivatives produced by ordinary
+pipeline forward calls, provide a function that receives the summed energy, the
+batch, and the set of requested keys. You write the required
+``torch.autograd.grad`` calls --- the same power as a single-model wrapper's
 ``forward()``:
 
 ```python
@@ -963,7 +1060,7 @@ def my_derivatives(energy, data, requested):
     data : Batch
         The batch.  data.positions has requires_grad=True.
     requested : set[str]
-        Output keys still needed (e.g. {"forces", "hessian"}).
+        Output keys still needed (e.g. {"forces"}).
 
     Returns
     -------
@@ -975,11 +1072,7 @@ def my_derivatives(energy, data, requested):
         result["forces"] = -torch.autograd.grad(
             energy, data.positions,
             grad_outputs=torch.ones_like(energy),
-            retain_graph="hessian" in requested,
         )[0]
-    if "hessian" in requested:
-        # Your custom Hessian implementation
-        result["hessian"] = compute_chunked_hessian(energy, data.positions)
     return result
 
 pipe = PipelineModelWrapper(groups=[
@@ -989,14 +1082,17 @@ pipe = PipelineModelWrapper(groups=[
         derivative_fn=my_derivatives,
     ),
 ])
-pipe.model_config.active_outputs = {"energy", "forces", "hessian"}
-out = pipe(batch)  # forces + hessian via your function
+pipe.model_config.active_outputs = {"energy", "forces"}
+out = pipe(batch)
 ```
 
 When ``derivative_fn`` is provided, the pipeline does **not** apply the
 strain trick or compute forces automatically --- your function has full
 control.  If you want stresses, use
 {py:func}`~nvalchemi.models._utils.prepare_strain` inside your function.
+The public `hessian_vector_product()`, `prepare_hessian()`, and
+`compute_hessian()` APIs use their own connected-energy path and do not invoke
+this callback.
 
 ### Neighbor list handling and `make_neighbor_hooks()`
 
@@ -1018,11 +1114,11 @@ All composition tiers handle neighbor lists centrally:
 
 `neighbor_adaptation` accepts:
 
-- `"auto"`: default. Adapt only when the source cutoff is at most
+* `"auto"`: default. Adapt only when the source cutoff is at most
   `max_cutoff_ratio` times the target cutoff; otherwise build another source
   list.
-- `"always"`: build one max-cutoff source and adapt every tighter model from it.
-- `"never"`: do not perform cutoff filtering. The pipeline builds exact cutoff
+* `"always"`: build one max-cutoff source and adapt every tighter model from it.
+* `"never"`: do not perform cutoff filtering. The pipeline builds exact cutoff
   source groups. Runtime format conversion is still allowed.
 
 ```python

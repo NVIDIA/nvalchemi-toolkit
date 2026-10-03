@@ -30,6 +30,17 @@ Strategies
 
 .. dataclass-table:: nvalchemi.training.TrainingStrategy
 
+``devices`` has length ``1`` or ``len(models)``. A named-model run stages one
+batch on ``devices[0]`` and hands it to every model. A per-model list must
+therefore name the same device in every entry, and a list naming more than one
+distinct device is refused at run time. The per-model form lets a caller list
+a device for each model it places; it is not a way to span devices. Entries are
+compared after :func:`~nvalchemi.data.resolve_device` fills in the index of an
+index-less ``cuda``, which means whichever device the process has made current,
+so ``cuda`` and ``cuda:0`` count as one device on the rank whose current device
+is ``0`` and as two on every other rank. A single-model run is unaffected. A :class:`~nvalchemi.training.hooks.DDPHook` on the NCCL backend
+collapses ``devices`` to this rank's own device before the check runs.
+
 
 Optimizer helpers
 -----------------
@@ -50,6 +61,14 @@ Optimizer helpers
 Serialization and checkpoints
 -----------------------------
 
+:func:`~nvalchemi.training.load_checkpoint` and
+:meth:`~nvalchemi.training.TrainingStrategy.load_checkpoint` rebuild a saved
+strategy from its metadata and restore the weights into models built from the
+saved specs. ``models=`` hands the loader live models to restore into instead,
+one per saved name, for a caller whose other objects already hold them. Extra
+keyword arguments are runtime overrides forwarded to the strategy class's
+``from_spec_dict``. Both are refused on the loads that rebuild no strategy.
+
 .. autosummary::
    :toctree: generated
    :nosignatures:
@@ -61,3 +80,67 @@ Serialization and checkpoints
    CheckpointManifest
    save_checkpoint
    load_checkpoint
+
+
+Runtime helpers
+---------------
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   configure_dataloader
+   configure_parallelism
+   move_to_devices
+   rehome_optimizer_state
+   freeze_unconfigured_models
+   eval_configured_models
+   evaluating
+
+
+Parallelism helpers
+-------------------
+
+A parallelism wrapper takes the place of the model a strategy holds. Code that
+needs the model's own surface, such as its ``model_config``, a
+:class:`~nvalchemi.models.base.BaseModelMixin` method, or an unwrapped
+``state_dict``, has to reach through the wrapper first. :func:`unwrap_model`
+returns the module behind the wrapper, or the model itself when nothing wraps
+it. It recognizes a wrapper by the ``module`` attribute the wrapper publishes,
+not by its class, so a hand-rolled wrapper unwraps exactly as
+:class:`~torch.nn.parallel.DistributedDataParallel` does.
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   unwrap_model
+
+
+Distributed helpers
+-------------------
+
+:func:`~nvalchemi.training.distributed.all_reduce_flags` collects one flag per
+rank into a world-sized vector that reads the same everywhere: each rank raises
+its own entry and a ``MAX`` all-reduce merges them, on the device
+:func:`~nvalchemi.distributed.collective_device` picks for the backend. A
+strategy uses it to turn a verdict only one rank can see, such as an empty data
+shard, into a refusal every rank raises together, before any rank reaches a
+collective its peers would block on.
+:func:`~nvalchemi.training.distributed.all_gather_rows` stacks every rank's
+rows of a tensor in rank order, padding unequal shards and trimming them back,
+and returns the slice this rank contributed; by default the gather is
+differentiable, so a loss over the world tensor sends gradients back to each
+rank's rows. :func:`~nvalchemi.training.distributed.all_gather_objects`
+collects one picklable object per rank. All three return without a collective
+on a single process.
+
+.. currentmodule:: nvalchemi.training.distributed
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   all_reduce_flags
+   all_gather_rows
+   all_gather_objects

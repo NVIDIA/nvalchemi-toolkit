@@ -16,12 +16,23 @@
 
 from __future__ import annotations
 
+import socket
+from datetime import timedelta
+
 import pytest
 import torch
+from tensordict import TensorDict
+from torch import distributed as dist
+from torch import multiprocessing as mp
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.batch import Batch, set_transient
-from nvalchemi.data.level_storage import MultiLevelStorage, UniformLevelStorage
+from nvalchemi.data.level_storage import (
+    LevelSchema,
+    MultiLevelStorage,
+    SegmentedLevelStorage,
+    UniformLevelStorage,
+)
 
 
 def _minimal_atomic_data(
@@ -63,6 +74,324 @@ def _atomic_data_with_edges_and_system(
         neighbor_list=torch.zeros(num_edges, 2, dtype=torch.long, device=device),
         energy=torch.tensor([[0.0]], device=device),
     )
+
+
+def _fieldless_builtin_batch(
+    atom_lengths: list[int],
+    edge_lengths: list[int],
+    *,
+    pointer_capacity: int | None = None,
+) -> Batch:
+    """Build a metadata-only legacy batch for fieldless atoms/edges coverage."""
+    schema = LevelSchema()
+    groups = {
+        "atoms": SegmentedLevelStorage(
+            data=None,
+            segment_lengths=atom_lengths,
+            batch_ptr_capacity=pointer_capacity,
+            device="cpu",
+            attr_map=schema,
+            validate=False,
+        ),
+        "edges": SegmentedLevelStorage(
+            data=None,
+            segment_lengths=edge_lengths,
+            batch_ptr_capacity=pointer_capacity,
+            device="cpu",
+            attr_map=schema,
+            validate=False,
+        ),
+    }
+    return Batch._construct(
+        device="cpu",
+        keys={"node": set(), "edge": set(), "system": set()},
+        storage=MultiLevelStorage(groups=groups, attr_map=schema, validate=False),
+    )
+
+
+def _custom_boundary_batch(
+    segment_length: int,
+    energy: float,
+    *,
+    payload_value: float | None = None,
+) -> Batch:
+    """Build a small batch with boundary-sized custom segment metadata."""
+    schema = LevelSchema()
+    schema.add_level("samples", segmented=True)
+    sample_data = None
+    if payload_value is not None:
+        schema.set("sample_values", "samples", dtype=torch.float32)
+        base = torch.tensor([[payload_value]], dtype=torch.float32)
+        sample_data = {"sample_values": base.expand(segment_length, 1)}
+
+    groups = {
+        "system": UniformLevelStorage(
+            data={"energy": torch.tensor([[energy]], dtype=torch.float32)},
+            device="cpu",
+            attr_map=schema,
+            validate=True,
+        ),
+        "samples": SegmentedLevelStorage(
+            data=sample_data,
+            segment_lengths=[segment_length],
+            device="cpu",
+            attr_map=schema,
+            validate=True,
+        ),
+    }
+    return Batch._construct(
+        device="cpu",
+        keys={"node": set(), "edge": set(), "system": {"energy"}},
+        storage=MultiLevelStorage(groups=groups, attr_map=schema, validate=True),
+    )
+
+
+def _builtin_edge_product_schema() -> LevelSchema:
+    """Build the public fieldless-edges product schema."""
+    schema = LevelSchema()
+    schema.add_product_level("atom_edges", left="atoms", right="edges")
+    schema.set("atom_edge_values", "atom_edges")
+    return schema
+
+
+def _builtin_edge_product_data(
+    num_nodes: int, num_edges: int, offset: float
+) -> AtomicData:
+    """Build an AtomicData item with a fieldless built-in edge parent."""
+    data = _minimal_atomic_data(num_nodes)
+    data.atom_edge_values = (
+        torch.arange(num_nodes * num_edges, dtype=torch.float32)
+        .add_(offset)
+        .reshape(num_nodes, num_edges, 1)
+    )
+    return data
+
+
+def _builtin_edge_product_batch() -> Batch:
+    """Build public atoms-times-fieldless-edges data with zero-edge graph."""
+    return Batch.from_data_list(
+        [
+            _builtin_edge_product_data(2, 3, 10.0),
+            _builtin_edge_product_data(3, 0, 20.0),
+            _builtin_edge_product_data(1, 2, 30.0),
+        ],
+        attr_map=_builtin_edge_product_schema(),
+    )
+
+
+def _custom_buffer_schema(*, fieldless_parent: bool = False) -> LevelSchema:
+    """Build a schema used by the custom buffer lifecycle tests."""
+    schema = LevelSchema()
+    schema.add_level("molecules", segmented=True)
+    schema.add_product_level("pairs", left="atoms", right="molecules")
+    if not fieldless_parent:
+        schema.set("molecule_values", "molecules")
+    schema.set("pair_values", "pairs")
+    return schema
+
+
+def _custom_buffer_data(
+    num_nodes: int,
+    num_molecules: int,
+    *,
+    fieldless_parent: bool = False,
+) -> AtomicData:
+    """Build one graph with custom segmented and product values."""
+    data = _minimal_atomic_data(num_nodes)
+    if not fieldless_parent:
+        data.molecule_values = torch.arange(num_molecules, dtype=torch.float32).reshape(
+            -1, 1
+        )
+    data.pair_values = (
+        torch.arange(num_nodes * num_molecules, dtype=torch.float32)
+        .add_(num_nodes * 10 + num_molecules)
+        .reshape(num_nodes, num_molecules, 1)
+    )
+    return data
+
+
+def _custom_uniform_schema() -> LevelSchema:
+    """Build a schema with one custom uniform field."""
+    schema = LevelSchema()
+    schema.add_level("metadata", segmented=False)
+    schema.set("metadata_values", "metadata")
+    return schema
+
+
+def _assert_hessian_batch(batch: Batch, num_nodes: tuple[int, ...]) -> None:
+    """Assert the canonical Hessian schema, packing, and logical shapes."""
+    schema = batch.get_level_schema()
+    assert schema.product_parents["atom_atom"] == ("atoms", "atoms")
+    assert schema.group_to_attrs["atom_atom"] == {"hessian"}
+    assert schema.dtypes["hessian"] == "float64"
+    assert batch.hessian.shape == (sum(count**2 for count in num_nodes), 3, 3)
+
+    pointer = [0]
+    for count in num_nodes:
+        pointer.append(pointer[-1] + count**2)
+    assert batch.level_ptr("atom_atom").tolist() == pointer
+    for index, count in enumerate(num_nodes):
+        assert batch.get_data(index).hessian.shape == (count, count, 3, 3)
+
+
+def _custom_transport_schema() -> LevelSchema:
+    """Build the mixed custom schema used by transport tests."""
+    schema = LevelSchema()
+    schema.add_level("metadata", segmented=False)
+    schema.add_level("molecules", segmented=True)
+    schema.add_level("fieldless", segmented=True)
+    schema.add_product_level("pairs", left="atoms", right="molecules")
+    schema.add_product_level("fieldless_pairs", left="atoms", right="fieldless")
+    schema.set("metadata_values", "metadata")
+    schema.set("molecule_values", "molecules")
+    schema.set("pair_values", "pairs")
+    schema.set("fieldless_pair_values", "fieldless_pairs")
+    return schema
+
+
+def _custom_transport_batch() -> Batch:
+    """Build a mixed custom batch with nonzero and zero custom segments."""
+    schema = _custom_transport_schema()
+    first = _minimal_atomic_data(2)
+    first.metadata_values = torch.tensor([[1.0]])
+    first.molecule_values = torch.tensor([[2.0], [3.0]])
+    first.pair_values = torch.arange(4, dtype=torch.float32).reshape(2, 2, 1)
+    first.fieldless_pair_values = torch.arange(6, dtype=torch.float32).reshape(2, 3, 1)
+
+    second = _minimal_atomic_data(3)
+    second.metadata_values = torch.tensor([[4.0]])
+    second.molecule_values = torch.empty(0, 1)
+    second.pair_values = torch.empty(3, 0, 1)
+    second.fieldless_pair_values = torch.empty(3, 0, 1)
+    return Batch.from_data_list([first, second], attr_map=schema)
+
+
+def _custom_transport_gloo_worker(
+    rank: int, world_size: int, port: int, sentinel: bool
+) -> None:
+    """Send or receive the custom transport fixture in a Gloo worker."""
+    dist.init_process_group(
+        backend="gloo",
+        init_method=f"tcp://127.0.0.1:{port}",
+        rank=rank,
+        world_size=world_size,
+        timeout=timedelta(seconds=30),
+    )
+    try:
+        template = _custom_transport_batch()
+        if rank == 0:
+            outgoing = template
+            if sentinel:
+                outgoing = Batch.empty(
+                    num_systems=0,
+                    num_nodes=0,
+                    num_edges=0,
+                    template=template,
+                    attr_map=template._storage.attr_map,
+                    level_capacities={
+                        "molecules": 0,
+                        "fieldless": 0,
+                        "pairs": 0,
+                        "fieldless_pairs": 0,
+                    },
+                )
+            outgoing.send(dst=1, tag=37)
+        else:
+            received = Batch.recv(src=0, device="cpu", template=template, tag=37)
+            assert received._storage.attr_map is not template._storage.attr_map
+            assert (
+                received._storage.attr_map.level_names
+                == template._storage.attr_map.level_names
+            )
+            assert list(received._storage.groups) == list(template._storage.groups)
+            if sentinel:
+                assert received.num_graphs == 0
+                for name, group in template._storage.groups.items():
+                    received_group = received._storage.groups[name]
+                    assert type(received_group) is type(group)
+                    assert list(received_group.keys()) == list(group.keys())
+                    for key in group.keys():
+                        assert received_group[key].dtype == group[key].dtype
+                        assert received_group[key].shape[1:] == group[key].shape[1:]
+                    if isinstance(received_group, SegmentedLevelStorage):
+                        assert received_group.segment_lengths.numel() == 0
+                assert received._storage.attr_map.product_parents[
+                    "fieldless_pairs"
+                ] == (
+                    "atoms",
+                    "fieldless",
+                )
+            else:
+                assert received.level_keys == template.level_keys
+                assert received.keys == template.keys
+                torch.testing.assert_close(
+                    received.metadata_values, template.metadata_values
+                )
+                torch.testing.assert_close(
+                    received.molecule_values, template.molecule_values
+                )
+                torch.testing.assert_close(received.pair_values, template.pair_values)
+                torch.testing.assert_close(
+                    received.fieldless_pair_values, template.fieldless_pair_values
+                )
+                assert received._storage.groups[
+                    "molecules"
+                ].segment_lengths.tolist() == [2, 0]
+                assert received._storage.groups[
+                    "fieldless"
+                ].segment_lengths.tolist() == [3, 0]
+                for level in ("molecules", "fieldless", "pairs", "fieldless_pairs"):
+                    torch.testing.assert_close(
+                        received.level_ptr(level), template.level_ptr(level)
+                    )
+                first = received.get_data(0)
+                second = received.get_data(1)
+                assert first.fieldless_pair_values.shape == (2, 3, 1)
+                assert second.fieldless_pair_values.shape == (3, 0, 1)
+                torch.testing.assert_close(
+                    first.fieldless_pair_values,
+                    template.get_data(0).fieldless_pair_values,
+                )
+    finally:
+        dist.destroy_process_group()
+
+
+def _builtin_edge_product_gloo_worker(rank: int, world_size: int, port: int) -> None:
+    """Send the public fieldless built-in edge parent fixture over Gloo."""
+    dist.init_process_group(
+        backend="gloo",
+        init_method=f"tcp://127.0.0.1:{port}",
+        rank=rank,
+        world_size=world_size,
+        timeout=timedelta(seconds=30),
+    )
+    try:
+        template = _builtin_edge_product_batch()
+        if rank == 0:
+            template.send(dst=1, tag=43)
+        else:
+            received = Batch.recv(src=0, device="cpu", template=template, tag=43)
+            assert "neighbor_list" not in received
+            assert received.level_ptr("atoms").tolist() == [0, 2, 5, 6]
+            assert received.level_ptr("edges").tolist() == [0, 3, 3, 5]
+            assert received.level_ptr("atom_edges").tolist() == [0, 6, 6, 8]
+            torch.testing.assert_close(
+                received.atom_edge_values, template.atom_edge_values
+            )
+            for graph_idx in range(received.num_graphs):
+                torch.testing.assert_close(
+                    received.get_data(graph_idx).atom_edge_values,
+                    template.get_data(graph_idx).atom_edge_values,
+                )
+    finally:
+        dist.destroy_process_group()
+
+
+def _available_tcp_port() -> int:
+    """Reserve and return an available local TCP port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        return int(listener.getsockname()[1])
 
 
 # -----------------------------------------------------------------------------
@@ -116,6 +445,165 @@ class TestBatchConstruction:
         assert batch.num_nodes == 0
         assert batch.num_edges == 0
 
+    def test_level_ptr_rejects_unknown_and_unresolved_levels(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        batch = Batch.from_data_list([_minimal_atomic_data(2)], attr_map=schema)
+
+        with pytest.raises(KeyError, match="missing"):
+            batch.level_ptr("missing")
+        with pytest.raises(KeyError, match="samples"):
+            batch.level_ptr("samples")
+        assert "samples" not in batch.level_keys
+
+    def test_level_ptr_resolves_fieldless_uniform_and_builtin_levels(self):
+        schema = LevelSchema()
+        schema.add_level("metadata", segmented=False)
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)], attr_map=schema
+        )
+
+        assert batch.level_keys["metadata"] == set()
+        assert batch.level_ptr("metadata").tolist() == [0, 1, 2]
+        assert batch.level_keys["edges"] == set()
+        assert batch.level_ptr("edges").tolist() == [0, 0, 0]
+
+    def test_level_ptr_resolves_fieldless_builtin_atoms(self):
+        system = UniformLevelStorage(
+            data={"energy": torch.zeros(2, 1)}, device="cpu", validate=False
+        )
+        storage = MultiLevelStorage(
+            groups={"system": system}, attr_map=None, validate=False
+        )
+        batch = Batch._construct(
+            device=torch.device("cpu"), keys={"system": {"energy"}}, storage=storage
+        )
+
+        assert batch.level_keys["atoms"] == set()
+        assert batch.level_ptr("atoms").tolist() == [0, 0, 0]
+
+    def test_level_ptr_rejects_uniform_graph_count_overflow(self):
+        system = UniformLevelStorage(
+            data={"energy": torch.zeros(1, 1)}, device="cpu", validate=False
+        )
+        object.__setattr__(system, "_num_kept", torch.iinfo(torch.int32).max + 1)
+        batch = Batch._construct(
+            device="cpu",
+            keys={"system": {"energy"}},
+            storage=MultiLevelStorage(groups={"system": system}, validate=False),
+        )
+
+        with pytest.raises(OverflowError, match="Uniform level 'system'"):
+            batch.level_ptr("system")
+
+    def test_level_ptr_derives_fieldless_product_from_resolved_parents(self):
+        schema = LevelSchema()
+        schema.add_level("left_items", segmented=True)
+        schema.add_level("right_items", segmented=True)
+        schema.add_product_level("left_right", left="left_items", right="right_items")
+        schema.set("left_values", "left_items")
+        schema.set("right_values", "right_items")
+        data_list = []
+        for num_left, num_right in ((2, 3), (1, 2)):
+            data = _minimal_atomic_data(2)
+            data.left_values = torch.zeros(num_left, 1)
+            data.right_values = torch.zeros(num_right, 1)
+            data_list.append(data)
+
+        batch = Batch.from_data_list(data_list, attr_map=schema)
+
+        assert batch.level_keys["left_right"] == set()
+        assert batch.level_ptr("left_right").tolist() == [0, 6, 8]
+
+    @pytest.mark.parametrize(
+        "node_counts",
+        [[50_000], [40_000, 40_000]],
+        ids=["per-graph", "cumulative"],
+    )
+    def test_level_ptr_rejects_int32_product_overflow(self, node_counts: list[int]):
+        schema = LevelSchema()
+        schema.add_product_level("pairs", left="atoms", right="atoms")
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(num_nodes) for num_nodes in node_counts],
+            attr_map=schema,
+        )
+
+        with pytest.raises(OverflowError, match="int32 maximum"):
+            batch.level_ptr("pairs")
+
+    def test_custom_schema_fields_retain_first_sample_order_and_infer_dtype(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("first_values", "samples")
+        schema.set("second_values", "samples")
+
+        first = _minimal_atomic_data(2)
+        first.first_values = torch.tensor([[1.0], [2.0]], dtype=torch.float64)
+        first.second_values = torch.tensor([[10.0], [20.0]], dtype=torch.float64)
+        second = _minimal_atomic_data(1)
+        second.second_values = torch.tensor([[30.0]], dtype=torch.float64)
+        second.first_values = torch.tensor([[3.0]], dtype=torch.float64)
+
+        batch = Batch.from_data_list([first, second], attr_map=schema)
+
+        assert list(batch._storage.groups["samples"].keys()) == [
+            "first_values",
+            "second_values",
+        ]
+        assert batch._storage.attr_map.dtypes["first_values"] == "float64"
+        assert batch._storage.attr_map.dtypes["second_values"] == "float64"
+        assert "first_values" not in schema.dtypes
+        assert "second_values" not in schema.dtypes
+        assert batch.first_values[:, 0].tolist() == [1.0, 2.0, 3.0]
+        assert batch.second_values[:, 0].tolist() == [10.0, 20.0, 30.0]
+
+    def test_custom_later_only_field_is_rejected(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("later_values", "samples")
+        first = _minimal_atomic_data(2)
+        second = _minimal_atomic_data(2)
+        second.later_values = torch.ones(1, 1)
+
+        with pytest.raises(ValueError, match="appears only in later sample 1"):
+            Batch.from_data_list([first, second], attr_map=schema)
+
+    def test_custom_missing_field_is_rejected(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_values", "samples")
+        first = _minimal_atomic_data(2)
+        first.sample_values = torch.ones(1, 1)
+        second = _minimal_atomic_data(2)
+
+        with pytest.raises(
+            ValueError, match="Custom field 'sample_values'.*missing from sample 1"
+        ):
+            Batch.from_data_list([first, second], attr_map=schema)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_storage_default_is_built_on_the_requested_device(self) -> None:
+        """A batch that allocates its own storage puts it where the batch says."""
+        batch = Batch(device="cuda:0")
+
+        batch.energy = torch.zeros(1, 1, device="cuda:0")
+
+        assert batch.device == torch.device("cuda", 0)
+        assert batch._storage.device == batch.device
+        assert batch.energy.device == batch.device
+
+    @pytest.mark.multigpu
+    def test_storage_default_follows_a_device_that_is_not_current(self) -> None:
+        """A second-GPU request is honoured while device 0 is current."""
+        with torch.cuda.device(0):
+            batch = Batch(device="cuda:1")
+
+            batch.energy = torch.zeros(1, 1, device="cuda:1")
+
+            assert batch.device == torch.device("cuda", 1)
+            assert batch._storage.device == batch.device
+            assert batch.energy.device == torch.device("cuda", 1)
+
     def test_batch_with_system_only_storage(self):
         """Batch built with only system group: batch, ptr, num_nodes_list, etc. hit None branches."""
         system = UniformLevelStorage(
@@ -144,6 +632,297 @@ class TestBatchConstruction:
         assert batch.num_edges_per_graph.shape == (0,)
         assert batch.max_num_nodes == 0
         assert batch.batch_size == 2
+
+    def test_custom_levels_pack_in_schema_order_and_round_trip(self):
+        schema = LevelSchema()
+        schema.add_level("molecules", segmented=True)
+        schema.add_product_level("atom_molecule", left="atoms", right="molecules")
+        schema.set("molecule_features", "molecules")
+        schema.set("pair_features", "atom_molecule")
+
+        data_list = []
+        for num_nodes, num_molecules in ((2, 3), (4, 1)):
+            data = _minimal_atomic_data(num_nodes)
+            data.molecule_features = torch.arange(num_molecules).reshape(-1, 1)
+            data.pair_features = torch.arange(num_nodes * num_molecules).reshape(
+                num_nodes, num_molecules, 1
+            )
+            data_list.append(data)
+
+        batch = Batch.from_data_list(data_list, attr_map=schema)
+
+        assert list(batch._storage.groups) == ["atoms", "molecules", "atom_molecule"]
+        assert list(batch.level_keys) == [
+            "atoms",
+            "edges",
+            "system",
+            "molecules",
+            "atom_molecule",
+        ]
+        assert batch.level_keys["molecules"] == {"molecule_features"}
+        assert batch.level_ptr("molecules").tolist() == [0, 3, 4]
+        assert batch.level_ptr("atom_molecule").tolist() == [0, 6, 10]
+
+        output = batch.get_data(1)
+        assert output.molecule_features.shape == (1, 1)
+        assert output.pair_features.shape == (4, 1, 1)
+        assert output._level_schema.level_kind("atom_molecule") == "product"
+        cloned_output = output.clone()
+        assert cloned_output._level_schema is not output._level_schema
+        moved_output = output.to("cpu")
+        assert moved_output._level_schema is not output._level_schema
+        rebatch = Batch.from_data_list([output])
+        assert rebatch.level_keys == batch.level_keys
+
+        selected = batch[[1, 0]]
+        assert selected.level_ptr("atom_molecule").tolist() == [0, 4, 10]
+        assert selected.get_data(0).pair_features.shape == (4, 1, 1)
+
+    def test_product_with_fieldless_parent_round_trips_logical_shape(self):
+        schema = LevelSchema()
+        schema.add_level("molecules", segmented=True)
+        schema.add_product_level("atom_molecule", left="atoms", right="molecules")
+        schema.set("pair_features", "atom_molecule")
+
+        data_list = []
+        for num_nodes, num_molecules in ((2, 3), (4, 1)):
+            data = _minimal_atomic_data(num_nodes)
+            data.pair_features = torch.zeros(num_nodes, num_molecules, 2)
+            data_list.append(data)
+
+        batch = Batch.from_data_list(data_list, attr_map=schema)
+
+        assert batch.level_keys["molecules"] == set()
+        assert batch.level_ptr("molecules").tolist() == [0, 3, 4]
+        assert batch.pair_features.shape == (10, 2)
+        assert batch.get_data(0).pair_features.shape == (2, 3, 2)
+        assert batch.get_data(1).pair_features.shape == (4, 1, 2)
+        assert Batch.from_data_list(batch.to_data_list()).level_keys == batch.level_keys
+
+    def test_self_product_uses_equal_logical_axes(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        schema.set("pair_features", "atom_atom")
+        data_list = []
+        for num_nodes in (2, 3):
+            data = _minimal_atomic_data(num_nodes)
+            data.pair_features = torch.zeros(num_nodes, num_nodes, 1)
+            data_list.append(data)
+
+        batch = Batch.from_data_list(data_list, attr_map=schema)
+
+        assert batch.level_ptr("atom_atom").tolist() == [0, 4, 13]
+        assert batch.get_data(0).pair_features.shape == (2, 2, 1)
+        assert batch.get_data(1).pair_features.shape == (3, 3, 1)
+
+    def test_custom_levels_complete_three_system_lifecycle(self):
+        schema = LevelSchema()
+        schema.add_level("empty", segmented=True)
+        schema.add_level("left_items", segmented=True)
+        schema.add_level("right_items", segmented=True)
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        schema.add_product_level("left_right", left="left_items", right="right_items")
+        schema.add_level("A", segmented=True)
+        schema.add_product_level("A_A", left="A", right="A")
+        for field, level in (
+            ("empty_values", "empty"),
+            ("left_values", "left_items"),
+            ("right_values", "right_items"),
+            ("atom_pairs", "atom_atom"),
+            ("cross_values", "left_right"),
+            ("A_values", "A"),
+            ("A_pairs", "A_A"),
+        ):
+            schema.set(field, level)
+
+        atom_counts = [2, 4, 1]
+        left_counts = [2, 4, 1]
+        right_counts = [3, 1, 2]
+        data_list = []
+        for index, (num_atoms, num_left, num_right) in enumerate(
+            zip(atom_counts, left_counts, right_counts, strict=True)
+        ):
+            data = _minimal_atomic_data(num_atoms)
+            a_count = num_atoms + 1
+            data.empty_values = torch.empty(0, 2)
+            data.left_values = torch.arange(index * 10, index * 10 + num_left).reshape(
+                -1, 1
+            )
+            data.right_values = torch.arange(
+                index * 10, index * 10 + num_right
+            ).reshape(-1, 1)
+            data.atom_pairs = torch.arange(num_atoms * num_atoms).reshape(
+                num_atoms, num_atoms, 1
+            )
+            data.cross_values = torch.arange(num_left * num_right).reshape(
+                num_left, num_right, 1
+            )
+            data.A_values = torch.arange(a_count).reshape(-1, 1)
+            data.A_pairs = torch.arange(a_count * a_count).reshape(a_count, a_count, 1)
+            data_list.append(data)
+
+        batch = Batch.from_data_list(data_list, attr_map=schema)
+        expected_ptrs = {
+            "atoms": [0, 2, 6, 7],
+            "empty": [0, 0, 0, 0],
+            "left_items": [0, 2, 6, 7],
+            "right_items": [0, 3, 4, 6],
+            "atom_atom": [0, 4, 20, 21],
+            "left_right": [0, 6, 10, 12],
+            "A": [0, 3, 8, 10],
+            "A_A": [0, 9, 34, 38],
+        }
+        for level, expected in expected_ptrs.items():
+            assert batch.level_ptr(level).tolist() == expected
+        assert batch.level_ptr("system").tolist() == [0, 1, 2, 3]
+        assert batch.level_keys["empty"] == {"empty_values"}
+        assert batch.empty_values.shape == (0, 2)
+        assert batch.left_values.shape == (7, 1)
+        assert batch.left_values[:, 0].tolist() == [0, 1, 10, 11, 12, 13, 20]
+        assert batch.right_values.shape == (6, 1)
+        assert batch.atom_pairs.shape == (21, 1)
+        assert batch.cross_values.shape == (12, 1)
+        assert batch.A_pairs.shape == (38, 1)
+
+        expected_shapes = [
+            ((2, 2, 1), (2, 3, 1), (3, 3, 1)),
+            ((4, 4, 1), (4, 1, 1), (5, 5, 1)),
+            ((1, 1, 1), (1, 2, 1), (2, 2, 1)),
+        ]
+        for index, (atom_pair_shape, cross_shape, a_pair_shape) in enumerate(
+            expected_shapes
+        ):
+            data = batch.get_data(index)
+            assert data.empty_values.shape == (0, 2)
+            assert data.atom_pairs.shape == atom_pair_shape
+            assert data.cross_values.shape == cross_shape
+            assert data.A_pairs.shape == a_pair_shape
+
+        rebatch = Batch.from_data_list(batch.to_data_list())
+        assert rebatch.level_keys == batch.level_keys
+        for level, expected in expected_ptrs.items():
+            assert rebatch.level_ptr(level).tolist() == expected
+
+        selected = batch.index_select([2, 0, 2])
+        selected_ptrs = {
+            "atoms": [0, 1, 3, 4],
+            "empty": [0, 0, 0, 0],
+            "left_items": [0, 1, 3, 4],
+            "right_items": [0, 2, 5, 7],
+            "atom_atom": [0, 1, 5, 6],
+            "left_right": [0, 2, 8, 10],
+            "A": [0, 2, 5, 7],
+            "A_A": [0, 4, 13, 17],
+        }
+        for level, expected in selected_ptrs.items():
+            assert selected.level_ptr(level).tolist() == expected
+        assert selected.get_data(0).atom_pairs.shape == (1, 1, 1)
+        assert selected.get_data(1).cross_values.shape == (2, 3, 1)
+        assert selected.get_data(2).A_pairs.shape == (2, 2, 1)
+
+        cloned = batch.clone()
+        assert cloned._storage.attr_map is not batch._storage.attr_map
+        cloned.add_key(
+            "clone_values",
+            [
+                torch.zeros(2, 1),
+                torch.zeros(4, 1),
+                torch.zeros(1, 1),
+            ],
+            level="left_items",
+        )
+        assert "clone_values" in cloned.level_keys["left_items"]
+        assert "clone_values" not in batch.level_keys["left_items"]
+
+        cpu = batch.cpu()
+        assert cpu.device == torch.device("cpu")
+        assert cpu.contiguous() is cpu
+        assert all(value.is_contiguous() for _, value in cpu)
+
+    def test_product_rank_and_cardinality_rejections(self):
+        schema = LevelSchema()
+        schema.add_level("molecules", segmented=True)
+        schema.add_product_level("atom_molecule", left="atoms", right="molecules")
+        schema.set("pair_features", "atom_molecule")
+
+        rank_error = _minimal_atomic_data(2)
+        rank_error.pair_features = torch.zeros(6)
+        with pytest.raises(ValueError, match="rank >= 2"):
+            Batch.from_data_list([rank_error], attr_map=schema)
+
+        cardinality_error = _minimal_atomic_data(2)
+        cardinality_error.pair_features = torch.zeros(3, 2, 1)
+        with pytest.raises(ValueError, match="left axis cardinalities"):
+            Batch.from_data_list([cardinality_error], attr_map=schema)
+
+    def test_product_rejects_inconsistent_axes_and_payload_shapes(self):
+        schema = LevelSchema()
+        schema.add_level("molecules", segmented=True)
+        schema.add_product_level("atom_molecule", left="atoms", right="molecules")
+        schema.set("pair_features", "atom_molecule")
+
+        first = _minimal_atomic_data(2)
+        second = _minimal_atomic_data(2)
+        first.pair_features = torch.zeros(2, 3, 1)
+        second.pair_features = torch.zeros(2, 3, 2)
+        with pytest.raises(ValueError, match="trailing shape"):
+            Batch.from_data_list([first, second], attr_map=schema)
+
+    def test_custom_cardinality_mismatch_is_rejected(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_features", "samples")
+        schema.set("other_features", "samples")
+        first = _minimal_atomic_data(2)
+        second = _minimal_atomic_data(3)
+        first.sample_features = torch.zeros(2, 1)
+        second.sample_features = torch.zeros(3, 1)
+        first.other_features = torch.zeros(2, 1)
+        second.other_features = torch.zeros(4, 1)
+
+        with pytest.raises(ValueError, match="cardinalities"):
+            Batch.from_data_list([first, second], attr_map=schema)
+
+    def test_custom_dtype_mismatch_is_rejected_without_schema_mutation(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_values", "samples")
+        before = schema.clone()
+        first = _minimal_atomic_data(2)
+        first.sample_values = torch.ones(1, 1, dtype=torch.float32)
+        second = _minimal_atomic_data(2)
+        second.sample_values = torch.ones(1, 1, dtype=torch.float64)
+
+        with pytest.raises(ValueError, match="incompatible dtypes"):
+            Batch.from_data_list([first, second], attr_map=schema)
+
+        assert schema.dtypes == before.dtypes
+        assert schema.attr_to_group == before.attr_to_group
+
+    def test_custom_declared_dtype_must_match_tensor_dtype(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_values", "samples", dtype="float64")
+        before = schema.clone()
+        data = _minimal_atomic_data(2)
+        data.sample_values = torch.ones(1, 1, dtype=torch.float32)
+
+        with pytest.raises(ValueError, match="expected declared dtype float64"):
+            Batch.from_data_list([data], attr_map=schema)
+
+        assert schema.dtypes == before.dtypes
+        assert schema.attr_to_group == before.attr_to_group
+
+    def test_edge_cardinality_inference_stays_local_to_batch(self):
+        data = _minimal_atomic_data(2)
+        data.add_edge_property("edge_weights", torch.zeros(3, 1))
+
+        assert data.num_edges == 0
+        batch = Batch.from_data_list([data])
+
+        assert batch.num_edges_list == [3]
+        assert batch.get_data(0).edge_weights.shape == (3, 1)
+        assert batch.get_data(0).num_edges == 0
 
 
 # -----------------------------------------------------------------------------
@@ -341,6 +1120,7 @@ class TestBatchIndexing:
         assert sub.num_graphs == 2
         assert sub.num_nodes_list == [3, 4]
         assert sub.num_nodes == 7
+        assert sub.level_ptr("atoms").dtype == torch.int32
 
     def test_index_select_int(self, device):
         batch = Batch.from_data_list(
@@ -379,6 +1159,115 @@ class TestBatchIndexing:
         assert sub.num_graphs == 2
         assert sub.num_nodes_list == [3, 2]
 
+    def test_index_select_with_int32_batch_ptr(self, device):
+        """A batch whose pointer was materialized before the device move still selects."""
+        data = [
+            _minimal_atomic_data(2),
+            _minimal_atomic_data(3),
+            _minimal_atomic_data(4),
+        ]
+        batch = Batch.from_data_list(data)
+        _ = batch.batch_ptr
+        batch = batch.to(device)
+        assert batch.batch_ptr.dtype == torch.int32
+
+        sub = batch[torch.tensor([0, 2], device=device)]
+
+        assert sub.num_graphs == 2
+        assert sub.num_nodes_list == [2, 4]
+        torch.testing.assert_close(
+            sub.positions,
+            torch.cat([data[0].positions, data[2].positions]).to(device),
+        )
+
+    @pytest.mark.multigpu
+    def test_index_select_on_indexless_cuda_batch_off_the_current_device(self) -> None:
+        """A batch moved to a bare ``cuda`` selects with any GPU current."""
+        data = [
+            _minimal_atomic_data(2),
+            _minimal_atomic_data(3),
+            _minimal_atomic_data(4),
+        ]
+        with torch.cuda.device(1):
+            batch = Batch.from_data_list(data).to("cuda")
+
+            sub = batch[torch.tensor([0, 2], device="cuda")]
+
+            assert sub.num_graphs == 2
+            assert sub.num_nodes_list == [2, 4]
+            assert torch.cuda.current_device() == 1
+
+    @pytest.mark.multigpu
+    def test_bare_cuda_move_records_the_storage_device_on_the_batch(self) -> None:
+        """A batch moved to a bare ``cuda`` keeps selecting once that GPU is no longer current."""
+        data = [
+            _atomic_data_with_edges_and_system(num_nodes=2, num_edges=3),
+            _atomic_data_with_edges_and_system(num_nodes=3, num_edges=2),
+            _atomic_data_with_edges_and_system(num_nodes=4, num_edges=1),
+        ]
+        with torch.cuda.device(1):
+            batch = Batch.from_data_list(data).to("cuda")
+
+        with torch.cuda.device(0):
+            sub = batch[torch.tensor([0, 2])]
+
+            assert sub.num_graphs == 2
+            assert sub.num_nodes_list == [2, 4]
+            assert sub.device == torch.device("cuda", 1)
+            assert batch.index_select([1]).num_nodes_list == [3]
+            assert batch.edge_ptr.device == torch.device("cuda", 1)
+            assert batch.batch_idx.device == torch.device("cuda", 1)
+            assert batch.device == torch.device("cuda", 1)
+            assert batch.device == batch._storage.device
+
+    @pytest.mark.multigpu
+    def test_bare_cuda_construction_records_the_resolved_device(self) -> None:
+        """``from_data_list(device="cuda")`` records the GPU its tensors reached."""
+        data = [_minimal_atomic_data(2), _minimal_atomic_data(3)]
+        with torch.cuda.device(1):
+            batch = Batch.from_data_list(data, device="cuda")
+
+        with torch.cuda.device(0):
+            assert batch[torch.tensor([1])].num_nodes_list == [3]
+            assert batch.device == torch.device("cuda", 1)
+            assert batch.device == batch._storage.device
+
+    @pytest.mark.multigpu
+    def test_bare_cuda_adopts_the_supplied_storage_device(self) -> None:
+        """A batch built around a storage takes that storage's GPU, not the current one."""
+        data = [
+            _minimal_atomic_data(2),
+            _minimal_atomic_data(3),
+            _minimal_atomic_data(4),
+        ]
+        with torch.cuda.device(1):
+            storage = Batch.from_data_list(data).to("cuda")._storage
+
+        with torch.cuda.device(0):
+            batch = Batch(device="cuda", storage=storage)
+
+            assert batch.device == torch.device("cuda", 1)
+            index = torch.tensor([0, 2], device="cuda:1")
+            assert batch.index_select(index).num_nodes_list == [2, 4]
+
+    @pytest.mark.multigpu
+    def test_explicit_device_conflicting_with_the_storage_is_rejected(self) -> None:
+        """An indexed request for another GPU than the storage's raises."""
+        with torch.cuda.device(1):
+            storage = (
+                Batch.from_data_list([_minimal_atomic_data(2)]).to("cuda")._storage
+            )
+
+        with pytest.raises(ValueError, match="conflicts with the supplied storage"):
+            Batch(device="cuda:0", storage=storage)
+
+    def test_cuda_device_for_a_cpu_storage_is_rejected(self) -> None:
+        """A CPU storage is not relabelled by an indexed CUDA request."""
+        storage = Batch.from_data_list([_minimal_atomic_data(2)])._storage
+
+        with pytest.raises(ValueError, match="conflicts with the supplied storage"):
+            Batch(device="cuda:0", storage=storage)
+
     def test_index_select_with_edges_applies_edge_index_correction(self):
         """index_select on a batch with edges corrects neighbor_list offsets."""
         data_list = [
@@ -394,6 +1283,59 @@ class TestBatchIndexing:
         d0 = sub.get_data(0)
         d1 = sub.get_data(1)
         assert d0.neighbor_list is not None and d1.neighbor_list is not None
+
+    def _batch_with_extra_keys(self, device: str) -> Batch:
+        """Return three graphs carrying a node key, a system key, and edges."""
+        data_list = [
+            _atomic_data_with_edges_and_system(num_nodes=2, num_edges=3),
+            _atomic_data_with_edges_and_system(num_nodes=3, num_edges=2),
+            _atomic_data_with_edges_and_system(num_nodes=1, num_edges=1),
+        ]
+        batch = Batch.from_data_list(data_list, device=device)
+        batch.forces = torch.randn(batch.num_nodes, 3, device=device)
+        return batch
+
+    def test_index_select_drop_leaves_the_named_keys_out(self, device):
+        """Dropped keys are absent from the selection and its tracked key sets."""
+        batch = self._batch_with_extra_keys(device)
+        plain = batch.index_select([0, 2])
+        sub = batch.index_select([0, 2], drop=("forces", "energy", "not_there"))
+        assert "forces" not in sub
+        assert "energy" not in sub
+        assert "forces" in batch and "energy" in batch
+        assert torch.equal(sub.positions, plain.positions)
+        assert torch.equal(sub.neighbor_list, plain.neighbor_list)
+        assert sub.num_nodes_list == plain.num_nodes_list
+        assert sub.num_edges_list == plain.num_edges_list
+        if sub.keys is not None:
+            assert all(
+                "forces" not in names and "energy" not in names
+                for names in sub.keys.values()
+            )
+
+    def test_index_select_default_drop_copies_every_key(self, device):
+        """Without a drop the selection carries exactly the keys the batch does."""
+        batch = self._batch_with_extra_keys(device)
+        sub = batch.index_select([1])
+        assert set(sub._storage.keys()) == set(batch._storage.keys())
+        assert torch.equal(sub.forces, batch.forces[2:5])
+
+    def test_index_select_drop_keeps_the_segmented_pointers_intact(self, device):
+        """Dropping a node key leaves the atom and edge pointers of the selection whole."""
+        batch = self._batch_with_extra_keys(device)
+        plain = batch.index_select([0, 2])
+        sub = batch.index_select([0, 2], drop=("forces",))
+        assert sub.batch_ptr.tolist() == plain.batch_ptr.tolist()
+        assert sub.level_ptr("edges").tolist() == plain.level_ptr("edges").tolist()
+        assert sub.get_data(1).neighbor_list is not None
+
+    def test_index_select_drop_of_every_edge_key_keeps_the_level(self, device):
+        """A level emptied by the drop keeps its cardinality and no fields."""
+        batch = self._batch_with_extra_keys(device)
+        sub = batch.index_select([0, 2], drop=("neighbor_list",))
+        assert "neighbor_list" not in sub
+        assert sub.level_keys["edges"] == set()
+        assert sub.num_edges_list == [3, 1]
 
     def test_index_select_normalize_bool_tensor(self):
         batch = Batch.from_data_list(
@@ -443,6 +1385,567 @@ class TestBatchIndexing:
 
 
 # -----------------------------------------------------------------------------
+# Public schema transfer and extension
+# -----------------------------------------------------------------------------
+class TestBatchSchemaExtension:
+    """Public-contract tests for post-construction schema registration."""
+
+    @staticmethod
+    def _schema_state(schema: LevelSchema) -> tuple:
+        """Return public schema state suitable for atomicity assertions."""
+        return (
+            schema.level_names,
+            schema.level_kinds.copy(),
+            schema.product_parents.copy(),
+            schema.attr_to_group.copy(),
+            schema.dtypes.copy(),
+        )
+
+    def test_get_level_schema_returns_a_defensive_copy(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+
+        exposed = batch.get_level_schema()
+        exposed.add_level("samples", segmented=True)
+        exposed.set("sample_values", "samples", dtype="float32")
+
+        assert "samples" not in batch.get_level_schema().level_names
+        assert "sample_values" not in batch.get_level_schema().attr_to_group
+
+    def test_extension_is_owned_and_batches_remain_isolated(self):
+        extension = LevelSchema()
+        extension.add_level("samples", segmented=True)
+        first = Batch.from_data_list([_minimal_atomic_data(2)])
+        second = Batch.from_data_list([_minimal_atomic_data(3)])
+
+        first.extend_level_schema(extension)
+        second.extend_level_schema(extension)
+        extension.add_level("extension_only", segmented=True)
+        first.add_level("first_only", segmented=False)
+
+        assert "extension_only" not in first.get_level_schema().level_names
+        assert "extension_only" not in second.get_level_schema().level_names
+        assert "first_only" in first.get_level_schema().level_names
+        assert "first_only" not in second.get_level_schema().level_names
+
+    def test_transfer_then_materialize_product_level(self):
+        source_schema = LevelSchema()
+        source_schema.add_level("samples", segmented=True)
+        source_schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        source_schema.set("hessian_blocks", "atom_atom", dtype="float32")
+        source_data = _minimal_atomic_data(1)
+        source_data.hessian_blocks = torch.zeros(1, 1, 3, 3)
+        source = Batch.from_data_list([source_data], attr_map=source_schema)
+        destination = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)]
+        )
+        before = destination.model_dump()
+
+        destination.extend_level_schema(source.get_level_schema())
+
+        assert destination.get_level_schema().level_names[-2:] == (
+            "samples",
+            "atom_atom",
+        )
+        assert destination.get_level_schema().group("hessian_blocks") == "atom_atom"
+        assert destination.get_level_schema().dtype("hessian_blocks") == "float32"
+        after = destination.model_dump()
+        assert after.keys() == before.keys()
+        for key, value in before.items():
+            if isinstance(value, torch.Tensor):
+                torch.testing.assert_close(after[key], value)
+            else:
+                assert after[key] == value
+
+        destination.add_key(
+            "hessian_blocks",
+            [torch.zeros(2, 2, 3, 3), torch.ones(3, 3, 3, 3)],
+            level="atom_atom",
+        )
+
+        assert destination.hessian_blocks.shape == (13, 3, 3)
+        assert destination.level_ptr("atom_atom").tolist() == [0, 4, 13]
+        assert destination.get_data(0).hessian_blocks.shape == (2, 2, 3, 3)
+        assert destination.get_data(1).hessian_blocks.shape == (3, 3, 3, 3)
+
+    def test_identical_extension_is_idempotent_and_dtype_aliases_match(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_key(
+            "custom_values",
+            [torch.ones(2, 1, dtype=torch.float32)],
+            level="node",
+        )
+        extension = LevelSchema()
+        extension.set("custom_values", "atoms", dtype="float")
+
+        batch.extend_level_schema(extension)
+        first_state = self._schema_state(batch.get_level_schema())
+        batch.extend_level_schema(extension)
+        assert self._schema_state(batch.get_level_schema()) == first_state
+
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+
+        assert batch.get_level_schema().level_names.count("atom_atom") == 1
+        assert batch.get_level_schema().dtype("custom_values") == "float32"
+
+    def test_level_kind_conflict_is_atomic(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_level("samples", segmented=True)
+        extension = LevelSchema()
+        extension.add_level("samples", segmented=False)
+        before = self._schema_state(batch.get_level_schema())
+
+        with pytest.raises(ValueError, match="already registered as segmented"):
+            batch.extend_level_schema(extension)
+
+        assert self._schema_state(batch.get_level_schema()) == before
+
+    def test_product_parent_conflict_is_atomic(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_level("samples", segmented=True)
+        batch.add_level("other", segmented=True)
+        batch.add_product_level("pairs", left="atoms", right="samples")
+        extension = LevelSchema()
+        extension.add_level("samples", segmented=True)
+        extension.add_level("other", segmented=True)
+        extension.add_product_level("pairs", left="atoms", right="other")
+        before = self._schema_state(batch.get_level_schema())
+        extension_before = self._schema_state(extension)
+
+        with pytest.raises(ValueError, match="already registered with parents"):
+            batch.extend_level_schema(extension)
+
+        assert self._schema_state(batch.get_level_schema()) == before
+        assert self._schema_state(extension) == extension_before
+
+    def test_field_owner_conflict_is_atomic(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_key("custom_values", [torch.ones(2, 1)], level="node")
+        extension = LevelSchema()
+        extension.set("custom_values", "system", dtype="float32")
+        before = self._schema_state(batch.get_level_schema())
+        values_before = batch.custom_values.clone()
+
+        with pytest.raises(ValueError, match="already assigned to level 'atoms'"):
+            batch.extend_level_schema(extension)
+
+        assert self._schema_state(batch.get_level_schema()) == before
+        torch.testing.assert_close(batch.custom_values, values_before)
+
+    def test_declared_dtype_conflict_is_atomic(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        batch.add_key(
+            "custom_values",
+            [torch.ones(2, 1, dtype=torch.float32)],
+            level="node",
+        )
+        extension = LevelSchema()
+        extension.set("custom_values", "atoms", dtype="float64")
+        before = self._schema_state(batch.get_level_schema())
+        values_before = batch.custom_values.clone()
+
+        with pytest.raises(ValueError, match="incompatible declared dtypes"):
+            batch.extend_level_schema(extension)
+
+        assert self._schema_state(batch.get_level_schema()) == before
+        torch.testing.assert_close(batch.custom_values, values_before)
+
+    def test_unknown_dtype_aliases_remain_distinct(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        existing = LevelSchema()
+        existing.set("custom_values", "samples", dtype="custom_float")
+        batch.extend_level_schema(existing)
+        extension = LevelSchema()
+        extension.set("custom_values", "samples", dtype="other_float")
+
+        with pytest.raises(ValueError, match="custom_float vs other_float"):
+            batch.extend_level_schema(extension)
+
+    def test_from_data_list_preserves_unknown_dtype_error(self):
+        schema = LevelSchema()
+        schema.add_level("metadata", segmented=False)
+        schema.set("custom_values", "metadata", dtype="custom_float")
+        data = _minimal_atomic_data(2)
+        data.custom_values = torch.ones(1, 1)
+
+        with pytest.raises(
+            ValueError, match="unsupported declared dtype 'custom_float'"
+        ):
+            Batch.from_data_list([data], attr_map=schema)
+
+    def test_extension_rejects_non_schema_without_mutation(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        before = self._schema_state(batch.get_level_schema())
+
+        with pytest.raises(TypeError, match="got dict"):
+            batch.extend_level_schema({})  # type: ignore[arg-type]
+
+        assert self._schema_state(batch.get_level_schema()) == before
+
+    @pytest.mark.parametrize(
+        "field_name",
+        [
+            "get_level_schema",
+            "extend_level_schema",
+            "add_level",
+            "add_product_level",
+        ],
+    )
+    def test_api_name_collision_remains_available_by_item(self, field_name):
+        batch = Batch.from_data_list(
+            [_atomic_data_with_system(2), _atomic_data_with_system(3)]
+        )
+        batch.add_key(
+            field_name,
+            [torch.tensor([[1.0]]), torch.tensor([[2.0]])],
+            level="system",
+        )
+
+        torch.testing.assert_close(batch[field_name], torch.tensor([[1.0], [2.0]]))
+        assert field_name in batch
+        assert field_name in {key for key, _ in batch}
+        assert field_name in batch.model_dump()
+        assert callable(getattr(batch, field_name))
+
+        torch.testing.assert_close(batch.clone()[field_name], batch[field_name])
+        torch.testing.assert_close(
+            batch.index_select([1])[field_name], torch.tensor([[2.0]])
+        )
+
+    def test_extended_schema_survives_public_batch_lifecycle(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+        batch.add_level("samples", segmented=True)
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+
+        derived = [
+            batch.clone(),
+            batch.to("cpu"),
+            batch.index_select([1]),
+            Batch.from_data_list([batch.get_data(0)]),
+            Batch.from_data_list(batch.to_data_list()),
+        ]
+
+        for result in derived:
+            assert result.get_level_schema().level_kind("samples") == "segmented"
+            assert result.get_level_schema().product_parents["atom_atom"] == (
+                "atoms",
+                "atoms",
+            )
+
+
+# -----------------------------------------------------------------------------
+class TestBatchEmptyFieldInsertion:
+    """Public-contract tests for adding typed fields to zero-graph batches."""
+
+    @staticmethod
+    def _metadata_state(batch: Batch) -> tuple:
+        """Return public schema and field state for atomicity assertions."""
+        schema = batch.get_level_schema()
+        return (
+            schema.level_names,
+            schema.level_kinds.copy(),
+            schema.product_parents.copy(),
+            schema.attr_to_group.copy(),
+            schema.dtypes.copy(),
+            tuple(batch.model_dump()),
+        )
+
+    def test_adds_empty_uniform_segmented_and_product_fields(self):
+        batch = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+        batch.add_level("metadata", segmented=False)
+        batch.add_level("samples", segmented=True)
+        batch.add_product_level("sample_pairs", left="samples", right="samples")
+
+        batch.add_key(
+            "metadata_values",
+            [],
+            level="metadata",
+            dtype=torch.int64,
+            payload_shape=(2,),
+        )
+        batch.add_key(
+            "sample_values",
+            [],
+            level="samples",
+            dtype=torch.float32,
+            payload_shape=(4,),
+        )
+        batch.add_key(
+            "pair_values",
+            [],
+            level="sample_pairs",
+            dtype=torch.float64,
+            payload_shape=(3, 3),
+        )
+
+        assert batch.metadata_values.shape == (0, 2)
+        assert batch.sample_values.shape == (0, 4)
+        assert batch.pair_values.shape == (0, 3, 3)
+        assert batch.level_ptr("metadata").tolist() == [0]
+        assert batch.level_ptr("samples").tolist() == [0]
+        assert batch.level_ptr("sample_pairs").tolist() == [0]
+        schema = batch.get_level_schema()
+        assert schema.dtype("metadata_values") == "int64"
+        assert schema.dtype("sample_values") == "float32"
+        assert schema.dtype("pair_values") == "float64"
+
+    def test_preserves_existing_builtin_buffer_capacities(self):
+        batch = Batch.empty(num_systems=4, num_nodes=10, num_edges=0)
+
+        batch.add_key(
+            "node_features",
+            [],
+            level="node",
+            dtype=torch.float32,
+            payload_shape=(2,),
+        )
+        batch.add_key(
+            "system_tags",
+            [],
+            level="system",
+            dtype=torch.int64,
+            payload_shape=(),
+        )
+
+        assert batch.num_graphs == 0
+        assert batch.node_features.shape == (10, 2)
+        assert batch.system_tags.shape == (4,)
+        assert batch.system_capacity == 4
+
+    def test_materializes_missing_empty_product_parents(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.add_product_level("atom_sample", left="atoms", right="samples")
+        batch = Batch.empty(
+            num_systems=0,
+            num_nodes=0,
+            num_edges=0,
+            attr_map=schema,
+        )
+
+        batch.add_key(
+            "pair_values",
+            [],
+            level="atom_sample",
+            dtype=torch.float32,
+            payload_shape=(1,),
+        )
+
+        assert batch.level_ptr("atoms").tolist() == [0]
+        assert batch.level_ptr("samples").tolist() == [0]
+        assert batch.level_ptr("atom_sample").tolist() == [0]
+        assert batch.pair_values.shape == (0, 1)
+
+    def test_empty_product_survives_lifecycle_and_append(self):
+        empty = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+        empty.add_product_level("atom_atom", left="atoms", right="atoms")
+        empty.add_key(
+            "hessian",
+            [],
+            level="atom_atom",
+            dtype=torch.float32,
+            payload_shape=(3, 3),
+        )
+
+        for derived in (empty.clone(), empty.cpu()):
+            assert derived.hessian.shape == (0, 3, 3)
+            assert derived.level_ptr("atom_atom").tolist() == [0]
+            assert derived.get_level_schema().group("hessian") == "atom_atom"
+        assert empty.model_dump()["hessian"].shape == (0, 3, 3)
+
+        populated = Batch.from_data_list(
+            [_minimal_atomic_data(2)],
+            attr_map=empty.get_level_schema(),
+        )
+        values = torch.arange(36, dtype=torch.float32).reshape(2, 2, 3, 3)
+        populated.add_key(
+            "hessian",
+            [values],
+            level="atom_atom",
+            dtype=torch.float32,
+            payload_shape=(3, 3),
+        )
+
+        empty.append(populated)
+        rebuilt = Batch.from_data_list(empty.to_data_list())
+
+        assert empty.num_nodes_list == [2]
+        assert empty.level_ptr("atom_atom").tolist() == [0, 4]
+        torch.testing.assert_close(empty.get_data(0).hessian, values)
+        torch.testing.assert_close(rebuilt.get_data(0).hessian, values)
+
+    def test_empty_overwrite_replaces_payload_shape(self):
+        batch = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+        batch.add_key(
+            "values",
+            [],
+            level="atom_atom",
+            dtype=torch.float32,
+            payload_shape=(3, 3),
+        )
+
+        batch.add_key(
+            "values",
+            [],
+            level="atom_atom",
+            overwrite=True,
+            dtype=torch.float32,
+            payload_shape=(2,),
+        )
+
+        assert batch.values.shape == (0, 2)
+        assert batch.get_level_schema().dtype("values") == "float32"
+
+    def test_nonempty_values_accept_matching_hints(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+        values = [torch.zeros(2, 4), torch.ones(3, 4)]
+
+        batch.add_key(
+            "features",
+            values,
+            level="node",
+            dtype=torch.float32,
+            payload_shape=(4,),
+        )
+
+        assert batch.features.shape == (5, 4)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "error", "message"),
+        [
+            ({"payload_shape": (3, 3)}, ValueError, "both dtype and payload_shape"),
+            ({"dtype": torch.float32}, ValueError, "both dtype and payload_shape"),
+            (
+                {"dtype": "float32", "payload_shape": (3, 3)},
+                TypeError,
+                "dtype must be a torch.dtype",
+            ),
+            (
+                {"dtype": torch.float32, "payload_shape": [3, 3]},
+                TypeError,
+                "payload_shape must be a tuple",
+            ),
+            (
+                {"dtype": torch.float32, "payload_shape": (True, 3)},
+                TypeError,
+                "non-negative integers",
+            ),
+            (
+                {"dtype": torch.float32, "payload_shape": (-1, 3)},
+                ValueError,
+                "dimensions must be non-negative",
+            ),
+            (
+                {"dtype": torch.bfloat16, "payload_shape": (3, 3)},
+                ValueError,
+                "Unsupported torch dtype",
+            ),
+        ],
+    )
+    def test_invalid_empty_metadata_is_atomic(self, kwargs, error, message):
+        batch = Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+        before = self._metadata_state(batch)
+
+        with pytest.raises(error, match=message):
+            batch.add_key("hessian", [], level="atom_atom", **kwargs)
+
+        assert self._metadata_state(batch) == before
+
+    def test_empty_values_reject_nonempty_batch_without_mutation(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        before = self._metadata_state(batch)
+
+        with pytest.raises(ValueError, match="Number of values"):
+            batch.add_key(
+                "features",
+                [],
+                level="node",
+                dtype=torch.float32,
+                payload_shape=(4,),
+            )
+
+        assert self._metadata_state(batch) == before
+
+    @pytest.mark.parametrize(
+        ("dtype", "payload_shape", "message"),
+        [
+            (torch.float64, (4,), "must have dtype"),
+            (torch.float32, (5,), "must have payload shape"),
+        ],
+    )
+    def test_nonempty_hint_mismatch_is_atomic(self, dtype, payload_shape, message):
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        before = self._metadata_state(batch)
+
+        with pytest.raises(ValueError, match=message):
+            batch.add_key(
+                "features",
+                [torch.zeros(2, 4)],
+                level="node",
+                dtype=dtype,
+                payload_shape=payload_shape,
+            )
+
+        assert self._metadata_state(batch) == before
+
+    def test_empty_declared_custom_dtype_mismatch_is_atomic(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_values", "samples", dtype="float64")
+        batch = Batch.empty(
+            num_systems=0,
+            num_nodes=0,
+            num_edges=0,
+            attr_map=schema,
+        )
+        before = self._metadata_state(batch)
+
+        with pytest.raises(ValueError, match="expected declared dtype float64"):
+            batch.add_key(
+                "sample_values",
+                [],
+                level="samples",
+                dtype=torch.float32,
+                payload_shape=(1,),
+            )
+
+        assert self._metadata_state(batch) == before
+
+    def test_unknown_declared_dtype_keeps_caller_specific_errors(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("custom_values", "samples", dtype="custom_float")
+        empty = Batch.empty(
+            num_systems=0,
+            num_nodes=0,
+            num_edges=0,
+            attr_map=schema,
+        )
+        populated = Batch.from_data_list([_minimal_atomic_data(2)], attr_map=schema)
+
+        with pytest.raises(
+            ValueError, match="unsupported declared dtype 'custom_float'"
+        ):
+            empty.add_key(
+                "custom_values",
+                [],
+                level="samples",
+                dtype=torch.float32,
+                payload_shape=(1,),
+            )
+        with pytest.raises(
+            ValueError, match="unsupported declared dtype 'custom_float'"
+        ):
+            populated.add_key(
+                "custom_values",
+                [torch.ones(2, 1)],
+                level="samples",
+            )
+
+
+# -----------------------------------------------------------------------------
 # Mutation and add_key
 # -----------------------------------------------------------------------------
 class TestBatchMutation:
@@ -455,6 +1958,108 @@ class TestBatchMutation:
         assert b1.num_graphs == 3
         assert b1.num_nodes_list == [2, 3, 4]
         assert b1.num_nodes == 9
+
+    def test_append_select_and_rebatch_fieldless_builtin_segment_metadata(self):
+        left = _fieldless_builtin_batch([2, 1], [3, 0], pointer_capacity=5)
+        right = _fieldless_builtin_batch([4], [2])
+
+        left.append(right)
+
+        assert left.level_ptr("atoms").tolist() == [0, 2, 3, 7]
+        assert left.level_ptr("edges").tolist() == [0, 3, 3, 5]
+        assert left._storage.groups["atoms"].batch_ptr.shape[0] == 5
+        selected = left.index_select([1, 2])
+        assert selected.level_ptr("atoms").tolist() == [0, 1, 5]
+        assert selected.level_ptr("edges").tolist() == [0, 0, 2]
+
+        selected.append(selected.clone())
+        assert selected.level_ptr("atoms").tolist() == [0, 1, 5, 6, 10]
+        assert selected.level_ptr("edges").tolist() == [0, 0, 2, 2, 4]
+
+    def test_fieldless_builtin_edge_product_lifecycle(self):
+        """Atoms-times-edges products retain fieldless edge cardinalities."""
+        original = _builtin_edge_product_batch()
+        left = Batch.from_data_list(
+            original.to_data_list()[:2], attr_map=original._storage.attr_map
+        )
+        right = Batch.from_data_list(
+            original.to_data_list()[2:], attr_map=original._storage.attr_map
+        )
+
+        left.append(right)
+
+        assert "neighbor_list" not in left
+        assert left.level_ptr("atoms").tolist() == [0, 2, 5, 6]
+        assert left.level_ptr("edges").tolist() == [0, 3, 3, 5]
+        assert left.level_ptr("atom_edges").tolist() == [0, 6, 6, 8]
+        for graph_idx in range(left.num_graphs):
+            torch.testing.assert_close(
+                left.get_data(graph_idx).atom_edge_values,
+                original.get_data(graph_idx).atom_edge_values,
+            )
+
+        selected = left.index_select([2, 0])
+        assert selected.level_ptr("edges").tolist() == [0, 2, 5]
+        for graph_idx, source_idx in enumerate((2, 0)):
+            torch.testing.assert_close(
+                selected.get_data(graph_idx).atom_edge_values,
+                original.get_data(source_idx).atom_edge_values,
+            )
+
+        repeated = selected.clone()
+        repeated.append(selected)
+        assert repeated.level_ptr("edges").tolist() == [0, 2, 5, 7, 10]
+        rebatch = Batch.from_data_list(
+            repeated.to_data_list(), attr_map=repeated._storage.attr_map
+        )
+        assert rebatch.level_ptr("atom_edges").tolist() == [0, 2, 8, 10, 16]
+        for graph_idx, source_idx in enumerate((2, 0, 2, 0)):
+            torch.testing.assert_close(
+                rebatch.get_data(graph_idx).atom_edge_values,
+                original.get_data(source_idx).atom_edge_values,
+            )
+
+    def test_append_fieldless_metadata_prevalidates_pointer_overflow(self):
+        maximum = torch.iinfo(torch.int32).max
+        left = _fieldless_builtin_batch([maximum], [0], pointer_capacity=4)
+        right = _fieldless_builtin_batch([1], [0])
+
+        with pytest.raises(OverflowError, match="Segment pointer exceeds"):
+            left.append(right)
+
+        assert left.level_ptr("atoms").tolist() == [0, maximum]
+        assert left.level_ptr("edges").tolist() == [0, 0]
+
+    def test_append_payload_overflow_is_atomic_across_levels(self):
+        maximum = torch.iinfo(torch.int32).max
+        left = _custom_boundary_batch(maximum, 11.0, payload_value=7.0)
+        right = _custom_boundary_batch(1, 22.0, payload_value=9.0)
+
+        with pytest.raises(OverflowError, match="Segment pointer exceeds"):
+            left.append(right)
+
+        assert left.num_graphs == 1
+        assert left.energy.tolist() == [[11.0]]
+        assert left.level_ptr("samples").tolist() == [0, maximum]
+        assert left.sample_values.shape == (maximum, 1)
+        assert left.sample_values[0].item() == 7.0
+        assert right.num_graphs == 1
+        assert right.energy.tolist() == [[22.0]]
+        assert right.level_ptr("samples").tolist() == [0, 1]
+        assert right.sample_values.tolist() == [[9.0]]
+
+    def test_append_cpu_batch_into_gpu_batch(self, gpu_device) -> None:
+        """Appending a CPU batch onto an accelerator batch moves the segment lengths."""
+        b1 = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)]
+        ).to(gpu_device)
+        b2 = Batch.from_data_list([_minimal_atomic_data(4)])
+
+        b1.append(b2)
+
+        assert b1.num_graphs == 3
+        assert b1.num_nodes_list == [2, 3, 4]
+        assert b1.positions.device.type == "cuda"
 
     def test_append_data(self):
         batch = Batch.from_data_list([_minimal_atomic_data(2)])
@@ -493,6 +2098,37 @@ class TestBatchMutation:
         )
         assert batch["forces"].shape == (5, 3)
 
+    @pytest.mark.parametrize("skip_validation", [False, True])
+    def test_add_key_node_survives_attribute_reassignment(
+        self, skip_validation: bool
+    ) -> None:
+        """A node key added publicly stays at node level when reassigned."""
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)],
+            skip_validation=skip_validation,
+        )
+        batch.add_key(
+            "node_embeddings",
+            [torch.randn(2, 4), torch.randn(3, 4)],
+            level="node",
+        )
+
+        batch.node_embeddings = torch.ones(5, 4)
+
+        assert batch._storage._group_name_from_attr("node_embeddings") == "atoms"
+        assert "node_embeddings" not in (batch._system_group or {})
+        assert batch.node_embeddings.eq(1).all()
+
+    def test_attribute_write_follows_a_key_written_into_a_group(self) -> None:
+        """A key placed straight into a group is not re-routed to the system group."""
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+        batch._atoms_group["node_embeddings"] = torch.zeros(5, 4)
+
+        batch.node_embeddings = torch.ones(5, 4)
+
+        assert batch._storage._group_name_from_attr("node_embeddings") == "atoms"
+        assert batch.node_embeddings.eq(1).all()
+
     def test_add_key_overwrite(self):
         batch = Batch.from_data_list([_atomic_data_with_system(2)])
         batch.add_key("virial", [torch.zeros(1, 3, 3)], level="system")
@@ -517,6 +2153,312 @@ class TestBatchMutation:
         batch = Batch.from_data_list([_atomic_data_with_system(2)])
         with pytest.raises(ValueError, match="Group 'edges' not found"):
             batch.add_key("edge_attr", [torch.randn(1, 4)], level="edge")
+
+    def test_add_key_system_creates_the_missing_system_group(self) -> None:
+        """A batch of bare positions gains a system group sized to its graphs."""
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+        assert batch._system_group is None
+        batch.add_key(
+            "tag", [torch.tensor([[1.0]]), torch.tensor([[2.0]])], level="system"
+        )
+        assert batch["tag"].shape == (2, 1)
+        assert batch._storage._group_name_from_attr("tag") == "system"
+        assert "tag" in batch.keys["system"]
+        assert batch.get_data(1).tag.tolist() == [[2.0]]
+
+    def test_add_key_registered_custom_level(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)], attr_map=schema
+        )
+        schema.set("sample_features", "samples")
+
+        batch.add_key(
+            "sample_features",
+            [torch.zeros(4, 2), torch.ones(1, 2)],
+            level="samples",
+        )
+
+        assert batch.level_keys["samples"] == {"sample_features"}
+        assert batch.level_ptr("samples").tolist() == [0, 4, 5]
+        assert batch.sample_features.shape == (5, 2)
+
+    def test_add_key_registered_product_level_uses_logical_axes(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.add_product_level("atom_sample", left="atoms", right="samples")
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)], attr_map=schema
+        )
+
+        batch.add_key(
+            "pair_features",
+            [torch.zeros(2, 4, 1), torch.ones(3, 1, 1)],
+            level="atom_sample",
+        )
+
+        assert batch.level_keys["samples"] == set()
+        assert batch.level_ptr("samples").tolist() == [0, 4, 5]
+        assert batch.level_ptr("atom_sample").tolist() == [0, 8, 11]
+        assert batch.get_data(0).pair_features.shape == (2, 4, 1)
+        assert batch.get_data(1).pair_features.shape == (3, 1, 1)
+
+    def test_add_key_product_rejects_insufficient_rank(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        batch = Batch.from_data_list([_minimal_atomic_data(2)], attr_map=schema)
+
+        with pytest.raises(ValueError, match="rank >= 2"):
+            batch.add_key("pair_features", [torch.zeros(4)], level="atom_atom")
+
+    def test_add_key_self_product_rejects_unequal_axes(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        batch = Batch.from_data_list([_minimal_atomic_data(2)], attr_map=schema)
+
+        with pytest.raises(ValueError, match="requires equal left and right"):
+            batch.add_key("pair_features", [torch.zeros(2, 3, 1)], level="atom_atom")
+
+    def test_add_key_product_rejects_parent_cardinality_mismatch(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.add_product_level("atom_sample", left="atoms", right="samples")
+        batch = Batch.from_data_list([_minimal_atomic_data(2)], attr_map=schema)
+
+        with pytest.raises(ValueError, match="do not match parent 'atoms'"):
+            batch.add_key("pair_features", [torch.zeros(3, 4, 1)], level="atom_sample")
+
+    def test_add_key_product_rejects_incompatible_payload_shapes(self):
+        schema = LevelSchema()
+        schema.add_product_level("atom_atom", left="atoms", right="atoms")
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)], attr_map=schema
+        )
+
+        with pytest.raises(ValueError, match="incompatible trailing shapes"):
+            batch.add_key(
+                "pair_features",
+                [torch.zeros(2, 2, 1), torch.zeros(3, 3, 2)],
+                level="atom_atom",
+            )
+
+    def test_add_key_custom_dtype_validation_precedes_storage_mutation(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(2)], attr_map=schema
+        )
+        before_groups = tuple(batch._storage.groups)
+        before_keys = {
+            name: set(group.keys()) for name, group in batch._storage.groups.items()
+        }
+
+        with pytest.raises(ValueError, match="incompatible dtypes"):
+            batch.add_key(
+                "sample_values",
+                [
+                    torch.ones(1, 1, dtype=torch.float32),
+                    torch.ones(1, 1, dtype=torch.float64),
+                ],
+                level="samples",
+            )
+
+        assert tuple(batch._storage.groups) == before_groups
+        assert {
+            name: set(group.keys()) for name, group in batch._storage.groups.items()
+        } == before_keys
+
+    def test_add_key_respects_declared_custom_dtype_before_storage_mutation(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_values", "samples", dtype="float64")
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(2)], attr_map=schema
+        )
+        before_groups = tuple(batch._storage.groups)
+        before_keys = {
+            name: set(group.keys()) for name, group in batch._storage.groups.items()
+        }
+        before_dtypes = batch._storage.attr_map.dtypes.copy()
+
+        with pytest.raises(ValueError, match="expected declared dtype float64"):
+            batch.add_key(
+                "sample_values",
+                [
+                    torch.ones(1, 1, dtype=torch.float32),
+                    torch.ones(1, 1, dtype=torch.float32),
+                ],
+                level="samples",
+            )
+
+        assert tuple(batch._storage.groups) == before_groups
+        assert {
+            name: set(group.keys()) for name, group in batch._storage.groups.items()
+        } == before_keys
+        assert batch._storage.attr_map.dtypes == before_dtypes
+
+    def test_add_key_custom_overwrite_and_unknown_level_fallback(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)], attr_map=schema
+        )
+
+        batch.add_key(
+            "sample_values",
+            [torch.zeros(2, 1), torch.ones(3, 1)],
+            level="samples",
+        )
+        batch.add_key(
+            "sample_values",
+            [
+                torch.full((2, 1), 2.0, dtype=torch.float32),
+                torch.full((3, 1), 3.0, dtype=torch.float32),
+            ],
+            level="samples",
+            overwrite=True,
+        )
+        assert batch.sample_values[:, 0].tolist() == [2, 2, 3, 3, 3]
+        assert batch.level_ptr("samples").tolist() == [0, 2, 5]
+
+        batch.add_key(
+            "legacy_values",
+            [torch.zeros(2, 1), torch.ones(3, 1)],
+            level="unregistered-level",
+        )
+        assert "legacy_values" in batch.level_keys["atoms"]
+        assert batch.legacy_values.shape == (5, 1)
+
+    def test_append_custom_product_with_fieldless_parent(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.add_product_level("atom_sample", left="atoms", right="samples")
+        schema.set("pair_values", "atom_sample")
+
+        def make_batch(num_atoms: int, num_samples: int, value: int) -> Batch:
+            data = _minimal_atomic_data(num_atoms)
+            data.pair_values = torch.full((num_atoms, num_samples, 1), value)
+            return Batch.from_data_list([data], attr_map=schema)
+
+        left = make_batch(2, 3, 1)
+        right = make_batch(1, 2, 2)
+        right_samples_ptr = right.level_ptr("samples").clone()
+
+        left.append(right)
+
+        assert left.level_keys["samples"] == set()
+        assert left.level_ptr("samples").tolist() == [0, 3, 5]
+        assert left.level_ptr("atom_sample").tolist() == [0, 6, 8]
+        assert left.get_data(1).pair_values.shape == (1, 2, 1)
+        assert right.level_ptr("samples").tolist() == right_samples_ptr.tolist()
+
+    @pytest.mark.parametrize(
+        "other_parents,other_counts",
+        [
+            (("right", "left"), {"left": 3, "right": 2, "other": 4}),
+            (("left", "other"), {"left": 2, "right": 4, "other": 3}),
+        ],
+        ids=["reversed-parents", "different-parents"],
+    )
+    def test_append_rejects_same_product_name_with_different_parents(
+        self, other_parents, other_counts
+    ):
+        def make_schema(parents: tuple[str, str]) -> LevelSchema:
+            schema = LevelSchema()
+            for name in ("left", "right", "other"):
+                schema.add_level(name, segmented=True)
+            schema.add_product_level("pairs", left=parents[0], right=parents[1])
+            for field, level in (
+                ("left_values", "left"),
+                ("right_values", "right"),
+                ("other_values", "other"),
+                ("pair_values", "pairs"),
+            ):
+                schema.set(field, level)
+            return schema
+
+        def make_batch(schema: LevelSchema, counts: dict[str, int]) -> Batch:
+            data = _minimal_atomic_data(2)
+            data.left_values = torch.zeros(counts["left"], 1)
+            data.right_values = torch.zeros(counts["right"], 1)
+            data.other_values = torch.zeros(counts["other"], 1)
+            data.pair_values = torch.zeros(2, 3, 1)
+            return Batch.from_data_list([data], attr_map=schema)
+
+        receiver = make_batch(
+            make_schema(("left", "right")), {"left": 2, "right": 3, "other": 4}
+        )
+        other = make_batch(make_schema(other_parents), other_counts)
+        receiver_before = receiver.pair_values.clone()
+        other_before = other.pair_values.clone()
+        receiver_ptr_before = receiver.level_ptr("pairs").clone()
+
+        with pytest.raises(ValueError, match="definitions"):
+            receiver.append(other)
+
+        torch.testing.assert_close(receiver.pair_values, receiver_before)
+        torch.testing.assert_close(other.pair_values, other_before)
+        assert receiver.level_ptr("pairs").tolist() == receiver_ptr_before.tolist()
+
+    def test_append_rejects_incompatible_custom_fields_before_mutation(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_features", "samples")
+        first = _minimal_atomic_data(2)
+        first.sample_features = torch.zeros(2, 1)
+        second = _minimal_atomic_data(2)
+        second.sample_features = torch.zeros(3, 1)
+        left = Batch.from_data_list([first], attr_map=schema)
+
+        other_schema = schema.clone()
+        other_schema.set("other_features", "samples")
+        second.other_features = torch.zeros(3, 1)
+        right = Batch.from_data_list([second], attr_map=other_schema)
+        left_before = left.sample_features.clone()
+        right_before = right.other_features.clone()
+
+        with pytest.raises(ValueError, match="field sets"):
+            left.append(right)
+        assert left.num_graphs == 1
+        torch.testing.assert_close(left.sample_features, left_before)
+        torch.testing.assert_close(right.other_features, right_before)
+
+    def test_append_rejects_custom_trailing_shape_before_mutation(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_features", "samples")
+        left_data = _minimal_atomic_data(2)
+        left_data.sample_features = torch.zeros(2, 1)
+        right_data = _minimal_atomic_data(3)
+        right_data.sample_features = torch.zeros(3, 2)
+        left = Batch.from_data_list([left_data], attr_map=schema)
+        right = Batch.from_data_list([right_data], attr_map=schema)
+        left_before = left.sample_features.clone()
+        right_before = right.sample_features.clone()
+
+        with pytest.raises(ValueError, match="trailing shapes"):
+            left.append(right)
+        torch.testing.assert_close(left.sample_features, left_before)
+        torch.testing.assert_close(right.sample_features, right_before)
+
+    def test_append_accepts_equivalent_custom_dtype_aliases(self):
+        left_schema = _custom_uniform_schema()
+        left_schema.set("metadata_values", "metadata", dtype="float")
+        right_schema = _custom_uniform_schema()
+        right_schema.set("metadata_values", "metadata", dtype="float32")
+
+        left_data = _minimal_atomic_data(2)
+        left_data.metadata_values = torch.tensor([[1.0]], dtype=torch.float32)
+        right_data = _minimal_atomic_data(2)
+        right_data.metadata_values = torch.tensor([[2.0]], dtype=torch.float32)
+        left = Batch.from_data_list([left_data], attr_map=left_schema)
+        right = Batch.from_data_list([right_data], attr_map=right_schema)
+
+        left.append(right)
+
+        assert left.num_graphs == 2
+        assert left.metadata_values[:, 0].tolist() == [1.0, 2.0]
 
     def test_append_preserves_other_edge_index(self):
         """append() must not mutate the other batch's neighbor_list."""
@@ -555,8 +2497,215 @@ class TestBatchMutation:
 
 
 # -----------------------------------------------------------------------------
+# Level lifecycle: drop_level / pop_level / set_level
+# -----------------------------------------------------------------------------
+class TestBatchLevelLifecycle:
+    """Tests for drop_level, pop_level, and set_level."""
+
+    def test_drop_level_removes_an_empty_edges_group(self) -> None:
+        """An edges group left with no fields can be dropped outright."""
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2, 2), _minimal_atomic_data(3, 1)]
+        )
+        del batch["neighbor_list"]
+        assert batch.level_keys["edges"] == set()
+
+        batch.drop_level("edges")
+
+        assert "edges" not in batch._storage.groups
+        assert batch.num_edges == 0
+        assert batch.level_ptr("edges").tolist() == [0, 0, 0]
+
+    def test_pop_and_set_level_round_trips_a_group_and_its_keys(self) -> None:
+        """A popped edges group carries its fields out and back unchanged."""
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2, 2), _minimal_atomic_data(3, 1)]
+        )
+        neighbor_list = batch["neighbor_list"]
+
+        popped = batch.pop_level("edges")
+
+        assert isinstance(popped, SegmentedLevelStorage)
+        assert "neighbor_list" not in batch
+        assert batch.num_edges == 0
+
+        batch.set_level("edges", popped)
+
+        assert batch["neighbor_list"] is neighbor_list
+        assert batch.num_edges == 3
+        assert batch.num_edges_list == [2, 1]
+        assert batch.level_keys["edges"] == {"neighbor_list"}
+        assert batch.to_data_list()[1].num_edges == 1
+
+    def test_set_level_restores_schema_level_order(self) -> None:
+        """A re-attached level returns to its schema position, not the end."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(2, 2) for _ in range(2)]
+        )
+
+        batch.set_level("edges", batch.pop_level("edges"))
+
+        assert list(batch._storage.groups) == ["atoms", "edges", "system"]
+        assert batch._storage.attr_map.group("neighbor_list") == "edges"
+
+    def test_pop_level_returns_none_for_an_unmaterialized_level(self) -> None:
+        """A registered level with no storage pops as None and drops as a no-op."""
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+
+        assert batch.pop_level("edges") is None
+        batch.drop_level("edges")
+
+    def test_pop_level_round_trips_a_custom_level(self) -> None:
+        """A custom segmented level keeps its payload across pop and set."""
+        batch = _custom_boundary_batch(3, 1.0, payload_value=2.0)
+        values = batch["sample_values"]
+
+        popped = batch.pop_level("samples")
+        assert "sample_values" not in batch
+
+        batch.set_level("samples", popped)
+
+        assert torch.equal(batch["sample_values"], values)
+        assert batch.level_ptr("samples").tolist() == [0, 3]
+
+    @pytest.mark.parametrize("level", ["atoms", "system"])
+    def test_pop_level_rejects_count_bearing_builtin_levels(self, level: str) -> None:
+        """The atoms and system levels carry the batch's counts and cannot leave."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(2, 2) for _ in range(2)]
+        )
+
+        with pytest.raises(ValueError, match="cannot be detached"):
+            batch.pop_level(level)
+        with pytest.raises(ValueError, match="cannot be detached"):
+            batch.drop_level(level)
+
+    def test_pop_level_unregistered_name_raises(self) -> None:
+        """An unregistered level name is a KeyError listing the known levels."""
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(3)])
+
+        with pytest.raises(KeyError, match="is not registered"):
+            batch.pop_level("nonexistent")
+
+    def test_set_level_unregistered_name_raises(self) -> None:
+        """Attaching storage under an unregistered level name is a KeyError."""
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2, 2), _minimal_atomic_data(3, 1)]
+        )
+        popped = batch.pop_level("edges")
+
+        with pytest.raises(KeyError, match="is not registered"):
+            batch.set_level("nonexistent", popped)
+
+    def test_set_level_wrong_storage_class_raises(self) -> None:
+        """A segmented level rejects uniform storage."""
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2, 2), _minimal_atomic_data(3, 1)]
+        )
+        batch.pop_level("edges")
+        uniform = UniformLevelStorage(
+            data={"edge_total": torch.zeros(2, 1)}, device="cpu", validate=False
+        )
+
+        with pytest.raises(TypeError, match="needs a SegmentedLevelStorage"):
+            batch.set_level("edges", uniform)
+
+    def test_set_level_graph_count_mismatch_raises(self) -> None:
+        """Storage spanning a different number of graphs is rejected."""
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2, 2), _minimal_atomic_data(3, 1)]
+        )
+        other = Batch.from_data_list([_minimal_atomic_data(2, 2)])
+        popped = other.pop_level("edges")
+
+        with pytest.raises(ValueError, match="spans 1 graphs, expected 2"):
+            batch.set_level("edges", popped)
+
+    def test_set_level_field_owned_by_another_level_raises(self) -> None:
+        """A field another level already holds cannot be attached."""
+        batch = Batch.from_data_list(
+            [_minimal_atomic_data(2, 2), _minimal_atomic_data(3, 1)]
+        )
+        batch.pop_level("edges")
+        clashing = SegmentedLevelStorage(
+            data={"positions": torch.zeros(3, 3)},
+            segment_lengths=[2, 1],
+            device="cpu",
+            validate=False,
+        )
+
+        with pytest.raises(ValueError, match="already belongs to level 'atoms'"):
+            batch.set_level("edges", clashing)
+
+
+# -----------------------------------------------------------------------------
 # Round-trip: added keys appear correctly in to_data_list()
 # -----------------------------------------------------------------------------
+class TestHessianBatchLifecycle:
+    """Test public lifecycle operations for dense Hessian result batches."""
+
+    def test_clone_is_independent_and_preserves_schema(self, hessian_batch_factory):
+        batch = hessian_batch_factory(2, 3)
+        clone = batch.clone()
+        clone.hessian[0, 0, 0] = -1.0
+
+        assert (
+            batch.get_level_schema().level_names == clone.get_level_schema().level_names
+        )
+        _assert_hessian_batch(clone, (2, 3))
+        assert batch.hessian[0, 0, 0].item() != -1.0
+        torch.testing.assert_close(clone.get_data(1).hessian, batch.get_data(1).hessian)
+
+    def test_device_move_uses_public_data_fixture(self, device, hessian_batch_factory):
+        batch = hessian_batch_factory(2, 3).to(device)
+
+        _assert_hessian_batch(batch, (2, 3))
+        assert batch.hessian.device.type == torch.device(device).type
+        assert batch.get_data(0).hessian.device.type == torch.device(device).type
+        torch.testing.assert_close(
+            batch.hessian.cpu(), hessian_batch_factory(2, 3).hessian
+        )
+
+    def test_reordered_and_repeated_select_preserves_blocks(
+        self, hessian_batch_factory
+    ):
+        batch = hessian_batch_factory(2, 3, 1)
+        selected = batch.index_select([2, 0, 2])
+
+        _assert_hessian_batch(selected, (1, 2, 1))
+        for result_index, source_index in enumerate((2, 0, 2)):
+            torch.testing.assert_close(
+                selected.get_data(result_index).hessian,
+                batch.get_data(source_index).hessian,
+            )
+
+    def test_get_data_to_data_list_and_rebatch_preserve_exact_values(
+        self, hessian_batch_factory
+    ):
+        batch = hessian_batch_factory(2, 3)
+        data_list = batch.to_data_list()
+        rebuilt = Batch.from_data_list(data_list, attr_map=batch.get_level_schema())
+
+        _assert_hessian_batch(rebuilt, (2, 3))
+        for index in range(batch.num_graphs):
+            torch.testing.assert_close(
+                batch.get_data(index).hessian, data_list[index].hessian
+            )
+        torch.testing.assert_close(rebuilt.hessian, batch.hessian)
+
+    def test_append_compatible_hessian_batches(self, hessian_batch_factory):
+        left = hessian_batch_factory(2, 1)
+        right = hessian_batch_factory(3, 2, offset=5000.0)
+        expected = [data.hessian for data in left.to_data_list() + right.to_data_list()]
+
+        left.append(right)
+
+        assert left.num_graphs == 4
+        _assert_hessian_batch(left, (2, 1, 3, 2))
+        for index, value in enumerate(expected):
+            torch.testing.assert_close(left.get_data(index).hessian, value)
+
+
 class TestBatchRoundTripAddedKeys:
     """Test that keys added to a Batch (e.g. by MD code) are correctly stored in
     AtomicData when converting back via to_data_list() / get_data().
@@ -727,6 +2876,27 @@ class TestBatchDeviceAndCopy:
         assert c.num_graphs == batch.num_graphs
         assert c["positions"] is not batch["positions"]
 
+    def test_clone_drop_leaves_the_named_keys_out(self):
+        """A drop keeps the named keys out of the copy and out of the tracked sets."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_system(2), _atomic_data_with_system(3)]
+        )
+        batch.forces = torch.randn(batch.num_nodes, 3)
+        c = batch.clone(drop=("forces", "energy", "not_there"))
+        assert "forces" not in c and "energy" not in c
+        assert "forces" in batch and "energy" in batch
+        assert torch.equal(c.positions, batch.positions)
+        assert c.positions is not batch.positions
+        assert c.num_nodes_list == batch.num_nodes_list
+        if c.keys is not None:
+            assert all("forces" not in names for names in c.keys.values())
+
+    def test_clone_default_drop_is_a_full_copy(self):
+        """Without a drop the clone carries exactly the keys the batch does."""
+        batch = Batch.from_data_list([_atomic_data_with_system(2)])
+        batch.forces = torch.randn(batch.num_nodes, 3)
+        assert set(batch.clone()._storage.keys()) == set(batch._storage.keys())
+
     def test_cpu_cuda(self):
         batch = Batch.from_data_list([_minimal_atomic_data(2)])
         batch_cpu = batch.cpu()
@@ -736,6 +2906,88 @@ class TestBatchDeviceAndCopy:
         batch = Batch.from_data_list([_minimal_atomic_data(2)])
         batch = batch.contiguous()
         assert batch["positions"].is_contiguous()
+
+
+class TestBatchWithoutKeys:
+    """Tests for Batch.without_keys."""
+
+    def _make_batch(self) -> Batch:
+        """Return a two-graph batch with a system-level energy and a custom node key."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_system(2), _atomic_data_with_system(3)]
+        )
+        batch.add_key("score", [torch.ones(2), torch.ones(3)], level="node")
+        return batch
+
+    def test_the_hidden_keys_are_absent_inside_the_block(self) -> None:
+        """The batch carries none of the named keys while the block runs."""
+        batch = self._make_batch()
+        with batch.without_keys("energy", "score"):
+            assert "energy" not in batch and "score" not in batch
+            assert "positions" in batch
+
+    def test_a_pre_existing_key_is_restored_at_its_level_as_the_same_tensor(
+        self,
+    ) -> None:
+        """A hidden key comes back where it was stored, as the object that was there."""
+        batch = self._make_batch()
+        energy, score = batch.energy, batch.score
+        with batch.without_keys("energy", "score"):
+            pass
+        assert batch.energy is energy and batch.score is score
+        assert "energy" in batch.level_keys["system"]
+        assert "score" in batch.level_keys["atoms"]
+
+    def test_a_key_written_inside_the_block_is_gone_afterwards(self) -> None:
+        """A field a model writes while the key is hidden leaves no trace."""
+        batch = self._make_batch()
+        with batch.without_keys("forces"):
+            batch.forces = torch.randn(batch.num_nodes, 3)
+            assert "forces" in batch
+        assert "forces" not in batch
+
+    def test_a_tensor_read_inside_the_block_outlives_it_with_its_graph(self) -> None:
+        """A value read inside stays usable, autograd graph included."""
+        batch = self._make_batch()
+        weight = torch.ones((), requires_grad=True)
+        with batch.without_keys("forces"):
+            batch.forces = weight * torch.randn(batch.num_nodes, 3)
+            forces = batch["forces"]
+        forces.sum().backward()
+        assert forces.shape == (batch.num_nodes, 3)
+        assert weight.grad is not None
+
+    def test_a_key_written_over_a_hidden_one_yields_to_the_original(self) -> None:
+        """A write over a hidden key inside the block is dropped when it ends."""
+        batch = self._make_batch()
+        energy = batch.energy
+        with batch.without_keys("energy"):
+            batch.energy = torch.full_like(energy, 7.0)
+        assert batch.energy is energy
+
+    def test_a_key_the_batch_lacks_is_ignored(self) -> None:
+        """Hiding an absent key neither raises nor creates it."""
+        batch = self._make_batch()
+        with batch.without_keys("not_there"):
+            assert "not_there" not in batch
+        assert "not_there" not in batch
+
+    def test_the_tracked_key_sets_are_hidden_and_restored(self) -> None:
+        """The level categorisation in ``keys`` follows the field in and out."""
+        batch = self._make_batch()
+        assert "energy" in batch.keys["system"]
+        with batch.without_keys("energy"):
+            assert "energy" not in batch.keys["system"]
+        assert "energy" in batch.keys["system"]
+
+    def test_the_keys_are_restored_when_the_block_raises(self) -> None:
+        """A block that raises still puts every hidden key back."""
+        batch = self._make_batch()
+        energy = batch.energy
+        with pytest.raises(RuntimeError, match="boom"):
+            with batch.without_keys("energy"):
+                raise RuntimeError("boom")
+        assert batch.energy is energy
 
 
 class TestBatchSerialization:
@@ -823,6 +3075,17 @@ class TestBatchPutDefrag:
         assert src_batch._copied_mask.shape == (2,)
         assert src_batch._copied_mask.sum().item() == 0
 
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_put_rejects_a_source_on_another_device(self) -> None:
+        """A source on another device is refused instead of launching a kernel on it."""
+        buffer = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(2)]
+        ).to("cuda:0")
+        src_batch = Batch.from_data_list([_minimal_atomic_data(2)])
+
+        with pytest.raises(ValueError, match="put requires src_batch on"):
+            buffer.put(src_batch, torch.tensor([True]))
+
     def test_put_with_copied_mask_in_place(self):
         """put with copied_mask provided sets it to the combined fit mask (in place)."""
         buffer = Batch.from_data_list(
@@ -875,6 +3138,39 @@ class TestBatchPutDefrag:
         # No room in buffer; combined fit mask is all False
         assert copied_mask.sum().item() == 0
         assert buffer.num_graphs == 2
+
+    def test_put_repeatedly_into_empty_buffer(self):
+        """A Batch.empty buffer with remaining capacity accepts repeated puts."""
+        template = _minimal_atomic_data(1)
+        buffer = Batch.empty(
+            num_systems=4, num_nodes=50, num_edges=0, template=template
+        )
+        for expected in range(1, 4):
+            src = Batch.from_data_list([_minimal_atomic_data(2)])
+            mask = torch.ones(1, dtype=torch.bool)
+            copied_mask = torch.zeros(1, dtype=torch.bool)
+            buffer.put(src, mask, copied_mask=copied_mask)
+            assert copied_mask.all()
+            assert buffer.num_graphs == expected
+
+    def test_put_zero_put_reuses_buffer(self):
+        """zero() restores a put-filled buffer to its freshly-allocated state."""
+        template = _minimal_atomic_data(1)
+        buffer = Batch.empty(
+            num_systems=4, num_nodes=50, num_edges=0, template=template
+        )
+        src = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(3)],
+        )
+        mask = torch.ones(2, dtype=torch.bool)
+        buffer.put(src, mask)
+        assert buffer.num_graphs == 2
+        buffer.zero()
+        assert buffer.num_graphs == 0
+        buffer.put(src, mask)
+        assert buffer.num_graphs == 2
+        assert buffer.num_nodes_list == [2, 3]
+        torch.testing.assert_close(buffer.positions[:5], src.positions[:5])
 
     def test_defrag_with_copied_mask(self):
         """defrag(copied_mask) compacts batch by removing graphs where copied_mask is True."""
@@ -1031,6 +3327,540 @@ class TestBatchPutDefrag:
         # Tensors are tight
         assert trimmed.positions.shape[0] == 7
 
+    def test_empty_allocates_custom_segmented_and_product_capacities(self):
+        schema = _custom_buffer_schema()
+        template = _custom_buffer_data(2, 3)
+        source = Batch.from_data_list([template], attr_map=schema)
+
+        buffer = Batch.empty(
+            num_systems=4,
+            num_nodes=20,
+            num_edges=0,
+            template=source,
+            level_capacities={"molecules": 10, "pairs": 20},
+        )
+
+        assert buffer._storage.attr_map is not source._storage.attr_map
+        assert buffer._storage.groups["molecules"]._data.shape[0] == 10
+        assert buffer._storage.groups["pairs"]._data.shape[0] == 20
+        assert buffer._storage.groups["molecules"].batch_ptr.shape[0] == 6
+
+    def test_empty_allocates_custom_uniform_from_num_systems(self):
+        schema = _custom_uniform_schema()
+        template = _minimal_atomic_data(2)
+        template.metadata_values = torch.tensor([[3.0]])
+        source = Batch.from_data_list([template], attr_map=schema)
+
+        buffer = Batch.empty(
+            num_systems=5,
+            num_nodes=10,
+            num_edges=0,
+            template=source,
+        )
+
+        group = buffer._storage.groups["metadata"]
+        assert isinstance(group, UniformLevelStorage)
+        assert group._data["metadata_values"].shape == (5, 1)
+        assert len(group) == 0
+
+    def test_empty_atomic_data_template_preserves_custom_float64_uniform_payload(self):
+        schema = _custom_uniform_schema()
+        schema.set("metadata_values", "metadata", dtype=torch.float64)
+        template = AtomicData(
+            positions=torch.zeros(2, 3, dtype=torch.float64),
+            atomic_numbers=torch.tensor([1, 8], dtype=torch.int64),
+        )
+        template.metadata_values = torch.tensor([[3.5]], dtype=torch.float64)
+        source = Batch.from_data_list([template], attr_map=schema)
+        carried_template = source.get_data(0)
+        buffer = Batch.empty(
+            num_systems=1,
+            num_nodes=2,
+            num_edges=0,
+            template=carried_template,
+        )
+
+        buffer.put(source, torch.ones(1, dtype=torch.bool))
+
+        assert buffer.metadata_values.dtype == torch.float64
+        torch.testing.assert_close(
+            buffer.get_data(0).metadata_values, carried_template.metadata_values
+        )
+
+    @pytest.mark.parametrize(
+        "capacities, error",
+        [
+            ({}, "Missing capacity"),
+            ({"unknown": 1}, "Unknown level"),
+            ({"atoms": 1}, "built-in"),
+            ({"molecules": 1.5}, "integer"),
+            ({"molecules": True}, "integer"),
+            ({"molecules": -1}, "non-negative"),
+        ],
+    )
+    def test_empty_rejects_invalid_custom_capacities(self, capacities, error):
+        schema = _custom_buffer_schema()
+        source = Batch.from_data_list([_custom_buffer_data(2, 3)], attr_map=schema)
+        with pytest.raises((ValueError, TypeError), match=error):
+            Batch.empty(
+                num_systems=2,
+                num_nodes=10,
+                num_edges=0,
+                template=source,
+                level_capacities=capacities,
+            )
+
+    def test_empty_like_preserves_custom_layout_and_no_system_graph_capacity(self):
+        schema = _custom_buffer_schema()
+        source = Batch.from_data_list(
+            [
+                _custom_buffer_data(2, 3),
+                _custom_buffer_data(3, 1),
+            ],
+            attr_map=schema,
+        )
+        buffer = Batch.empty(
+            num_systems=4,
+            num_nodes=20,
+            num_edges=0,
+            template=source,
+            level_capacities={"molecules": 10, "pairs": 20},
+        )
+
+        clone = Batch.empty_like(buffer)
+
+        assert clone._storage.attr_map is not buffer._storage.attr_map
+        assert tuple(clone._storage.groups) == tuple(buffer._storage.groups)
+        assert clone._storage.groups["molecules"]._data.shape[0] == 10
+        assert clone._storage.groups["pairs"]._data.shape[0] == 20
+        assert clone._storage.groups["atoms"]._data.shape[0] == 20
+        assert clone._storage.groups["atoms"]._batch_ptr.shape[0] == 6
+
+    def test_empty_keeps_product_capacity_independent_of_parent_capacity(self):
+        schema = _custom_buffer_schema()
+        source = Batch.from_data_list(
+            [_custom_buffer_data(2, 3)],
+            attr_map=schema,
+        )
+
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=100,
+            num_edges=0,
+            template=source,
+            level_capacities={"molecules": 3, "pairs": 7},
+        )
+
+        assert buffer._storage.groups["molecules"]._data.shape[0] == 3
+        assert buffer._storage.groups["pairs"]._data.shape[0] == 7
+        with pytest.raises(ValueError, match="pairs"):
+            Batch.empty(
+                num_systems=2,
+                num_nodes=100,
+                num_edges=0,
+                template=source,
+                level_capacities={"molecules": 3},
+            )
+
+    def test_trim_preserves_custom_uniform_segmented_product_and_fieldless_parent(
+        self,
+    ):
+        schema = LevelSchema()
+        schema.add_level("metadata", segmented=False)
+        schema.add_level("molecules", segmented=True)
+        schema.add_level("fieldless", segmented=True)
+        schema.add_product_level("pairs", left="atoms", right="fieldless")
+        schema.set("metadata_values", "metadata")
+        schema.set("molecule_values", "molecules")
+        schema.set("pair_values", "pairs")
+
+        data_list = []
+        for num_nodes, num_molecules, num_fieldless in (
+            (2, 3, 2),
+            (4, 1, 3),
+            (1, 2, 0),
+        ):
+            data = _minimal_atomic_data(num_nodes)
+            data.metadata_values = torch.tensor([[float(num_nodes)]])
+            data.molecule_values = torch.arange(
+                num_molecules, dtype=torch.float32
+            ).reshape(-1, 1)
+            data.pair_values = torch.arange(
+                num_nodes * num_fieldless, dtype=torch.float32
+            ).reshape(num_nodes, num_fieldless, 1)
+            data_list.append(data)
+
+        batch = Batch.from_data_list(data_list, attr_map=schema)
+        trimmed = batch.trim(torch.tensor([True, False, True]))
+
+        assert trimmed is not None
+        assert trimmed.num_graphs == 1
+        assert isinstance(trimmed._storage.groups["metadata"], UniformLevelStorage)
+        assert isinstance(trimmed._storage.groups["molecules"], SegmentedLevelStorage)
+        assert isinstance(trimmed._storage.groups["fieldless"], SegmentedLevelStorage)
+        assert isinstance(trimmed._storage.groups["pairs"], SegmentedLevelStorage)
+        assert trimmed.metadata_values.shape == (1, 1)
+        assert trimmed.molecule_values.shape == (1, 1)
+        assert trimmed.level_ptr("fieldless").tolist() == [0, 3]
+        assert trimmed.level_ptr("pairs").tolist() == [0, 12]
+        assert trimmed.get_data(0).pair_values.shape == (4, 3, 1)
+
+    def test_put_combines_custom_rejection_before_legacy_copy(self):
+        schema = _custom_buffer_schema(fieldless_parent=True)
+        source = Batch.from_data_list(
+            [
+                _custom_buffer_data(2, 3, fieldless_parent=True),
+                _custom_buffer_data(2, 3, fieldless_parent=True),
+            ],
+            attr_map=schema,
+        )
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=4,
+            num_edges=0,
+            template=source,
+            level_capacities={"pairs": 3},
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+
+        buffer.put(source, torch.ones(2, dtype=torch.bool), copied_mask=copied)
+
+        assert copied.tolist() == [False, False]
+        assert buffer.num_graphs == 0
+        assert buffer.positions.eq(0).all()
+
+    def test_put_fieldless_overflow_is_rejected_before_uniform_copy(self):
+        maximum = torch.iinfo(torch.int32).max
+        first = _custom_boundary_batch(maximum, 11.0)
+        second = _custom_boundary_batch(1, 22.0)
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=0,
+            num_edges=0,
+            template=first,
+        )
+        occupancy = torch.zeros(2, dtype=torch.bool)
+        copied = torch.zeros(1, dtype=torch.bool)
+
+        buffer.put(
+            first,
+            torch.tensor([True]),
+            copied_mask=copied,
+            dest_mask=occupancy,
+        )
+        assert copied.tolist() == [True]
+        assert occupancy.tolist() == [True, False]
+
+        copied.zero_()
+        buffer.put(
+            second,
+            torch.tensor([True]),
+            copied_mask=copied,
+            dest_mask=occupancy,
+        )
+
+        assert copied.tolist() == [False]
+        assert occupancy.tolist() == [True, False]
+        assert buffer.num_graphs == 1
+        assert buffer.energy.tolist() == [[11.0], [0.0]]
+        assert buffer.level_ptr("samples").tolist() == [0, maximum]
+
+    def test_put_uniform_groups_share_occupancy_snapshot(self):
+        schema = _custom_uniform_schema()
+        data_list = []
+        for energy, metadata in ((10.0, 20.0), (30.0, 40.0)):
+            data = _atomic_data_with_system(2)
+            data.energy = torch.tensor([[energy]])
+            data.metadata_values = torch.tensor([[metadata]])
+            data_list.append(data)
+        source = Batch.from_data_list(data_list, attr_map=schema)
+        buffer = Batch.empty(
+            num_systems=3,
+            num_nodes=10,
+            num_edges=0,
+            template=source,
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+        dest_mask = torch.tensor([True, False, True])
+
+        buffer.put(
+            source,
+            torch.ones(2, dtype=torch.bool),
+            copied_mask=copied,
+            dest_mask=dest_mask,
+        )
+
+        assert copied.tolist() == [True, False]
+        assert dest_mask.tolist() == [True, True, True]
+        assert buffer.energy[1].item() == 10.0
+        assert buffer.metadata_values[1].item() == 20.0
+        assert buffer.energy[0].item() == 0.0
+        assert buffer.energy[2].item() == 0.0
+
+    def test_put_and_defrag_preserve_mixed_builtin_buffer_dtypes(self):
+        first = _minimal_atomic_data(2)
+        second = _minimal_atomic_data(3)
+        first.atomic_numbers = torch.tensor([1, 6], dtype=torch.int64)
+        second.atomic_numbers = torch.tensor([8, 1, 1], dtype=torch.int64)
+        source = Batch.from_data_list([first, second])
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=5,
+            num_edges=0,
+            template=source,
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+
+        buffer.put(source, torch.tensor([True, False]), copied_mask=copied)
+
+        assert copied.tolist() == [True, False]
+        torch.testing.assert_close(buffer.atomic_numbers[:2], first.atomic_numbers)
+        torch.testing.assert_close(buffer.positions[:2], first.positions)
+        source.defrag(copied)
+        torch.testing.assert_close(source.atomic_numbers[:3], second.atomic_numbers)
+        torch.testing.assert_close(source.positions[:3], second.positions)
+
+    def test_put_omits_paired_fieldless_uniform_schema_group(self):
+        schema = LevelSchema()
+        schema.add_level("metadata", segmented=False)
+        source = Batch.from_data_list(
+            [_minimal_atomic_data(2), _minimal_atomic_data(2)], attr_map=schema
+        )
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=4,
+            num_edges=0,
+            template=source,
+        )
+        source_metadata = UniformLevelStorage(
+            data=None, device="cpu", attr_map=schema, validate=False
+        )
+        source_metadata._data = TensorDict({}, batch_size=[2], device="cpu")
+        buffer_metadata = UniformLevelStorage(
+            data=None, device="cpu", attr_map=schema, validate=False
+        )
+        buffer_metadata._data = TensorDict({}, batch_size=[2], device="cpu")
+        source._storage.groups["metadata"] = source_metadata
+        buffer._storage.groups["metadata"] = buffer_metadata
+        copied = torch.zeros(2, dtype=torch.bool)
+
+        buffer.put(source, torch.ones(2, dtype=torch.bool), copied_mask=copied)
+
+        assert copied.tolist() == [True, True]
+        assert buffer.num_graphs == 2
+        assert buffer._storage.groups["metadata"]._data.is_empty()
+
+    def test_put_rejects_builtin_dtype_mismatch_before_any_group_mutates(self):
+        source = Batch.from_data_list([_minimal_atomic_data(2)])
+        source._storage.groups["atoms"]._data["atomic_numbers"] = torch.ones(
+            2, dtype=torch.int32
+        )
+        buffer = Batch.empty(
+            num_systems=1,
+            num_nodes=2,
+            num_edges=0,
+            template=source,
+        )
+        buffer._storage.groups["atoms"]._data["atomic_numbers"] = torch.zeros(
+            2, dtype=torch.int64
+        )
+        copied = torch.zeros(1, dtype=torch.bool)
+        before_positions = buffer.positions.clone()
+        before_ptr = buffer.batch_ptr.clone()
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                "Level 'atoms' field 'atomic_numbers' has incompatible buffer dtypes: "
+                "torch.int64 vs torch.int32"
+            ),
+        ):
+            buffer.put(source, torch.ones(1, dtype=torch.bool), copied_mask=copied)
+
+        assert copied.tolist() == [False]
+        torch.testing.assert_close(buffer.positions, before_positions)
+        torch.testing.assert_close(buffer.batch_ptr, before_ptr)
+
+    def test_defrag_prevalidates_all_groups_before_compacting_any_payload(self):
+        batch = Batch.from_data_list([_minimal_atomic_data(2), _minimal_atomic_data(2)])
+        batch._storage.groups["atoms"]._data["atomic_numbers"] = torch.ones(
+            4, dtype=torch.float16
+        )
+        before_positions = batch.positions.clone()
+        before_ptr = batch.batch_ptr.clone()
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                "Level 'atoms' field 'atomic_numbers' dtype torch.float16 is not "
+                "supported by buffer kernels"
+            ),
+        ):
+            batch.defrag(torch.tensor([True, False]))
+
+        torch.testing.assert_close(batch.positions, before_positions)
+        torch.testing.assert_close(batch.batch_ptr, before_ptr)
+
+    def test_put_and_defrag_support_product_and_fieldless_parent(self):
+        schema = _custom_buffer_schema(fieldless_parent=True)
+        source = Batch.from_data_list(
+            [
+                _custom_buffer_data(2, 3, fieldless_parent=True),
+                _custom_buffer_data(3, 1, fieldless_parent=True),
+            ],
+            attr_map=schema,
+        )
+        buffer = Batch.empty(
+            num_systems=3,
+            num_nodes=20,
+            num_edges=0,
+            template=source,
+            level_capacities={"pairs": 20},
+        )
+        copied = torch.zeros(2, dtype=torch.bool)
+        expected_first = source.get_data(0).pair_values.clone()
+        expected_second = source.get_data(1).pair_values.clone()
+
+        buffer.put(source, torch.tensor([True, False]), copied_mask=copied)
+
+        assert copied.tolist() == [True, False]
+        assert buffer.num_graphs == 1
+        assert buffer._storage.groups["molecules"].batch_ptr[:2].tolist() == [0, 3]
+        assert buffer.pair_values.shape == (20, 1)
+        assert buffer.level_ptr("pairs").tolist() == [0, 6]
+        assert buffer.level_ptr("pairs").numel() == buffer.num_graphs + 1
+        torch.testing.assert_close(buffer.get_data(0).pair_values, expected_first)
+        source.defrag(copied)
+        assert source.num_graphs == 1
+        assert source.level_ptr("pairs")[:2].tolist() == [0, 3]
+        torch.testing.assert_close(source.get_data(0).pair_values, expected_second)
+
+    def test_zero_clears_segment_caches_and_reuses_custom_buffer(self):
+        schema = _custom_buffer_schema(fieldless_parent=True)
+        source = Batch.from_data_list(
+            [_custom_buffer_data(2, 3, fieldless_parent=True)], attr_map=schema
+        )
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=10,
+            num_edges=0,
+            template=source,
+            level_capacities={"pairs": 10},
+        )
+        buffer.put(source, torch.ones(1, dtype=torch.bool))
+        source.defrag()
+        buffer.zero()
+
+        assert buffer.num_graphs == 0
+        assert buffer._storage.groups["pairs"].batch_ptr.shape[0] == 4
+        assert buffer.pair_values.eq(0).all()
+        assert not hasattr(buffer._storage.groups["pairs"], "_num_segments")
+        buffer.put(
+            Batch.from_data_list(
+                [_custom_buffer_data(2, 3, fieldless_parent=True)], attr_map=schema
+            ),
+            torch.ones(1, dtype=torch.bool),
+        )
+        assert buffer.num_graphs == 1
+
+    def test_put_mismatched_custom_layout_is_atomic(self):
+        target_schema = _custom_buffer_schema()
+        source_schema = _custom_buffer_schema()
+        source_schema.set("molecule_values", "molecules", dtype="float64")
+        target_source = Batch.from_data_list(
+            [_custom_buffer_data(2, 2)], attr_map=target_schema
+        )
+        source_data = _custom_buffer_data(2, 2)
+        source_data.molecule_values = source_data.molecule_values.to(torch.float64)
+        source = Batch.from_data_list([source_data], attr_map=source_schema)
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=10,
+            num_edges=0,
+            template=target_source,
+            level_capacities={"molecules": 5, "pairs": 5},
+        )
+        with pytest.raises(ValueError, match="Custom put"):
+            buffer.put(source, torch.ones(1, dtype=torch.bool))
+        assert buffer.num_graphs == 0
+        assert buffer.positions.eq(0).all()
+
+    def test_put_accepts_equivalent_custom_dtype_aliases(self):
+        target_schema = _custom_buffer_schema()
+        target_schema.set("molecule_values", "molecules", dtype="float32")
+        source_schema = _custom_buffer_schema()
+        source_schema.set("molecule_values", "molecules", dtype="float")
+        target = Batch.from_data_list(
+            [_custom_buffer_data(2, 2)], attr_map=target_schema
+        )
+        source = Batch.from_data_list(
+            [_custom_buffer_data(2, 2)], attr_map=source_schema
+        )
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=10,
+            num_edges=0,
+            template=target,
+            level_capacities={"molecules": 5, "pairs": 5},
+        )
+
+        buffer.put(source, torch.ones(1, dtype=torch.bool))
+
+        assert buffer.num_graphs == 1
+        assert buffer.molecule_values[:2, 0].tolist() == [0.0, 1.0]
+
+    @pytest.mark.parametrize("kind", ["uniform", "segmented", "product"])
+    def test_put_rejects_non_float32_custom_buffer_payload_before_mutation(self, kind):
+        schema = LevelSchema()
+        data = _minimal_atomic_data(2)
+        if kind == "uniform":
+            schema.add_level("observables", segmented=False)
+            schema.set("observable_values", "observables")
+            data.observable_values = torch.tensor([[1]], dtype=torch.float16)
+            level = "observables"
+            capacities = {}
+            error = "not supported by uniform buffer kernels"
+        elif kind == "segmented":
+            schema.add_level("samples", segmented=True)
+            schema.set("sample_values", "samples")
+            data.sample_values = torch.tensor([[1], [2]], dtype=torch.int64)
+            level = "samples"
+            capacities = {"samples": 4}
+            error = "must use float32"
+        else:
+            schema.add_level("samples", segmented=True)
+            schema.add_product_level("pairs", left="atoms", right="samples")
+            schema.set("pair_values", "pairs")
+            data.pair_values = torch.arange(6, dtype=torch.int64).reshape(2, 3, 1)
+            level = "pairs"
+            capacities = {"pairs": 8}
+            error = "must use float32"
+
+        source = Batch.from_data_list([data], attr_map=schema)
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=4,
+            num_edges=0,
+            template=source,
+            level_capacities=capacities,
+        )
+        before_positions = buffer.positions.clone()
+        before_payload = {
+            key: value.clone() for key, value in buffer._storage.groups[level].items()
+        }
+        before_ptr = buffer.level_ptr(level).clone()
+        copied = torch.zeros(1, dtype=torch.bool)
+
+        with pytest.raises(ValueError, match=error):
+            buffer.put(source, torch.ones(1, dtype=torch.bool), copied_mask=copied)
+
+        assert copied.tolist() == [False]
+        assert buffer.num_graphs == 0
+        torch.testing.assert_close(buffer.positions, before_positions)
+        for key, value in before_payload.items():
+            torch.testing.assert_close(buffer._storage.groups[level][key], value)
+        torch.testing.assert_close(buffer.level_ptr(level), before_ptr)
+
 
 class TestBatchRecvHandleWait:
     """Tests for _BatchRecvHandle.wait() non-blocking receive protocol."""
@@ -1058,8 +3888,10 @@ class TestBatchRecvHandleWait:
 
         irecv_handles = []
 
-        def make_irecv_handle(*args, **kwargs):
+        def make_irecv_handle(tensor, *args, **kwargs):
             h = MagicMock()
+            # Simulate irecv populating its destination when wait completes.
+            h.wait.side_effect = lambda: tensor.fill_(5)
             irecv_handles.append(h)
             return h
 
@@ -1081,6 +3913,104 @@ class TestBatchRecvHandleWait:
             assert h.wait.called, "irecv handle should have wait() called"
         for h in mock_td_handles:
             assert h.wait.called, "TensorDict handle should have wait() called"
+
+    def test_wait_constructs_fieldless_builtin_groups_after_length_receives(self):
+        from unittest.mock import MagicMock, patch
+
+        from nvalchemi.data.batch import _BatchRecvHandle
+
+        template = _fieldless_builtin_batch([1, 1], [1, 1])
+        pending_lengths = iter(([2, 3], [1, 0]))
+
+        class ReceiveWork:
+            def __init__(self, target, values):
+                self.target = target
+                self.values = values
+
+            def wait(self):
+                self.target.copy_(torch.tensor(self.values, dtype=torch.int32))
+
+        def receive(target, *args, **kwargs):
+            return ReceiveWork(target, next(pending_lengths))
+
+        handle = _BatchRecvHandle(
+            meta=torch.tensor([2, 5, 1], dtype=torch.int64),
+            meta_handle=MagicMock(),
+            src=0,
+            device=torch.device("cpu"),
+            template=template,
+            base_tag=100,
+            group=None,
+        )
+        with patch("torch.distributed.irecv", side_effect=receive):
+            received = handle.wait()
+
+        assert set(received._storage.groups) == {"atoms", "edges"}
+        assert received.level_ptr("atoms").tolist() == [0, 2, 5]
+        assert received.level_ptr("edges").tolist() == [0, 1, 1]
+        assert received.level_keys == {"atoms": set(), "edges": set(), "system": set()}
+
+    def test_wait_receives_public_fieldless_builtin_edge_product(self):
+        """Receive waits for built-in lengths before product reconstruction."""
+        from unittest.mock import MagicMock, patch
+
+        from nvalchemi.data.batch import _BatchRecvHandle
+
+        template = _builtin_edge_product_batch()
+        pending_lengths = iter(([2, 3, 1], [3, 0, 2], [6, 0, 2]))
+
+        class ReceiveWork:
+            def __init__(self, target, values):
+                self.target = target
+                self.values = values
+
+            def wait(self):
+                self.target.copy_(torch.tensor(self.values, dtype=torch.int32))
+
+        def receive(target, *args, **kwargs):
+            return ReceiveWork(target, next(pending_lengths))
+
+        payloads = iter(
+            [
+                template._storage.groups["atoms"]._data[: template.num_nodes],
+                template._storage.groups["atom_edges"]._data[
+                    : template._storage.groups["atom_edges"].num_elements()
+                ],
+            ]
+        )
+
+        def receive_tensordict(
+            destination, src=None, init_tag=None, group=None, return_premature=False
+        ):
+            source = next(payloads)
+            for key in destination.keys():
+                destination[key].copy_(source[key])
+            return [MagicMock()]
+
+        handle = _BatchRecvHandle(
+            meta=torch.tensor([3, 6, 5], dtype=torch.int64),
+            meta_handle=MagicMock(),
+            src=0,
+            device=torch.device("cpu"),
+            template=template,
+            base_tag=100,
+            group=None,
+        )
+        with (
+            patch("torch.distributed.irecv", side_effect=receive),
+            patch("tensordict.TensorDict.irecv", receive_tensordict),
+        ):
+            received = handle.wait()
+
+        assert "neighbor_list" not in received
+        assert received.level_ptr("edges").tolist() == [0, 3, 3, 5]
+        assert received.level_ptr("atom_edges").tolist() == [0, 6, 6, 8]
+        torch.testing.assert_close(received.atom_edge_values, template.atom_edge_values)
+        for graph_idx in range(received.num_graphs):
+            torch.testing.assert_close(
+                received.get_data(graph_idx).atom_edge_values,
+                template.get_data(graph_idx).atom_edge_values,
+            )
 
 
 class TestBatchRecvHandleEmpty:
@@ -1139,9 +4069,10 @@ class TestBatchIsendIrecvTagAlignment:
             mock_handle = MagicMock()
             return mock_handle
 
-        def capture_irecv_tag(*args, **kwargs):
+        def capture_irecv_tag(tensor, *args, **kwargs):
             if "tag" in kwargs:
                 recv_tags.append(kwargs["tag"])
+            tensor.zero_()
             mock_handle = MagicMock()
             return mock_handle
 
@@ -1189,6 +4120,188 @@ class TestBatchIsendIrecvTagAlignment:
         send_tags_after_meta = send_tags[1:]
         assert send_tags_after_meta == recv_tags, (
             f"Tag mismatch: send (after meta)={send_tags_after_meta}, recv={recv_tags}"
+        )
+
+
+class TestCustomBatchTransport:
+    def test_legacy_transport_tags_have_no_custom_extension(self):
+        from unittest.mock import MagicMock, patch
+
+        batch = Batch.from_data_list([_minimal_atomic_data(2)])
+        send_tags: list[int] = []
+        td_tags: list[int] = []
+
+        def capture_isend(*args, **kwargs):
+            send_tags.append(kwargs["tag"])
+            return MagicMock()
+
+        def capture_td_isend(
+            self, dst=None, init_tag=None, group=None, return_early=False
+        ):
+            td_tags.extend(init_tag + index for index, _ in enumerate(self.keys()))
+            return [MagicMock()]
+
+        with (
+            patch("torch.distributed.isend", side_effect=capture_isend),
+            patch("tensordict.TensorDict.isend", capture_td_isend),
+        ):
+            batch.isend(dst=1, tag=11)
+
+        assert send_tags == [11, 12]
+        assert td_tags == list(
+            range(14, 14 + len(list(batch._storage.groups["atoms"].keys())))
+        )
+
+    def test_custom_extension_starts_after_legacy_and_reserves_fieldless_slot(self):
+        from unittest.mock import MagicMock, patch
+
+        batch = _custom_transport_batch()
+        send_tags: list[int] = []
+        td_tags: list[int] = []
+
+        def capture_isend(*args, **kwargs):
+            send_tags.append(kwargs["tag"])
+            return MagicMock()
+
+        def capture_td_isend(
+            self, dst=None, init_tag=None, group=None, return_early=False
+        ):
+            td_tags.extend(init_tag + index for index, _ in enumerate(self.keys()))
+            return [MagicMock()]
+
+        with (
+            patch("torch.distributed.isend", side_effect=capture_isend),
+            patch("tensordict.TensorDict.isend", capture_td_isend),
+        ):
+            batch.isend(dst=1, tag=11)
+
+        legacy_end = 3
+        for name in ("atoms", "edges", "system"):
+            group = batch._storage.groups.get(name)
+            legacy_end += len(list(group.keys())) + 1 if group is not None else 1
+        custom_start = 11 + legacy_end
+
+        assert send_tags[:2] == [11, 12]
+        assert send_tags[2:] == [
+            custom_start,
+            custom_start + 1,
+            custom_start + 2,
+            custom_start + 3,
+        ]
+        assert custom_start + 8 not in td_tags
+        assert custom_start + 9 in td_tags
+        assert custom_start + 11 in td_tags
+
+    def test_custom_send_and_receive_tags_align_in_schema_order(self):
+        from unittest.mock import MagicMock, patch
+
+        from nvalchemi.data.batch import _BatchRecvHandle
+
+        batch = _custom_transport_batch()
+        send_tags: list[int] = []
+        recv_tags: list[int] = []
+
+        def capture_isend(*args, **kwargs):
+            send_tags.append(kwargs["tag"])
+            return MagicMock()
+
+        def capture_td_isend(
+            self, dst=None, init_tag=None, group=None, return_early=False
+        ):
+            send_tags.extend(init_tag + index for index, _ in enumerate(self.keys()))
+            return [MagicMock()]
+
+        with (
+            patch("torch.distributed.isend", side_effect=capture_isend),
+            patch("tensordict.TensorDict.isend", capture_td_isend),
+        ):
+            batch.isend(dst=1, tag=23)
+
+        def capture_irecv(tensor, *args, **kwargs):
+            recv_tags.append(kwargs["tag"])
+            if tensor.dtype == torch.int32:
+                tensor.zero_()
+            return MagicMock()
+
+        def capture_td_irecv(
+            self, src=None, init_tag=None, group=None, return_premature=False
+        ):
+            recv_tags.extend(init_tag + index for index, _ in enumerate(self.keys()))
+            return [MagicMock()]
+
+        handle = _BatchRecvHandle(
+            meta=torch.tensor(
+                [batch.num_graphs, batch.num_nodes, batch.num_edges], dtype=torch.int64
+            ),
+            meta_handle=MagicMock(),
+            src=0,
+            device=torch.device("cpu"),
+            template=batch,
+            base_tag=23,
+            group=None,
+        )
+        with (
+            patch("torch.distributed.irecv", side_effect=capture_irecv),
+            patch("tensordict.TensorDict.irecv", capture_td_irecv),
+        ):
+            handle.wait()
+
+        assert send_tags[1:] == recv_tags
+
+    def test_custom_sentinel_preserves_schema_without_receives(self):
+        from unittest.mock import MagicMock, patch
+
+        from nvalchemi.data.batch import _BatchRecvHandle
+
+        template = _custom_transport_batch()
+        handle = _BatchRecvHandle(
+            meta=torch.zeros(3, dtype=torch.int64),
+            meta_handle=MagicMock(),
+            src=0,
+            device=torch.device("cpu"),
+            template=template,
+            base_tag=0,
+            group=None,
+        )
+        with patch("torch.distributed.irecv") as mock_irecv:
+            received = handle.wait()
+
+        mock_irecv.assert_not_called()
+        assert received._storage.attr_map is not template._storage.attr_map
+        assert (
+            received._storage.attr_map.level_names
+            == template._storage.attr_map.level_names
+        )
+        assert list(received._storage.groups) == list(template._storage.groups)
+        assert received._storage.groups["fieldless"].segment_lengths.numel() == 0
+        assert received._storage.attr_map.product_parents["fieldless_pairs"] == (
+            "atoms",
+            "fieldless",
+        )
+
+    @pytest.mark.skipif(
+        not dist.is_available() or not dist.is_gloo_available(),
+        reason="gloo backend is required",
+    )
+    @pytest.mark.parametrize("sentinel", [False, True])
+    def test_custom_transport_round_trip_over_gloo(self, sentinel):
+        mp.spawn(
+            _custom_transport_gloo_worker,
+            args=(2, _available_tcp_port(), sentinel),
+            nprocs=2,
+            join=True,
+        )
+
+    @pytest.mark.skipif(
+        not dist.is_available() or not dist.is_gloo_available(),
+        reason="gloo backend is required",
+    )
+    def test_fieldless_builtin_edge_product_round_trip_over_gloo(self):
+        mp.spawn(
+            _builtin_edge_product_gloo_worker,
+            args=(2, _available_tcp_port()),
+            nprocs=2,
+            join=True,
         )
 
 
@@ -1287,6 +4400,25 @@ class TestBatchFromRawDicts:
         assert batch.my_custom_scalar[0].item() == 42.0
         assert batch.my_custom_scalar[1].item() == 99.0
 
+    def test_custom_later_only_field_in_raw_dict_is_rejected_with_sample_index(self):
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("later_values", "samples")
+        raw = [
+            {
+                "atomic_numbers": torch.tensor([1, 2]),
+                "positions": torch.zeros(2, 3),
+            },
+            {
+                "atomic_numbers": torch.tensor([3]),
+                "positions": torch.zeros(1, 3),
+                "later_values": torch.ones(1, 1),
+            },
+        ]
+
+        with pytest.raises(ValueError, match="appears only in later sample 1"):
+            Batch.from_raw_dicts(raw, attr_map=schema)
+
     def test_field_levels_classifies_custom_atom_key(self) -> None:
         """field_levels routes custom per-atom tensors to atom level."""
         d0 = {
@@ -1340,6 +4472,70 @@ class TestBatchFromRawDicts:
         # field_levels is provided but doesn't mention unknown_scalar
         batch = Batch.from_raw_dicts([d0, d1], field_levels={"some_other_key": "atom"})
         assert "unknown_scalar" in batch.keys["system"]
+
+    def test_schema_routes_custom_raw_levels_and_field_levels_override(self) -> None:
+        schema = LevelSchema()
+        schema.add_level("samples", segmented=True)
+        schema.set("sample_values", "samples")
+        raw = [
+            {
+                "atomic_numbers": torch.tensor([1, 2]),
+                "positions": torch.zeros(2, 3),
+                "sample_values": torch.zeros(3, 1),
+                "system_value": torch.zeros(1, 1),
+            },
+            {
+                "atomic_numbers": torch.tensor([3]),
+                "positions": torch.zeros(1, 3),
+                "sample_values": torch.ones(1, 1),
+                "system_value": torch.ones(1, 1),
+            },
+        ]
+        batch = Batch.from_raw_dicts(raw, attr_map=schema)
+        assert batch.level_ptr("samples").tolist() == [0, 3, 4]
+
+        override_schema = schema.clone()
+        override_schema.set("system_value", "samples")
+        overridden = Batch.from_raw_dicts(
+            raw,
+            attr_map=override_schema,
+            field_levels={"system_value": "system"},
+        )
+        assert "system_value" in overridden.level_keys["system"]
+        assert (
+            "system_value"
+            in Batch.from_data_list([overridden.get_data(0)]).level_keys["system"]
+        )
+
+    def test_raw_product_uses_logical_axes_and_round_trips(self) -> None:
+        schema = LevelSchema()
+        schema.add_level("left_items", segmented=True)
+        schema.add_level("right_items", segmented=True)
+        schema.add_product_level("left_right", left="left_items", right="right_items")
+        schema.set("pair_values", "left_right")
+        raw = [
+            {
+                "atomic_numbers": torch.tensor([1, 2]),
+                "positions": torch.zeros(2, 3),
+                "pair_values": torch.zeros(2, 3, 4),
+            },
+            {
+                "atomic_numbers": torch.tensor([3]),
+                "positions": torch.zeros(1, 3),
+                "pair_values": torch.ones(1, 2, 4),
+            },
+        ]
+
+        batch = Batch.from_raw_dicts(raw, attr_map=schema)
+
+        assert batch.level_ptr("left_items").tolist() == [0, 2, 3]
+        assert batch.level_ptr("right_items").tolist() == [0, 3, 5]
+        assert batch.level_ptr("left_right").tolist() == [0, 6, 8]
+        assert batch.get_data(0).pair_values.shape == (2, 3, 4)
+        assert batch.get_data(1).pair_values.shape == (1, 2, 4)
+        rebatch = Batch.from_data_list(batch.to_data_list())
+        assert rebatch.level_keys["left_right"] == {"pair_values"}
+        assert rebatch.level_ptr("left_right").tolist() == [0, 6, 8]
 
 
 class TestSetTransient:

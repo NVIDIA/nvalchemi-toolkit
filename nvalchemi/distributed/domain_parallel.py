@@ -25,10 +25,12 @@ migration, and trajectory gather.
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import TYPE_CHECKING, Any
 
 import torch
 import torch.distributed as dist
+from jaxtyping import Bool
 
 from nvalchemi.distributed._core.gather_primitives import mesh_group
 from nvalchemi.distributed._dynamics_coordinator import (
@@ -86,6 +88,16 @@ class DomainParallel(BaseDynamics):
         config: DomainConfig,
         **kwargs: Any,
     ) -> None:
+        requested_exit_status = kwargs.get("exit_status", dynamics.exit_status)
+        if requested_exit_status != dynamics.exit_status:
+            warnings.warn(
+                "DomainParallel requires exit_status to match the wrapped dynamics; "
+                f"overriding exit_status={requested_exit_status!r} with "
+                f"dynamics.exit_status={dynamics.exit_status!r}.",
+                UserWarning,
+                stacklevel=2,
+            )
+        kwargs["exit_status"] = dynamics.exit_status
         super().__init__(model=dynamics.model, **kwargs)
         self._dynamics: BaseDynamics = dynamics
         self._config: DomainConfig = config
@@ -106,7 +118,6 @@ class DomainParallel(BaseDynamics):
 
         # Runtime state.
         self._n_owned: int = 0
-        self._forces_primed: bool = False
 
         # Pipeline-stage state (2D pipeline x domain). A DomainParallel used as a
         # DistributedPipeline stage spans a domain sub-mesh; the group lead does
@@ -262,13 +273,19 @@ class DomainParallel(BaseDynamics):
         # end of step N-1 — atoms that crossed at end-of-N-1 still get
         # to their owners before any compute in step N.
         batch = self._resolve_pending_migrate(batch)
+        active_graph_mask = self._active_graph_mask(batch)
+        self._ensure_admission_initialized(batch)
 
         if not self._forces_primed:
-            self._prime_forces(batch)
+            self._prime_forces(batch, active_graph_mask)
             self._forces_primed = True
 
         # 1. Outer BEFORE_STEP hooks.
-        self._call_hooks(DynamicsStage.BEFORE_STEP, batch)
+        self._call_hooks(
+            DynamicsStage.BEFORE_STEP,
+            batch,
+            active_graph_mask,
+        )
 
         dyn = self._dynamics
         dyn._ensure_state_initialized(batch)
@@ -278,10 +295,18 @@ class DomainParallel(BaseDynamics):
 
         # 2. Pre-update on owned batch (velocity-Verlet half-kick). The reduce
         # scope makes NHC/NPT/NPH couple to mesh-global kinetic state.
-        dyn._call_hooks(DynamicsStage.BEFORE_PRE_UPDATE, batch)
+        dyn._call_hooks(
+            DynamicsStage.BEFORE_PRE_UPDATE,
+            batch,
+            active_graph_mask,
+        )
         with self._thermo.reduce_scope():
             dyn.pre_update(batch)
-        dyn._call_hooks(DynamicsStage.AFTER_PRE_UPDATE, batch)
+        dyn._call_hooks(
+            DynamicsStage.AFTER_PRE_UPDATE,
+            batch,
+            active_graph_mask,
+        )
 
         # 3. Wrap positions into the periodic box — but ONLY on axes that are
         # not spatially partitioned. Wrapping a *partitioned* axis teleports an
@@ -299,13 +324,21 @@ class DomainParallel(BaseDynamics):
         # 4-6. Compute via DistributedModel. ``_distributed_compute``
         # fires the inner BEFORE_COMPUTE / AFTER_COMPUTE hooks on the
         # correct view (padded for halo-storage, owned for sharded).
-        self._distributed_compute(batch)
+        self._distributed_compute(batch, active_graph_mask)
 
         # 7. Post-update (velocity-Verlet finalize).
-        dyn._call_hooks(DynamicsStage.BEFORE_POST_UPDATE, batch)
+        dyn._call_hooks(
+            DynamicsStage.BEFORE_POST_UPDATE,
+            batch,
+            active_graph_mask,
+        )
         with self._thermo.reduce_scope():
             dyn.post_update(batch)
-        dyn._call_hooks(DynamicsStage.AFTER_POST_UPDATE, batch)
+        dyn._call_hooks(
+            DynamicsStage.AFTER_POST_UPDATE,
+            batch,
+            active_graph_mask,
+        )
         # Keep the replicated controller + cell state byte-identical across ranks.
         self._thermo.broadcast_state(batch)
 
@@ -318,7 +351,11 @@ class DomainParallel(BaseDynamics):
         self._dispatch_async_migrate_check(batch)
 
         # 9. Outer AFTER_STEP hooks.
-        self._call_hooks(DynamicsStage.AFTER_STEP, batch)
+        self._call_hooks(
+            DynamicsStage.AFTER_STEP,
+            batch,
+            active_graph_mask,
+        )
 
         convergence_due = (
             dyn.convergence_hook is not None
@@ -354,14 +391,22 @@ class DomainParallel(BaseDynamics):
             converged = global_indices if global_indices.numel() > 0 else None
         dyn._last_converged = converged
         if converged is not None:
-            dyn._call_hooks(DynamicsStage.ON_CONVERGE, batch)
+            dyn._call_hooks(
+                DynamicsStage.ON_CONVERGE,
+                batch,
+                active_graph_mask,
+            )
         return batch, converged
 
     # ------------------------------------------------------------------
     # Force priming (initial compute before the first integrator step)
     # ------------------------------------------------------------------
 
-    def _prime_forces(self, batch: Batch) -> None:
+    def _prime_forces(
+        self,
+        batch: Batch,
+        active_graph_mask: torch.Tensor | None,
+    ) -> None:
         """Run one compute pass to initialize ``batch.forces`` /
         ``batch.energy`` before the first integrator step.
 
@@ -370,14 +415,18 @@ class DomainParallel(BaseDynamics):
         handles halo exchange + hook firing internally.
         """
         logger.info("[rank %d] priming forces (initial compute)", self._domain_rank)
-        self._distributed_compute(batch)
+        self._distributed_compute(batch, active_graph_mask)
         logger.info("[rank %d] force priming complete", self._domain_rank)
 
     # ------------------------------------------------------------------
     # Distributed compute: delegate to DistributedModel
     # ------------------------------------------------------------------
 
-    def _distributed_compute(self, batch: Batch) -> None:
+    def _distributed_compute(
+        self,
+        batch: Batch,
+        active_graph_mask: torch.Tensor | None,
+    ) -> None:
         """Run the model via :class:`DistributedModel` and write the
         owned-shape outputs back into *batch* in-place.
 
@@ -402,9 +451,17 @@ class DomainParallel(BaseDynamics):
 
         # Single-process fallback.
         if self._sharded_batch is None or self._dist_model is None:
-            dyn._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
-            dyn.compute(batch)
-            dyn._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
+            dyn._call_hooks(
+                DynamicsStage.BEFORE_COMPUTE,
+                batch,
+                active_graph_mask,
+            )
+            dyn.compute(batch, active_graph_mask)
+            dyn._call_hooks(
+                DynamicsStage.AFTER_COMPUTE,
+                batch,
+                active_graph_mask,
+            )
             return
 
         # 1. Sync owned state back into the persistent ShardedBatch.
@@ -416,9 +473,17 @@ class DomainParallel(BaseDynamics):
             # so it runs directly on the ShardedBatch — no external halo_exchange /
             # NL hook. Fire the compute hooks on the owned batch (parity with the
             # single-process path; the composite builds its own padded views).
-            dyn._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch)
+            dyn._call_hooks(
+                DynamicsStage.BEFORE_COMPUTE,
+                batch,
+                active_graph_mask,
+            )
             outputs = self._dist_model(self._sharded_batch)
-            dyn._call_hooks(DynamicsStage.AFTER_COMPUTE, batch)
+            dyn._call_hooks(
+                DynamicsStage.AFTER_COMPUTE,
+                batch,
+                active_graph_mask,
+            )
         else:
             # 2. Populate sharded.padded_batch. ``halo_exchange`` needs the halo
             # config which ``DistributedModel`` builds lazily on first call, so
@@ -441,13 +506,21 @@ class DomainParallel(BaseDynamics):
                 compute_batch = batch
 
             # 3. BEFORE_COMPUTE hooks — fire on the view the model will see.
-            dyn._call_hooks(DynamicsStage.BEFORE_COMPUTE, compute_batch)
+            dyn._call_hooks(
+                DynamicsStage.BEFORE_COMPUTE,
+                compute_batch,
+                active_graph_mask,
+            )
 
             # 4. Model forward via the adapter.
             outputs = self._dist_model(self._sharded_batch)
 
             # 5. AFTER_COMPUTE hooks.
-            dyn._call_hooks(DynamicsStage.AFTER_COMPUTE, compute_batch)
+            dyn._call_hooks(
+                DynamicsStage.AFTER_COMPUTE,
+                compute_batch,
+                active_graph_mask,
+            )
 
         # 6. Detach all output tensors before writing to the batch and stashing
         # on ``dyn._last_outputs`` (mirrors ``BaseDynamics.compute``). Outputs
@@ -472,9 +545,15 @@ class DomainParallel(BaseDynamics):
                 continue
             target = getattr(batch, batch_attr, None)
             if target is None:
-                setattr(batch, batch_attr, value.clone())
-            else:
-                target.copy_(value.view(target.shape))
+                setattr(batch, batch_attr, torch.empty_like(value))
+                target = getattr(batch, batch_attr)
+            dyn._publish_model_output(
+                batch,
+                batch_attr,
+                target,
+                value,
+                active_graph_mask,
+            )
 
         # Clear ``requires_grad`` on batch tensors that the model
         # enabled for autograd (a conservative-force model flips
@@ -610,8 +689,20 @@ class DomainParallel(BaseDynamics):
     # Hook overrides
     # ------------------------------------------------------------------
 
-    def _build_context(self, batch: Batch) -> HookContext:
-        ctx = super()._build_context(batch)
+    def _active_graph_mask(self, batch: Batch) -> Bool[torch.Tensor, "B"] | None:  # noqa: F722, F821
+        """Return the active-graph snapshot for a domain-parallel step."""
+        return self.active_graph_mask(batch, self._dynamics.exit_status)
+
+    def _build_context(
+        self,
+        batch: Batch,
+        *,
+        active_graph_mask: torch.Tensor | None = None,
+    ) -> HookContext:
+        ctx = super()._build_context(
+            batch,
+            active_graph_mask=active_graph_mask,
+        )
         ctx.n_owned = self._n_owned
         ctx.domain_mesh = self._config.mesh
         ctx.is_domain_parallel = True
@@ -622,14 +713,23 @@ class DomainParallel(BaseDynamics):
         )
         return ctx
 
-    def _call_hooks(self, stage: DynamicsStage, batch: Batch) -> None:
+    def _call_hooks(
+        self,
+        stage: DynamicsStage,
+        batch: Batch,
+        active_graph_mask: torch.Tensor | None = None,
+        *,
+        ignore_frequency: bool = False,
+    ) -> None:
         """Invoke hooks respecting their ``HookScope``.
 
         - LOCAL: hook sees the per-rank owned batch (no communication).
         - GLOBAL: per-system ``energy`` all-reduced before the hook fires.
         - RANK_ZERO: system gathered to rank 0; hook runs only there.
         """
-        ctx = self._build_context(batch)
+        if active_graph_mask is None:
+            active_graph_mask = self._active_graph_mask(batch)
+        ctx = self._build_context(batch, active_graph_mask=active_graph_mask)
 
         for hook in self.hooks:
             runs_on_stage = getattr(hook, "_runs_on_stage", None)
@@ -639,7 +739,7 @@ class DomainParallel(BaseDynamics):
             elif stage != hook.stage:
                 continue
 
-            if self.step_count % hook.frequency != 0:
+            if not ignore_frequency and self.step_count % hook.frequency != 0:
                 continue
 
             scope = getattr(hook, "scope", HookScope.LOCAL)
@@ -652,13 +752,23 @@ class DomainParallel(BaseDynamics):
                 # replicated it per rank, so summing again would multiply it by
                 # the rank count.
                 full = self._gather_all(batch)
-                ctx_full = self._build_context(full) if full is not None else ctx
+                ctx_full = (
+                    self._build_context(
+                        full,
+                        active_graph_mask=self._active_graph_mask(full),
+                    )
+                    if full is not None
+                    else ctx
+                )
                 hook(ctx_full, stage)
 
             elif scope == HookScope.RANK_ZERO:
                 full_batch = self.gather(batch, dst=0)
                 if self._domain_rank == 0 and full_batch is not None:
-                    ctx_full = self._build_context(full_batch)
+                    ctx_full = self._build_context(
+                        full_batch,
+                        active_graph_mask=self._active_graph_mask(full_batch),
+                    )
                     hook(ctx_full, stage)
 
             else:
@@ -680,12 +790,12 @@ class DomainParallel(BaseDynamics):
                 "No step count provided. Either pass `n_steps` to run() "
                 "or set it at construction time."
             )
+        self._validate_n_steps(resolved)
         self._open_hooks()
         try:
-            if not self._forces_primed:
-                self._prime_forces(batch)
-                self._forces_primed = True
-
+            # Each run starts a fresh admission, even when reusing the same batch
+            self._admission_initialized = False
+            self._forces_primed = False
             for _ in range(resolved):
                 batch, _converged = self.step(batch)
                 if (

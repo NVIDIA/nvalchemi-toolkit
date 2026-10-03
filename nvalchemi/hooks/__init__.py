@@ -19,6 +19,7 @@ from __future__ import annotations
 from nvalchemi.hooks._context import (
     BiasContext,
     DynamicsContext,
+    GenerationContext,
     HookContext,
     TrainContext,
 )
@@ -58,6 +59,7 @@ __all__ = [
     "CheckpointableHook",
     "DynamicsContext",
     "DynamicsRichLayout",
+    "GenerationContext",
     "Hook",
     "HookContext",
     "HookRegistryMixin",

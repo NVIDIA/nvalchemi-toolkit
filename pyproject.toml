@@ -9,24 +9,25 @@ authors = [
 ]
 description = "High-performance open-source deep-learning framework for exploring, building and deploying AI atomic simulation workflows."
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.15"
 license = {file="LICENSE"}
 dependencies = [
-    "nvalchemi-toolkit-ops>=0.4.1",
+    "nvalchemi-toolkit-ops>=0.5.0",
     "torch>=2.8",
     "click",
     "loguru",
-    "numpy<2.4",
+    "numpy>=2,<3",
     "jaxtyping>=0.3.2",
     "tensordict>=0.11.0",
     "pydantic>=2.11.7",
-    "dm-tree>=0.1.8",
     "plum-dispatch>=2.5.7",
     "zarr>=3",
     "periodictable==2.0.2",
     "rich>=13.0.0",
-    "plotext",
-    "nvidia-physicsnemo>=2.0.0",
+    # plotext 6 removed clf(), which hooks/reporting and training/cli call.
+    "plotext<6",
+
+    "nvidia-physicsnemo>=2.2.0",
 ]
 keywords = [
     "machine learning",
@@ -67,17 +68,19 @@ ase = [
     "ase>=3.27.0",
 ]
 cu12 = [
-    "nvalchemi-toolkit-ops[torch-cu12]>=0.4.1; sys_platform != 'darwin'",
-    "nvidia-physicsnemo[cu12]>=2.0.0; sys_platform != 'darwin'",
-    "cuml-cu12>=25.6.0; sys_platform != 'darwin'",
+    "nvalchemi-toolkit-ops[torch-cu12]>=0.5.0; sys_platform != 'darwin'",
+    # PhysicsNeMo core only: its [cuXX] extras pin cupy<14 (no cp314 wheels),
+    # and nothing in nvalchemi imports the RAPIDS stack (cuml/cupy/DALI).
+    # Users needing RAPIDS should install it directly.
+    "nvidia-physicsnemo>=2.2.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
     "torchvision; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform != 'darwin'",
 ]
 cu13 = [
-    "nvalchemi-toolkit-ops[torch-cu13]>=0.4.1; sys_platform != 'darwin'",
-    "nvidia-physicsnemo[cu13]>=2.0.0; sys_platform != 'darwin'",
-    "cuml-cu13>=25.6.0; sys_platform != 'darwin'",
+    "nvalchemi-toolkit-ops[torch-cu13]>=0.5.0; sys_platform != 'darwin'",
+    # PhysicsNeMo core only — see the cu12 extra note.
+    "nvidia-physicsnemo>=2.2.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
     "torchvision; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform != 'darwin'",
@@ -93,7 +96,25 @@ tensorboard = [
     "tensorboard",
 ]
 uma = [
-    "fairchem-core>=2.0.0",
+    "fairchem-core>=2.22.0",
+    # torchtnt imports pkg_resources, which setuptools 81 removed.
+    "setuptools>=70.0.0,<81",
+]
+uma-cu12 = [
+    "fairchem-core>=2.22.0",
+    "setuptools>=70.0.0,<81",
+    "nvalchemi-toolkit-ops[torch-cu12]>=0.5.0; sys_platform != 'darwin'",
+    "torch; sys_platform != 'darwin'",
+    "torchvision; sys_platform != 'darwin'",
+    "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform != 'darwin'",
+]
+uma-cu13 = [
+    "fairchem-core>=2.22.0",
+    "setuptools>=70.0.0,<81",
+    "nvalchemi-toolkit-ops[torch-cu13]>=0.5.0; sys_platform != 'darwin'",
+    "torch; sys_platform != 'darwin'",
+    "torchvision; sys_platform != 'darwin'",
+    "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform != 'darwin'",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -101,25 +122,68 @@ packages = ["nvalchemi"]
 
 # === UV configuration ====
 [tool.uv]
-default-groups = ["dev", "build"]
+default-groups = ["dev", "build", "docs"]
 # torch/torchvision resolve from the explicit PyTorch CUDA indexes while their
 # dependencies come from PyPI; unsafe-best-match lets uv pick the best version
 # across indexes rather than stopping at the first that has the name.
 index-strategy = "unsafe-best-match"
 conflicts = [
+  # UMA needs setuptools<81 while the build group needs the patched release.
+  [
+    { extra = "uma" },
+    { group = "build" },
+  ],
+  [
+    { extra = "uma-cu12" },
+    { group = "build" },
+  ],
+  [
+    { extra = "uma-cu13" },
+    { group = "build" },
+  ],
   [
     { extra = "cu12" },
     { extra = "cu13" },
   ],
-  # UMA's fairchem-core caps torch <2.9; the cuXX extras floor it at >=2.11
-  # (via toolkit-ops), so UMA forks a separate env (`uv sync --extra uma`).
+  # Historical env isolation: keep UMA and the CUDA extras in separate
+  # environments (the standalone uma-cuXX variants combine them). The original
+  # RAPIDS/numba conflict no longer applies since the cuXX extras dropped the
+  # RAPIDS stack, but the env split is kept deliberately.
   [
-    { extra = "cu12" },
     { extra = "uma" },
+    { extra = "cu12" },
   ],
   [
-    { extra = "cu13" },
     { extra = "uma" },
+    { extra = "cu13" },
+  ],
+  [
+    { extra = "uma-cu12" },
+    { extra = "cu12" },
+  ],
+  [
+    { extra = "uma-cu12" },
+    { extra = "cu13" },
+  ],
+  [
+    { extra = "uma-cu13" },
+    { extra = "cu12" },
+  ],
+  [
+    { extra = "uma-cu13" },
+    { extra = "cu13" },
+  ],
+  [
+    { extra = "uma" },
+    { extra = "uma-cu12" },
+  ],
+  [
+    { extra = "uma" },
+    { extra = "uma-cu13" },
+  ],
+  [
+    { extra = "uma-cu12" },
+    { extra = "uma-cu13" },
   ],
   # MACE 0.3.15 pins e3nn==0.4.4; fairchem-core (UMA) needs e3nn>=0.5 —
   # mutually exclusive, so install one extra per environment.
@@ -127,12 +191,27 @@ conflicts = [
     { extra = "mace" },
     { extra = "uma" },
   ],
+  [
+    { extra = "mace" },
+    { extra = "uma-cu12" },
+  ],
+  [
+    { extra = "mace" },
+    { extra = "uma-cu13" },
+  ],
 ]
 override-dependencies = [
-  "python-hostlist; sys_platform == 'never'"
+  "python-hostlist; sys_platform == 'never'",
+  # fairchem-core pins lmdb<=1.7.3, which has no cp314 wheel. lmdb>=2.0.0
+  # ships cp314 wheels. Nothing in our fairchem usage touches lmdb, so from
+  # 3.14 on override the pin; below 3.14, re-state fairchem's original pin.
+  # (A marker-scoped override alone would DROP lmdb on older Pythons, since
+  # uv replaces the requirement outright — hence the explicit pair.)
+  "lmdb>=1.6.2,<=1.7.3; python_version < '3.14'",
+  "lmdb>=2.0.0; python_version >= '3.14'",
 ]
 dependency-metadata = [
-  { name = "nvalchemi-toolkit-ops", version = "0.4.1", requires-dist = [
+  { name = "nvalchemi-toolkit-ops", version = "0.5.0", requires-dist = [
     "warp-lang >= 1.13.0",
     "numpy",
     "torch>=2.8.0 ; extra == 'torch'",
@@ -144,20 +223,27 @@ dependency-metadata = [
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
+  { index = "pytorch-cu126", extra = "uma-cu12", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
+  { index = "pytorch-cu130", extra = "uma-cu13", marker = "sys_platform != 'darwin'" },
 ]
 torchvision = [
   { index = "pytorch-cu126", extra = "cu12", marker = "sys_platform != 'darwin'" },
+  { index = "pytorch-cu126", extra = "uma-cu12", marker = "sys_platform != 'darwin'" },
   { index = "pytorch-cu130", extra = "cu13", marker = "sys_platform != 'darwin'" },
+  { index = "pytorch-cu130", extra = "uma-cu13", marker = "sys_platform != 'darwin'" },
 ]
+# Pre-release pin: resolve nvalchemi-toolkit-ops from the 0.5.0-rc branch
+# instead of PyPI. tool.uv.sources only affects this workspace, so the
+# published package metadata is unchanged; drop this entry once ops 0.5.0
+# is released on PyPI.
+nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops", rev = "0.5.0-rc" }
 
 # these are intended to be developer facing
 [dependency-groups]
 build = [
     "ninja>=1.11.1.4",
-    # setuptools 81 dropped pkg_resources, which fairchem-core's torchtnt
-    # imports at load — pin <81 so the UMA stack imports.
-    "setuptools>=70.0.0,<81",
+    "setuptools>=83.0.0",
 ]
 dev = [
     "pre-commit",
@@ -166,18 +252,17 @@ dev = [
     "pytest-skip-slow>=0.0.5",
     "pytest-asyncio>=0.25.3",
     "pytest-dependency>=0.6.0",
-    "pyyaml>=6.0",
-    "black==22.10.0",
-    "interrogate==1.5.0",
-    "coverage>=7.2.0",
     "pytest-cov>=7.0.0",
-    "ruff==0.11.13",
-    "nvtx",
-    "hypothesis>=6.135.10",
-    "hypothesis-torch>=1.0.11",
-    "rdkit>=2025.3.3",
     "pytest-dependency>=0.6.0",
     "pytest-testmon>=2.2.0",
+    "coverage>=7.2.0",
+    "pyyaml>=6.0",
+    "interrogate==1.5.0",
+    "ruff==0.15.4",
+    "nvtx",
+    # no cp315 x86_64 wheel yet (2026.3.6 ships cp315 only for aarch64/mac)
+    "rdkit>=2025.3.3; python_version < '3.15'",
+
 ]
 distribution = [
   "pyarmor==9.1.8",
@@ -195,7 +280,7 @@ docs = [
     "myst-parser>=0.18.0",
     "sphinx-favicon>=1.0.1",
     "pydata-sphinx-theme==0.15.2",
-    "python-dotenv==1.1.1"
+    "python-dotenv==1.2.2",
 ]
 
 [tool.setuptools.packages.find]

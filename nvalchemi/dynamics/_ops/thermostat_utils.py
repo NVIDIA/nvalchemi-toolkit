@@ -141,7 +141,7 @@ def _rescale_to_temperature(
 
     Operates in-place on *velocities*.
     """
-    from nvalchemi.dynamics.hooks._utils import KB_EV  # noqa: PLC0415
+    from nvalchemi.dynamics._units import KB_EV  # noqa: PLC0415
 
     m = masses.unsqueeze(-1) if masses.dim() == 1 else masses  # (N, 1)
     v2 = (velocities**2).sum(dim=-1, keepdim=True)  # (N, 1)
@@ -222,7 +222,7 @@ def initialize_velocities(
         Atomic positions ``[N, 3]``.  Required when ``remove_rotations=True``
         (needed to compute the moment of inertia tensor).
     """
-    from nvalchemi.dynamics.hooks._utils import KB_EV  # noqa: PLC0415
+    from nvalchemi.dynamics._units import KB_EV  # noqa: PLC0415
 
     dtype = velocities.dtype
     vec_t = _vec_type(dtype)

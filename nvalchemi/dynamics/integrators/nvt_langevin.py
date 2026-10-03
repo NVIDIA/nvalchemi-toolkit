@@ -39,9 +39,12 @@ import torch
 from nvalchemi.data import Batch
 from nvalchemi.dynamics._ops._bridge import _make_state_batch, _to_per_system
 from nvalchemi.dynamics._ops.langevin import langevin_finalize, langevin_half_step
-from nvalchemi.dynamics._units import fs_to_internal_time, per_fs_to_internal_rate
+from nvalchemi.dynamics._units import (
+    KB_EV,
+    fs_to_internal_time,
+    per_fs_to_internal_rate,
+)
 from nvalchemi.dynamics.base import BaseDynamics
-from nvalchemi.dynamics.hooks._utils import KB_EV
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.base import ConvergenceHook
@@ -113,6 +116,16 @@ class NVTLangevin(BaseDynamics):
         self._temperature_init = temperature
         self._friction_init = per_fs_to_internal_rate(friction)
         self._random_seed = random_seed
+
+    @property
+    def random_seed(self) -> int:
+        """Base seed of the thermostat noise, which every step offsets by ``step_count``."""
+        return self._random_seed
+
+    @random_seed.setter
+    def random_seed(self, value: int) -> None:
+        """Move the noise onto another stream from the next step on."""
+        self._random_seed = value
 
     def _init_state(self, batch: Batch) -> None:
         M = batch.num_graphs

@@ -64,11 +64,14 @@ uv sync --extra cu13 --group docs
 ```
 
 Optional extras include `aimnet`, `ase`, `cu12`, `cu13`, `mace`, `pymatgen`,
-`tensorboard`, and `uma`. `uma` conflicts with the CUDA/MACE stack and should be
-resolved in its own environment, as CI does with:
+`tensorboard`, `uma`, `uma-cu12`, and `uma-cu13`. Use a standalone UMA CUDA
+variant rather than combining `uma` with `cu12` or `cu13`; UMA also conflicts
+with MACE and the default `build` group. Resolve it in its own environment, as
+CI does with:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-uma uv sync --extra uma --extra ase
+UV_PROJECT_ENVIRONMENT=.venv-uma-cu12 \
+  uv sync --extra uma-cu12 --extra ase --no-group build
 ```
 
 ## Build, Lint, Test
@@ -219,7 +222,7 @@ chains are documented in `.claude/skills/README.md`.
 
 | Skill | Use when |
 |-------|----------|
-| `nvalchemi-data-structures` | Building or batching atomic systems; shape, dtype, or device errors |
+| `nvalchemi-data-structures` | Building, batching, or grouping atomic systems; shape, dtype, or device errors |
 | `nvalchemi-data-storage` | Writing, reading, composing, or streaming Zarr-backed atomic data |
 | `nvalchemi-zarr-perf` | Tuning Dataset/DataLoader throughput or Zarr chunking |
 | `nvalchemi-model-wrapping` | Wrapping an MLIP or custom PyTorch model via `BaseModelMixin` |
@@ -228,5 +231,6 @@ chains are documented in `.claude/skills/README.md`.
 | `nvalchemi-loss-api` | Choosing, weighting, masking, or implementing loss functions |
 | `nvalchemi-dynamics-api` | Any MD/relaxation/EOS simulation script or batched GPU pipeline |
 | `nvalchemi-dynamics-hooks` | Per-step callbacks: neighbor lists, convergence, logging |
+| `nvalchemi-mep` | Reaction paths and minimum-energy paths: interpolation, IDPP, batched NEB |
 | `nvalchemi-dynamics-implementation` | Implementing a new integrator, optimizer, or sampler class |
 | `nvalchemi-reporting` | Progress dashboards, TensorBoard, or CSV observability |

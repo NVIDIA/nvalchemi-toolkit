@@ -654,6 +654,7 @@ class TestSecurityNoPickle:
 
     _TARGETS = (
         Path(__file__).resolve().parents[2] / "nvalchemi" / "_serialization.py",
+        Path(__file__).resolve().parents[2] / "nvalchemi" / "specs.py",
         Path(__file__).resolve().parents[2] / "nvalchemi" / "training" / "_spec.py",
         Path(__file__).resolve().parents[2]
         / "nvalchemi"

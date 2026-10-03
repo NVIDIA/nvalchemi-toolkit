@@ -20,12 +20,31 @@ Scatter reductions (``V ... → B ...``)
 :func:`per_graph_sum` and :func:`per_graph_mean` take a flat per-node
 tensor with a ``batch_idx`` mapping each node to its graph and reduce
 the leading node dim into a per-graph output, preserving trailing dims
-verbatim.
+verbatim. Both accumulate in at least fp32 and return that width, so a
+half-precision input reduces to an fp32 per-graph tensor.
 
 These helpers only produce per-graph tensors. They do not choose the
 final scalar weighting across graphs. For per-graph values :math:`x_i`,
 a graph-balanced scalar is :math:`B^{-1} \sum_i x_i`, while an
 atom-weighted scalar is :math:`(\sum_i N_i x_i) / (\sum_i N_i)`.
+
+Graph-balanced scalar (``V ... → ()``)
+--------------------------------------
+
+:func:`graph_balanced_mean` composes the scatter reduction with the
+graph-balanced weighting: it sums a per-node residual and its validity
+weights per graph, divides, and averages the per-graph means. Loss
+terms that mean over graphs rather than over atoms share it instead of
+re-deriving the per-graph numerator and denominator.
+
+Masked scalar (``V ... → ()``)
+------------------------------
+
+:func:`masked_mean` is the reduction a per-node loss term with a
+``normalize_by_atom_count`` switch ends in: the global mean of a masked
+residual over its valid entries, or :func:`graph_balanced_mean` when the
+switch is on, reading ``batch_idx`` and ``num_graphs`` from a batch when
+they are not passed. Both branches accumulate in at least fp32.
 
 Matrix reductions (``B ... m n → B ...``)
 -----------------------------------------
@@ -70,7 +89,7 @@ trailing dims before scattering::
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 import torch
 
@@ -79,7 +98,22 @@ from nvalchemi._typing import BatchIndices
 if TYPE_CHECKING:
     from jaxtyping import Float, Num
 
+__all__ = [
+    "frobenius_mse",
+    "graph_balanced_mean",
+    "masked_mean",
+    "per_graph_mean",
+    "per_graph_sum",
+]
+
 _NumGraphs: TypeAlias = int | torch.Tensor
+
+
+def _require_metadata(value: Any, name: str, *, loss_name: str) -> Any:
+    """Return required loss metadata or raise a focused error."""
+    if value is None:
+        raise ValueError(f"{loss_name} requires {name}=... metadata.")
+    return value
 
 
 def _resolve_batch_indices(
@@ -142,13 +176,25 @@ def _per_graph_sum_resolved(
     batch_idx: BatchIndices,
     num_graphs: _NumGraphs,
 ) -> Float[torch.Tensor, "B ..."]:  # noqa: F722
-    """Sum per-node values after ``batch_idx`` and ``num_graphs`` are resolved."""
+    """Sum per-node values after ``batch_idx`` and ``num_graphs`` are resolved.
+
+    The accumulator is at least fp32 regardless of the input dtype, and the
+    widened result is returned as is. CUDA scatter atomics round after every
+    add, so a bf16 running sum stops growing at 256 and an fp16 one at 2048: a
+    graph-balanced force loss over a few thousand atoms was off by more than a
+    factor of three. Casting the total back to the input dtype reintroduced the
+    same class of failure from the other end, since an fp16 per-graph sum of a
+    few thousand squared errors exceeds ``65504`` and saturates to ``inf``
+    before the caller divides it by the atom count. fp32 and fp64 inputs are
+    untouched: their accumulator already matches their dtype.
+    """
     out_shape = (num_graphs, *values.shape[1:])
-    out = torch.zeros(out_shape, dtype=values.dtype, device=values.device)
+    acc_dtype = torch.promote_types(values.dtype, torch.float32)
+    out = torch.zeros(out_shape, dtype=acc_dtype, device=values.device)
     idx_shape = [1] * (values.ndim - 1)
     index = batch_idx.view(-1, *idx_shape).expand_as(values)
     # TODO: refactor to use warp kernels when backwards ready
-    out.scatter_add_(0, index, values)
+    out.scatter_add_(0, index, values.to(acc_dtype))
     return out
 
 
@@ -178,7 +224,10 @@ def per_graph_sum(
     Returns
     -------
     Float[torch.Tensor, "B ..."]
-        Per-graph sums of shape ``(num_graphs, *values.shape[1:])``.
+        Per-graph sums of shape ``(num_graphs, *values.shape[1:])``. The sum
+        accumulates in at least fp32 and keeps that width, so half-precision
+        inputs (fp16, bf16) come back as fp32 rather than overflowing a
+        narrow output; fp32 and fp64 inputs return their own dtype.
     """
     batch_idx, resolved = _prep_reduction(values, batch_idx, num_graphs, name="values")
     return _per_graph_sum_resolved(values, batch_idx, resolved)
@@ -205,7 +254,8 @@ def per_graph_mean(
     Returns
     -------
     Float[torch.Tensor, "B ..."]
-        Per-graph means.
+        Per-graph means, in fp32 for half-precision inputs — see
+        :func:`per_graph_sum`.
     """
     batch_idx, resolved = _prep_reduction(values, batch_idx, num_graphs, name="values")
     totals = _per_graph_sum_resolved(values, batch_idx, resolved)
@@ -219,6 +269,145 @@ def per_graph_mean(
     count_shape = [1] * (totals.ndim - 1)
     counts = counts.view(-1, *count_shape)
     return totals / counts
+
+
+def graph_balanced_mean(
+    residual: Float[torch.Tensor, "V ..."],  # noqa: F722
+    valid: Num[torch.Tensor, "V ..."],  # noqa: F722
+    batch_idx: BatchIndices | None,
+    num_graphs: int | None,
+    *,
+    loss_name: str,
+) -> tuple[Float[torch.Tensor, ""], Float[torch.Tensor, "B"]]:  # noqa: F722
+    r"""Mean over graphs of each graph's mean valid residual.
+
+    For per-node residuals :math:`\rho_{ia}` and validity weights
+    :math:`w_{ia}` this returns
+
+    .. math::
+
+        L = \frac{1}{B} \sum_{i=1}^{B}
+        \frac{\sum_a \rho_{ia}}{\max\left(\sum_a w_{ia}, 1\right)},
+
+    so every graph contributes equally regardless of its size and a graph
+    with no valid node contributes ``0.0``. Trailing dims of ``residual`` and
+    ``valid`` are summed into the node before the scatter, so a ``(V, 3)``
+    squared force error with a ``(V, 3)`` component mask divides by the
+    number of valid components rather than of valid atoms. Both tensors are
+    promoted to at least float32 first and the per-graph sums stay at that
+    width (see :func:`per_graph_sum`).
+
+    Parameters
+    ----------
+    residual : Float[torch.Tensor, "V ..."]
+        Per-node residual, already zeroed where ``valid`` is false.
+    valid : Num[torch.Tensor, "V ..."]
+        Per-node validity mask or weights, same shape as ``residual``.
+    batch_idx : BatchIndices | None
+        Node-to-graph assignment; ``None`` is refused.
+    num_graphs : int | None
+        Number of graphs in the batch; ``None`` is refused.
+    loss_name : str
+        Name of the calling loss, used in the metadata error.
+
+    Returns
+    -------
+    tuple[Float[torch.Tensor, ""], Float[torch.Tensor, "B"]]
+        The scalar loss and the per-graph means it averages, the latter
+        suitable for a loss term's ``per_sample_loss``.
+
+    Raises
+    ------
+    ValueError
+        If ``batch_idx`` or ``num_graphs`` is ``None``, or if the leading dim
+        of ``residual`` does not match ``batch_idx``.
+    """
+    batch_idx = _require_metadata(batch_idx, "batch_idx", loss_name=loss_name)
+    num_graphs = _require_metadata(num_graphs, "num_graphs", loss_name=loss_name)
+    acc_dtype = torch.promote_types(residual.dtype, torch.float32)
+    trailing = tuple(range(1, residual.ndim))
+    if trailing:
+        per_node_residual = residual.sum(dim=trailing, dtype=acc_dtype)
+        per_node_valid = valid.sum(dim=trailing, dtype=acc_dtype)
+    else:
+        per_node_residual = residual.to(acc_dtype)
+        per_node_valid = valid.to(acc_dtype)
+    per_graph_residual = per_graph_sum(
+        per_node_residual, batch_idx, num_graphs=num_graphs
+    )
+    per_graph_valid = per_graph_sum(per_node_valid, batch_idx, num_graphs=num_graphs)
+    per_sample = per_graph_residual / per_graph_valid.clamp_min(1.0)
+    return per_sample.mean(), per_sample
+
+
+def masked_mean(
+    residual: Float[torch.Tensor, "V ..."],  # noqa: F722
+    valid: Num[torch.Tensor, "V ..."],  # noqa: F722
+    *,
+    graph_balanced: bool,
+    batch_idx: BatchIndices | None = None,
+    num_graphs: int | None = None,
+    batch: Any | None = None,
+    loss_name: str = "masked_mean",
+) -> tuple[Float[torch.Tensor, ""], Float[torch.Tensor, "B"] | None]:  # noqa: F722
+    r"""Mean of a masked residual, over every valid entry or balanced over graphs.
+
+    Without *graph_balanced* this is the global mean: the residual summed
+    over every entry and divided by the number of valid entries, so every
+    atom weighs the same and a large graph weighs more than a small one.
+    With it, the reduction is :func:`graph_balanced_mean`, so every graph
+    weighs the same. Both branches accumulate in at least float32, so a
+    half-precision residual reduces to a float32 scalar, and a residual with
+    no valid entry reduces to ``0.0`` on either branch.
+
+    Parameters
+    ----------
+    residual : Float[torch.Tensor, "V ..."]
+        Per-node residual, already zeroed where ``valid`` is false.
+    valid : Num[torch.Tensor, "V ..."]
+        Per-node validity mask or weights, same shape as ``residual``.
+    graph_balanced : bool
+        Whether to average within each graph first and then over graphs.
+    batch_idx : BatchIndices | None, optional
+        Node-to-graph assignment, read only when *graph_balanced*. Default
+        ``None`` reads it from *batch*.
+    num_graphs : int | None, optional
+        Number of graphs in the batch, read only when *graph_balanced*.
+        Default ``None`` reads it from *batch*.
+    batch : Any | None, optional
+        Object carrying ``batch_idx`` and ``num_graphs`` for the keywords
+        left ``None``, as the ``batch=`` keyword a composed loss forwards.
+        Default ``None``.
+    loss_name : str, optional
+        Name of the calling loss, used in the metadata error. Default
+        ``"masked_mean"``.
+
+    Returns
+    -------
+    tuple[Float[torch.Tensor, ""], Float[torch.Tensor, "B"] | None]
+        The scalar loss and, when *graph_balanced*, the per-graph means it
+        averages, suitable for a loss term's ``per_sample_loss``; ``None``
+        otherwise.
+
+    Raises
+    ------
+    ValueError
+        If *graph_balanced* and neither the keywords nor *batch* supply
+        ``batch_idx`` and ``num_graphs``, or if the leading dim of
+        ``residual`` does not match ``batch_idx``.
+    """
+    if not graph_balanced:
+        acc_dtype = torch.promote_types(residual.dtype, torch.float32)
+        total = residual.to(acc_dtype).sum() / valid.sum(dtype=acc_dtype).clamp_min(1.0)
+        return total, None
+    if batch is not None:
+        if batch_idx is None:
+            batch_idx = getattr(batch, "batch_idx", None)
+        if num_graphs is None:
+            num_graphs = getattr(batch, "num_graphs", None)
+    return graph_balanced_mean(
+        residual, valid, batch_idx, num_graphs, loss_name=loss_name
+    )
 
 
 def frobenius_mse(

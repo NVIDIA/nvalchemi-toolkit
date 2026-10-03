@@ -42,21 +42,31 @@ class FreezeAtomsHook:
     hook identifies atoms by their ``atom_categories`` field and
     constrains them by:
 
-    1. **Snapshotting positions** — At ``BEFORE_PRE_UPDATE``, the hook
-       snapshots all atomic positions.
-    2. **Restoring positions** — At ``AFTER_POST_UPDATE``, the hook
+    1. **Snapshotting and clearing state** — At ``BEFORE_PRE_UPDATE``, the hook
+       snapshots all atomic positions and clears frozen atoms' velocities and
+       forces before the integrator uses them.
+    2. **Restoring before compute** — At ``AFTER_PRE_UPDATE``, the hook
+       restores frozen atoms' positions and clears their velocities so
+       compute-preparation hooks and the model see the constrained geometry.
+    3. **Clearing new state** — At ``BEFORE_POST_UPDATE``, the hook clears
+       forces newly computed for frozen atoms and clears their velocities
+       before the second integrator update.
+    4. **Restoring positions** — At ``AFTER_POST_UPDATE``, the hook
        restores positions of frozen atoms using ``torch.where``,
        effectively undoing any displacement applied by the integrator.
-    3. **Zeroing velocities** — Velocities of frozen atoms are set to
+    5. **Zeroing velocities** — Velocities of frozen atoms are set to
        zero to prevent momentum accumulation.
-    4. **Optionally zeroing forces** — By default, forces on frozen
-       atoms are also zeroed. This prevents force contributions from
-       propagating through the integrator and ensures clean energy
-       conservation diagnostics.
+    6. **Optionally exposing forces** — When ``zero_forces=False``, raw
+       model forces remain available at ``AFTER_COMPUTE`` for reporting.
+       However, they are still cleared at ``BEFORE_POST_UPDATE`` so they
+       cannot propagate through the integrator.
 
-    The hook fires at two stages: ``BEFORE_PRE_UPDATE`` (to snapshot
-    positions) and ``AFTER_POST_UPDATE`` (to restore frozen positions
-    and zero velocities/forces). This two-stage design enables
+    The hook fires at five stages: ``BEFORE_PRE_UPDATE`` (to snapshot
+    positions and clear prior state), ``AFTER_PRE_UPDATE`` (to restore the
+    constrained geometry before compute preparation), ``AFTER_COMPUTE``
+    (optionally clear model forces), ``BEFORE_POST_UPDATE`` (to clear newly
+    computed forces), and ``AFTER_POST_UPDATE`` (to restore frozen positions
+    and clear velocities). This multi-stage design enables
     ``torch.compile(fullgraph=True)`` compatibility by avoiding
     data-dependent branching.
 
@@ -69,11 +79,22 @@ class FreezeAtomsHook:
     freeze_category : int, optional
         The ``atom_categories`` value that identifies frozen atoms.
         Default is ``AtomCategory.SPECIAL.value`` (-1). Atoms with
-        ``batch.atom_categories == freeze_category`` will be frozen.
+        ``batch.atom_categories == freeze_category`` will be frozen when
+        ``mask_key`` is not provided.
+    mask_key : str, optional
+        Name of a boolean node-level batch field that identifies frozen atoms.
+        When provided, this mask is used instead of ``atom_categories``. This
+        supports workflow-owned constraints such as NEB endpoint and per-path
+        fixed-atom masks. Default is ``None``.
     zero_forces : bool, optional
-        Whether to zero forces on frozen atoms. Default ``True``.
-        Set to ``False`` if you need to measure forces on frozen
-        atoms for analysis purposes.
+        Whether to zero forces immediately at ``AFTER_COMPUTE``.
+        Default ``True``. Set to ``False`` to inspect raw frozen-atom
+        forces in an ``AFTER_COMPUTE`` hook. Note that forces are always
+        cleared before ``post_update``.
+    zero_velocities : bool, optional
+        Whether to clear frozen-atom velocities around integrator updates.
+        Default ``True``. Set to ``False`` for optimizers that do not use
+        velocities, such as quasi-Newton methods.
 
     Attributes
     ----------
@@ -81,8 +102,12 @@ class FreezeAtomsHook:
         Constraint application frequency in steps.
     freeze_category : int
         Category value identifying frozen atoms.
+    mask_key : str | None
+        Optional node-level boolean batch field identifying frozen atoms.
     zero_forces : bool
-        Whether forces are zeroed on frozen atoms.
+        Whether forces are zeroed immediately after compute.
+    zero_velocities : bool
+        Whether velocities are cleared around integrator updates.
     stage : DynamicsStage
         Primary stage, set to ``BEFORE_PRE_UPDATE`` for protocol compliance.
 
@@ -106,8 +131,11 @@ class FreezeAtomsHook:
 
     Notes
     -----
-    * Fires at two stages: ``BEFORE_PRE_UPDATE`` (snapshot all positions)
-      and ``AFTER_POST_UPDATE`` (restore frozen positions via ``torch.where``).
+    * Fires at ``BEFORE_PRE_UPDATE`` (snapshot positions and clear prior
+      forces/velocities), ``AFTER_PRE_UPDATE`` (restore positions before
+      compute preparation), ``AFTER_COMPUTE`` (optionally expose new forces),
+      ``BEFORE_POST_UPDATE`` (clear new forces), and ``AFTER_POST_UPDATE``
+      (restore positions and clear velocities).
     * Uses ``torch.where`` for branchless GPU-vectorized restore, enabling
       ``torch.compile(fullgraph=True)`` compatibility.
     * All positions are snapshotted each step (not just frozen ones) to
@@ -122,16 +150,30 @@ class FreezeAtomsHook:
         self,
         frequency: int = 1,
         freeze_category: int = AtomCategory.SPECIAL.value,
+        mask_key: str | None = None,
         zero_forces: bool = True,
+        zero_velocities: bool = True,
         stage: Enum = DynamicsStage.BEFORE_PRE_UPDATE,
     ) -> None:
+        if mask_key is not None and not isinstance(mask_key, str):
+            raise TypeError("mask_key must be a string or None")
+        if mask_key == "":
+            raise ValueError("mask_key must be a non-empty string or None")
         self.frequency = frequency
         self.freeze_category = freeze_category
+        self.mask_key = mask_key
         self.zero_forces = zero_forces
+        self.zero_velocities = zero_velocities
         self.stage = stage
         # Multi-stage hooks need both a primary stage and a list of active stages
         self._active_stages = frozenset(
-            {DynamicsStage.BEFORE_PRE_UPDATE, DynamicsStage.AFTER_POST_UPDATE}
+            {
+                DynamicsStage.BEFORE_PRE_UPDATE,
+                DynamicsStage.AFTER_PRE_UPDATE,
+                DynamicsStage.AFTER_COMPUTE,
+                DynamicsStage.BEFORE_POST_UPDATE,
+                DynamicsStage.AFTER_POST_UPDATE,
+            }
         )
         self._saved_positions: torch.Tensor | None = None
 
@@ -150,35 +192,67 @@ class FreezeAtomsHook:
         """
         return stage in self._active_stages
 
-    def _restore(self, batch: Batch) -> None:
-        """Restore frozen atom positions and zero velocities/forces.
+    def _mask(
+        self, batch: Batch, active_graph_mask: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """Return the active frozen-atom mask with a coordinate dimension."""
+        # mask shape: [V] -> [V, 1] for broadcasting with [V, 3]
+        mask = (
+            batch.atom_categories == self.freeze_category
+            if self.mask_key is None
+            else getattr(batch, self.mask_key)
+        )
+        if active_graph_mask is not None:
+            mask = mask & active_graph_mask[batch.batch_idx]
+        return mask.unsqueeze(-1)
 
-        The restore logic runs under :func:`torch.no_grad` because
-        ``positions`` may carry ``requires_grad=True`` from the model's
-        conservative-force computation.
-
-        Parameters
-        ----------
-        batch : Batch
-            The current batch of atomic data. ``batch.positions``,
-            ``batch.velocities``, and optionally ``batch.forces`` are
-            modified in-place.
-        """
+    def _clear_forces(
+        self, batch: Batch, active_graph_mask: torch.Tensor | None = None
+    ) -> None:
+        """Clear forces on active frozen atoms before an integrator update."""
         with torch.no_grad():
-            # mask shape: [V] -> [V, 1] for broadcasting with [V, 3]
-            mask = (batch.atom_categories == self.freeze_category).unsqueeze(-1)
-            zeros = torch.zeros_like(batch.positions)
+            mask = self._mask(batch, active_graph_mask)
+            batch.forces.copy_(torch.where(mask, 0, batch.forces))
 
+    def _clear_velocities(
+        self, batch: Batch, active_graph_mask: torch.Tensor | None = None
+    ) -> None:
+        """Clear velocities on active frozen atoms when velocities are present."""
+        velocities = (
+            getattr(batch, "velocities", None) if self.zero_velocities else None
+        )
+        if velocities is not None:
+            mask = self._mask(batch, active_graph_mask)
+            velocities.copy_(torch.where(mask, 0, velocities))
+
+    def _restore(
+        self, batch: Batch, active_graph_mask: torch.Tensor | None = None
+    ) -> None:
+        """Restore frozen positions and clear frozen velocities when present."""
+        with torch.no_grad():
+            mask = self._mask(batch, active_graph_mask)
             batch.positions.copy_(
                 torch.where(mask, self._saved_positions, batch.positions)
             )
-            batch.velocities.copy_(torch.where(mask, zeros, batch.velocities))
-            if self.zero_forces:
-                batch.forces.copy_(torch.where(mask, zeros, batch.forces))
+            velocities = (
+                getattr(batch, "velocities", None) if self.zero_velocities else None
+            )
+            if velocities is not None:
+                velocities.copy_(torch.where(mask, 0, velocities))
 
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
-        """Snapshot or restore frozen atom positions."""
+        """Apply the stage-specific frozen-atom constraint."""
         if stage == DynamicsStage.BEFORE_PRE_UPDATE:
             self._saved_positions = ctx.batch.positions.clone()
+            self._clear_forces(ctx.batch, ctx.active_graph_mask)
+            self._restore(ctx.batch, ctx.active_graph_mask)
+        elif stage == DynamicsStage.AFTER_PRE_UPDATE:
+            self._restore(ctx.batch, ctx.active_graph_mask)
+        elif stage == DynamicsStage.AFTER_COMPUTE:
+            if self.zero_forces:
+                self._clear_forces(ctx.batch, ctx.active_graph_mask)
+        elif stage == DynamicsStage.BEFORE_POST_UPDATE:
+            self._clear_forces(ctx.batch, ctx.active_graph_mask)
+            self._clear_velocities(ctx.batch, ctx.active_graph_mask)
         else:
-            self._restore(ctx.batch)
+            self._restore(ctx.batch, ctx.active_graph_mask)

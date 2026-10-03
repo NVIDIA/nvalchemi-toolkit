@@ -89,7 +89,8 @@ class TestConstruction:
     def test_all_preset(self) -> None:
         profiler = StageTimingHook("all")
         assert DynamicsStage.ON_CONVERGE not in profiler._profiled_stages
-        assert len(profiler._profiled_stages) == len(DynamicsStage) - 1
+        assert DynamicsStage.ON_GRADUATE not in profiler._profiled_stages
+        assert len(profiler._profiled_stages) == len(DynamicsStage) - 2
 
     def test_custom_stages(self) -> None:
         S = DynamicsStage

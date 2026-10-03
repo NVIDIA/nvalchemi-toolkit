@@ -15,10 +15,15 @@
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import pytest
 import torch
 import torch.distributed as dist
+
+if TYPE_CHECKING:
+    from nvalchemi.data.batch import Batch
 
 
 def _cueq_ops_registered() -> bool:
@@ -125,3 +130,33 @@ def gpu_device(request) -> str:
 def fixed_torch_seed() -> None:
     """Set a fixed PyTorch RNG seed for tests that compare random tensors."""
     torch.manual_seed(0)
+
+
+@pytest.fixture
+def hessian_batch_factory() -> Callable[..., Batch]:
+    """Build a Hessian-bearing Batch for lifecycle and Zarr tests."""
+    from nvalchemi.data.atomic_data import AtomicData
+    from nvalchemi.data.batch import Batch
+
+    def make_batch(*num_nodes: int, offset: float = 0.0) -> Batch:
+        data = [
+            AtomicData(
+                positions=torch.arange(count * 3, dtype=torch.float64).reshape(
+                    count, 3
+                ),
+                atomic_numbers=torch.ones(count, dtype=torch.long),
+            )
+            for count in num_nodes
+        ]
+        batch = Batch.from_data_list(data, device="cpu")
+        batch.add_product_level("atom_atom", left="atoms", right="atoms")
+        blocks = [
+            torch.arange(count * count * 9, dtype=torch.float64)
+            .reshape(count, count, 3, 3)
+            .add(offset + index * 1000.0)
+            for index, count in enumerate(num_nodes)
+        ]
+        batch.add_key("hessian", blocks, level="atom_atom")
+        return batch
+
+    return make_batch

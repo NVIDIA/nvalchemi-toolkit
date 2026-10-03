@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 from unittest.mock import patch
 
@@ -331,3 +332,33 @@ class TestStrategyValidateStepCadenceGate:
         # Epoch cadence ignores the step-ran signal.
         assert strategy._should_validate(TrainingStage.AFTER_EPOCH) is True
         assert strategy._validation_checkpoint(TrainingStage.AFTER_EPOCH) is True
+
+
+class TestStrategyValidateDevicePlacement:
+    """validate() honours the strategy's configured devices."""
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_validate_before_run_moves_models_to_strategy_device(self) -> None:
+        """A standalone validation pass moves the models onto the strategy device."""
+        strategy = _make_validation_strategy(devices=[torch.device("cuda", 0)])
+        assert next(strategy.models["main"].parameters()).device.type == "cpu"
+
+        summary = strategy.validate()
+
+        assert summary is not None
+        assert next(strategy.models["main"].parameters()).device.type == "cuda"
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+    def test_validate_places_the_published_inference_model(self) -> None:
+        """A validation pass that selects the EMA slot moves it to the device first."""
+        strategy = _make_validation_strategy(
+            validation_config_kwargs={"use_ema": "always"}
+        )
+        strategy.set_inference_model(copy.deepcopy(strategy.models["main"]))
+        strategy.devices = [torch.device("cuda", 0)]
+        assert next(strategy.inference_model.parameters()).device.type == "cpu"
+
+        summary = strategy.validate()
+
+        assert summary is not None
+        assert next(strategy.inference_model.parameters()).device.type == "cuda"

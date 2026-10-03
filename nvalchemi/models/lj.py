@@ -45,13 +45,17 @@ Notes
 * Only a **single species** is supported in this wrapper.  Epsilon and sigma
   are scalar parameters shared across all atom pairs.
 * Stress/virial computation (needed for NPT/NPH) is available via
-  ``model_config.active_outputs`` including ``"stress"``.  When enabled, the
-  wrapper returns a ``"stress"`` key containing the tensile-positive Cauchy
-  stress ``-W/V`` in energy units.  After calling ``Batch.from_data_list``, set
-  the placeholder directly:
-  ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  This is
-  required because ``"stress"`` is not a named ``AtomicData`` field and is
-  therefore not carried through batching automatically.
+  ``model_config.active_outputs`` including ``"stress"`` (e.g. via
+  ``model.set_config("active_outputs", {"energy", "forces", "stress"})``).
+  When enabled, the wrapper returns a ``"stress"`` key containing the
+  tensile-positive Cauchy stress ``-W/V`` in energy units.  After calling
+  ``Batch.from_data_list``, set the placeholder directly:
+  ``batch["stress"] = torch.zeros(batch.num_graphs, 3, 3)``.  NPT/NPH
+  integrators read ``batch.stress`` before the first model evaluation and
+  the compute loop updates it in place, so the tensor must already exist.
+  It can be omitted only when the source data already carries ``stress``,
+  which is a named :class:`~nvalchemi.data.AtomicData` field and survives
+  batching.
 """
 
 from __future__ import annotations
@@ -346,6 +350,24 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
             keys.add("stress")
         return keys
 
+    def direct_derivative_keys(self) -> set[str]:
+        """Report which outputs are computed analytically by the kernel.
+
+        Returns
+        -------
+        set[str]
+            ``{"forces", "stress"}`` intersected with the declared outputs. LJ
+            evaluates forces and the virial directly in the Warp kernel and its
+            kernel energy carries no autograd graph, so a pipeline autograd group
+            keeps and sums them rather than recomputing them from the energy.
+        """
+        keys: set[str] = set()
+        if "forces" in self.model_config.outputs:
+            keys.add("forces")
+        if "stress" in self.model_config.outputs:
+            keys.add("stress")
+        return keys
+
     # ------------------------------------------------------------------
     # Forward pass
     # ------------------------------------------------------------------
@@ -440,6 +462,11 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                 switch_width=self.switch_width,
                 half_list=self.half_list,
             )
+            atomic_energies, forces, virial = (
+                atomic_energies.detach(),
+                forces.detach(),
+                virial.detach(),
+            )
             atomic_virial = virial.view(N, 3, 3)
             virials = torch.zeros(
                 B, 3, 3, dtype=atomic_virial.dtype, device=positions.device
@@ -459,6 +486,7 @@ class LennardJonesModelWrapper(nn.Module, BaseModelMixin):
                 switch_width=self.switch_width,
                 half_list=self.half_list,
             )
+            atomic_energies, forces = atomic_energies.detach(), forces.detach()
             virials = None
 
         # Scatter per-atom energies to per-system totals. For fp32 inputs,

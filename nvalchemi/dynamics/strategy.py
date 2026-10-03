@@ -12,288 +12,317 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Declarative recipes that configure a ``BaseDynamics`` they do not own.
-
-``BaseDynamics`` owns the stepping loop.  A workflow built on top of it —
-enhanced sampling, NEB, a relaxation schedule, an equation-of-state scan —
-differs from plain dynamics only in *what it configures*: which engine, which
-hooks, how long.  Expressing each of those as its own runner with its own
-``run()`` would give every future workflow a second loop to choose between,
-and the two would drift.
-
-:class:`DynamicsStrategy` is the alternative, and it mirrors
-:class:`~nvalchemi.training.strategy.TrainingStrategy`: a Pydantic model that
-validates the whole configuration up front, builds the engine, and serialises
-to a spec.  The difference from the training precedent is deliberate —
-``TrainingStrategy`` owns its loop because nothing below it does, whereas a
-dynamics strategy delegates to the engine it builds.
-
-Workflows become sibling subclasses that override :meth:`build_hooks`::
-
-    class EnhancedSampling(DynamicsStrategy): ...
-    class NEB(DynamicsStrategy): ...
-    class Relax(DynamicsStrategy): ...
-"""
+"""Declarative strategies that construct and run dynamics engines."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from collections.abc import Mapping, Sequence
+from typing import Annotated, Any, TypeAlias
 
 import torch
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
+from nvalchemi._serialization import (
+    SerializableOptionalClass,
+    _extract_init_kwargs_from_attrs,
+)
+from nvalchemi.data import Batch
 from nvalchemi.dynamics.base import BaseDynamics
-
-if TYPE_CHECKING:
-    from nvalchemi.data import Batch
-    from nvalchemi.hooks import Hook
-    from nvalchemi.models.base import BaseModelMixin
+from nvalchemi.hooks._protocol import Hook
+from nvalchemi.models.base import BaseModelMixin
+from nvalchemi.specs import BaseSpec, create_model_spec, create_model_spec_from_json
 
 __all__ = ["DynamicsStrategy"]
 
-_JSON_SCALARS = (bool, int, float, str)
+# Strictly positive scalar integer
+PositiveInt: TypeAlias = Annotated[int, Field(strict=True, gt=0)]
 
 
-def _json_ready(value: Any, where: str) -> Any:
-    """Return *value* in a form :func:`json.dumps` accepts.
+def _constructor_spec(component: Any) -> Any:
+    """Build a reconstructible spec from a component's constructor state."""
+    checkpoint_spec = getattr(component, "checkpoint_spec", None)
+    if callable(checkpoint_spec):
+        spec = checkpoint_spec()
+        if spec is not None:
+            if not isinstance(spec, BaseSpec):
+                raise TypeError(
+                    "checkpoint_spec() must return a BaseSpec or None; got "
+                    f"{type(spec).__name__}."
+                )
+            return spec
 
-    Tensors become nested lists, dtypes and devices their string form, paths
-    their string form, and containers are converted element-wise.  Anything
-    else raises rather than being coerced to a ``repr``: a spec that
-    serialises to a string nothing can read back is worse than one that says
-    it cannot represent the configuration.
+    kwargs = _extract_init_kwargs_from_attrs(component)
+    for name, value in list(kwargs.items()):
+        if isinstance(value, torch.nn.Module):
+            kwargs[name] = _constructor_spec(value)
+    return create_model_spec(type(component), **kwargs)
 
-    Parameters
-    ----------
-    value:
-        The value to convert.
-    where:
-        Dotted path to *value*, used in the error.
 
-    Returns
-    -------
-    Any
-        A JSON-representable equivalent.
+def _component_spec_dict(component: Any, *, label: str) -> dict[str, Any]:
+    """Serialize one reconstructible runtime component to a JSON dictionary."""
+    try:
+        return _constructor_spec(component).model_dump(mode="json")
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Cannot serialize {label} {type(component).__name__}: {exc}"
+        ) from exc
 
-    Raises
-    ------
-    TypeError
-        If *value* has no JSON form.
-    """
-    if value is None or isinstance(value, _JSON_SCALARS):
-        return value
-    if isinstance(value, torch.Tensor):
-        return value.detach().cpu().tolist()
-    if isinstance(value, (torch.dtype, torch.device, Path)):
-        return str(value)
-    if isinstance(value, Mapping):
-        return {
-            str(key): _json_ready(item, f"{where}[{key!r}]")
-            for key, item in value.items()
-        }
-    if isinstance(value, (list, tuple)):
-        return [_json_ready(item, f"{where}[{i}]") for i, item in enumerate(value)]
-    raise TypeError(
-        f"to_spec_dict: {where} is a {type(value).__name__}, which has no "
-        "JSON form. A spec is declarative configuration; move a live object "
-        "to a runtime argument, or give the value a representable form."
-    )
+
+def _build_spec_component(raw: Any, *, label: str) -> Any:
+    """Build one runtime component from a serialized constructor spec."""
+    if not isinstance(raw, Mapping):
+        raise ValueError(
+            f"from_spec_dict: {label} must be a constructor-spec mapping; "
+            f"got {type(raw).__name__}."
+        )
+    try:
+        return create_model_spec_from_json(dict(raw)).build()
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError(f"from_spec_dict: cannot rebuild {label}: {exc}") from exc
 
 
 class DynamicsStrategy(BaseModel):
-    """Declarative recipe that builds and runs a configured ``BaseDynamics``.
+    """Base class for declarative, serializable dynamics strategies.
 
-    Construction validates the configuration; :meth:`build` turns it into a
-    live engine; :meth:`run` drives that engine.  The strategy never steps the
-    dynamics itself — :meth:`run` delegates to ``BaseDynamics.run``, so there
-    is exactly one stepping loop in the toolkit.
+    A strategy stores the configuration needed to construct a dynamics engine.
+    By default, each :meth:`run` constructs a fresh engine. Set ``cache_engine``
+    to continue the same simulation with its engine state preserved across runs.
+    :meth:`to_spec_dict` represents hooks as reconstructible constructor
+    specs while the live model remains a runtime dependency. When restoring with
+    :meth:`from_spec_dict`, ``model=`` supplies that dependency and
+    ``extra_hooks=`` appends runtime hooks.
 
-    Attributes
+    Parameters
     ----------
-    engine:
-        The ``BaseDynamics`` subclass to build.  A class, not an instance: the
-        strategy is a recipe, and the same recipe can build an engine more
-        than once (per rank, per restart).
-    engine_kwargs:
-        Constructor arguments for *engine* beyond ``model``, ``hooks`` and
-        ``n_steps`` — timestep, temperature, friction, and so on.
-    n_steps:
-        Default duration, used when :meth:`run` is called without one.
-    extra_hooks:
-        Caller-supplied hooks, appended after whatever :meth:`build_hooks`
-        contributes.  Excluded from :meth:`to_spec_dict`, because a hook is a
-        live object rather than a declarative knob.
-
-    Notes
-    -----
-    Subclassing
-        Override :meth:`build_hooks` to contribute the hooks the workflow
-        needs.  Call ``super().build_hooks()`` and extend, so *extra_hooks*
-        keeps working::
-
-            def build_hooks(self) -> list[Hook]:
-                return [WalkerIdentityHook(), *super().build_hooks()]
-
-    Engine reuse
-        :meth:`run` builds the engine once and caches it, so consecutive calls
-        continue the same trajectory rather than restarting it with a fresh
-        thermostat and step counter.  Call :meth:`build` directly to own the
-        engine yourself.
+    model : BaseModelMixin
+        Potential model used by the dynamics engine.
+    engine : type of BaseDynamics or None, optional
+        Engine class for the default :meth:`build_engine` implementation.
+        Serialized as an importable dotted path. ``None`` requires an override.
+    engine_kwargs : dict of str to Any, optional
+        Additional engine constructor arguments. ``model``, ``hooks``, and
+        ``n_steps`` are supplied by the strategy.
+    n_steps : int or None, optional
+        Default number of dynamics steps. ``None`` delegates termination to
+        the constructed engine.
+    extra_hooks : sequence of Hook or None, optional
+        Ordered runtime hooks added to the constructed engine.
+    cache_engine : bool, optional
+        Reuse the first engine built by :meth:`run` to continue the same
+        simulation, preserving optimizer or thermostat state and step counts.
+        Defaults to ``False``. Cached runtime state is excluded from strategy specs.
     """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        extra="forbid",
+        validate_assignment=False,
+        revalidate_instances="never",
+    )
 
-    engine: type[BaseDynamics] = Field(
-        description="BaseDynamics subclass this strategy builds."
+    model: BaseModelMixin = Field(
+        exclude=True,
+        description=(
+            "Live potential model used by the dynamics engine; excluded from "
+            "strategy serialization."
+        ),
+    )
+    engine: SerializableOptionalClass = Field(
+        default=None,
+        description=(
+            "Dynamics engine class for the default builder; None requires a "
+            "build_engine override. Round-trips via an importable dotted path."
+        ),
     )
     engine_kwargs: dict[str, Any] = Field(
         default_factory=dict,
-        description="Constructor arguments for the engine beyond model/hooks/n_steps.",
+        description="Additional keyword arguments forwarded to the engine constructor.",
     )
-    n_steps: int | None = Field(
-        default=None, description="Default duration when run() is given none."
+    n_steps: PositiveInt | None = Field(
+        default=None,
+        description="Default dynamics step limit, or None for no fixed limit.",
     )
-    extra_hooks: list[Any] = Field(
+    extra_hooks: list[Hook] = Field(
         default_factory=list,
         exclude=True,
-        description="Caller-supplied hooks; runtime objects, not serialised.",
+        description=(
+            "Runtime hooks represented by ordered constructor specs during strategy "
+            "serialization."
+        ),
+    )
+    cache_engine: bool = Field(
+        default=False,
+        description="Reuse the engine and its runtime state across run() calls.",
     )
 
     _engine: BaseDynamics | None = PrivateAttr(default=None)
 
-    def build_hooks(self) -> list[Hook]:
-        """Return the hooks this strategy contributes to the engine.
+    @field_validator("engine")
+    @classmethod
+    def _validate_engine(cls, value: type | None) -> type[BaseDynamics] | None:
+        """Require a dynamics engine subclass when a class is configured."""
+        if value is not None and not issubclass(value, BaseDynamics):
+            raise TypeError("engine must subclass BaseDynamics")
+        return value
 
-        The base implementation contributes only :attr:`extra_hooks`.
-        Subclasses override to prepend their own and should call
-        ``super().build_hooks()`` rather than dropping it.
+    @field_validator("extra_hooks", mode="before")
+    @classmethod
+    def _normalize_extra_hooks(cls, value: Any) -> list[Hook]:
+        """Convert an optional hook sequence to a new list."""
+        if value is None:
+            return []
+        if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+            raise TypeError("extra_hooks must be a sequence of Hook objects or None")
+        return list(value)
 
-        Returns
-        -------
-        list[Hook]
-            Hooks to register on the built engine, in registration order.
-        """
-        return list(self.extra_hooks)
+    def build_engine(self) -> BaseDynamics:
+        """Construct a fresh dynamics engine.
 
-    def build(self, model: BaseModelMixin) -> BaseDynamics:
-        """Construct the engine for *model*.
-
-        Parameters
-        ----------
-        model:
-            The potential the engine will call.
+        The default builds one engine from :attr:`engine` and
+        :meth:`build_hooks`. Override for multi-engine or multi-stage strategies.
 
         Returns
         -------
         BaseDynamics
-            A freshly constructed engine with this strategy's hooks
-            registered.  Each call builds a new one; :meth:`run` caches
-            instead.
+            Newly constructed engine configured by this strategy.
+
+        Raises
+        ------
+        NotImplementedError
+            If no engine class is configured and this method is not overridden.
         """
+        if self.engine is None:
+            raise NotImplementedError(
+                f"{type(self).__name__} must set `engine=` or override build_engine()"
+            )
         return self.engine(
-            model=model,
+            model=self.model,
             hooks=self.build_hooks(),
             n_steps=self.n_steps,
             **self.engine_kwargs,
         )
 
-    def dynamics(self, model: BaseModelMixin) -> BaseDynamics:
-        """Return the cached engine for *model*, building it on first use.
-
-        Parameters
-        ----------
-        model:
-            The potential the engine will call.
+    def build_hooks(self) -> list[Hook]:
+        """Build the ordered hook list for the default engine builder.
 
         Returns
         -------
-        BaseDynamics
-            The engine this strategy drives.  Stable across calls, so step
-            counters and thermostat state persist.
-
-        Raises
-        ------
-        ValueError
-            If *model* is not the one the cached engine was built for.  The
-            cache exists so consecutive :meth:`run` calls continue a single
-            trajectory; handing it a second potential would either return an
-            engine evaluating the first — a trajectory for the wrong model,
-            with nothing to show for it — or quietly start a second
-            trajectory sharing the first one's hooks and counters.  Call
-            :meth:`build` for an independent engine, or construct a second
-            strategy.
+        list of Hook
+            A new list containing the configured extra hooks. Override to add
+            strategy-specific hooks.
         """
-        if self._engine is None:
-            self._engine = self.build(model)
-        elif self._engine.model is not model:
-            raise ValueError(
-                f"{type(self).__name__}: this strategy is already driving an "
-                f"engine built for a {type(self._engine.model).__name__}, and "
-                f"a different {type(model).__name__} was passed. A strategy "
-                "caches its engine so consecutive run() calls continue one "
-                "trajectory, which a second potential would silently "
-                "invalidate. Use build(model) for an independent engine, or "
-                "construct a second strategy."
-            )
-        return self._engine
+        return list(self.extra_hooks)
 
     def run(
         self,
         batch: Batch,
-        model: BaseModelMixin,
         n_steps: int | None = None,
     ) -> Batch:
-        """Run the configured dynamics.
+        """Run an engine on ``batch``, reusing it when caching is enabled.
 
-        Delegates to ``BaseDynamics.run``; the strategy contributes
-        configuration, not a second stepping loop.
+        With ``cache_engine=False``, every call builds a fresh engine. With
+        ``cache_engine=True``, only the first call builds an engine, and later
+        calls reuse its state and original configuration to continue the same
+        simulation. Optimizer or thermostat state and step counts are retained.
+        The caller must keep the batch's system/group membership and ordering,
+        device, and dtype aligned with the cached engine's state. Compatibility
+        is not validated automatically, and changing the batch does not reset
+        engine state. Use ``cache_engine=False`` for independent simulations.
 
         Parameters
         ----------
-        batch:
-            The initial batch.
-        model:
-            The potential the engine calls.
-        n_steps:
-            Duration; falls back to :attr:`n_steps`.
+        batch : Batch
+            Atomic systems to update in place.
+        n_steps : int or None, optional
+            Per-run step-limit override. ``None`` uses :attr:`n_steps`.
 
         Returns
         -------
         Batch
-            The batch after all steps.
+            The input batch after dynamics updates.
         """
-        engine = self.dynamics(model)
-        return engine.run(
-            batch, n_steps=n_steps if n_steps is not None else self.n_steps
-        )
+        if self.cache_engine:
+            if self._engine is None:
+                self._engine = self.build_engine()
+            engine = self._engine
+        else:
+            engine = self.build_engine()
+        result = engine.run(batch, n_steps=n_steps)
+        if result is None:
+            raise RuntimeError(
+                f"{type(self).__name__} unexpectedly completed without a result batch"
+            )
+        return result
 
     def to_spec_dict(self) -> dict[str, Any]:
-        """Serialise the declarative knobs to a JSON-ready dict.
+        """Serialize declarative strategy fields to a JSON-ready dictionary.
 
-        ``extra_hooks`` is excluded: a hook is a live object, not a knob.
-        Subclasses that add live fields should exclude them the same way and
-        extend this dict with their own declarative settings.
-
-        ``engine_kwargs`` is converted rather than copied.  Several
-        integrators take tensor-valued controls — ``NVTLangevin`` annotates
-        ``temperature`` as ``float | torch.Tensor`` — so copying them
-        verbatim produces a dict that :func:`json.dumps` refuses, for a
-        configuration the engine itself accepts.
+        Hooks are represented by constructor specs. The live model, cached
+        engine, and mutable hook state are not included. Subclasses with arbitrary
+        configuration objects must provide Pydantic serializers or override this method.
 
         Returns
         -------
         dict[str, Any]
-            JSON-ready bundle suitable for :func:`json.dumps`.
-
-        Raises
-        ------
-        TypeError
-            If an ``engine_kwargs`` value has no JSON form, naming the key.
+            JSON-ready strategy configuration.
         """
-        return {
-            "engine": f"{self.engine.__module__}.{self.engine.__qualname__}",
-            "engine_kwargs": _json_ready(dict(self.engine_kwargs), "engine_kwargs"),
-            "n_steps": self.n_steps,
-        }
+        spec = self.model_dump(mode="json")
+        spec["extra_hook_specs"] = [
+            _component_spec_dict(hook, label=f"hook at index {index}")
+            for index, hook in enumerate(self.extra_hooks)
+        ]
+        return spec
+
+    @classmethod
+    def from_spec_dict(
+        cls,
+        spec: Mapping[str, Any],
+        *,
+        model: BaseModelMixin,
+        extra_hooks: Sequence[Hook] | None = None,
+    ) -> DynamicsStrategy:
+        """Rebuild a strategy from :meth:`to_spec_dict` output.
+
+        Parameters
+        ----------
+        spec : mapping of str to Any
+            JSON-decoded strategy configuration.
+        model : BaseModelMixin
+            Weighted potential model to attach to the restored strategy.
+        extra_hooks : sequence of Hook or None, optional
+            Runtime hooks appended after hooks rebuilt from serialized specs.
+
+        Returns
+        -------
+        DynamicsStrategy
+            Freshly validated strategy instance.
+        """
+        if not isinstance(spec, Mapping):
+            raise TypeError("spec must be a mapping")
+        data = dict(spec)
+        runtime_fields = {"model", "extra_hooks"} & data.keys()
+        if runtime_fields:
+            names = ", ".join(sorted(runtime_fields))
+            raise ValueError(f"spec cannot contain runtime-only fields: {names}")
+
+        raw_hook_specs = data.pop("extra_hook_specs", [])
+        if not isinstance(raw_hook_specs, list):
+            raise ValueError(
+                "from_spec_dict: extra_hook_specs must be a list of constructor specs."
+            )
+        hooks: list[Hook] = []
+        for index, raw_hook_spec in enumerate(raw_hook_specs):
+            hook = _build_spec_component(
+                raw_hook_spec,
+                label=f"extra_hook_specs[{index}]",
+            )
+            if not isinstance(hook, Hook):
+                raise TypeError(
+                    f"from_spec_dict: extra_hook_specs[{index}] built "
+                    f"{type(hook).__name__}, expected Hook."
+                )
+            hooks.append(hook)
+
+        data["model"] = model
+        data["extra_hooks"] = [*hooks, *(extra_hooks or [])]
+        return cls.model_validate(data)

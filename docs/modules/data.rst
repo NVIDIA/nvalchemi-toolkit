@@ -16,6 +16,16 @@ Core classes
 
    AtomicData
    Batch
+   LevelSchema
+
+Device helpers
+--------------
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   resolve_device
 
 I/O and pipelines
 -----------------
@@ -27,6 +37,7 @@ I/O and pipelines
 
    AtomicDataZarrWriter
    AtomicDataZarrReader
+   FieldSchema
    Dataset
    InMemoryDataset
    DataLoader
@@ -45,6 +56,24 @@ Dataset composition and sampling
    MultiDataset
    MultiDatasetSampler
    MultiDatasetBatchSampler
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   distributed_shard
+
+Device helpers
+--------------
+
+.. currentmodule:: nvalchemi.data.datapipes
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   dataset_device
+   same_device
 
 Write configuration
 -------------------

@@ -90,6 +90,37 @@ first = batch.get_data(0)
 again = batch.to_data_list()
 ```
 
+### Grouping graphs
+
+A batch can optionally tag contiguous runs of graphs as **groups** — a single
+logical unit such as the images of one NEB path — via
+{py:meth}`~nvalchemi.data.batch.Batch.set_group_layout`. This is unrelated to
+the internal atoms/edges/system **storage groups** described later in *How
+Batch stores data internally*.
+
+```python
+batch.set_group_layout(torch.tensor([4, 4, 1, 1, 1]))
+print(batch.group_idx)  # tensor([0, 0, 1, 1, 1]) - normalized to dense IDs
+```
+
+The derived {py:attr}`~nvalchemi.data.batch.Batch.group_layout` property
+lazily builds and caches a
+{py:class}`~nvalchemi.data.group_layout.GroupLayout`, mapping between graph,
+node, and group cardinalities (`graph_rank`, `node_to_group`, `group_ptr`,
+`num_graphs_per_group`), plus mask/broadcast helpers `reduce_all`,
+`reduce_any`, and `broadcast`. The cache invalidates automatically when
+`group_idx` is reassigned or graph membership
+mutates (selection, `zero`, `defrag`, ...). The derived metadata is a snapshot
+taken when `group_layout` is first accessed. In-place changes such as
+`batch.group_idx[3] = 2` cannot be detected; call
+`batch.set_group_layout(batch.group_idx)` afterward to validate the new grouping
+and rebuild the cached layout. A selection that leaves group numbering
+non-dense must be repaired with `batch.set_group_layout(batch.group_idx)` before
+`group_layout` is accessed again. `append()` requires both batches grouped or
+both ungrouped and rebases labels. `put()` rejects a grouped source or
+destination because graph-level buffer masks can split logical groups, while
+`append_data()` is rejected on a grouped batch.
+
 ### Indexing and selection
 
 `Batch` supports bracket indexing that mirrors familiar Python and PyTorch
@@ -148,36 +179,267 @@ list_of_data = batch.to_data_list()
 
 ## How Batch stores data internally
 
-When you call {py:meth}`nvalchemi.data.batch.Batch.from_data_list`, the resulting
-`Batch` does not simply stack all tensors along a new "batch" axis. Different kinds
-of data need different layouts, and the toolkit uses a storage model that reflects
-this.
+A `Batch` organizes tensor fields by their cardinality within each atomic system.
+Each field belongs to a **level**, which determines how many logical entities it
+contains per system and how those values are packed across the batch. The three
+built-in levels cover the usual atomic-data layout:
 
-Every tensor attribute belongs to one of three **levels**:
+| Built-in level | Kind | Per-system cardinality | Examples |
+|---|---|---:|---|
+| `system` | Uniform | `1` | `cell`, `pbc`, `energy`, `stress` |
+| `atoms` | Segmented | `N_i` atoms | `positions`, `atomic_numbers`, `forces` |
+| `edges` | Segmented | `E_i` edges | `neighbor_list`, `shifts`, `edge_embeddings` |
 
-| Level | Storage class | Shape convention | Examples |
-|-----------|----------------------------|--------------------------------------|---------------------------------------------|
-| **system** | {py:class}`~nvalchemi.data.level_storage.UniformLevelStorage` | First dim = number of graphs | `cell`, `pbc`, `energy`, `stress` |
-| **atoms** | {py:class}`~nvalchemi.data.level_storage.SegmentedLevelStorage` | Concatenated across graphs | `positions`, `atomic_numbers`, `forces` |
-| **edges** | {py:class}`~nvalchemi.data.level_storage.SegmentedLevelStorage` | Concatenated across graphs | `neighbor_list`, `shifts`, `neighbor_list_shifts`, `edge_embeddings` |
+A uniform level contributes one row per system. A segmented level may contribute a
+different number of rows from each system. For example, all positions are packed
+into one tensor, and an atom pointer records the slice owned by each system. Edge
+data uses the same segmented representation with a separate pointer.
 
-**Uniform storage** is straightforward: every graph contributes exactly one row, so
-the i-th graph's data is always at index `i`. System-level properties like the
-simulation cell or total energy work this way.
+### Defining custom levels
 
-**Segmented storage** is designed for variable-length data. Positions, for example,
-are concatenated into a single tensor of shape `(total_nodes, 3)`. To know where each
-graph's atoms start and end, the storage tracks `segment_lengths` and a pointer array
-`batch_ptr`. The i-th graph's nodes live at `positions[batch_ptr[i]:batch_ptr[i+1]]`.
-Edge data works the same way, with node-index offsets automatically applied to
-`neighbor_list` so that each graph's edges still point to the correct atoms in the
-flattened array.
+Use {py:class}`~nvalchemi.data.LevelSchema` when data needs cardinalities beyond the
+built-in atom, edge, and system levels. A schema can register:
 
-The mapping from attribute name to level is determined by a
-{py:obj}`~nvalchemi.data.level_storage.DEFAULT_ATTRIBUTE_MAP`. When you add a new key with
-{py:meth}`~nvalchemi.data.batch.Batch.add_key`, you explicitly specify the level
-(`"node"`, `"edge"`, or `"system"`) so the batch knows how to slice it back out when
-you call {py:meth}`~nvalchemi.data.batch.Batch.get_data`.
+- A custom **uniform** level with one entity per system.
+- A custom **segmented** level with an arbitrary entity count per system.
+- A **product** level representing the Cartesian product of two ordered segmented
+  base levels.
+
+The example below adds a custom `constraints` level to the schema and fills it with
+a variable number of constraint records per system. Each record is represented here
+by an eight-element feature vector.
+
+```python
+import torch
+
+from nvalchemi.data import AtomicData, Batch, LevelSchema
+
+data_list = [
+    AtomicData(
+        positions=torch.randn(num_atoms, 3),
+        atomic_numbers=torch.ones(num_atoms, dtype=torch.long),
+    )
+    for num_atoms in (2, 3)
+]
+
+schema = LevelSchema()
+schema.add_level("constraints", segmented=True)
+
+print(schema.level_names)
+# ('atoms', 'edges', 'system', 'constraints')
+print(schema.level_kind("constraints"))  # 'segmented'
+
+constraint_batch = Batch.from_data_list(data_list, attr_map=schema)
+constraint_values = [torch.randn(4, 8), torch.randn(1, 8)]
+constraint_batch.add_key(
+    "constraint_features",
+    constraint_values,
+    level="constraints",
+)
+
+print(constraint_batch.level_ptr("constraints").tolist())  # [0, 4, 5]
+print(constraint_batch.constraint_features.shape)  # torch.Size([5, 8])
+```
+
+The two systems contain four and one constraint records. These counts do not need to
+match their atom or edge counts.
+
+Registering a level defines its cardinality semantics; it does not automatically
+assign arbitrary tensor fields to that level. There are three ways to classify a
+custom field:
+
+1. For a field already present on each `AtomicData`, call
+   `schema.set("constraint_features", "constraints")` before constructing the
+   batch.
+2. Pass `field_levels={"constraint_features": "constraints"}` to
+   {py:meth}`~nvalchemi.data.Batch.from_data_list`.
+3. Add values after construction with
+   `batch.add_key("constraint_features", values, level="constraints")`, as in the
+   example above.
+
+All three routes record field ownership in the batch-owned schema. The explicit
+`field_levels` form is useful when the input objects should remain unchanged.
+
+### Extending an existing Batch schema
+
+An already-created {py:class}`~nvalchemi.data.Batch` can copy level declarations
+from another batch or register additional levels directly:
+
+```python
+destination.extend_level_schema(source.get_level_schema())
+destination.add_product_level(
+    "atom_atom",
+    left="atoms",
+    right="atoms",
+)
+```
+
+{py:meth}`~nvalchemi.data.Batch.get_level_schema` returns a defensive copy, so
+changing the returned {py:class}`~nvalchemi.data.LevelSchema` does not modify the
+source batch. Schema extension copies declarations only; it does not copy tensor
+data, allocate storage groups, or create placeholder fields. Materialize a field
+separately with {py:meth}`~nvalchemi.data.Batch.add_key` after its level has been
+registered.
+
+The names `get_level_schema`, `extend_level_schema`, `add_level`, and
+`add_product_level` are reserved for the `Batch` API during attribute-style access.
+Custom tensor fields may still use those names, but access them through item syntax:
+
+```python
+batch["get_level_schema"]
+batch["add_product_level"]
+```
+
+Attribute syntax such as `batch.get_level_schema()` and
+`batch.add_product_level(...)` always resolves to the corresponding `Batch` API.
+
+### Adding fields to a zero-graph Batch
+
+A zero-graph batch has no per-system tensors from which `add_key()` can infer a
+field's dtype or trailing payload shape. Supply both explicitly when materializing
+such a field:
+
+```python
+empty_batch.add_product_level(
+    "atom_atom",
+    left="atoms",
+    right="atoms",
+)
+empty_batch.add_key(
+    "pair_blocks",
+    [],
+    level="atom_atom",
+    dtype=torch.float32,
+    payload_shape=(3, 3),
+)
+
+print(empty_batch.pair_blocks.shape)  # torch.Size([0, 3, 3])
+print(empty_batch.level_ptr("atom_atom").tolist())  # [0]
+```
+
+`payload_shape` contains only dimensions not owned by the level. Uniform levels
+own the graph axis, segmented levels own one cardinality axis, and product levels
+own two parent-cardinality axes. Existing pre-allocated group capacity is retained;
+a newly materialized group starts with zero capacity. For non-empty values these
+keywords are optional consistency checks, and ordinary shape and dtype inference
+remains unchanged.
+
+### Storing a Hessian
+
+{py:meth}`~nvalchemi.models.base.BaseModelMixin.compute_hessian` stores the
+Hessian of total energy with respect to Cartesian positions on a product level
+whose left and right parents are both the built-in `atoms` level:
+
+```python
+result = model.compute_hessian(
+    batch,
+    strategy="vmap",
+    row_chunk_size=32,
+)
+
+assert result is batch
+print(result.get_level_schema().product_parents["atom_atom"])
+# ('atoms', 'atoms')
+```
+
+To keep a simulation batch unchanged, supply a separate analysis batch with its
+required neighbor data already prepared.
+
+For a system with `N_i` atoms, `get_data(i).hessian` has logical shape
+`[N_i, N_i, 3, 3]`. Its axes are
+`[atom_out, atom_in, xyz_out, xyz_in]`. A batch containing systems with two and
+three atoms packs their four and nine atom-pair blocks without padding:
+
+```python
+print(result.level_ptr("atom_atom").tolist())  # [0, 4, 13]
+print(result.hessian.shape)  # torch.Size([13, 3, 3])
+print(result.get_data(0).hessian.shape)  # torch.Size([2, 2, 3, 3])
+```
+
+The product blocks are restored with their two atom axes by
+{py:meth}`~nvalchemi.data.Batch.get_data` and
+{py:meth}`~nvalchemi.data.Batch.to_data_list`. They retain their schema, pointers,
+dtype, and values through cloning, selection, compatible append, and device
+movement. The stored tensor is detached from the construction graph.
+
+The field also uses the existing custom-level Zarr representation:
+
+```python
+from nvalchemi.data import AtomicDataZarrReader, AtomicDataZarrWriter, Dataset
+
+writer = AtomicDataZarrWriter("hessians.zarr")
+writer.write(result)
+
+dataset = Dataset(AtomicDataZarrReader("hessians.zarr"), device="cpu")
+loaded = dataset.load_batches([[0, 1]])[0]
+print(loaded.get_data(1).hessian.shape)  # torch.Size([3, 3, 3, 3])
+```
+
+Appending another Hessian batch requires the same level definitions, field set,
+dtype, and trailing `[3, 3]` payload shape. Zarr stores the packed product payload
+and an `int64` dataset-wide pointer; no Hessian-specific on-disk format is used.
+
+Dense Hessians have quadratic storage cost and are intended for explicit analysis
+or dataset generation. Do not carry them through active in-flight dynamics
+batches. Use the matrix-free model HVP APIs when dense storage is unnecessary.
+
+| Field kind | Per-system logical shape | Packed `Batch` shape |
+|---|---|---|
+| Uniform | `[1, H]` | `[B, H]` |
+| Segmented | `[S_i, H]` | `[sum(S_i), H]` |
+| Product | `[L_i, R_i, H]` | `[sum(L_i * R_i), H]` |
+
+{py:attr}`~nvalchemi.data.Batch.level_keys` reports every cardinality-resolved level
+and its fields in schema order. A fieldless resolved level appears with an empty set.
+{py:meth}`~nvalchemi.data.Batch.level_ptr` returns its cumulative per-system pointer
+as an `int32` tensor. This limit applies to each materialized level in one in-memory
+`Batch`; constructing a level whose packed cardinality exceeds the signed `int32`
+range raises an error. Zarr uses `int64` pointers for dataset-wide offsets, so the
+total dataset may contain more entities than a single `Batch`. The existing
+{py:attr}`~nvalchemi.data.Batch.keys` property remains the node, edge, and system
+compatibility view and does not list custom levels.
+
+### Fieldless cardinality metadata
+
+A level's cardinality can be known even when it owns no tensor field. This is useful
+when a product field is the only value that exposes one of its parent dimensions:
+
+```python
+schema = LevelSchema()
+schema.add_level("augmented", segmented=True)
+schema.add_product_level(
+    "atom_augmented",
+    left="atoms",
+    right="augmented",
+)
+
+augmented_batch = Batch.from_data_list(data_list, attr_map=schema)
+augmented_batch.add_key(
+    "atom_augmented_features",
+    [torch.randn(2, 4, 8), torch.randn(3, 5, 8)],
+    level="atom_augmented",
+)
+
+print(augmented_batch.level_keys["augmented"])          # set()
+print(augmented_batch.level_ptr("augmented").tolist())  # [0, 4, 9]
+```
+
+In this example the augmented counts happen to be `N_i + 2`. The schema does not
+store or evaluate that expression: the product tensors supply the concrete counts
+four and five. Registered segmented and product levels are otherwise materialized
+lazily, when a field or product axis establishes their cardinality. Zero-length
+parent and product axes are valid.
+
+Custom definitions and segment boundaries are preserved through reconstruction,
+selection, append, device movement, buffering, and point-to-point batch transport.
+Custom segmented payloads remain opaque: only the built-in `neighbor_list` receives
+automatic atom-index offsets. A custom edge-like tensor that contains indices must
+manage its own index semantics.
+
+Custom point-to-point transport uses the receiver's template to determine message
+order, field dtypes, and payload shapes. The sender and receiver must therefore use
+independently matching templates; the transport does not negotiate or validate two
+different layouts at runtime.
 
 ## Neighbor list formats
 
@@ -254,6 +516,36 @@ buffer = Batch.empty(
 All tensors are pre-allocated at the given capacity. The batch's `num_graphs` starts
 at zero.
 
+For a `Batch` template with custom levels, pass an element capacity for each
+payload-bearing custom segmented or product level:
+
+```python
+custom_buffer = Batch.empty(
+    num_systems=64,
+    num_nodes=4096,
+    num_edges=32768,
+    template=hessian_batch,
+    level_capacities={
+        "atom_atom": 8192,
+    },
+    device="cuda",
+)
+```
+
+Custom uniform levels use `num_systems`. Product capacity is explicit and is not
+derived from either parent capacity. A fieldless segmented parent needs pointer
+metadata but no element-buffer entry in `level_capacities`. Use
+{py:meth}`~nvalchemi.data.Batch.empty_like` to create an empty buffer that
+preserves an existing batch's complete materialized layout and capacities.
+
+The generic buffer kernels support `bool`, `float32`, `float64`, `int32`, and
+`int64` payloads, and built-in fields may use any of those dtypes. Custom uniform
+levels use the same set. For custom segmented and product levels,
+{py:meth}`~nvalchemi.data.Batch.put` currently accepts only `float32` payloads.
+Unsupported or mismatched dtypes are rejected before any batch group is modified.
+This narrower buffer-copy policy does not change the dtype support of ordinary,
+tightly packed `Batch` objects.
+
 ### Filling the buffer with `put`
 
 {py:meth}`nvalchemi.data.batch.Batch.put` copies selected graphs from a source batch
@@ -289,6 +581,97 @@ pipeline iteration.
 These operations (`empty` / `put` / `defrag` / `zero`) form the backbone of the
 dynamics pipeline's inflight batching, where systems enter and leave a running
 simulation at different times.
+
+## Persisting custom levels in Zarr
+
+{py:class}`~nvalchemi.data.AtomicDataZarrWriter` persists a batch's complete level
+schema. Custom fields are stored under `levels/<level>/`, while cumulative pointers
+for resolved custom segmented and product levels are stored under
+`meta/level_ptrs/`. Product payloads stay packed on disk and are restored to their
+two logical parent axes when read.
+
+The root `attrs["levels"]` entry contains locally versioned custom-level definitions.
+This version applies only to that metadata; it is not a store-wide format version.
+A batch containing only the built-in levels retains the existing `core/`, `custom/`,
+and built-in pointer layout and does not create custom-level metadata.
+
+The example below writes two ordinary systems, then adds a variable-length
+`constraints` field. The pointer is a complete physical-store prefix pointer: the
+two systems own two and three constraint rows, respectively.
+
+```python
+import torch
+
+from nvalchemi.data import (
+    AtomicData,
+    AtomicDataZarrReader,
+    AtomicDataZarrWriter,
+    Batch,
+    Dataset,
+    LevelSchema,
+)
+
+systems = [
+    AtomicData(
+        positions=torch.zeros(num_atoms, 3),
+        atomic_numbers=torch.ones(num_atoms, dtype=torch.long),
+    )
+    for num_atoms in (2, 3)
+]
+
+writer = AtomicDataZarrWriter("features.zarr")
+writer.write(Batch.from_data_list(systems))
+
+schema = LevelSchema()
+schema.add_level("constraints", segmented=True)
+constraint_ptr = torch.tensor([0, 2, 5], dtype=torch.int64)
+constraint_values = torch.arange(40, dtype=torch.float32).reshape(5, 8)
+writer.add_custom(
+    "constraint_features",
+    constraint_values,
+    "constraints",
+    attr_map=schema,
+    level_ptrs={"constraints": constraint_ptr},
+)
+
+reader = AtomicDataZarrReader("features.zarr")
+stored_schema = reader.level_schema
+dataset = Dataset(reader, device="cpu")
+loaded_batch = dataset.load_batches([[0, 1]])[0]
+
+print(loaded_batch.level_ptr("constraints").tolist())  # [0, 2, 5]
+print(loaded_batch.constraint_features.shape)  # torch.Size([5, 8])
+print(loaded_batch.get_data(1).constraint_features.shape)  # torch.Size([3, 8])
+print(loaded_batch.get_data(1).constraint_features[0].tolist())
+# [16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0]
+```
+
+`reader.level_schema` returns an independent schema. The reader also describes
+the store without reading a chunk: `reader.schema()` returns one
+{py:class}`~nvalchemi.data.FieldSchema` (level, dtype, row shape) per stored
+field, `reader.level_sizes()` the row count of every level including custom
+ones, `reader.num_samples` the stored sample count with soft-deleted samples
+included, `reader.field_array(name)` the Zarr array behind a field, and
+`reader.check_integrity()` raises when the pointers, masks, and field arrays
+disagree with the committed sample count, which is what an append interrupted
+mid-write leaves behind. `Dataset` and
+{py:class}`~nvalchemi.data.InMemoryDataset` propagate field-bearing custom levels
+and fieldless parents whose counts can be recovered from product payload axes. A
+level represented only by a stored pointer, with no field or product payload, is
+preserved by Zarr but is not reconstructed by those dataset batching paths.
+
+{py:meth}`~nvalchemi.data.AtomicDataZarrWriter.add_custom` can add a field on a new
+custom level to an existing store by accepting its `attr_map` and complete physical
+store prefix pointers through `level_ptrs`. Each pointer must have one entry more
+than the number of physical samples and must cover deleted rows as well as active
+samples. Definitions, pointers, and tensor conversion are validated before new
+level groups or arrays are created. Once a definition and its pointers are stored,
+later fields on the same level can reuse them.
+
+Legacy stores are opened without migration or rewriting. Conversely, Toolkit
+versions that predate custom levels do not know how to recover fields stored in the
+new `levels/` groups, even though the store's legacy `core/` and `custom/` contents
+retain their existing representation.
 
 ## ASE Atoms interoperability
 

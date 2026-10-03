@@ -151,8 +151,17 @@ fused = FusedStage(
     exit_status=2,           # auto-set to len(sub_stages) if -1
     compile_step=False,      # enable torch.compile
     compile_kwargs=None,     # kwargs for torch.compile
+    reprime_on_entry=None,   # status codes needing a fresh force compute on entry
 )
 ```
+
+If a sub-stage needs freshly computed forces before it starts integrating
+(e.g. its `AFTER_COMPUTE` hooks differ from the stage the sample came from),
+pass its status code in `reprime_on_entry`. Newly entering samples skip one
+`pre_update`/`post_update` cycle while the shared compute and that stage's
+`AFTER_COMPUTE` hooks refresh their forces, then integrate normally the
+following iteration. This is separate from the initial batch-wide force
+prime and does not affect samples already in that status.
 
 ### With torch.compile
 
@@ -163,6 +172,20 @@ fused.compile(fullgraph=True, mode="reduce-overhead")
 with fused:  # lazy compilation on context entry
     result = fused.run(batch)
 ```
+
+### CUDA streams: `with` vs bare `run()`
+
+Prefer to use context manager:
+
+```python
+with dynamics:
+    dynamics.run(batch)
+```
+
+As best pattern, even without explicit CUDA stream usage, as it in turn
+supports `compile(mode="reduce-overhead")`
+
+Calling `dynamics.run(batch)` without context manager will reuse the current stream.
 
 ### How it works
 

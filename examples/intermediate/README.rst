@@ -29,3 +29,11 @@ selection.
 **07 — Rich Training Reporting**: Live Rich dashboard driven by synthetic
 training losses, validation metrics, progress counters, and learning-rate
 scheduler values.
+
+**08 — LoRA Fine-Tuning**: Download the LPSC dataset in EXTXYZ format, convert
+it to in-memory atomic data, create training and validation subsets, fit atomic
+reference energies, and fine-tune ``medium-mpa-0`` with LoRA adapters.
+
+**09 — Offline Distillation**: Labeling a dataset with a frozen foundation
+teacher, streaming the labeled Zarr store, and distilling energy, force, and
+per-atom energy signals into a student with DistillationStrategy.

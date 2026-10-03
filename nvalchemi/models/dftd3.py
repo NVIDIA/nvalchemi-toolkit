@@ -71,6 +71,7 @@ from torch import nn
 
 from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.models._derivatives import DerivativeNotSupported, _DerivativeRequest
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -572,6 +573,21 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
             node_virial_key="atomic_virial",
         )
 
+    # ------------------------------------------------------------------
+    # Derivative support
+    # ------------------------------------------------------------------
+
+    def _validate_derivative_request(self, request: _DerivativeRequest) -> None:
+        """Reject second-order requests before entering the D3 kernel."""
+        raise DerivativeNotSupported(
+            model_name=type(self).__name__,
+            operation=request.operation,
+            execution=request.execution,
+            strategy=request.strategy,
+            reason="DFT-D3 uses an analytical Warp derivative path without energy "
+            "double backward support",
+        )
+
     @property
     def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
         return {}
@@ -689,6 +705,24 @@ class DFTD3ModelWrapper(nn.Module, BaseModelMixin):
         if "forces" in self.model_config.active_outputs:
             keys.add("forces")
         if "stress" in self.model_config.active_outputs:
+            keys.add("stress")
+        return keys
+
+    def direct_derivative_keys(self) -> set[str]:
+        """Report which outputs are computed analytically by the kernel.
+
+        Returns
+        -------
+        set[str]
+            ``{"forces", "stress"}`` intersected with the declared outputs.  D3
+            evaluates forces and the virial directly in the Warp kernel and its
+            kernel energy carries no autograd graph, so a pipeline autograd group
+            keeps and sums them rather than recomputing them from the energy.
+        """
+        keys: set[str] = set()
+        if "forces" in self.model_config.outputs:
+            keys.add("forces")
+        if "stress" in self.model_config.outputs:
             keys.add("stress")
         return keys
 

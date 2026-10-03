@@ -23,11 +23,11 @@ from typing import TYPE_CHECKING
 
 import torch
 
+from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.hooks import DynamicsContext
 
 if TYPE_CHECKING:
-    from nvalchemi.data import Batch
     from nvalchemi.dynamics.base import BaseDynamics
 
 
@@ -43,7 +43,8 @@ def make_dynamics_context(
     batch : Batch
         Batch to expose through the context.
     dynamics : BaseDynamics
-        Dynamics instance providing step, model, rank, and convergence state.
+        Dynamics instance providing step, model, rank, and convergence state,
+        and exposed as the context's ``workflow`` as the engine does.
     converged : torch.Tensor | None, optional
         Explicit converged graph indices. When ``None``, use
         ``dynamics._last_converged``.
@@ -65,6 +66,7 @@ def make_dynamics_context(
         model=dynamics.model,
         converged_mask=mask,
         global_rank=dynamics.global_rank,
+        workflow=dynamics,
     )
 
 
@@ -132,3 +134,134 @@ class RecordingHook:
             The stage being dispatched (unused).
         """
         self.record_list.append(self.name)
+
+
+# ---------------------------------------------------------------------------
+# Shared batch/model builders
+# ---------------------------------------------------------------------------
+
+
+def _make_atomic_data(
+    n_atoms: int, seed: int = 0, with_cell: bool = False
+) -> AtomicData:
+    """Return a minimal AtomicData suitable for dynamics tests."""
+    g = torch.Generator()
+    g.manual_seed(seed)
+    kwargs = dict(
+        positions=torch.randn(n_atoms, 3, generator=g),
+        atomic_numbers=torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g),
+        atomic_masses=torch.ones(n_atoms),
+        forces=torch.zeros(n_atoms, 3),
+        energy=torch.zeros(1, 1),
+    )
+    if with_cell:
+        kwargs["cell"] = torch.eye(3).unsqueeze(0)
+        kwargs["stress"] = torch.zeros(1, 3, 3)
+    data = AtomicData(**kwargs)
+    data.add_node_property("velocities", torch.zeros(n_atoms, 3))
+    return data
+
+
+def _make_batch(
+    n_systems: int, n_atoms_each: int = 4, seed: int = 0, with_cell: bool = False
+) -> Batch:
+    data_list = [
+        _make_atomic_data(n_atoms_each, seed + i, with_cell=with_cell)
+        for i in range(n_systems)
+    ]
+    return Batch.from_data_list(data_list)
+
+
+def _make_stress_model():
+    """Return a DemoModelWrapper subclass that also reports zero stress.
+
+    NPT/NPH declare ``"stress"`` in ``__needs_keys__``, so ``step()``
+    requires the model to produce stress in its output dict.  This
+    factory builds a minimal subclass that appends a (M, 3, 3) zero
+    stress tensor so that ``_validate_model_outputs`` passes.  The
+    actual stress value used by NPT/NPH kernels is read from
+    ``batch.stress``, which is initialised to zeros when the batch is
+    built with ``with_cell=True``.
+    """
+    from collections import OrderedDict
+
+    from nvalchemi.models.base import ModelConfig
+    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+    class _Wrapper(DemoModelWrapper):
+        def __init__(self):
+            super().__init__(DemoModel())
+            base = self.model_config
+            self.model_config = ModelConfig(
+                outputs=frozenset(set(base.outputs) | {"stress"}),
+                autograd_outputs=base.autograd_outputs,
+                autograd_inputs=base.autograd_inputs,
+                required_inputs=base.required_inputs,
+                optional_inputs=base.optional_inputs,
+                supports_pbc=base.supports_pbc,
+                neighbor_config=base.neighbor_config,
+                needs_pbc=base.needs_pbc,
+            )
+
+        def adapt_output(self, model_output, data):
+            M = data.num_graphs if hasattr(data, "num_graphs") else 1
+            return OrderedDict(
+                [
+                    ("energy", model_output["energy"]),
+                    ("forces", model_output["forces"]),
+                    (
+                        "stress",
+                        torch.zeros(
+                            M,
+                            3,
+                            3,
+                            device=data.positions.device,
+                            dtype=data.positions.dtype,
+                        ),
+                    ),
+                ]
+            )
+
+    return _Wrapper()
+
+
+def _make_model(needs_stress: bool = False):
+    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+    if needs_stress:
+        return _make_stress_model()
+    return DemoModelWrapper(DemoModel())
+
+
+class _MockSampler:
+    """Minimal sampler stub for inflight batching tests."""
+
+    def __init__(self, replacements: list):
+        self._queue = list(replacements)
+        # Eagerly reflect exhausted state so base.py can snapshot it before requesting
+        self.exhausted = len(self._queue) == 0
+
+    @property
+    def max_atoms(self) -> int | None:
+        return None
+
+    @property
+    def max_edges(self) -> int | None:
+        return None
+
+    @property
+    def max_batch_size(self) -> int | None:
+        return None
+
+    def request_replacements_budget(
+        self,
+        atom_budget: int | None = None,
+        edge_budget: int | None = None,
+        max_count: int | None = None,
+    ) -> list:
+        if not self._queue:
+            self.exhausted = True
+            return []
+        result = self._queue.pop(0)
+        self.exhausted = len(self._queue) == 0
+        return [result]

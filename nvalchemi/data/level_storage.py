@@ -83,10 +83,11 @@ the concrete implementations.
 
 from __future__ import annotations
 
+import contextlib
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Iterator
-from typing import Any
+from collections.abc import Collection, Iterator
+from typing import Any, Literal, TypeAlias
 
 import numpy as np
 import torch
@@ -97,7 +98,6 @@ from torch import Tensor
 from nvalchemi.data.buffer_kernels import (
     TORCH_TO_WP,
     compute_put_fit_mask_per_system,
-    compute_put_fit_mask_segmented,
     defrag_per_system,
     defrag_segmented,
     put_masked_per_system,
@@ -118,8 +118,39 @@ except RuntimeError as e:
 # ---------------------------------------------------------------------------
 IndexType = int | slice | Tensor | list
 DeviceType = torch.device | str
+LevelKind: TypeAlias = Literal["uniform", "segmented", "product"]
 # Segment/graph index dtype for SegmentedLevelStorage (matches segment_lengths).
 INDEX_DTYPE = torch.int32
+
+
+def resolve_device(device: DeviceType | None) -> torch.device:
+    """Return *device* with a bare ``cuda`` indexed by the current CUDA device.
+
+    A storage records the device it is asked for, but ``.to("cuda")`` puts its
+    tensors on whichever GPU is current at that moment. Recording the request
+    verbatim makes the record disagree with the tensors as soon as the current
+    device changes, so every later ``torch.cat`` or lazily built pointer raises
+    a device mismatch. Resolving once at record time pins the storage to the
+    GPU its tensors actually reached. The same resolution turns a caller's
+    index-less ``"cuda"``, which means the device a launcher pinned this
+    process to, into a concrete device that other placements can be compared
+    against.
+
+    Parameters
+    ----------
+    device : DeviceType or None
+        Requested device. ``None`` means ``"cpu"``.
+
+    Returns
+    -------
+    torch.device
+        The requested device, with a CUDA index filled in when absent.
+    """
+    resolved = torch.device(device) if device else torch.device("cpu")
+    if resolved.type == "cuda" and resolved.index is None:
+        return torch.device("cuda", torch.cuda.current_device())
+    return resolved
+
 
 # ---------------------------------------------------------------------------
 # Dtype mapping constants
@@ -169,6 +200,26 @@ TORCH_DTYPE_MAP_INVERSE: dict[torch.dtype, str] = {
     torch.bool: "bool",
 }
 
+
+def effective_dtype(declared: str | torch.dtype | None) -> torch.dtype | str | None:
+    """Resolve known dtype aliases while preserving unknown strings.
+
+    Parameters
+    ----------
+    declared : str, torch.dtype, or None
+        Dtype name or object declared by the schema.
+
+    Returns
+    -------
+    torch.dtype, str, or None
+        The resolved dtype for a known alias, or the original value when it is
+        ``None``, a ``torch.dtype``, or an unknown string.
+    """
+    if declared is None or isinstance(declared, torch.dtype):
+        return declared
+    return TORCH_DTYPE_MAP.get(declared, declared)
+
+
 # ---------------------------------------------------------------------------
 # Domain-specific defaults (aligned with nvalchemi naming conventions)
 # ---------------------------------------------------------------------------
@@ -217,13 +268,14 @@ DEFAULT_DTYPES: dict[str, str] = {
 }
 
 DEFAULT_SEGMENTED_GROUPS: set[str] = {"atoms", "edges"}
+_BUILTIN_LEVEL_ORDER = ("atoms", "edges", "system")
 
 
 # ---------------------------------------------------------------------------
 # LevelSchema
 # ---------------------------------------------------------------------------
 class LevelSchema:
-    """Registry mapping attribute names to groups, dtypes, and segmentation flags.
+    """Registry mapping attributes to levels, dtypes, and level kinds.
 
     Parameters
     ----------
@@ -260,7 +312,7 @@ class LevelSchema:
             for attr in attrs
         }
         self.segmented_groups: set[str] = (
-            segmented_groups
+            segmented_groups.copy()
             if segmented_groups is not None
             else DEFAULT_SEGMENTED_GROUPS.copy()
         )
@@ -273,11 +325,143 @@ class LevelSchema:
                     f"dtype keys must match attribute set. Missing: {expected - provided}, "
                     f"extra: {provided - expected}"
                 )
-            self.dtypes: dict[str, str] = dtypes
+            self.dtypes: dict[str, str] = dtypes.copy()
         else:
             self.dtypes = DEFAULT_DTYPES.copy()
 
+        self.level_kinds: dict[str, LevelKind] = {
+            group: "segmented" if group in self.segmented_groups else "uniform"
+            for group in self.group_to_attrs
+        }
+        self.product_parents: dict[str, tuple[str, str]] = {}
+        builtin_levels = [
+            group for group in _BUILTIN_LEVEL_ORDER if group in self.group_to_attrs
+        ]
+        custom_levels = [
+            group for group in self.group_to_attrs if group not in _BUILTIN_LEVEL_ORDER
+        ]
+        self._level_names = [*builtin_levels, *custom_levels]
+
     # -- Mutation -----------------------------------------------------------
+
+    @staticmethod
+    def _validate_level_name(name: str, parameter: str) -> None:
+        if not isinstance(name, str):
+            raise TypeError(f"{parameter} must be a string")
+        if not name.strip():
+            raise ValueError(f"{parameter} must not be empty or whitespace")
+
+    def _validate_can_make_uniform(self, name: str) -> None:
+        dependents = [
+            product
+            for product, parents in self.product_parents.items()
+            if name in parents
+        ]
+        if dependents:
+            raise ValueError(
+                f"Level '{name}' cannot be made uniform because it is a parent of "
+                f"product level(s): {', '.join(dependents)}"
+            )
+
+    def add_level(self, name: str, *, segmented: bool) -> None:
+        """Register an ordinary uniform or segmented level.
+
+        Repeating the same definition is an idempotent operation.
+
+        Parameters
+        ----------
+        name : str
+            Name of the level.
+        segmented : bool
+            Whether the level has variable per-system cardinality.
+
+        Raises
+        ------
+        TypeError
+            If *name* is not a string or *segmented* is not a Boolean.
+        ValueError
+            If *name* is empty or already has a different kind.
+        """
+        self._validate_level_name(name, "name")
+        if not isinstance(segmented, bool):
+            raise TypeError("segmented must be a bool")
+
+        kind: LevelKind = "segmented" if segmented else "uniform"
+        existing_kind = self.level_kinds.get(name)
+        if existing_kind is not None:
+            if existing_kind == kind:
+                return
+            raise ValueError(
+                f"Level '{name}' is already registered as {existing_kind}, not {kind}"
+            )
+
+        self.group_to_attrs.setdefault(name, set())
+        self.level_kinds[name] = kind
+        self._level_names.append(name)
+        if segmented:
+            self.segmented_groups.add(name)
+        else:
+            self.segmented_groups.discard(name)
+
+    def add_product_level(self, name: str, *, left: str, right: str) -> None:
+        """Register a segmented Cartesian product of two base levels.
+
+        Product levels preserve parent order and may use the same segmented
+        parent on both axes. Repeating an identical definition is idempotent.
+
+        Parameters
+        ----------
+        name : str
+            Name of the product level.
+        left : str
+            Registered segmented level for the left entity axis.
+        right : str
+            Registered segmented level for the right entity axis.
+
+        Raises
+        ------
+        TypeError
+            If any level name is not a string.
+        KeyError
+            If either parent is not registered.
+        ValueError
+            If a name is empty, a parent is not a segmented base level, or the
+            requested definition conflicts with an existing level.
+        """
+        self._validate_level_name(name, "name")
+        self._validate_level_name(left, "left")
+        self._validate_level_name(right, "right")
+
+        existing_kind = self.level_kinds.get(name)
+        if existing_kind == "product":
+            if self.product_parents[name] == (left, right):
+                return
+            raise ValueError(
+                f"Product level '{name}' is already registered with parents "
+                f"{self.product_parents[name]}, not {(left, right)}"
+            )
+        if existing_kind is not None:
+            raise ValueError(
+                f"Level '{name}' is already registered as {existing_kind}, not product"
+            )
+        if name == left or name == right:
+            raise ValueError(f"Product level '{name}' cannot reference itself")
+
+        for parent_name, axis in ((left, "left"), (right, "right")):
+            if parent_name not in self.level_kinds:
+                raise KeyError(f"{axis} parent level '{parent_name}' is not registered")
+            parent_kind = self.level_kinds[parent_name]
+            if parent_kind != "segmented":
+                raise ValueError(
+                    f"{axis} parent level '{parent_name}' must be a segmented "
+                    f"base level, not {parent_kind}"
+                )
+
+        self.group_to_attrs.setdefault(name, set())
+        self.level_kinds[name] = "product"
+        self.product_parents[name] = (left, right)
+        self._level_names.append(name)
+        self.segmented_groups.add(name)
 
     def set(
         self,
@@ -298,7 +482,26 @@ class LevelSchema:
             Data type for the attribute.
         is_segmented : bool, optional
             Whether *group_name* should be marked as segmented.
+
+        Raises
+        ------
+        ValueError
+            If the requested segmentation would invalidate a product level or
+            *dtype* is an unsupported ``torch.dtype`` value.
         """
+        normalized_dtype = dtype
+        if isinstance(dtype, torch.dtype):
+            try:
+                normalized_dtype = TORCH_DTYPE_MAP_INVERSE[dtype]
+            except KeyError as exc:
+                raise ValueError(f"Unsupported torch dtype: {dtype}") from exc
+
+        level_kind = self.level_kinds.get(group_name)
+        if level_kind == "product" and is_segmented is False:
+            raise ValueError(f"Product level '{group_name}' cannot be made uniform")
+        if level_kind == "segmented" and is_segmented is False:
+            self._validate_can_make_uniform(group_name)
+
         existing_group = self.attr_to_group.get(attr_name)
         if existing_group is not None and existing_group != group_name:
             self.group_to_attrs[existing_group].discard(attr_name)
@@ -308,22 +511,31 @@ class LevelSchema:
             self.group_to_attrs[group_name] = set()
         self.group_to_attrs[group_name].add(attr_name)
 
-        if is_segmented is not None:
+        if level_kind is None:
+            if is_segmented is None:
+                is_segmented = group_name in self.segmented_groups
+            level_kind = "segmented" if is_segmented else "uniform"
+            self.level_kinds[group_name] = level_kind
+            self._level_names.append(group_name)
+
+        if level_kind == "product":
+            self.segmented_groups.add(group_name)
+        elif is_segmented is not None:
             if is_segmented:
                 self.segmented_groups.add(group_name)
+                self.level_kinds[group_name] = "segmented"
             else:
                 self.segmented_groups.discard(group_name)
+                self.level_kinds[group_name] = "uniform"
 
-        if dtype is not None:
-            self.dtypes[attr_name] = (
-                TORCH_DTYPE_MAP_INVERSE[dtype]
-                if isinstance(dtype, torch.dtype)
-                else dtype
-            )
+        if normalized_dtype is not None:
+            self.dtypes[attr_name] = normalized_dtype
 
     def mark_group_segmented(self, group_name: str) -> None:
         """Mark *group_name* as segmented."""
         self.segmented_groups.add(group_name)
+        if group_name in self.level_kinds and self.level_kinds[group_name] != "product":
+            self.level_kinds[group_name] = "segmented"
 
     def unmark_group_segmented(self, group_name: str) -> None:
         """Remove the segmented flag from *group_name*.
@@ -332,8 +544,85 @@ class LevelSchema:
         ------
         KeyError
             If *group_name* is not currently segmented.
+        ValueError
+            If *group_name* is a product or a parent of a product.
         """
+        if self.level_kinds.get(group_name) == "product":
+            raise ValueError(f"Product level '{group_name}' cannot be made uniform")
+        self._validate_can_make_uniform(group_name)
         self.segmented_groups.remove(group_name)
+        if group_name in self.level_kinds:
+            self.level_kinds[group_name] = "uniform"
+
+    def _merged_with(self, extension: LevelSchema) -> LevelSchema:
+        """Return an additive merge without modifying either input schema.
+
+        The existing schema remains authoritative for declarations it already
+        owns. New levels and fields are appended from *extension* in its
+        definition order. Equivalent dtype aliases compare through their
+        effective :class:`torch.dtype` values.
+
+        Parameters
+        ----------
+        extension : LevelSchema
+            Schema declarations to add.
+
+        Returns
+        -------
+        LevelSchema
+            Independent merged schema.
+
+        Raises
+        ------
+        TypeError
+            If *extension* is not a :class:`LevelSchema`.
+        ValueError
+            If an existing level, product, field owner, or dtype conflicts.
+        """
+        if not isinstance(extension, LevelSchema):
+            raise TypeError(
+                f"extension must be a LevelSchema, got {type(extension).__name__}"
+            )
+
+        merged = self.clone()
+        for level_name in extension.level_names:
+            kind = extension.level_kind(level_name)
+            if kind == "product":
+                left, right = extension.product_parents[level_name]
+                merged.add_product_level(level_name, left=left, right=right)
+            else:
+                merged.add_level(level_name, segmented=kind == "segmented")
+
+        for attr_name, group_name in extension.attr_to_group.items():
+            existing_group = merged.attr_to_group.get(attr_name)
+            if existing_group is not None and existing_group != group_name:
+                raise ValueError(
+                    f"Field '{attr_name}' is already assigned to level "
+                    f"'{existing_group}', not '{group_name}'"
+                )
+
+            existing_dtype = merged.dtypes.get(attr_name)
+            extension_dtype = extension.dtypes.get(attr_name)
+            if existing_dtype is not None and extension_dtype is not None:
+                existing_effective = effective_dtype(existing_dtype)
+                extension_effective = effective_dtype(extension_dtype)
+                if existing_effective != extension_effective:
+                    raise ValueError(
+                        f"Field '{attr_name}' has incompatible declared dtypes: "
+                        f"{existing_dtype} vs {extension_dtype}"
+                    )
+
+            if existing_group is None or (
+                existing_dtype is None and extension_dtype is not None
+            ):
+                merged.set(
+                    attr_name,
+                    group_name,
+                    dtype=extension_dtype,
+                    is_segmented=merged.level_kind(group_name) != "uniform",
+                )
+
+        return merged
 
     # -- Queries ------------------------------------------------------------
 
@@ -352,6 +641,33 @@ class LevelSchema:
         if attr_name not in self.attr_to_group:
             raise KeyError(f"Attribute '{attr_name}' not found")
         return self.attr_to_group[attr_name] in self.segmented_groups
+
+    @property
+    def level_names(self) -> tuple[str, ...]:
+        """Return registered level names in deterministic definition order."""
+        return tuple(self._level_names)
+
+    def level_kind(self, name: str) -> LevelKind:
+        """Return the kind of a registered level.
+
+        Parameters
+        ----------
+        name : str
+            Name of the level.
+
+        Returns
+        -------
+        LevelKind
+            ``"uniform"``, ``"segmented"``, or ``"product"``.
+
+        Raises
+        ------
+        KeyError
+            If *name* is not a registered level.
+        """
+        if name not in self.level_kinds:
+            raise KeyError(f"Level '{name}' not found")
+        return self.level_kinds[name]
 
     def group(self, attr_name: str) -> str:
         """Return the group name for *attr_name*.
@@ -386,6 +702,9 @@ class LevelSchema:
         cloned.attr_to_group = self.attr_to_group.copy()
         cloned.segmented_groups = self.segmented_groups.copy()
         cloned.dtypes = self.dtypes.copy()
+        cloned.level_kinds = self.level_kinds.copy()
+        cloned.product_parents = self.product_parents.copy()
+        cloned._level_names = self._level_names.copy()
         return cloned
 
 
@@ -393,6 +712,104 @@ class LevelSchema:
 # warp-accelerated helper
 # ---------------------------------------------------------------------------
 _INT32_MAX: int = 2**31 - 1
+
+
+def _validate_buffer_field_pairs(
+    destination: TensorDict,
+    source: TensorDict,
+) -> list[str]:
+    """Validate participating buffer fields and return them in destination order."""
+    fields = [key for key in destination.keys() if key in source.keys()]
+    for key in fields:
+        dest_dtype = destination[key].dtype
+        source_dtype = source[key].dtype
+        if dest_dtype != source_dtype:
+            raise ValueError(
+                f"Field '{key}' has incompatible dtypes: {dest_dtype} vs {source_dtype}"
+            )
+        if dest_dtype not in TORCH_TO_WP:
+            raise ValueError(
+                f"Field '{key}' dtype {dest_dtype} is not supported by buffer kernels"
+            )
+    return fields
+
+
+def _validate_buffer_field_dtypes(data: TensorDict) -> list[str]:
+    """Validate buffer field dtypes and return fields in storage order."""
+    fields = list(data.keys())
+    for key in fields:
+        dtype = data[key].dtype
+        if dtype not in TORCH_TO_WP:
+            raise ValueError(
+                f"Field '{key}' dtype {dtype} is not supported by buffer kernels"
+            )
+    return fields
+
+
+def _checked_segment_metadata(
+    segment_lengths: list[int] | Tensor,
+    device: DeviceType,
+    *,
+    batch_ptr: Tensor | None = None,
+    batch_ptr_capacity: int | None = None,
+) -> tuple[Tensor, Tensor]:
+    """Normalize segmented lengths and build an int32 pointer without wrapping.
+
+    All arithmetic is performed in int64 before the in-memory int32 metadata is
+    materialized.  A supplied pointer is retained (including its spare capacity)
+    after the same range check; otherwise a logical pointer is built from the
+    supplied lengths and optionally expanded to *batch_ptr_capacity*.
+    """
+    lengths64 = to_tensor(segment_lengths, device=device).to(torch.int64)
+    if lengths64.ndim != 1:
+        raise ValueError("segment_lengths must be one-dimensional")
+    cumulative64 = torch.cumsum(lengths64, dim=0, dtype=torch.int64)
+    invalid_lengths = (
+        (lengths64 < 0) | (lengths64 > _INT32_MAX) | (cumulative64 > _INT32_MAX)
+    ).any()
+    supplied64: Tensor | None = None
+    invalid_metadata = invalid_lengths
+    if batch_ptr is not None:
+        supplied64 = to_tensor(batch_ptr, device=device).to(torch.int64)
+        if supplied64.ndim != 1:
+            raise ValueError("batch_ptr must be one-dimensional")
+        invalid_metadata = (
+            invalid_metadata | ((supplied64 < 0) | (supplied64 > _INT32_MAX)).any()
+        )
+
+    if bool(invalid_metadata):
+        if bool((lengths64 < 0).any()):
+            raise ValueError(f"Segment lengths cannot be negative: {lengths64}")
+        if bool((lengths64 > _INT32_MAX).any()):
+            raise OverflowError(
+                f"Segment length exceeds signed int32 maximum ({_INT32_MAX})"
+            )
+        if bool((cumulative64 > _INT32_MAX).any()):
+            raise OverflowError(
+                f"Segment pointer exceeds signed int32 maximum ({_INT32_MAX})"
+            )
+        if supplied64 is not None and bool((supplied64 < 0).any()):
+            raise ValueError(f"batch_ptr values cannot be negative: {supplied64}")
+        raise OverflowError(
+            f"Supplied batch_ptr exceeds signed int32 maximum ({_INT32_MAX})"
+        )
+    logical_ptr = torch.cat(
+        [
+            torch.zeros(1, device=device, dtype=torch.int32),
+            cumulative64.to(torch.int32),
+        ]
+    )
+
+    if supplied64 is not None:
+        return lengths64.to(torch.int32), supplied64.to(torch.int32)
+
+    capacity = max(batch_ptr_capacity or 0, logical_ptr.numel())
+    if capacity == logical_ptr.numel():
+        return lengths64.to(torch.int32), logical_ptr
+    ptr = torch.empty(capacity, device=device, dtype=torch.int32)
+    ptr[: logical_ptr.numel()] = logical_ptr
+    ptr[logical_ptr.numel() :] = logical_ptr[-1]
+    return lengths64.to(torch.int32), ptr
 
 
 @wp.kernel(enable_backward=False)
@@ -447,22 +864,26 @@ _TORCH_TO_WP: dict[torch.dtype, type] = {
 def _expand_segments_warp(
     seg_idx: torch.Tensor,
     batch_ptr: torch.Tensor,
-    device: torch.device,
     index_dtype: torch.dtype,
 ) -> torch.Tensor:
     """Expand segment indices to element indices using a Warp kernel.
 
-    The kernel overload matching *index_dtype* is selected automatically,
-    so no dtype conversion is performed on the input tensors.
+    The kernel overload matching *index_dtype* is selected automatically.
+    Gathered pointer values are cast to that dtype before launch so Warp sees
+    arguments matching the selected overload.
+
+    The launch and the output follow *batch_ptr*'s own device rather than a
+    requested one, because a storage may record an index-less ``cuda`` while its
+    tensors sit on a non-default GPU; launching such a storage against the
+    current device reads unmapped memory. The current device is restored
+    afterwards, since a Warp launch leaves its own device selected.
 
     Parameters
     ----------
     seg_idx : torch.Tensor
-        1-D tensor of selected segment indices (on *device*).
+        1-D tensor of selected segment indices, on *batch_ptr*'s device.
     batch_ptr : torch.Tensor
         Cumulative segment pointer of length ``num_segments + 1``.
-    device : torch.device
-        Target device (CPU or CUDA) for the kernel launch.
     index_dtype : torch.dtype
         Integer dtype (``torch.int32`` or ``torch.int64``) for the output
         tensor and kernel selection.
@@ -470,7 +891,7 @@ def _expand_segments_warp(
     Returns
     -------
     torch.Tensor
-        1-D tensor of element-level indices on *device*.
+        1-D tensor of element-level indices on *batch_ptr*'s device.
 
     Raises
     ------
@@ -486,38 +907,53 @@ def _expand_segments_warp(
 
     kernel = _expand_segments_overloads[wp_dtype]
 
-    starts = batch_ptr[seg_idx]
-    ends = batch_ptr[seg_idx + 1]
+    if seg_idx.numel() == 0:
+        return torch.empty(0, device=batch_ptr.device, dtype=index_dtype)
+
+    starts = batch_ptr[seg_idx].to(index_dtype)
+    ends = batch_ptr[seg_idx + 1].to(index_dtype)
     lengths = ends - starts
 
-    cumlen = torch.cumsum(lengths, dim=0, dtype=index_dtype)
-    total = int(cumlen[-1].item())
+    if bool(((starts < 0) | (ends < 0)).any()):
+        raise ValueError("batch_ptr values cannot be negative")
+    if bool((lengths < 0).any()):
+        raise ValueError("Segment lengths cannot be negative")
+
+    cumlen64 = torch.cumsum(lengths, dim=0, dtype=torch.int64)
+    total = int(cumlen64[-1].item())
     if total > _INT32_MAX:
-        raise ValueError(
+        raise OverflowError(
             f"Total element count {total} exceeds int32 maximum "
             f"({_INT32_MAX}); the Warp kernel uses int32 loop bounds"
         )
+    # An index-less ``cuda`` device resolves to whichever device is current,
+    # which need not be where the pointer lives.
+    launch_device = starts.device
     if total == 0:
-        return torch.empty(0, device=device, dtype=index_dtype)
+        return torch.empty(0, device=launch_device, dtype=index_dtype)
 
-    offsets = cumlen - lengths
-    output = torch.empty(total, device=device, dtype=index_dtype)
+    offsets = (cumlen64 - lengths.to(torch.int64)).to(index_dtype)
+    output = torch.empty(total, device=launch_device, dtype=index_dtype)
 
-    if device.type == "cuda":
-        wp_device = f"cuda:{device.index or 0}"
+    if launch_device.type == "cuda":
+        wp_device = f"cuda:{launch_device.index}"
+        device_scope = torch.cuda.device(launch_device)
     else:
         wp_device = "cpu"
-    wp.launch(
-        kernel=kernel,
-        dim=seg_idx.numel(),
-        inputs=[
-            wp.from_torch(starts, dtype=wp_dtype),
-            wp.from_torch(lengths, dtype=wp_dtype),
-            wp.from_torch(offsets, dtype=wp_dtype),
-            wp.from_torch(output, dtype=wp_dtype),
-        ],
-        device=wp_device,
-    )
+        device_scope = contextlib.nullcontext()
+    # wp.launch leaves its own device current; restore torch's.
+    with device_scope:
+        wp.launch(
+            kernel=kernel,
+            dim=seg_idx.numel(),
+            inputs=[
+                wp.from_torch(starts, dtype=wp_dtype),
+                wp.from_torch(lengths, dtype=wp_dtype),
+                wp.from_torch(offsets, dtype=wp_dtype),
+                wp.from_torch(output, dtype=wp_dtype),
+            ],
+            device=wp_device,
+        )
 
     return output
 
@@ -632,7 +1068,7 @@ class BaseLevelStorage(ABC):
         validate: bool = True,
     ) -> None:
         self._attr_map = attr_map if attr_map else LevelSchema()
-        self.device = torch.device(device) if device else torch.device("cpu")
+        self.device = resolve_device(device)
         self.validate = validate
 
         if data is None:
@@ -713,8 +1149,8 @@ class BaseLevelStorage(ABC):
     def __len__(self) -> int: ...
 
     @abstractmethod
-    def select(self, idx: IndexType) -> BaseLevelStorage:
-        """Return a new container with only the selected samples."""
+    def select(self, idx: IndexType, *, drop: Collection[str] = ()) -> BaseLevelStorage:
+        """Return a container of only the selected samples, without *drop* keys."""
 
     @abstractmethod
     def update_at(self, key: str, value: Tensor, idx: IndexType) -> None:
@@ -816,9 +1252,15 @@ class BaseLevelStorage(ABC):
         """Return a shallow copy (tensors are **not** cloned)."""
         return self.__class__(self._data, device=self.device, validate=False)
 
-    def clone(self) -> BaseLevelStorage:
-        """Return a deep copy including an independent attr_map clone."""
-        cloned = {k: _clone_tensor(v) for k, v in self._data.items()}
+    def clone(self, *, drop: Collection[str] = ()) -> BaseLevelStorage:
+        """Return a deep copy including an independent attr_map clone.
+
+        Parameters
+        ----------
+        drop : Collection[str], optional
+            Keys left out of the copy instead of being cloned. Default ``()``.
+        """
+        cloned = {k: _clone_tensor(v) for k, v in self._data.items() if k not in drop}
         return self.__class__(
             cloned,
             device=self.device,
@@ -834,7 +1276,8 @@ class BaseLevelStorage(ABC):
         Parameters
         ----------
         device : DeviceType
-            Target device.
+            Target device. A bare ``"cuda"`` is recorded as the CUDA device
+            current at the time of the move, which is where the tensors land.
         non_blocking : bool, default False
             Whether tensor copies may be asynchronous when supported.
 
@@ -843,7 +1286,7 @@ class BaseLevelStorage(ABC):
         Self
             For method chaining.
         """
-        device = torch.device(device)
+        device = resolve_device(device)
         self.device = device
         self._data = self._data.to(device, non_blocking=non_blocking)
         return self
@@ -901,14 +1344,14 @@ class UniformLevelStorage(BaseLevelStorage):
                     )
 
     def __len__(self) -> int:
+        n = getattr(self, "_num_kept", None)
+        if n is not None:
+            return n
         if self._data.is_empty():
             # batch_size is set to [N] when constructed from a sized TensorDict
             # (e.g. the empty system group created by from_data_list).
             bs = self._data.batch_size
             return int(bs[0]) if bs else 0
-        n = getattr(self, "_num_kept", None)
-        if n is not None:
-            return n
         return self._data.shape[0]
 
     def num_elements(self) -> int:
@@ -919,13 +1362,18 @@ class UniformLevelStorage(BaseLevelStorage):
         if not self._data.is_empty() and len(value) != len(self):
             raise ValueError(f"Length mismatch: {len(value)} vs {len(self)}")
 
-    def select(self, idx: IndexType) -> UniformLevelStorage:
+    def select(
+        self, idx: IndexType, *, drop: Collection[str] = ()
+    ) -> UniformLevelStorage:
         """Select a subset of samples by index.
 
         Parameters
         ----------
         idx : int, slice, or Tensor
             Index specification.
+        drop : Collection[str], optional
+            Keys left out of the selection instead of being copied. Default
+            ``()``.
 
         Returns
         -------
@@ -936,7 +1384,8 @@ class UniformLevelStorage(BaseLevelStorage):
         elif not isinstance(idx, slice):
             idx = self._prepare_index(idx)
 
-        selected_td = self._data[idx]
+        data = self._data.exclude(*drop) if drop else self._data
+        selected_td = data[idx]
         return self.__class__(selected_td, device=self.device, validate=False)
 
     def _prepare_index(self, idx: Any) -> Tensor:
@@ -1119,9 +1568,10 @@ class UniformLevelStorage(BaseLevelStorage):
     ) -> None:
         """Put rows where mask[i] is True from src into this storage (buffer).
 
-        Copies only float32 attributes; only as many rows as fit in this
-        storage's empty slots (dest_mask[i] False = empty). Uses Warp buffer
-        kernels (no host sync). If copied_mask is provided, it is updated in
+        Supported payload dtypes are bool, float32, float64, int32, and int64;
+        source and destination dtypes must match. Only as many rows as fit in
+        this storage's empty slots (dest_mask[i] False = empty) are copied.
+        Uses Warp buffer kernels. If copied_mask is provided, it is updated in
         place with True for each row that was copied.
 
         Parameters
@@ -1137,18 +1587,25 @@ class UniformLevelStorage(BaseLevelStorage):
         dest_mask : Tensor, optional
             (capacity,) bool, True = slot occupied; capacity = ``len(self)``
             or ``self._data.shape[0]`` when ``_num_kept`` is set (pre-allocated
-            buffer). If None, all slots are treated as empty.
+            buffer). Occupied slots must form a dense prefix. If None, all slots
+            are treated as empty.
         """
         if self._data.is_empty() or src._data.is_empty():
             raise ValueError("put requires non-empty source and dest")
-        common = set(self._data.keys()) & set(src._data.keys())
-        if not common:
+        fields = _validate_buffer_field_pairs(self._data, src._data)
+        if not fields:
             raise ValueError("put requires at least one common attribute")
         n_src = len(src)
         dest_capacity = self._data.shape[0]
         if mask.shape[0] != n_src:
             raise ValueError(f"mask shape {mask.shape[0]} != len(src) {n_src}")
         mask = mask.to(device=self.device, dtype=torch.bool)
+        for key in fields:
+            dest_t = self._data[key]
+            if dest_t.shape[0] < dest_capacity:
+                raise ValueError(
+                    f"dest attribute '{key}' first dim {dest_t.shape[0]} < {dest_capacity}"
+                )
         if copied_mask is not None:
             if copied_mask.shape[0] != n_src:
                 raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_src}")
@@ -1164,20 +1621,29 @@ class UniformLevelStorage(BaseLevelStorage):
                 raise ValueError(
                     f"dest_mask shape {dest_mask.shape[0]} != dest capacity {dest_capacity}"
                 )
-        for key in common:
+        initial_dest_mask = dest_mask.clone()
+        first_key, *remaining_keys = fields
+        first_dest_mask = initial_dest_mask.clone()
+        put_masked_per_system(
+            src._data[first_key],
+            mask,
+            self._data[first_key],
+            first_dest_mask,
+            out_mask,
+        )
+        for key in remaining_keys:
             src_t = src._data[key]
             dest_t = self._data[key]
-            if dest_t.shape[0] < dest_capacity:
-                raise ValueError(
-                    f"dest attribute '{key}' first dim {dest_t.shape[0]} < {dest_capacity}"
-                )
+            field_dest_mask = initial_dest_mask.clone()
+            field_copied_mask = out_mask.clone()
             put_masked_per_system(
                 src_t,
                 mask,
                 dest_t,
-                dest_mask,
-                out_mask,
+                field_dest_mask,
+                field_copied_mask,
             )
+        dest_mask.copy_(first_dest_mask)
         num_copied = out_mask.sum().item()
         if num_copied > 0 and getattr(self, "_num_kept", None) is not None:
             object.__setattr__(self, "_num_kept", self._num_kept + num_copied)
@@ -1189,10 +1655,10 @@ class UniformLevelStorage(BaseLevelStorage):
         """Defrag in-place: remove rows where copied_mask[i] is True.
 
         Rows with copied_mask[i] True (previously put) are dropped; remaining
-        rows move to the front in place. Only float32 attributes are
-        compacted. Buffer shape is unchanged (fixed-size batches). Other
-        attributes are indexed with the same indices (so must be kept in sync
-        if present).
+        rows move to the front in place. Payloads must use a dtype supported by
+        the buffer kernels (``bool``, ``float32``, ``float64``, ``int32``, or
+        ``int64``). All fields are validated before compaction. Buffer shape is
+        unchanged for fixed-size batches.
 
         Parameters
         ----------
@@ -1216,10 +1682,9 @@ class UniformLevelStorage(BaseLevelStorage):
             copied_mask = copied_mask.to(device=self.device, dtype=torch.bool)
         if copied_mask.shape[0] != n_src:
             raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_src}")
-        for key in list(self._data.keys()):
+        fields = _validate_buffer_field_dtypes(self._data)
+        for key in fields:
             t = self._data[key]
-            if t.dtype not in TORCH_TO_WP:
-                continue
             # Pass a clone so the kernel's in-place mask update doesn't affect other keys
             defrag_per_system(t, copied_mask.clone())
         object.__setattr__(self, "_num_kept", int((~copied_mask).sum().item()))
@@ -1237,9 +1702,9 @@ class UniformLevelStorage(BaseLevelStorage):
         super().to_device(device, non_blocking=non_blocking)
         return self
 
-    def clone(self) -> UniformLevelStorage:
-        """Return a deep copy; copies _num_kept if set (e.g. after defrag)."""
-        out = super().clone()
+    def clone(self, *, drop: Collection[str] = ()) -> UniformLevelStorage:
+        """Return a deep copy minus *drop*; copies _num_kept if set (e.g. after defrag)."""
+        out = super().clone(drop=drop)
         if getattr(self, "_num_kept", None) is not None:
             object.__setattr__(out, "_num_kept", self._num_kept)
         return out
@@ -1284,6 +1749,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
     ------
     ValueError
         If segment lengths are negative or don't sum to ``data.shape[0]``.
+    OverflowError
+        If segment lengths or pointer values exceed the signed int32 range.
     """
 
     def __init__(
@@ -1309,40 +1776,36 @@ class SegmentedLevelStorage(BaseLevelStorage):
         if segment_lengths is None:
             if not self._data.is_empty():
                 num_el = self._data.shape[0]
-                self.segment_lengths = torch.tensor(
-                    [num_el], device=self.device, dtype=torch.int32
-                )
+                segment_lengths = [num_el]
             else:
-                self.segment_lengths = torch.tensor(
-                    [], device=self.device, dtype=torch.int32
-                )
-        else:
-            self.segment_lengths = to_tensor(
-                segment_lengths, self.device, dtype="int32"
-            )
+                segment_lengths = []
+
+        self.segment_lengths, normalized_batch_ptr = _checked_segment_metadata(
+            segment_lengths,
+            self.device,
+            batch_ptr=batch_ptr,
+            batch_ptr_capacity=batch_ptr_capacity if batch_ptr is None else None,
+        )
 
         self._batch_idx: Tensor | None = (
             batch_idx.to(device=self.device, dtype=torch.int32)
             if batch_idx is not None
             else None
         )
+        requested_batch_ptr_capacity: int | None = None
         if batch_ptr is not None:
-            self._batch_ptr = batch_ptr.to(device=self.device, dtype=torch.int32)
-        elif batch_ptr_capacity is not None and not self._data.is_empty():
-            n_seg = len(self.segment_lengths)
-            cap = max(batch_ptr_capacity, n_seg + 1)
-            self._batch_ptr = torch.empty(cap, device=self.device, dtype=torch.int32)
-            self._batch_ptr[0] = 0
-            cum = torch.cumsum(self.segment_lengths, dim=0)
-            self._batch_ptr[1 : n_seg + 1] = cum
-            if cap > n_seg + 1:
-                self._batch_ptr[n_seg + 1 :].fill_(cum[-1].item() if n_seg else 0)
+            self._batch_ptr = normalized_batch_ptr
+            requested_batch_ptr_capacity = self._batch_ptr.shape[0]
+        elif batch_ptr_capacity is not None:
+            self._batch_ptr = normalized_batch_ptr
+            requested_batch_ptr_capacity = self._batch_ptr.shape[0]
         else:
             self._batch_ptr = None
+        self._batch_ptr_capacity = requested_batch_ptr_capacity
         self._batch_ptr_np: np.ndarray | None = None
         self._segment_indices: Tensor | None = None
 
-        if not self._data.is_empty() and validate:
+        if validate:
             self._validate_initialization()
 
     # -- Validation ---------------------------------------------------------
@@ -1354,6 +1817,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
             raise ValueError(
                 f"Segment lengths cannot be negative: {self.segment_lengths}"
             )
+        if self._data.is_empty():
+            return
 
         segment_sum = self.segment_lengths.sum().item()
         if segment_sum != total_elements:
@@ -1455,12 +1920,48 @@ class SegmentedLevelStorage(BaseLevelStorage):
 
     def _lazy_init_batch_ptr(self) -> None:
         if self._batch_ptr is None:
-            self._batch_ptr = torch.cat(
-                [
-                    torch.zeros(1, device=self.device, dtype=torch.int32),
-                    torch.cumsum(self.segment_lengths, dim=0),
-                ]
+            self.segment_lengths, self._batch_ptr = _checked_segment_metadata(
+                self.segment_lengths,
+                self.device,
+                batch_ptr_capacity=self._batch_ptr_capacity,
             )
+            self._batch_ptr_capacity = (
+                self._batch_ptr.shape[0]
+                if self._batch_ptr_capacity is not None
+                else None
+            )
+
+    def _replace_segment_lengths(
+        self,
+        segment_lengths: list[int] | Tensor,
+        *,
+        preserve_pointer: bool = True,
+        normalized_metadata: tuple[Tensor, Tensor] | None = None,
+    ) -> None:
+        """Replace segment metadata, preserving pointer capacity when present."""
+        had_pointer_cache = preserve_pointer and self._batch_ptr is not None
+        preserve_capacity = preserve_pointer and self._batch_ptr_capacity is not None
+        pointer_capacity = self._batch_ptr_capacity if preserve_capacity else None
+        if normalized_metadata is None:
+            self.segment_lengths, pointer = _checked_segment_metadata(
+                segment_lengths,
+                self.device,
+                batch_ptr_capacity=pointer_capacity,
+            )
+        else:
+            self.segment_lengths, pointer = normalized_metadata
+        if had_pointer_cache or preserve_capacity:
+            self._batch_ptr = pointer
+        else:
+            self._batch_ptr = None
+        if preserve_capacity:
+            self._batch_ptr_capacity = pointer.shape[0]
+        self._batch_idx = None
+        self._batch_ptr_np = None
+        self._segment_indices = None
+        if hasattr(self, "_num_segments"):
+            object.__delattr__(self, "_num_segments")
+            object.__delattr__(self, "_num_elements_kept")
 
     def _lazy_init_segment_indices(self) -> None:
         if self._segment_indices is None:
@@ -1545,22 +2046,25 @@ class SegmentedLevelStorage(BaseLevelStorage):
         seg_idx = self._normalize_segment_index(idx)
         if self.device.type == "cuda":
             self._lazy_init_batch_ptr()
-            return _expand_segments_warp(
-                seg_idx, self._batch_ptr, self.device, torch.int64
-            )
+            return _expand_segments_warp(seg_idx, self._batch_ptr, torch.int64)
 
         else:
-            starts = self.batch_ptr[seg_idx]
-            ends = self.batch_ptr[seg_idx + 1]
+            starts = self.batch_ptr[seg_idx].to(torch.int64)
+            ends = self.batch_ptr[seg_idx + 1].to(torch.int64)
             lengths = ends - starts
-            total = int(lengths.sum().item())
+            total = int(torch.sum(lengths, dtype=torch.int64).item())
+            if total < 0 or total > _INT32_MAX:
+                raise OverflowError(
+                    f"Selected element count {total} is outside the supported int32 range "
+                    f"({_INT32_MAX})"
+                )
             if total == 0:
                 return torch.empty(0, device=self.device, dtype=torch.int64)
 
             repeated_starts = torch.repeat_interleave(
                 starts, lengths, output_size=total
             )
-            cum_lengths = torch.cumsum(lengths, 0, dtype=lengths.dtype)
+            cum_lengths = torch.cumsum(lengths, 0, dtype=torch.int64)
             prefix = torch.repeat_interleave(
                 cum_lengths - lengths,
                 lengths,
@@ -1577,13 +2081,18 @@ class SegmentedLevelStorage(BaseLevelStorage):
             return self.segment_lengths[idx]
         return self.segment_lengths[to_tensor(idx).to(device=self.device)]
 
-    def select(self, idx: IndexType) -> SegmentedLevelStorage:
+    def select(
+        self, idx: IndexType, *, drop: Collection[str] = ()
+    ) -> SegmentedLevelStorage:
         """Select a subset of segments.
 
         Parameters
         ----------
         idx : int, slice, or Tensor
             Segment-level index.
+        drop : Collection[str], optional
+            Keys left out of the selection instead of being copied. The
+            segment lengths are selected regardless. Default ``()``.
 
         Returns
         -------
@@ -1591,7 +2100,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
         """
         element_idx = self._expand_idx(idx)
         segment_lengths = self._select_segment_lengths(idx)
-        selected_td = self._data[element_idx.to(device=self.device)]
+        data = self._data.exclude(*drop) if drop else self._data
+        selected_td = data[element_idx.to(device=self.device)]
         return self.__class__(
             selected_td,
             device=self.device,
@@ -1650,9 +2160,19 @@ class SegmentedLevelStorage(BaseLevelStorage):
         self._batch_ptr_np = None
         return self
 
-    def clone(self) -> SegmentedLevelStorage:
-        """Return a deep copy with independent tensors, segment info, and attr_map."""
-        cloned_data = {k: _clone_tensor(self._data[k]) for k in self._data.keys()}
+    def clone(self, *, drop: Collection[str] = ()) -> SegmentedLevelStorage:
+        """Return a deep copy with independent tensors, segment info, and attr_map.
+
+        Parameters
+        ----------
+        drop : Collection[str], optional
+            Keys left out of the copy instead of being cloned. The segment
+            lengths, batch index, and batch pointer are cloned regardless.
+            Default ``()``.
+        """
+        cloned_data = {
+            k: _clone_tensor(self._data[k]) for k in self._data.keys() if k not in drop
+        }
         cloned_seg = _clone_tensor(self.segment_lengths)
         cloned_bidx = (
             _clone_tensor(self._batch_idx) if self._batch_idx is not None else None
@@ -1669,6 +2189,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
             batch_ptr=cloned_bptr,
             validate=False,
         )
+        if cloned_bptr is None:
+            object.__setattr__(out, "_batch_ptr_capacity", self._batch_ptr_capacity)
         if getattr(self, "_num_segments", None) is not None:
             object.__setattr__(out, "_num_segments", self._num_segments)
             object.__setattr__(out, "_num_elements_kept", self._num_elements_kept)
@@ -1699,6 +2221,8 @@ class SegmentedLevelStorage(BaseLevelStorage):
         ------
         ValueError
             On key mismatch (strict) or incompatible trailing shapes.
+        OverflowError
+            If the combined segmented pointer exceeds the signed int32 range.
         """
         self_keys = set(self.keys())
         other_keys = set(other.keys())
@@ -1708,8 +2232,14 @@ class SegmentedLevelStorage(BaseLevelStorage):
         if not common:
             return self
 
-        prev_elements = self.num_elements()
-        prev_segments = len(self)
+        combined_lengths = torch.cat(
+            [self.segment_lengths, other.segment_lengths.to(self.device)]
+        )
+        _checked_segment_metadata(
+            combined_lengths,
+            self.device,
+            batch_ptr_capacity=self._batch_ptr_capacity,
+        )
 
         # TensorDict enforces batch_size; replace with new TensorDict of concatenated data
         new_data = {}
@@ -1727,22 +2257,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
             batch_size=[new_total],
             device=self.device,
         )
-        self.segment_lengths = torch.cat([self.segment_lengths, other.segment_lengths])
-
-        if self._batch_idx is not None:
-            other._lazy_init_batch_idx()
-            self._batch_idx = torch.cat(
-                [self._batch_idx, other._batch_idx.to(self.device) + prev_segments]
-            )
-        if self._batch_ptr is not None:
-            other._lazy_init_batch_ptr()
-            self._batch_ptr = torch.cat(
-                [self._batch_ptr, other._batch_ptr[1:].to(self.device) + prev_elements]
-            )
-        self._batch_ptr_np = None
-        if hasattr(self, "_num_segments"):
-            object.__delattr__(self, "_num_segments")
-            object.__delattr__(self, "_num_elements_kept")
+        self._replace_segment_lengths(combined_lengths)
         return self
 
     def extend_for_appended_graphs(self, n: int) -> SegmentedLevelStorage:
@@ -1765,14 +2280,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
         if n <= 0:
             return self
         extra = torch.zeros(n, device=self.device, dtype=self.segment_lengths.dtype)
-        self.segment_lengths = torch.cat([self.segment_lengths, extra])
-        self._batch_idx = None
-        self._batch_ptr = None
-        self._batch_ptr_np = None
-        self._segment_indices = None
-        if hasattr(self, "_num_segments"):
-            object.__delattr__(self, "_num_segments")
-            object.__delattr__(self, "_num_elements_kept")
+        self._replace_segment_lengths(torch.cat([self.segment_lengths, extra]))
         return self
 
     def compute_put_per_system_fit_mask(
@@ -1799,7 +2307,9 @@ class SegmentedLevelStorage(BaseLevelStorage):
         -----
         No data is copied. If this storage's batch_ptr has insufficient capacity for
         new segment boundaries, fit_mask is zeroed. Use with put after combining
-        (e.g. logical_and) with other levels' fit masks.
+        (e.g. logical_and) with other levels' fit masks. Fieldless source and
+        destination groups check both pointer capacity and whether cumulative
+        cardinality remains within the signed int32 range.
         """
         n_seg = len(source)
         if source_mask.shape[0] != n_seg:
@@ -1810,22 +2320,53 @@ class SegmentedLevelStorage(BaseLevelStorage):
             raise ValueError(f"fit_mask shape {fit_mask.shape[0]} != {n_seg}")
         source_mask = source_mask.to(device=self.device, dtype=torch.bool)
         fit_mask = fit_mask.to(device=self.device, dtype=torch.bool)
+        source_fieldless = source._data.is_empty()
+        dest_fieldless = self._data.is_empty()
+        num_dest_segments = len(self)
+        if source_fieldless != dest_fieldless:
+            raise ValueError(
+                "Segmented put requires both source and destination to be "
+                "fieldless or both to contain payload data"
+            )
+        if source_fieldless:
+            source._lazy_init_batch_ptr()
+            self._lazy_init_batch_ptr()
+            min_batch_ptr_size = num_dest_segments + n_seg + 2
+            if self._batch_ptr.shape[0] < min_batch_ptr_size:
+                fit_mask.zero_()
+                return
+            source_lengths = (
+                source._batch_ptr[1 : n_seg + 1] - source._batch_ptr[:n_seg]
+            ).to(torch.int64)
+            masked_lengths = torch.where(
+                source_mask,
+                source_lengths,
+                torch.zeros_like(source_lengths),
+            )
+            ends = self._batch_ptr[num_dest_segments].to(torch.int64) + torch.cumsum(
+                masked_lengths, dim=0, dtype=torch.int64
+            )
+            fit_mask.copy_(source_mask & (ends >= 0) & (ends <= _INT32_MAX))
+            return
         source._lazy_init_batch_ptr()
         self._lazy_init_batch_ptr()
-        num_dest_segments = len(self)
         min_batch_ptr_size = num_dest_segments + n_seg + 2
         if self._batch_ptr.shape[0] < min_batch_ptr_size:
             fit_mask.zero_()
             return
-        dest_capacity = self._data.shape[0]
-        compute_put_fit_mask_segmented(
-            source._batch_ptr,
+        source_lengths = (
+            source._batch_ptr[1 : n_seg + 1] - source._batch_ptr[:n_seg]
+        ).to(torch.int64)
+        masked_lengths = torch.where(
             source_mask,
-            self._batch_ptr,
-            num_dest_segments,
-            dest_capacity,
-            fit_mask,
+            source_lengths,
+            torch.zeros_like(source_lengths),
         )
+        ends = self._batch_ptr[num_dest_segments].to(torch.int64) + torch.cumsum(
+            masked_lengths, dim=0, dtype=torch.int64
+        )
+        dest_capacity = min(self._data.shape[0], _INT32_MAX)
+        fit_mask.copy_(source_mask & (ends >= 0) & (ends <= dest_capacity))
 
     def put(
         self,
@@ -1836,11 +2377,11 @@ class SegmentedLevelStorage(BaseLevelStorage):
     ) -> None:
         """Put segments where mask[i] is True from src into this storage (buffer).
 
-        New segment boundaries are appended to this storage's batch_ptr. Only
-        float32 attributes are copied. Uses Warp buffer kernels; one host sync
-        after all attributes to update this storage's segment count. If
-        copied_mask is provided, it is updated in place with True for each
-        segment that was copied.
+        New segment boundaries are appended to this storage's batch_ptr.
+        Supported payload dtypes are bool, float32, float64, int32, and int64;
+        source and destination dtypes must match. Fieldless source and
+        destination groups copy segment metadata only. If *copied_mask* is
+        provided, it is updated in place for each copied segment.
 
         Parameters
         ----------
@@ -1852,16 +2393,72 @@ class SegmentedLevelStorage(BaseLevelStorage):
             (num_segments,) bool; if provided, modified in place with which
             segments were actually copied. If None, stored on *src* as
             ``_copied_mask`` for use by :meth:`defrag`.
+
+        Raises
+        ------
+        OverflowError
+            If the resulting segmented pointer exceeds the signed int32 range.
         """
+        source_fieldless = src._data.is_empty()
+        dest_fieldless = self._data.is_empty()
+        if source_fieldless != dest_fieldless:
+            raise ValueError(
+                "Segmented put requires both source and destination to be "
+                "fieldless or both to contain payload data"
+            )
+        if source_fieldless:
+            n_seg = len(src)
+            if mask.shape[0] != n_seg:
+                raise ValueError(f"mask shape {mask.shape[0]} != num segments {n_seg}")
+            mask = mask.to(device=self.device, dtype=torch.bool)
+            num_dest_segments = len(self)
+            source_lengths = src.segment_lengths[:n_seg].to(self.device)
+            selected_lengths = source_lengths[mask]
+            old_lengths = self.segment_lengths[:num_dest_segments]
+            combined_lengths = torch.cat([old_lengths, selected_lengths])
+            normalized_metadata = _checked_segment_metadata(
+                combined_lengths,
+                self.device,
+                batch_ptr_capacity=self._batch_ptr_capacity,
+            )
+            if copied_mask is not None:
+                if copied_mask.shape[0] != n_seg:
+                    raise ValueError(
+                        f"copied_mask shape {copied_mask.shape[0]} != {n_seg}"
+                    )
+                out_mask = copied_mask.to(device=self.device, dtype=torch.bool)
+            else:
+                out_mask = torch.zeros(n_seg, device=self.device, dtype=torch.bool)
+                object.__setattr__(src, "_copied_mask", out_mask)
+            src._lazy_init_batch_ptr()
+            self._lazy_init_batch_ptr()
+            min_batch_ptr_size = num_dest_segments + n_seg + 2
+            if self._batch_ptr.shape[0] < min_batch_ptr_size:
+                out_mask.zero_()
+                return
+            self._replace_segment_lengths(
+                combined_lengths,
+                preserve_pointer=True,
+                normalized_metadata=normalized_metadata,
+            )
+            out_mask.copy_(mask)
+            return
         if self._data.is_empty() or src._data.is_empty():
             raise ValueError("put requires non-empty source and dest")
-        common = set(self._data.keys()) & set(src._data.keys())
-        if not common:
+        fields = _validate_buffer_field_pairs(self._data, src._data)
+        if not fields:
             raise ValueError("put requires at least one common attribute")
         n_seg = len(src)
         if mask.shape[0] != n_seg:
             raise ValueError(f"mask shape {mask.shape[0]} != num segments {n_seg}")
         mask = mask.to(device=self.device, dtype=torch.bool)
+        num_dest_segments = len(self)
+        source_lengths = src.segment_lengths[:n_seg].to(self.device)
+        selected_lengths = source_lengths[mask]
+        old_lengths = self.segment_lengths[:num_dest_segments]
+        _checked_segment_metadata(
+            torch.cat([old_lengths, selected_lengths]), self.device
+        )
         if copied_mask is not None:
             if copied_mask.shape[0] != n_seg:
                 raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_seg}")
@@ -1871,20 +2468,24 @@ class SegmentedLevelStorage(BaseLevelStorage):
             object.__setattr__(src, "_copied_mask", out_mask)
         src._lazy_init_batch_ptr()
         self._lazy_init_batch_ptr()
-        num_dest_segments = len(self)
         min_batch_ptr_size = num_dest_segments + n_seg + 2
         dest_batch_ptr = self._batch_ptr
         if dest_batch_ptr.shape[0] < min_batch_ptr_size:
             return
-        new_num_dest = None
-        for key in common:
+        first_key, *remaining_keys = fields
+        new_num_dest = put_masked_segmented(
+            src._data[first_key],
+            src._batch_ptr,
+            mask,
+            self._data[first_key],
+            dest_batch_ptr,
+            num_dest_segments,
+            out_mask,
+        )
+        for key in remaining_keys:
             src_t = src._data[key]
-            if src_t.dtype != torch.float32:
-                continue
             dest_t = self._data[key]
-            if dest_t.dtype != torch.float32:
-                continue
-            new_num_dest = put_masked_segmented(
+            put_masked_segmented(
                 src_t,
                 src._batch_ptr,
                 mask,
@@ -1895,13 +2496,10 @@ class SegmentedLevelStorage(BaseLevelStorage):
             )
         if new_num_dest is not None:
             new_n = int(new_num_dest.item())
-            self.segment_lengths = (
-                dest_batch_ptr[1 : new_n + 1] - dest_batch_ptr[:new_n]
+            self._replace_segment_lengths(
+                dest_batch_ptr[1 : new_n + 1] - dest_batch_ptr[:new_n],
+                preserve_pointer=True,
             )
-            object.__setattr__(self, "_batch_ptr_np", None)
-            if hasattr(self, "_num_segments"):
-                object.__delattr__(self, "_num_segments")
-                object.__delattr__(self, "_num_elements_kept")
 
     def defrag(
         self,
@@ -1909,9 +2507,10 @@ class SegmentedLevelStorage(BaseLevelStorage):
     ) -> SegmentedLevelStorage:
         """Defrag in-place: remove segments where copied_mask[i] is True.
 
-        Kept segments move to the front; batch_ptr is updated in place (tail
-        filled so batch_ptr[-1] == total_kept_elems); segment_lengths derived
-        from it; no trim. All attributes must be float32 (uses Warp kernels).
+        Kept segments move to the front and pointer metadata is updated in
+        place without trimming allocated capacity. Supported payload dtypes are
+        bool, float32, float64, int32, and int64. All fields are validated
+        before compaction. Fieldless groups compact only segment metadata.
 
         Parameters
         ----------
@@ -1925,6 +2524,26 @@ class SegmentedLevelStorage(BaseLevelStorage):
             For method chaining.
         """
         if self._data.is_empty():
+            n_seg = len(self)
+            if copied_mask is None:
+                copied_mask = getattr(self, "_copied_mask", None)
+                if copied_mask is None:
+                    raise ValueError("defrag requires copied_mask or a prior put")
+            else:
+                copied_mask = copied_mask.to(device=self.device, dtype=torch.bool)
+            if copied_mask.shape[0] != n_seg:
+                raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_seg}")
+            kept_lengths = self.segment_lengths[:n_seg][~copied_mask]
+            self._replace_segment_lengths(kept_lengths, preserve_pointer=True)
+            self._lazy_init_batch_ptr()
+            object.__setattr__(self, "_num_segments", len(kept_lengths))
+            object.__setattr__(
+                self,
+                "_num_elements_kept",
+                int(self._batch_ptr[len(kept_lengths)].item()),
+            )
+            if hasattr(self, "_copied_mask"):
+                object.__delattr__(self, "_copied_mask")
             return self
         n_seg = len(self)
         if copied_mask is None:
@@ -1936,21 +2555,23 @@ class SegmentedLevelStorage(BaseLevelStorage):
         if copied_mask.shape[0] != n_seg:
             raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_seg}")
         self._lazy_init_batch_ptr()
-        keys = list(self._data.keys())
+        keys = _validate_buffer_field_dtypes(self._data)
         original_bp = self._batch_ptr.clone()
-        num_kept_t = defrag_segmented(self._data[keys[0]], self._batch_ptr, copied_mask)
+        num_kept_t = defrag_segmented(
+            self._data[keys[0]], self._batch_ptr, copied_mask.clone()
+        )
         for key in keys[1:]:
-            defrag_segmented(self._data[key], original_bp.clone(), copied_mask)
+            defrag_segmented(self._data[key], original_bp.clone(), copied_mask.clone())
 
-        self.segment_lengths = self._batch_ptr[1:] - self._batch_ptr[:-1]
         n_kept = int(num_kept_t.item())
+        self._replace_segment_lengths(
+            self._batch_ptr[1 : n_kept + 1] - self._batch_ptr[:n_kept],
+            preserve_pointer=True,
+        )
         object.__setattr__(self, "_num_segments", n_kept)
         object.__setattr__(
             self, "_num_elements_kept", int(self._batch_ptr[n_kept].item())
         )
-        self._batch_idx = None
-        self._batch_ptr_np = None
-        self._segment_indices = None
         # Kernel already compacted each tensor in place (kept rows at front, rest zeroed);
         # buffer shape is unchanged for fixed-size batches.
         if hasattr(self, "_copied_mask"):
@@ -1995,7 +2616,7 @@ class MultiLevelStorage:
             groups if groups is not None else {}
         )
         self.attr_map = attr_map if attr_map is not None else LevelSchema()
-        self.device = torch.device(device) if device else torch.device("cpu")
+        self.device = resolve_device(device)
 
         if validate and self.groups:
             self._validate_consistency()
@@ -2032,7 +2653,8 @@ class MultiLevelStorage:
             for key in group.keys():
                 if key in seen:
                     raise ValueError(
-                        f"Attribute '{key}' is duplicated in group '{group_name}'"
+                        f"Attribute '{key}' is duplicated across storage groups; "
+                        f"found again in group '{group_name}'"
                     )
                 seen.add(key)
 
@@ -2101,11 +2723,13 @@ class MultiLevelStorage:
         return self.select(key)
 
     def __setitem__(self, key: str, value: Any) -> None:
-        """Set an attribute, routing to the correct group via ``attr_map``."""
-        try:
-            group_name = self.attr_map.group(key)
-        except KeyError:
-            group_name = "system"  # Unknown keys default to system-level
+        """Set an attribute, routing to the group that holds it or ``attr_map``."""
+        group_name = self._group_name_from_attr(key)
+        if group_name is None:
+            try:
+                group_name = self.attr_map.group(key)
+            except KeyError:
+                group_name = "system"  # Unknown keys default to system-level
         dtype = self.attr_map.dtypes.get(key, None)
         tensor = to_tensor(value, device=self.device, dtype=dtype)
 
@@ -2179,13 +2803,18 @@ class MultiLevelStorage:
 
     # -- Selection / cloning ------------------------------------------------
 
-    def select(self, idx: IndexType) -> MultiLevelStorage:
+    def select(
+        self, idx: IndexType, *, drop: Collection[str] = ()
+    ) -> MultiLevelStorage:
         """Select a subset of samples across all groups.
 
         Parameters
         ----------
         idx : IndexType
             Sample-level index specification.
+        drop : Collection[str], optional
+            Keys left out of every group's selection instead of being copied.
+            Default ``()``.
 
         Returns
         -------
@@ -2194,7 +2823,7 @@ class MultiLevelStorage:
         if isinstance(idx, int):
             idx = slice(idx, idx + 1)
         return self.__class__(
-            groups={k: v.select(idx) for k, v in self.groups.items()},
+            groups={k: v.select(idx, drop=drop) for k, v in self.groups.items()},
             attr_map=self.attr_map,
             validate=False,
         )
@@ -2208,21 +2837,36 @@ class MultiLevelStorage:
     ) -> MultiLevelStorage:
         """Move all groups to *device*.
 
+        Parameters
+        ----------
+        device : DeviceType
+            Target device. A bare ``"cuda"`` is recorded as the CUDA device
+            current at the time of the move, which is where the tensors land.
+        non_blocking : bool, default False
+            Whether tensor copies may be asynchronous when supported.
+
         Returns
         -------
         Self
             For method chaining.
         """
-        device = torch.device(device)
+        device = resolve_device(device)
         self.device = device
         for group in self.groups.values():
             group.to_device(device, non_blocking=non_blocking)
         return self
 
-    def clone(self) -> MultiLevelStorage:
-        """Return a deep copy with independent groups and attr_map."""
+    def clone(self, *, drop: Collection[str] = ()) -> MultiLevelStorage:
+        """Return a deep copy with independent groups and attr_map.
+
+        Parameters
+        ----------
+        drop : Collection[str], optional
+            Keys left out of every group's copy instead of being cloned.
+            Default ``()``.
+        """
         return self.__class__(
-            groups={n: g.clone() for n, g in self.groups.items()},
+            groups={n: g.clone(drop=drop) for n, g in self.groups.items()},
             validate=False,
             attr_map=self.attr_map.clone(),
             device=self.device,
@@ -2409,7 +3053,9 @@ class MultiLevelStorage:
 
         Notes
         -----
-        Uses the ``attr_map`` from the first batch.
+        Uses the ``attr_map`` and the device from the first batch. Every
+        contributed tensor, segment lengths included, is moved to that device
+        before it is concatenated, so batches held on different devices merge.
         """
         if not batches:
             return cls(attr_map=LevelSchema())
@@ -2459,7 +3105,7 @@ class MultiLevelStorage:
             if all(g.is_segmented() for g in attr_groups):
                 group_name = attr_map.group(attr)
                 merged_seg_lengths[group_name] = torch.cat(
-                    [g.segment_lengths for g in attr_groups], dim=0
+                    [g.segment_lengths.to(device) for g in attr_groups], dim=0
                 )
 
         return cls.from_data(

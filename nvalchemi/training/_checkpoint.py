@@ -96,6 +96,7 @@ from nvalchemi.training._spec import (
     create_model_spec,
     create_model_spec_from_json,
 )
+from nvalchemi.training._strategy_validation import ModelInput, _normalize_models
 from nvalchemi.training.distributed import get_world_size
 
 CheckpointValidator = Callable[[str, Mapping[str, Any], Mapping[str, Any]], None]
@@ -436,6 +437,119 @@ def _snapshot_components(
         name: (_snapshot_state_dict(component.state_dict()), spec)
         for name, (component, spec) in components.items()
     }
+
+
+def _filter_ema_hook_states_to_trainable_state(
+    snapshot: dict[str, Any],
+    trainable_names_by_model: Mapping[str, set[str]],
+    buffer_names_by_model: Mapping[str, set[str]],
+) -> None:
+    """Filter EMA averaged model state to trainable parameters plus buffers if EMA is enabled."""
+    hook_states = snapshot.get("hook_states", {})
+    if not isinstance(hook_states, Mapping):
+        return
+
+    for key, state in hook_states.items():
+        if not str(key).startswith("nvalchemi.training.hooks.ema.EMAHook:"):
+            continue
+        if not isinstance(state, dict):
+            continue
+        model_key = state.get("model_key")
+        averaged_state = state.get("averaged_model_state")
+        if not isinstance(model_key, str) or not isinstance(averaged_state, Mapping):
+            continue
+        if model_key not in trainable_names_by_model:
+            continue
+
+        # AveragedModel stores the wrapped model's state under the "module." prefix
+        parameter_keys = {
+            f"module.{name}" for name in trainable_names_by_model[model_key]
+        }
+        missing = sorted(parameter_keys - set(averaged_state))
+        if missing:
+            raise KeyError(
+                f"Cannot checkpoint missing EMA trainable parameter(s): {missing!r}."
+            )
+
+        # Preserve persistent buffers that are present in the averaged model state
+        buffer_keys = {
+            f"module.{name}"
+            for name in buffer_names_by_model.get(model_key, set())
+            if f"module.{name}" in averaged_state
+        }
+        keep_keys = parameter_keys | buffer_keys
+        state["averaged_model_state"] = _snapshot_state_dict(
+            {name: averaged_state[name] for name in sorted(keep_keys)}
+        )
+
+        # Partial EMA state must be restored non-strictly, like partial model state
+        state["averaged_model_state_load"] = "partial"
+
+
+def _filter_snapshot_to_trainable_state(
+    snapshot: dict[str, Any],
+    workflow: Any,
+    *,
+    error_prefix: str = "CheckpointHook",
+    warning_message: str | None = None,
+) -> None:
+    """Mutate a checkpoint snapshot to keep only optimizer-selected model state.
+
+    Models without selected parameters are kept with empty state so restore can
+    reconstruct them from spec while partial loading skips their weights.
+    """
+    trainable_names = set(getattr(workflow, "_optimizer_parameter_names", set()) or ())
+    if not trainable_names:
+        raise ValueError(
+            f"{error_prefix} selected no trainable parameters. Ensure trainable "
+            "parameter filters have been configured before checkpointing."
+        )
+    if warning_message is not None:
+        warnings.warn(warning_message, UserWarning, stacklevel=3)
+
+    filtered_models = {}
+    trainable_names_by_model: dict[str, set[str]] = {}
+    buffer_names_by_model: dict[str, set[str]] = {}
+    for model_name, (state_dict, spec) in snapshot["models"].items():
+        prefix = f"{model_name}."
+        model_trainable_names = {
+            name.removeprefix(prefix)
+            for name in trainable_names
+            if name.startswith(prefix)
+        }
+
+        # Persistent buffers are required alongside selected parameters for partial restore
+        live_model = _checkpoint_model(workflow.models[model_name])
+        buffers = {
+            name for name, _buffer in live_model.named_buffers() if name in state_dict
+        }
+        trainable_names_by_model[model_name] = model_trainable_names
+        buffer_names_by_model[model_name] = buffers
+
+        # Reject stale optimizer metadata
+        missing = sorted(model_trainable_names - set(state_dict))
+        if missing:
+            raise KeyError(
+                f"Cannot checkpoint missing trainable parameter(s): {missing!r}."
+            )
+
+        # Collate trainable states
+        selected_state: dict[str, torch.Tensor] = {
+            name: state_dict[name] for name in sorted(model_trainable_names)
+        }
+        selected_state.update({name: state_dict[name] for name in sorted(buffers)})
+        filtered_models[model_name] = (
+            _snapshot_state_dict(selected_state),
+            spec,
+        )
+    snapshot["models"] = filtered_models
+    _filter_ema_hook_states_to_trainable_state(
+        snapshot,
+        trainable_names_by_model,
+        buffer_names_by_model,
+    )
+    # Mark model state as partial so model can be restored non-strictly in load_checkpoint.
+    snapshot["strategy_metadata"]["model_state_load"] = "partial"
 
 
 def _hook_state_key(hook: object, occurrence: int) -> str:
@@ -1129,6 +1243,28 @@ def _optimizer_scheduler_maps_from_strategy(
     return optimizers, schedulers
 
 
+def _load_partial_model_state(
+    model: nn.Module,
+    weights: Mapping[str, Any],
+    *,
+    model_name: str,
+) -> None:
+    """Load partial model state while rejecting unconsumed saved keys."""
+    result = model.load_state_dict(weights, strict=False)
+    if result.unexpected_keys:
+        raise RuntimeError(
+            "Partial model state contains unexpected tensor keys for model "
+            f"{model_name!r}: {sorted(result.unexpected_keys)}."
+        )
+    # Sanity-check that keys present in the partial state are not reported missing.
+    missing_saved_keys = set(weights) & set(result.missing_keys)
+    if missing_saved_keys:
+        raise RuntimeError(
+            "Partial model state tensor keys were not loaded for model "
+            f"{model_name!r}: {sorted(missing_saved_keys)}."
+        )
+
+
 def _restore_checkpoint_into_strategy(
     root: Path,
     manifest: CheckpointManifest,
@@ -1163,7 +1299,13 @@ def _restore_checkpoint_into_strategy(
             weights_only=True,
             map_location=map_location,
         )
-        model.load_state_dict(weights)
+        if (
+            strategy_metadata is not None
+            and strategy_metadata.get("model_state_load") == "partial"
+        ):
+            _load_partial_model_state(model, weights, model_name=name)
+        else:
+            model.load_state_dict(weights)
         spec_path = root / "models" / name / "spec.json"
         spec = _load_spec(spec_path) if spec_path.exists() else None
         loaded_models[name] = (model, spec)
@@ -1384,6 +1526,21 @@ def _with_strategy_device_override(
     return metadata
 
 
+def _with_live_strategy_devices(
+    strategy_metadata: Mapping[str, Any],
+    devices: Sequence[torch.device],
+) -> dict[str, Any]:
+    """Return strategy metadata whose devices are the live strategy's own.
+
+    A live restore stages weights through ``map_location`` and then re-homes
+    every model onto the strategy's ``devices``, so the strategy decides where
+    the restored objects end up and the returned metadata has to say so.
+    """
+    metadata = dict(strategy_metadata)
+    metadata["devices"] = [str(device) for device in devices]
+    return metadata
+
+
 def _build_model_from_checkpoint_spec(
     root: Path,
     name: str,
@@ -1432,6 +1589,7 @@ def save_checkpoint(
     associations: _Associations | None = None,
     checkpoint_index: int = -1,
     strategy: Any | None = None,
+    save_trainable_state_only: bool = False,
 ) -> int:
     """Save a checkpoint with a manifest.
 
@@ -1463,6 +1621,10 @@ def save_checkpoint(
         from the manifest's last index, or starts at ``0``.
     strategy
         Optional training strategy to save as a restartable checkpoint.
+    save_trainable_state_only
+        If ``True``, save optimizer-selected model parameters plus buffers
+        and mark model state as partial for non-strict restore. Requires
+        ``strategy``.
 
     Returns
     -------
@@ -1491,12 +1653,33 @@ def save_checkpoint(
     if strategy is None and isinstance(models, TrainingStrategy):
         strategy = models
         models = None
+    if save_trainable_state_only and strategy is None:
+        raise ValueError(
+            "save_trainable_state_only=True requires strategy checkpointing."
+        )
     if strategy is not None:
         if not isinstance(strategy, TrainingStrategy):
             raise TypeError(
                 "strategy must be a TrainingStrategy instance; got "
                 f"{type(strategy).__name__}."
             )
+        if save_trainable_state_only:
+            snapshot = _create_checkpoint_snapshot(
+                root,
+                checkpoint_index=checkpoint_index,
+                strategy=strategy,
+            )
+            _filter_snapshot_to_trainable_state(
+                snapshot,
+                strategy,
+                warning_message=(
+                    "Saving a checkpoint with save_trainable_state_only=True "
+                    "stores only optimizer-selected parameters and buffers. "
+                    "Restoring this checkpoint requires the saved model spec "
+                    "to reconstruct the exact base model weights."
+                ),
+            )
+            return _write_checkpoint_snapshot(root, snapshot)
         (
             models,
             optimizers,
@@ -1553,6 +1736,35 @@ def save_checkpoint(
     return checkpoint_index
 
 
+def _caller_models(
+    models: ModelInput, saved: Sequence[str], single_model_input: bool | None
+) -> ModelInput:
+    """Return *models* once their names are exactly the checkpoint's *saved* ones.
+
+    A single model stands for a checkpoint whose one model is ``"main"``. The
+    weights are loaded by name, so a name the checkpoint lacks would stay
+    unweighted and a saved name with no caller object would be rebuilt from
+    its spec beside the caller's, neither of which a caller supplying models
+    means. The result takes the shape the checkpoint recorded in
+    *single_model_input*, so a bare model and ``{"main": model}`` restore the
+    same call mode the strategy was saved with; a legacy checkpoint that
+    recorded none leaves the caller's shape as given.
+    """
+    named = _normalize_models(models)
+    names = set(named)
+    if names != set(saved):
+        raise ValueError(
+            "load_checkpoint: models must name exactly the checkpoint's models "
+            f"{sorted(saved)!r}; got {sorted(names)!r}. Pass one live model per "
+            "saved name, or leave models unset to rebuild them from the saved specs."
+        )
+    if single_model_input is True:
+        return named["main"]
+    if single_model_input is False:
+        return named
+    return models
+
+
 def load_checkpoint(
     root_folder: Path | str,
     checkpoint_index: int = -1,
@@ -1565,6 +1777,8 @@ def load_checkpoint(
     hooks: Sequence[Any] | None = None,
     training_fn: Any = None,
     strategy: Any | None = None,
+    models: ModelInput | None = None,
+    **runtime_overrides: Any,
 ) -> CheckpointManifest | dict[str, Any]:
     """Load a multi-component checkpoint written by :func:`save_checkpoint`.
 
@@ -1586,7 +1800,10 @@ def load_checkpoint(
         each loaded model is additionally moved via
         ``model.to(map_location)``. Optimizers and schedulers have their
         state placed by ``torch.load`` alone (they lack a standard
-        ``.to()`` API).
+        ``.to()`` API). With ``strategy`` it only stages the load: the live
+        strategy's ``devices`` still decide where the restored models and
+        optimizer state come to rest, and the returned ``strategy_metadata``
+        reports those devices rather than ``map_location``.
     model_names
         If given, load only the models with these names together with the
         optimizers and schedulers wired to them through
@@ -1615,6 +1832,21 @@ def load_checkpoint(
         This mode restores model, optimizer, scheduler, runtime-counter, and
         checkpointable hook state into the live objects instead of rebuilding
         models from saved specs.
+    models
+        Live models to restore the checkpoint's weights into, in place of the
+        ones the loader builds from the saved specs: a single model for a
+        checkpoint whose one model is ``"main"``, or a mapping whose names
+        are exactly ``manifest.models``. Like ``runtime_overrides``, accepted
+        only when the saved strategy is rebuilt from its metadata. A caller
+        whose other objects already hold the models, such as a propagator
+        built around the student it trains, passes them here so the weights
+        land in those very objects.
+    **runtime_overrides
+        Runtime overrides: live objects that a saved spec cannot carry, passed
+        as extra keyword arguments. They are forwarded to the strategy class's
+        ``from_spec_dict`` when a saved strategy is rebuilt from its metadata,
+        and a subclass documents the ones it accepts. They are refused in the
+        modes that rebuild no strategy.
 
     Returns
     -------
@@ -1634,8 +1866,14 @@ def load_checkpoint(
     KeyError
         If any name in ``model_names`` does not appear in
         ``manifest.models``.
+    ValueError
+        If ``models`` does not name exactly the models in ``manifest.models``.
     RuntimeError
         If a model spec does not build an :class:`~torch.nn.Module`.
+    TypeError
+        If ``runtime_overrides`` or ``models`` are given but no strategy is
+        rebuilt from metadata, or if a runtime override reaches a
+        ``from_spec_dict`` that does not accept it.
 
     Examples
     --------
@@ -1658,6 +1896,18 @@ def load_checkpoint(
         result = load_checkpoint("runs/kd", model_names={"teacher", "student"})
     """
     root = Path(root_folder)
+    supplied = sorted(runtime_overrides) + (["models"] if models is not None else [])
+    if supplied and (
+        adapter is not None or strategy is not None or model_names is not None
+    ):
+        raise TypeError(
+            f"load_checkpoint: got runtime overrides {supplied!r}, "
+            "but this load rebuilds no strategy, so nothing receives them. An "
+            "adapter load, a live strategy restore, and a partial model_names "
+            "load all leave the strategy class's from_spec_dict uncalled. Drop "
+            "the overrides, or load without adapter, strategy, and model_names "
+            "so the saved strategy is rebuilt from its metadata."
+        )
     if adapter is not None:
         if strategy is not None:
             raise ValueError("load_checkpoint does not support strategy with adapter.")
@@ -1695,17 +1945,20 @@ def load_checkpoint(
                 "load_checkpoint(strategy=...) restores the complete live strategy; "
                 "model_names is not supported in this mode."
             )
+        # A live restore targets the live strategy, not the recorded device.
         loaded = _restore_checkpoint_into_strategy(
             root,
             manifest,
             checkpoint_index=checkpoint_index,
             strategy=strategy,
             strategy_metadata=strategy_metadata,
-            map_location=load_location,
+            map_location=(
+                load_location if map_location is not None else strategy.devices[0]
+            ),
         )
         if strategy_metadata is not None:
-            loaded["strategy_metadata"] = _with_strategy_device_override(
-                strategy_metadata, map_location
+            loaded["strategy_metadata"] = _with_live_strategy_devices(
+                strategy_metadata, strategy.devices
             )
         _run_validators(loaded, validators)
         return loaded
@@ -1715,20 +1968,27 @@ def load_checkpoint(
     if strategy_metadata is not None and model_names is None:
         from nvalchemi.training.strategy import TrainingStrategy
 
-        # Build models from specs without loading weights.
-        unweighted_models = {
-            name: _build_model_from_checkpoint_spec(
-                root,
-                name,
-                load_location=load_location,
-            )[0]
-            for name in manifest.models
-        }
-        loaded_strategy_models: Any = unweighted_models
-        if strategy_metadata.get("single_model_input") is True and set(
-            unweighted_models
-        ) == {"main"}:
-            loaded_strategy_models = unweighted_models["main"]
+        # Build models from specs without loading weights, unless the caller
+        # supplied the objects the weights are to land in.
+        loaded_strategy_models: Any
+        if models is not None:
+            loaded_strategy_models = _caller_models(
+                models, manifest.models, strategy_metadata.get("single_model_input")
+            )
+        else:
+            unweighted_models = {
+                name: _build_model_from_checkpoint_spec(
+                    root,
+                    name,
+                    load_location=load_location,
+                )[0]
+                for name in manifest.models
+            }
+            loaded_strategy_models = unweighted_models
+            if strategy_metadata.get("single_model_input") is True and set(
+                unweighted_models
+            ) == {"main"}:
+                loaded_strategy_models = unweighted_models["main"]
 
         # Reconstruct the strategy and run registration-time hooks.
         runtime_strategy_metadata = _with_strategy_device_override(
@@ -1739,6 +1999,7 @@ def load_checkpoint(
             models=loaded_strategy_models,
             hooks=hooks,  # extra user-supplied runtime hooks
             training_fn=training_fn,
+            **runtime_overrides,
         )
 
         # Load model weights and optimizer/scheduler/runtime state.
@@ -1757,6 +2018,14 @@ def load_checkpoint(
     # Path 3: component-level loads: either the checkpoint has no strategy
     # metadata, or ``model_names`` requested a partial load from a strategy
     # checkpoint. Partial loads do not reconstruct strategy hooks.
+    if supplied:
+        raise TypeError(
+            f"load_checkpoint: got runtime overrides {supplied!r}, "
+            "but this checkpoint carries no strategy metadata, so no strategy is "
+            "rebuilt and nothing receives them. Drop the overrides, or load a "
+            "checkpoint saved with a strategy so its class's from_spec_dict is "
+            "called."
+        )
     # Determine what models to load.
     selected_models = set(manifest.models) if model_names is None else set(model_names)
     unknown = selected_models - set(manifest.models)

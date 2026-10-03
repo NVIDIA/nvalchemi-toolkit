@@ -16,9 +16,9 @@
 Cell alignment hook for variable-cell optimization.
 
 Provides :class:`AlignCellHook`, which aligns periodic simulation cells to
-upper-triangular (right-handed) form before the first optimizer step, and
-:func:`_align_atomic_data_cell`, a standalone utility for aligning a single
-:class:`~nvalchemi.data.AtomicData` instance.
+lower-triangular (right-handed) form before the first optimizer step, and
+:func:`_aligned_periodic`, the standalone alignment implementation it shares
+with :meth:`~nvalchemi.dynamics.optimizers.lbfgs.LBFGSVariableCell._reference_cells`.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from enum import Enum
 
 import torch
 
-from nvalchemi.dynamics._ops.cell_align import align_cell
+from nvalchemi.dynamics._ops.cell_align import align_cell, cell_alignment_offenders
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.hooks._context import DynamicsContext
 
@@ -35,10 +35,10 @@ __all__ = ["AlignCellHook"]
 
 
 class AlignCellHook:
-    r"""Align periodic cells before the first variable-cell FIRE2 step.
+    r"""Align periodic cells before the first variable-cell FIRE2 or L-BFGS step.
 
     Transforms each periodic system's cell matrix to the standard
-    upper-triangular (right-handed) form:
+    lower-triangular (right-handed) form:
 
     .. math::
 
@@ -51,6 +51,13 @@ class AlignCellHook:
     and rotates positions to preserve fractional coordinates.  This
     representation reduces rotational ambiguity (improving optimizer
     stability) and has 6 independent parameters instead of 9.
+
+    ``forces`` and ``stress``, if present on the batch, are rotated by the
+    same transform.  This matters because :class:`~nvalchemi.dynamics.base.BaseDynamics`
+    primes forces/stress (one model call) before ``BEFORE_STEP`` hooks run,
+    so on the first step of a new admission this hook would otherwise rotate
+    positions/cell into a new frame while leaving already-computed
+    forces/stress in the old one.
 
     The hook fires at :attr:`~DynamicsStage.BEFORE_STEP` and skips
     non-periodic systems.
@@ -80,38 +87,109 @@ class AlignCellHook:
 
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Align the current batch when any periodic cell is not triangular."""
-        del stage
-        batch = ctx.batch
+        aligned = _aligned_periodic(ctx.batch, ctx.active_graph_mask)
+        if aligned is not None:
+            positions, cell, forces, stress = aligned
+            with torch.no_grad():
+                ctx.batch.positions.copy_(positions)
+                ctx.batch.cell.copy_(cell)
+                # BaseDynamics primes forces/stress via a model call before
+                # BEFORE_STEP hooks run (base.py), i.e. before this hook
+                # rotates positions/cell on the first step of an admission.
+                # Rotate them the same way so pre_update doesn't mix a
+                # pre-rotation force/stress with post-rotation positions.
+                if forces is not None:
+                    ctx.batch.forces.copy_(forces)
+                if stress is not None:
+                    ctx.batch.stress.copy_(stress)
 
-        if not hasattr(batch, "cell") or batch.cell is None:
-            return
-        if not hasattr(batch, "pbc") or batch.pbc is None:
-            return
 
-        # Determine which systems are periodic
-        pbc = batch.pbc
-        if pbc.dim() == 1:
-            if pbc.shape[0] == batch.num_graphs:
-                periodic_mask = pbc.to(dtype=torch.bool)
-            else:
-                periodic_mask = pbc.unsqueeze(0).any(dim=-1)
+def _aligned_periodic(
+    batch, active_graph_mask: torch.Tensor | None = None
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, torch.Tensor | None] | None:
+    """Return ``(positions, cell, forces, stress)`` with periodic systems aligned.
+
+    ``forces``/``stress`` are rotated by the same transform as ``positions``/
+    ``cell`` (``None`` when *batch* doesn't carry that field) so a caller that
+    already has forces/stress computed in the old frame — e.g. because forces
+    were primed before this hook ran — can keep them consistent with the
+    newly-aligned frame instead of silently mixing the two.  Reads *batch*
+    without writing it; other systems keep their values.  Returns ``None``
+    when there is nothing to align.
+
+    Shared by :class:`AlignCellHook` (which copies the result back into the
+    live batch) and
+    :meth:`~nvalchemi.dynamics.optimizers.lbfgs.LBFGSVariableCell._reference_cells`
+    (which only needs the aligned cell to validate/seed its reference chart,
+    without touching *batch*) — kept standalone rather than inlined into the
+    hook so both call sites share one alignment implementation.
+    """
+    if getattr(batch, "cell", None) is None or getattr(batch, "pbc", None) is None:
+        return None
+    cell = batch.cell.detach()
+    if cell.shape[0] == 0:
+        return None
+
+    # Determine which systems are periodic
+    pbc = batch.pbc
+    if pbc.dim() == 1:
+        if pbc.shape[0] == batch.num_graphs:
+            periodic_mask = pbc.to(dtype=torch.bool)
         else:
-            periodic_mask = pbc.any(dim=-1)
-        if not periodic_mask.any():
-            return
+            periodic_mask = pbc.unsqueeze(0).any(dim=-1)
+    else:
+        periodic_mask = pbc.any(dim=-1)
+    if active_graph_mask is not None:
+        periodic_mask = periodic_mask & active_graph_mask
 
-        positions = batch.positions.contiguous()
-        cell = batch.cell.contiguous()
-        if positions.dtype not in (torch.float32, torch.float64):
-            raise TypeError(
-                "Cell alignment only supports float32/float64 positions, got "
-                f"{positions.dtype}."
-            )
-        if cell.dtype != positions.dtype:
-            cell = cell.to(dtype=positions.dtype)
+    # Skip the clone + kernel launch when nothing needs realigning (the
+    # common case after the first step) -- also avoids ULP-level position
+    # nudges that would violate L-BFGS's "don't edit positions" contract.
+    needs_align = periodic_mask & cell_alignment_offenders(cell)
+    # Eager early exit; compiled graphs run branchless (all-False is a no-op).
+    if not torch.compiler.is_compiling() and not needs_align.any():
+        return None
 
-        batch_idx = batch.batch_idx.to(dtype=torch.int32).contiguous()
-        align_cell(positions, cell, batch_idx)
+    positions_dtype = batch.positions.dtype
+    if positions_dtype not in (torch.float32, torch.float64):
+        raise TypeError(
+            "Cell alignment only supports float32/float64 positions, got "
+            f"{positions_dtype}."
+        )
+    positions = batch.positions.detach().contiguous().clone()
+    cell = cell.contiguous().clone()
+    if cell.dtype != positions_dtype:
+        cell = cell.to(dtype=positions_dtype)
 
-        batch.positions = positions
-        batch.cell = cell
+    batch_idx = batch.batch_idx.to(dtype=torch.int32).contiguous()
+    transform = align_cell(positions, cell, batch_idx)
+
+    # needs_align, not periodic_mask: align_cell recomputed every
+    # periodic+active cell above (no per-system skip), so an already-aligned
+    # one can differ from the input by a few ULP -- blend those back out.
+    aligned_atoms = needs_align[batch.batch_idx].unsqueeze(-1)
+    aligned_cells = needs_align[:, None, None]
+
+    forces = None
+    batch_forces = getattr(batch, "forces", None)
+    if batch_forces is not None:
+        rotated = torch.einsum(
+            "nij,nj->ni", transform[batch.batch_idx.long()], batch_forces.detach()
+        )
+        forces = torch.where(aligned_atoms, rotated, batch_forces.detach())
+
+    stress = None
+    batch_stress = getattr(batch, "stress", None)
+    if batch_stress is not None:
+        # Cauchy stress is a rank-2 Cartesian tensor: sigma' = R sigma R^T.
+        rotated = torch.einsum(
+            "mij,mjk,mlk->mil", transform, batch_stress.detach(), transform
+        )
+        stress = torch.where(aligned_cells, rotated, batch_stress.detach())
+
+    return (
+        torch.where(aligned_atoms, positions, batch.positions.detach()),
+        torch.where(aligned_cells, cell, batch.cell.detach()),
+        forces,
+        stress,
+    )

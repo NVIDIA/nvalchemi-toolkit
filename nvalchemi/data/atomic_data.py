@@ -23,11 +23,19 @@ from typing import TYPE_CHECKING, Annotated, Any, ClassVar
 import numpy as np
 import periodictable as pt
 import torch
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    PrivateAttr,
+    model_validator,
+)
 
 from nvalchemi import OptionalDependency
 from nvalchemi import _typing as t
 from nvalchemi.data.data import DataMixin  # type: ignore
+from nvalchemi.data.level_storage import DEFAULT_ATTRIBUTE_MAP
 
 if TYPE_CHECKING:
     from ase import Atoms
@@ -81,6 +89,7 @@ class AtomicNumberTable:
 
 
 _DEFAULT_MASS_TABLE: torch.Tensor | None = None
+_BUILTIN_FIELD_NAMES = frozenset().union(*DEFAULT_ATTRIBUTE_MAP.values())
 
 
 def _default_mass_table() -> torch.Tensor:
@@ -381,6 +390,10 @@ class AtomicData(BaseModel, DataMixin):
         default_factory=dict,
         description="Additional unstructured information about the system.",
     )
+    # Batch stores custom level definitions privately on an extracted
+    # AtomicData so an immediate unbatch/rebatch cycle retains its schema.
+    # PrivateAttr keeps this metadata out of field enumeration and dumps.
+    _level_schema: Any = PrivateAttr(default=None)
     # "Node key" means dim(0) == num_nodes; tensors may have any rank.
     _default_node_keys: ClassVar[frozenset[str]] = frozenset(
         {
@@ -701,6 +714,48 @@ class AtomicData(BaseModel, DataMixin):
         """Add a system property to the graph."""
         setattr(self, key, value)
         self.__system_keys__.add(key)
+
+    def clone(self) -> AtomicData:
+        """Return a deep copy, including an independent private level schema."""
+        cloned = DataMixin.clone(self)
+        if self._level_schema is not None:
+            cloned._level_schema = self._level_schema.clone()
+        return cloned  # type: ignore[return-value]
+
+    def to(
+        self,
+        device: torch.device | str,
+        dtype: torch.dtype | None = None,
+        non_blocking: bool = False,
+    ) -> AtomicData:
+        """Return a device-moved copy with synchronized level metadata.
+
+        Floating custom-field dtype declarations follow an explicit dtype
+        conversion so the returned object can be batched again immediately.
+
+        Raises
+        ------
+        ValueError
+            If the requested dtype cannot be represented by the level schema.
+        """
+        moved = DataMixin.to(self, device, dtype, non_blocking)
+        if self._level_schema is not None:
+            schema = self._level_schema.clone()
+            if dtype is not None:
+                for key, group_name in schema.attr_to_group.items():
+                    if key in _BUILTIN_FIELD_NAMES:
+                        continue
+                    original = getattr(self, key, None)
+                    converted = getattr(moved, key, None)
+                    if (
+                        isinstance(original, torch.Tensor)
+                        and isinstance(converted, torch.Tensor)
+                        and original.dtype.is_floating_point
+                        and original.dtype != converted.dtype
+                    ):
+                        schema.set(key, group_name, dtype=converted.dtype)
+            moved._level_schema = schema
+        return moved  # type: ignore[return-value]
 
     @property
     def chemical_hash(self) -> str:

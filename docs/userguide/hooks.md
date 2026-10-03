@@ -96,6 +96,21 @@ Dynamics engines pass {py:class}`~nvalchemi.hooks.DynamicsContext`, which adds:
 |-------|------|---------|
 | `step_count` | `int` | Current dynamics step |
 | `converged_mask` | `torch.Tensor \| None` | Samples that converged at the current hook stage |
+| `active_graph_mask` | `torch.Tensor \| None` | Systems active for the current fused or sub-stage dispatch |
+
+Mutating hooks must restrict their selection to `active_graph_mask` when it is
+set. For node-level mutations, combine the hook's selection with
+`ctx.active_graph_mask[batch.batch_idx]`; for graph-level mutations, combine it
+with `ctx.active_graph_mask`. Otherwise, a hook registered on a fused sub-stage
+can mutate graphs owned by another sub-stage or graphs sitting out an integrator
+update during force repriming. Model outputs follow the same ownership rule: the
+forward pass may evaluate the whole batch, but dynamics publish graph-, atom-,
+and edge-level outputs only for
+the active graphs in that dispatch. Inactive rows retain their prior values.
+Read-only observation hooks may instead inspect the full batch deliberately. For
+example, the `StatusSnapshotHook` in
+{doc}`/examples/intermediate/01_multistage_pipeline` reads every graph to report
+the global status distribution.
 
 Training loops pass {py:class}`~nvalchemi.hooks.TrainContext`, which adds:
 
@@ -116,8 +131,9 @@ Training loops pass {py:class}`~nvalchemi.hooks.TrainContext`, which adds:
 | `validation` | `dict[str, Any] \| None` | Latest validation summary |
 
 The engine builds this context object at each stage via an overridable
-`_build_context(batch)` method. Custom engines should return their own
-`HookContext` subclass when hooks need workflow-specific fields.
+`_build_context(batch, **context_fields)` method. Custom engines should
+override it with matching keyword parameters and return their own `HookContext`
+subclass when hooks need workflow-specific fields.
 
 ### Optional context manager support
 
@@ -132,8 +148,8 @@ its logger.
 
 The hook system supports multiple **task categories** through stage enums:
 
-- **Dynamics**: {py:class}`~nvalchemi.dynamics.base.DynamicsStage` — 9 stages from
-  `BEFORE_STEP` through `ON_CONVERGE`
+- **Dynamics**: {py:class}`~nvalchemi.dynamics.base.DynamicsStage` — 11
+  lifecycle stages from `ON_ADMISSION` through `ON_GRADUATE`
 - **Custom pipelines**: Any custom `Enum` type — the hook system accepts arbitrary
   enum types via the `Enum` fallback
 
@@ -234,6 +250,11 @@ hook = LoggingHook(backend="csv", log_path="hooks.csv", frequency=10)  # log eve
 ```
 
 The hook implements the context manager protocol to manage its logger lifecycle.
+It writes one row per graph by default. For grouped workflows such as reaction
+paths, set `by_group=True` and return `(num_groups,)` tensors from
+`custom_scalars`. Group mode does not implicitly reduce graph-level energy,
+force, or temperature because those reductions are application dependent.
+
 It is the current built-in dynamics logger, not the full logging abstraction for
 all workflows.
 
@@ -479,8 +500,9 @@ workflow counters should stay out of hook checkpoints.
 
 ## Composing hooks
 
-Hooks are independent and composable. A typical production setup combines
-convergence, logging, and trajectory recording:
+Hooks are generally independent and composable. Some hooks depend on data
+produced by others and must be registered after them. A typical production
+setup combines convergence, logging, and trajectory recording:
 
 ```python
 from nvalchemi.dynamics import FIRE, ConvergenceHook

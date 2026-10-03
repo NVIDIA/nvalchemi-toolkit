@@ -20,6 +20,7 @@ particularly to note their data type and shapes.
 
 The notation we will use for shapes is as follows:
 - B: Batch size
+- G: Number of groups in a batch
 - V: Number of nodes (vertices)
 - E: Number of edges
 - H: Hidden feature dimensionality
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
     from nvalchemi.data import AtomicData, Batch
 
 B: TypeAlias = int
+G: TypeAlias = int  # groups in a batch
 V: TypeAlias = int
 E: TypeAlias = int
 H: TypeAlias = int

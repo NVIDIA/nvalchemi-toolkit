@@ -27,7 +27,13 @@ import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics.sinks import DataSink, GPUBuffer, HostMemory, ZarrData
+from nvalchemi.dynamics.sinks import (
+    DataSink,
+    GPUBuffer,
+    HostMemory,
+    ResizableSink,
+    ZarrData,
+)
 
 # -----------------------------------------------------------------------------
 # Helper Functions
@@ -89,6 +95,30 @@ def create_single_atom_batch(num_graphs: int = 1, device: str = "cpu") -> Batch:
 # -----------------------------------------------------------------------------
 # Test Classes
 # -----------------------------------------------------------------------------
+
+
+class _GrowingHostMemory(HostMemory):
+    """Host-memory sink that can be grown after construction."""
+
+    def resize(self, capacity: int) -> None:
+        """Raise the capacity to *capacity*."""
+        self._capacity = capacity
+
+
+class TestResizableSink:
+    """Structural check for sinks a consumer may grow."""
+
+    def test_a_sink_with_capacity_and_resize_satisfies_the_protocol(self) -> None:
+        """Offering ``capacity`` and ``resize`` is all the protocol asks."""
+        sink = _GrowingHostMemory(capacity=1)
+
+        assert isinstance(sink, ResizableSink)
+        sink.resize(4)
+        assert sink.capacity == 4
+
+    def test_a_fixed_capacity_sink_does_not(self) -> None:
+        """A stock DataSink exposes ``capacity`` but no ``resize``."""
+        assert not isinstance(HostMemory(capacity=1), ResizableSink)
 
 
 class TestDataSinkABC:
@@ -221,6 +251,22 @@ class TestGPUBuffer:
         # Verify positions match
         assert torch.allclose(retrieved.positions, original_positions)
         assert retrieved.num_graphs == 2
+
+    def test_write_moves_a_cpu_batch_to_the_buffer_device(self) -> None:
+        """A batch handed over on CPU is moved to the buffer rather than crashing."""
+        buffer = GPUBuffer(capacity=10, max_atoms=10, max_edges=20, device="cuda")
+        cuda_batch = create_test_batch(num_graphs=2, device="cuda")
+        cpu_batch = create_test_batch(num_graphs=1, device="cpu")
+
+        buffer.write(cuda_batch)
+        buffer.write(cpu_batch)
+
+        retrieved = buffer.read()
+        assert retrieved.num_graphs == 3
+        assert retrieved.positions.device.type == "cuda"
+        torch.testing.assert_close(
+            retrieved.positions[cuda_batch.num_nodes :].cpu(), cpu_batch.positions
+        )
 
     def test_zero_clears_buffer(self) -> None:
         """Verify zero() clears all stored data."""

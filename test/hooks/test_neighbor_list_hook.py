@@ -304,6 +304,16 @@ class TestCopyToStagingBuffers:
             hook._buf_positions, batch.positions.to(hook._buf_positions.dtype)
         )
 
+    def test_gradient_enabled_positions_do_not_attach_staging_buffer(self, device: str):
+        hook = NeighborListHook(_cfg(), stage=DynamicsStage.BEFORE_COMPUTE)
+        batch = _line_batch(device)
+        batch.positions.requires_grad_(True)
+
+        hook(_ctx(batch), _STAGE)
+
+        assert not hook._buf_positions.requires_grad
+        assert hook._buf_positions.grad_fn is None
+
 
 # ===========================================================================
 # TestAllocNlKwargs
