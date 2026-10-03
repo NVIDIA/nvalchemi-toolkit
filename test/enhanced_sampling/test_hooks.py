@@ -348,6 +348,43 @@ class TestBiasHookProtocol:
         with pytest.raises(ValueError, match="proposed assignment.*NaN or Inf"):
             hook.bias_energy(batch, torch.tensor([1, 0]))
 
+    def test_bias_energy_ignores_derivatives_acceptance_never_reads(self) -> None:
+        """A singular force under the proposed labels must not stop the run.
+
+        ``sqrt((x - c)^2)`` is finite everywhere, but its derivative at the
+        centre is ``0/0``. Scored against the other walker's window, each
+        walker sits exactly on that centre: the energy acceptance reads is a
+        clean zero, and the ``nan`` is in forces nothing ever applies.
+        """
+
+        class _SqrtRestraint(ConservativeBias):
+            """|x - center_s|, written so autograd meets 0/0 at the centre."""
+
+            def __init__(self) -> None:
+                super().__init__(name="r", compute_stress=False)
+                self.register_buffer("centers", torch.tensor([0.0, 1.0]))
+
+            def energy(self, current: Batch) -> torch.Tensor:
+                """Return a per-window square-root restraint."""
+                state = current.thermodynamic_state_id.reshape(-1).to(torch.long)
+                x = current.positions[:, 0].reshape(current.num_graphs, -1).mean(-1)
+                return torch.sqrt((x - self.centers[state]) ** 2).reshape(-1, 1)
+
+        batch = _make_batch(n_graphs=2)
+        with torch.no_grad():
+            batch.positions[: batch.num_nodes // 2, 0] = 1.0
+            batch.positions[batch.num_nodes // 2 :, 0] = 0.0
+        hook = BiasHook({"r": _SqrtRestraint()})
+
+        # Precondition: the proposed assignment really does hit the singularity.
+        batch["thermodynamic_state_id"] = torch.tensor([1, 0])
+        assert not bool(hook.biases["r"](batch)["forces"].isfinite().all())
+        batch["thermodynamic_state_id"] = torch.tensor([0, 1])
+
+        energy = hook.bias_energy(batch, torch.tensor([1, 0]))
+        assert energy.tolist() == [0.0, 0.0]
+        assert batch.thermodynamic_state_id.tolist() == [0, 1]
+
     def test_bias_energy_names_the_offending_bias(self) -> None:
         class _NanBias(ConservativeBias):
             def __init__(self) -> None:

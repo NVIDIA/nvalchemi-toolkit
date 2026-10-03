@@ -1174,6 +1174,13 @@ class BiasHook:
         overlap.  The ``isfinite`` sync this costs is per exchange attempt,
         not per step.
 
+        Only the energy is checked, because only the energy is read.  The
+        forces and stress computed alongside it are discarded, and a bias
+        can be finite under a foreign window while its derivative is
+        singular there — a square-root restraint scored at its own centre.
+        Refusing that would stop the run over a value nothing applies; the
+        force path checks the derivatives the integrator actually uses.
+
         Parameters
         ----------
         batch:
@@ -1189,7 +1196,7 @@ class BiasHook:
         Raises
         ------
         ValueError
-            If any bias returns a contribution violating the ``ModelOutputs``
+            If any bias returns an energy violating the ``ModelOutputs``
             conventions under *state_ids*, naming the bias.
         """
         original = batch.thermodynamic_state_id
@@ -1201,15 +1208,13 @@ class BiasHook:
                 device=batch.positions.device,
             )
             for name, bias in self.biases.items():
-                outputs = bias(batch)
+                energy = bias(batch).get("energy")
                 validate_contribution(
-                    outputs,
+                    {"energy": energy},
                     source=f"{type(bias).__name__} {name!r} under the proposed "
                     "assignment",
-                    num_atoms=batch.num_nodes,
                     num_graphs=batch.num_graphs,
                 )
-                energy = outputs.get("energy")
                 if energy is not None:
                     total = total + energy.reshape(-1)
         finally:

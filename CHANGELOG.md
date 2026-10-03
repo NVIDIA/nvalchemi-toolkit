@@ -448,6 +448,25 @@
 
 ### Fixed
 
+- **A singular force nothing applies stopped umbrella exchange** —
+  `BiasHook.bias_energy` scores every bias under the *proposed* assignment and
+  validated the whole contribution, forces and stress included. Acceptance
+  reads only the energy; the derivatives computed alongside it are discarded.
+  A bias can be finite under a foreign window while its derivative is singular
+  there — `sqrt((x - c)^2)` scored with the walker on that window's centre has
+  energy `0` and force `0/0` — so the run raised over a value nothing would
+  ever apply:
+
+  ```text
+  ValueError: _SqrtRestraint 'r' under the proposed assignment['forces']
+  contains NaN or Inf values.
+  ```
+
+  Only the energy is checked there now, for shape, detachment and finiteness.
+  A non-finite *energy* still raises, which is the check that path exists
+  for; the forces the integrator does apply are still checked on the force
+  path.
+
 - **A retried swap was counted twice** — `ReplicaExchange` tallied its
   attempts and advanced its draw counter inside the acceptance rule, which
   `PairSwapHook` calls before the rebinding that can refuse. A refused segment
