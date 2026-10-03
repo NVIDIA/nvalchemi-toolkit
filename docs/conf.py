@@ -113,7 +113,9 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
 ]
-suppress_warnings = ["config.cache"]
+# ref.python: unqualified shape tokens such as ``num_atoms`` in upstream
+# docstrings resolve to several documented attributes.
+suppress_warnings = ["config.cache", "ref.python"]
 autodoc_typehints = "description"
 autodoc_preserve_defaults = True
 

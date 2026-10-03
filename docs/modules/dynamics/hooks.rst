@@ -227,6 +227,40 @@ Key arguments:
 - ``frequency`` — check every N steps. Checking every step is accurate but
   adds overhead for large batches; ``frequency=100`` is typical.
 
+StabilityMonitor
+................
+
+:class:`~nvalchemi.dynamics.hooks.StabilityMonitor` is the offline counterpart
+of the drift monitor. Instead of comparing one live value against a threshold,
+it records the total energy and momentum of every graph at each firing, as
+float64 on the host, and reports the whole series once the run is over through
+:meth:`~nvalchemi.dynamics.hooks.StabilityMonitor.metrics`. The result is a
+:class:`~nvalchemi.dynamics.hooks.StabilityMetrics` record: the endpoint drift
+per atom, a least-squares drift rate per nanosecond when a ``timestep_fs`` is
+given, the RMS fluctuation about that fit, the largest excursion, and the
+largest deviation of any graph's total momentum, each for the worst graph or as
+the mean over graphs under ``aggregate="mean"``.
+
+Key arguments:
+
+- ``warmup_steps`` — firings before this step count are discarded, so a
+  structure that is not an equilibrium of the propagated potential relaxes
+  before the series starts. Without it, the relaxation is reported as drift.
+- ``divergence`` — a predicate flagging diverged graphs, evaluated at every
+  firing. The first firing that flags any graph ends the series and is
+  recorded as ``first_divergence_step``. It defaults to
+  :func:`~nvalchemi.dynamics.hooks.nonfinite_graph_mask`.
+- ``stop_on_composition_change`` — recording always stops when the graph
+  count or the per-graph atom counts change; this flag also stops it when a
+  ``system_id`` in a slot changes, which is what an inflight refill of an
+  equal-size system looks like.
+
+:func:`~nvalchemi.dynamics.hooks.total_momentum`, the per-graph mass-weighted
+velocity sum the monitor records, is exported alongside it. A batch that
+carries ``status`` brings an ``active_graph_mask`` to every dispatch, and the
+monitor records as long as that mask keeps every graph active. Like the drift
+monitor, it does not yet support a dispatch in which some graphs are inactive.
+
 StageTimingHook and TorchProfilerHook are described in :ref:`hooks-api`.
 
 Post-compute hooks
@@ -517,10 +551,22 @@ API reference
    SnapshotHook
    ConvergedSnapshotHook
    EnergyDriftMonitorHook
+   StabilityMonitor
+   StabilityMetrics
+   total_momentum
    NaNDetectorHook
    MaxForceClampHook
    nonfinite_graph_mask
    FreezeAtomsHook
+
+The module-level kinetic-energy helper the temperature-reading hooks are
+built on is exported alongside them:
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   kinetic_energy_per_graph
 
 The general-purpose profiling hooks
 :class:`~nvalchemi.hooks.StageTimingHook` and

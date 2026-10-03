@@ -12,26 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""User-supplied data transforms for :mod:`nvalchemi.data`.
+"""Steady-state throughput measurement for a model driving dynamics.
 
-This package hosts composition infrastructure for transforms that plug
-into :class:`~nvalchemi.data.Dataset` (per-sample transforms) and
-:class:`~nvalchemi.data.DataLoader` (per-batch transforms), and is the
-intended home for future concrete transform submodules
+The measurement is :func:`nvalchemi.dynamics.measure_throughput`, which lives
+in :mod:`nvalchemi.dynamics.benchmark` because it times any propagator; the
+evaluation suite re-exports it with its record.
 """
 
 from __future__ import annotations
 
-from nvalchemi.data.transforms.compose import Compose
-from nvalchemi.data.transforms.supercell import (
-    DEFAULT_EXTENSIVE_SYSTEM_KEYS,
-    DEFAULT_INTENSIVE_SYSTEM_KEYS,
-    make_supercell,
-)
+from nvalchemi.dynamics.benchmark import ThroughputMetrics, measure_throughput
 
-__all__ = [
-    "DEFAULT_EXTENSIVE_SYSTEM_KEYS",
-    "DEFAULT_INTENSIVE_SYSTEM_KEYS",
-    "Compose",
-    "make_supercell",
-]
+__all__ = ["ThroughputMetrics", "measure_throughput"]

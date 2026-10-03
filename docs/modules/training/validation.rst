@@ -110,3 +110,4 @@ API reference
    ValidationConfig
    ValidationLoop
    BatchValidationCallback
+   ensure_reiterable_validation_data

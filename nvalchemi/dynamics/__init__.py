@@ -28,6 +28,7 @@ from nvalchemi.dynamics.base import (
     Hook,
     requires_grad_ctx,
 )
+from nvalchemi.dynamics.benchmark import ThroughputMetrics, measure_throughput
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.integrators import NPH, NPT, NVE, NVTLangevin, NVTNoseHoover
 from nvalchemi.dynamics.optimizers import (
@@ -83,11 +84,13 @@ __all__ = [
     "OrderedStructureSampler",
     "SizeAwareSampler",
     "StructureSource",
+    "ThroughputMetrics",
     "WithinBudget",
     "ZarrData",
     "hooks",
     "initialize_velocities",
     "integrators",
+    "measure_throughput",
     "optimizers",
     "requires_grad_ctx",
 ]
