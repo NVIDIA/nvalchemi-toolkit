@@ -717,6 +717,28 @@ def _recover_interrupted_replacement(path: Path) -> None:
     os.replace(candidates[0], path)
 
 
+def _stored_field_names(path: Path) -> set[str]:
+    """Return every field ``AtomicDataZarrWriter`` has recorded in a store.
+
+    Parameters
+    ----------
+    path:
+        The store.
+
+    Returns
+    -------
+    set[str]
+        Field names across every group the writer's ``fields`` map lists.
+    """
+    fields = zarr.open_group(str(path), mode="r").attrs.get("fields", {})
+    return {
+        name
+        for group in fields.values()
+        if isinstance(group, Mapping)
+        for name in group
+    }
+
+
 def _write_store(
     path: Path,
     components: Mapping[str, Stateful],
@@ -757,6 +779,9 @@ def _write_store(
     if batch is not None:
         writer = AtomicDataZarrWriter(str(path))
         writer.write(batch)
+        # The writer stores per-graph fields it recognises on its own, and
+        # refuses to add one twice; only the rest need adding here.
+        written = _stored_field_names(path)
         for name in batch_fields:
             value = getattr(batch, name, None)
             if value is None:
@@ -766,7 +791,8 @@ def _write_store(
                     "saving — a field that is silently skipped comes back "
                     "missing on restore."
                 )
-            writer.add_custom(name, value.reshape(-1), level="system")
+            if name not in written:
+                writer.add_custom(name, value.reshape(-1), level="system")
             batch_field_dtypes[name] = str(value.dtype)
     elif batch_fields:
         raise ValueError(
@@ -975,12 +1001,17 @@ def _read_batch(
     batch = Batch.from_data_list(data_list).to(device)
 
     root = zarr.open_group(str(path), mode="r")
-    custom = root["custom"] if "custom" in root else None
+    # ``custom/`` is where this layer adds a field; ``core/`` is where the
+    # writer stores one it recognises itself.  Either way the field comes back
+    # flat, in the dtype it was saved with.
+    groups = [root[name] for name in ("custom", "core") if name in root]
     for name in manifest.batch_fields:
-        if custom is not None and name in custom:
-            values = np.asarray(custom[name][...])
-            batch[name] = torch.from_numpy(np.ascontiguousarray(values)).to(
-                device=device,
-                dtype=_torch_dtype(manifest.batch_field_dtypes[name]),
-            )
+        for group in groups:
+            if name in group:
+                values = np.asarray(group[name][...]).reshape(-1)
+                batch[name] = torch.from_numpy(np.ascontiguousarray(values)).to(
+                    device=device,
+                    dtype=_torch_dtype(manifest.batch_field_dtypes[name]),
+                )
+                break
     return batch
