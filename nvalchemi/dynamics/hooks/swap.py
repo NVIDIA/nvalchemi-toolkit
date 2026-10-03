@@ -31,7 +31,11 @@ What a caller supplies
 ``accept_fn(batch, i, j) -> Bool[Tensor, "P"]``
     The rule.  *i* and *j* are the graph rows holding the two slots of each
     proposed pair, so the rule reads whatever it needs off the batch — energy,
-    a bias, an order parameter — and returns one decision per pair.
+    a bias, an order parameter — and returns one decision per pair.  It may
+    be asked twice about one segment, so it should change nothing.
+``record_fn(pairs, accepted) -> None``
+    Optional.  Where a rule keeps its statistics: called once per segment,
+    after the outcome is final.
 ``pairing(segment, n_slots) -> list[tuple[int, int]]``
     Optional.  Which rungs to propose.  Its pairs must be disjoint — they are
     decided simultaneously, so an overlap has no defined meaning and its
@@ -191,8 +195,9 @@ class PairSwapHook:
     accept_fn:
         ``accept_fn(batch, i, j) -> Bool[Tensor, "P"]``.  The physics: given
         the graph rows holding each proposed pair, return one decision per
-        pair.  Called once per attempted segment, and not at all when the
-        segment proposes no pairs.
+        pair.  Not called when the segment proposes no pairs, and called
+        again when a segment that failed before committing is retried — so
+        it should have no side effects.  Statistics go in ``record_fn``.
     params_fn:
         ``params_fn(slots) -> Mapping[str, Tensor]``, mapping the post-swap
         assignment to per-graph parameters handed to
@@ -214,6 +219,13 @@ class PairSwapHook:
         Called with the batch after an accepted swap has been applied, for
         whatever the method has to repair — forces computed under the old
         parameters, most obviously.
+    record_fn:
+        ``record_fn(pairs, accepted) -> None``, given the segment's slot pairs
+        and the decision on each.  Called once per decided segment, when the
+        outcome is final: after an accepted swap commits, or when no pair was
+        accepted.  Never for a segment that raised before committing, so a
+        retried segment is counted once.  Runs before ``on_swap``, so a
+        failed repair does not lose the record of a swap that happened.
 
     Notes
     -----
@@ -241,6 +253,7 @@ class PairSwapHook:
         | Callable[[int, int], list[tuple[int, int]]] = "even_odd",
         frequency: int = 100,
         on_swap: Callable[[Batch], None] | None = None,
+        record_fn: Callable[[list[tuple[int, int]], torch.Tensor], None] | None = None,
     ) -> None:
         if isinstance(pairing, str) and pairing not in _PAIRINGS:
             raise ValueError(
@@ -262,6 +275,7 @@ class PairSwapHook:
         self.n_slots = int(n_slots)
         self.pairing = _PAIRINGS[pairing] if isinstance(pairing, str) else pairing
         self.on_swap = on_swap
+        self.record_fn = record_fn
         self.attempted_segment = -1
         self.dynamics: Any = None
         self._attempting = False
@@ -325,10 +339,11 @@ class PairSwapHook:
         -----
         A segment that raises **before the swap commits** — a rejected
         rebinding, a malformed pairing — stays unattempted, so a caller that
-        recovers can try it again.  The acceptance rule will have consumed a
-        draw by then, so a retry is a fresh decision rather than a replay of
-        the one that failed, which is the right trade against leaving the
-        labels and the integrator disagreeing.
+        recovers can try it again.  ``record_fn`` has not run for it, so the
+        failed attempt is not counted, and the retry asks ``accept_fn`` again.
+        A rule that draws from a counter it advances only in ``record_fn`` —
+        as ``ReplicaExchange`` does — therefore replays the same decision
+        rather than consuming a second draw.
 
         Once the swap commits the cursor advances immediately, even if the
         post-swap repair then raises.  Past that line the batch has already
@@ -346,9 +361,9 @@ class PairSwapHook:
             self._attempt(batch, segment)
         finally:
             self._attempting = False
-        # Reached when nothing was committed and nothing raised — no pairs,
-        # or none accepted. A segment that did commit advanced the cursor
-        # itself, inside _attempt. The in-progress flag keeps a hook driven
+        # Reached when the segment proposed no pairs, so there was nothing to
+        # decide. A segment that was decided advanced the cursor itself,
+        # inside _attempt. The in-progress flag keeps a hook driven
         # re-entrantly from attempting the same segment twice.
         self.attempted_segment = max(self.attempted_segment, segment)
 
@@ -471,6 +486,9 @@ class PairSwapHook:
 
         accepted = self.accept_fn(batch, rows_i, rows_j)
         if not bool(accepted.any()):
+            # Nothing to apply, so nothing left that can refuse: the outcome
+            # is already final.
+            self._settle(segment, pairs, accepted)
             return
 
         new_slots = apply_pair_swaps(slots, rows_i, rows_j, accepted)
@@ -504,10 +522,32 @@ class PairSwapHook:
         # this line on a retry would not re-attempt the segment, it would
         # swap an already-swapped batch a second time — two exchanges where
         # the acceptance rule granted one.
-        self.attempted_segment = segment
+        self._settle(segment, pairs, accepted)
 
         # Last, and deliberately after the labels: this is repair work on
         # quantities derived from the swap — forces computed under the old
         # parameters — so it needs the swap to have happened.
         if self.on_swap is not None:
             self.on_swap(batch)
+
+    def _settle(
+        self, segment: int, pairs: list[tuple[int, int]], accepted: torch.Tensor
+    ) -> None:
+        """Mark *segment* decided, then hand the decision to ``record_fn``.
+
+        The one place a segment's outcome becomes final.  Recording anywhere
+        earlier — inside ``accept_fn``, say — counts a segment whose
+        application then fails, and counts it again when it is retried.
+
+        Parameters
+        ----------
+        segment:
+            The segment just decided.
+        pairs:
+            Its slot pairs.
+        accepted:
+            One boolean per pair.
+        """
+        self.attempted_segment = segment
+        if self.record_fn is not None:
+            self.record_fn(pairs, accepted)

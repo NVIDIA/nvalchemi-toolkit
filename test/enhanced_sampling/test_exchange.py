@@ -669,6 +669,61 @@ class TestDeterminism:
             assert bool(accepted.all()) or not pairs
         assert exchange.accepted == exchange.attempts
 
+    def test_a_refused_swap_retried_is_decided_and_counted_once(self) -> None:
+        """A segment that failed to apply never happened, so it is not counted.
+
+        The rule used to tally inside the decision, before the rebinding that
+        can refuse. A refused segment stays retryable, so the retry decided
+        again — one segment, at most one swap, but two rounds of attempts in
+        the acceptance rates and two draws off the counter.
+        """
+
+        class _RefuseOnce:
+            def __init__(self) -> None:
+                self.refused = False
+
+            def apply_per_system_params(
+                self, params: Mapping[str, torch.Tensor], batch: Batch
+            ) -> None:
+                """Refuse the first rebinding, before touching any state."""
+                if not self.refused:
+                    self.refused = True
+                    raise KeyError("cannot rebind")
+
+        class _Accepting:
+            def apply_per_system_params(
+                self, params: Mapping[str, torch.Tensor], batch: Batch
+            ) -> None:
+                """Accept the rebinding without doing anything."""
+
+        def _run(engine: object) -> tuple:
+            exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+            hook = exchange.swap_hook()
+            hook.on_register(engine)
+            batch = _make_batch()
+            batch["thermodynamic_state_id"] = torch.arange(4)
+            # A real spread, so the outcome depends on which draw is used.
+            batch["energy"] = torch.tensor([[0.0], [0.05], [0.10], [0.15]])
+            try:
+                hook.attempt_segment(batch, 0)
+            except KeyError:
+                assert (exchange.attempts, exchange.exchange_id) == (0, 0), (
+                    "a segment that failed to apply was counted"
+                )
+                hook.attempt_segment(batch, 0)
+            return (
+                batch.thermodynamic_state_id.reshape(-1).tolist(),
+                exchange.attempts,
+                exchange.accepted,
+                exchange.exchange_id,
+                list(exchange.pair_attempts),
+                list(exchange.pair_accepted),
+            )
+
+        uninterrupted = _run(_Accepting())
+        assert uninterrupted[2] > 0, "nothing accepted, so nothing to refuse"
+        assert _run(_RefuseOnce()) == uninterrupted
+
 
 # ===========================================================================
 # 6. Runner integration

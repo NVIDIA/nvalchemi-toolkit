@@ -451,6 +451,8 @@ class ReplicaExchange:
             bias_current=bias_current,
             bias_swapped=bias_swapped,
         )
+        # Nothing is applied here, so the decision is already final.
+        self._tally(pairs, accepted)
         new_ids = apply_pair_swaps(ids, rows_i, rows_j, accepted)
         return new_ids, pairs, accepted
 
@@ -505,6 +507,11 @@ class ReplicaExchange:
         Two implementations would drift, and a drifted acceptance rule breaks
         detailed balance with nothing to show for it.
 
+        Counts nothing and leaves the draw counter where it is: the caller
+        calls :meth:`_tally` once the decision is final.  For the hook that
+        is after the swap commits, so a swap that fails to apply and is
+        retried is decided again from the same draw and counted once.
+
         Parameters
         ----------
         slots:
@@ -557,20 +564,13 @@ class ReplicaExchange:
             )
 
         uniforms = self._uniforms(rows_i.numel(), log_alpha.device)
-        accepted = log_acceptance_is_accepted(log_alpha, uniforms)
-        self._tally(
-            [
-                (int(a), int(b))
-                for a, b in zip(
-                    slots[rows_i].tolist(), slots[rows_j].tolist(), strict=True
-                )
-            ],
-            accepted,
-        )
-        return accepted
+        return log_acceptance_is_accepted(log_alpha, uniforms)
 
     def _tally(self, pairs: list[tuple[int, int]], accepted: torch.Tensor) -> None:
         """Record one round of attempts, and advance the acceptance RNG.
+
+        Called once per round, when its outcome is final — directly by
+        :meth:`decide`, and as the swap hook's ``record_fn`` otherwise.
 
         Parameters
         ----------
@@ -634,7 +634,9 @@ class ReplicaExchange:
         cadence, the parameter rebinding — belongs to
         :class:`~nvalchemi.dynamics.hooks.PairSwapHook`.  This supplies the
         two pieces that are enhanced-sampling physics: the Sugita-Okamoto
-        acceptance rule and the temperature table it rebinds from.
+        acceptance rule and the temperature table it rebinds from.  The
+        tallies and the draw counter advance through the hook's
+        ``record_fn``, so only a segment that actually commits counts.
 
         Parameters
         ----------
@@ -661,6 +663,7 @@ class ReplicaExchange:
             n_slots=len(self.states),
             frequency=self.attempt_interval,
             on_swap=on_swap,
+            record_fn=self._tally,
         )
 
     def per_system_params(self, state_ids: torch.Tensor) -> dict[str, torch.Tensor]:

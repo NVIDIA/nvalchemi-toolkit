@@ -448,6 +448,28 @@
 
 ### Fixed
 
+- **A retried swap was counted twice** — `ReplicaExchange` tallied its
+  attempts and advanced its draw counter inside the acceptance rule, which
+  `PairSwapHook` calls before the rebinding that can refuse. A refused segment
+  stays retryable, so a caller that recovered asked the rule again: one
+  segment, at most one swap, but two rounds in the acceptance rates and two
+  draws consumed:
+
+  ```text
+  before          : [0, 1, 2, 3] | exchange_id 0 | attempts 0 | accepted 0
+  rebind refused  : 'refused once'
+  after failure   : [0, 1, 2, 3] | exchange_id 1 | attempts 2 | accepted 2
+  after retry     : [1, 0, 3, 2] | exchange_id 2 | attempts 4 | accepted 4
+  ```
+
+  `PairSwapHook` takes a new `record_fn(pairs, accepted)`, called once per
+  segment when its outcome is final — after the swap commits, or when no pair
+  was accepted — and before `on_swap`, so a failed repair does not lose the
+  record. `ReplicaExchange` now tallies there, and the acceptance rule only
+  decides. A retry therefore draws from the same counter position and replays
+  the decision that failed to apply, rather than making a second one. Runs
+  without a failure are unchanged, decision for decision.
+
 - **A failed post-swap repair let one exchange happen twice** — `PairSwapHook`
   advanced its segment cursor only after `_attempt` returned, but the swap
   commits earlier: the integrator is rebound and the labels written, and only

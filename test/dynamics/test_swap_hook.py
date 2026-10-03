@@ -461,6 +461,89 @@ class TestPairSwapHook:
         hook.attempt_segment(batch, 1)
         assert hook.attempted_segment == 1
 
+    def test_record_fn_is_given_the_pairs_and_the_decision(self) -> None:
+        records: list[tuple[list[tuple[int, int]], list[bool]]] = []
+        hook = self._hook(record_fn=lambda p, a: records.append((p, a.tolist())))
+        hook.on_register(_RecordingEngine())
+        hook.attempt_segment(_make_batch(), 0)
+        assert records == [([(0, 1), (2, 3)], [True, True])]
+
+    def test_a_segment_nobody_accepted_is_still_recorded(self) -> None:
+        """Rejections are half of every acceptance rate."""
+        records: list[list[bool]] = []
+        hook = self._hook(
+            accept_fn=_accept_none, record_fn=lambda p, a: records.append(a.tolist())
+        )
+        hook.on_register(_RecordingEngine())
+        hook.attempt_segment(_make_batch(), 0)
+        hook.attempt_segment(_make_batch(), 0)
+        assert records == [[False, False]]
+
+    def test_an_empty_segment_records_nothing(self) -> None:
+        """No pairs, no decision."""
+        records: list[object] = []
+        hook = PairSwapHook(
+            _accept_all,
+            slot_field="slot",
+            n_slots=2,
+            frequency=2,
+            record_fn=lambda p, a: records.append(p),
+        )
+        hook.attempt_segment(_make_batch(n_graphs=2), 1)
+        assert records == []
+
+    def test_a_failed_application_is_recorded_only_once_it_commits(self) -> None:
+        """Recording a segment that failed counts it again when it is retried.
+
+        ``accept_fn`` is asked once per try, so a rule that counted there saw
+        one segment twice — two rounds of attempts in its acceptance rates
+        for at most one swap.
+        """
+
+        class _RefuseOnce:
+            def __init__(self) -> None:
+                self.refused = False
+
+            def apply_per_system_params(
+                self, params: Mapping[str, torch.Tensor], batch: Batch
+            ) -> None:
+                """Refuse the first rebinding, before touching any state."""
+                if not self.refused:
+                    self.refused = True
+                    raise KeyError("cannot rebind")
+
+        records: list[list[bool]] = []
+        hook = self._hook(
+            params_fn=lambda slots: {"temperature": slots.float()},
+            record_fn=lambda p, a: records.append(a.tolist()),
+        )
+        hook.on_register(_RefuseOnce())
+        batch = _make_batch()
+        with pytest.raises(KeyError):
+            hook.attempt_segment(batch, 0)
+        assert records == [], "a segment that failed to apply was recorded"
+
+        hook.attempt_segment(batch, 0)
+        assert records == [[True, True]]
+        assert batch.slot.reshape(-1).tolist() == [1, 0, 3, 2]
+
+    def test_a_failed_repair_does_not_lose_the_record(self) -> None:
+        """The swap happened, so it counts — ``on_swap`` runs after the record."""
+
+        def _explode(batch: Batch) -> None:
+            raise RuntimeError("force re-evaluation failed")
+
+        records: list[list[bool]] = []
+        hook = self._hook(
+            on_swap=_explode, record_fn=lambda p, a: records.append(a.tolist())
+        )
+        hook.on_register(_RecordingEngine())
+        batch = _make_batch()
+        with pytest.raises(RuntimeError):
+            hook.attempt_segment(batch, 0)
+        hook.attempt_segment(batch, 0)
+        assert records == [[True, True]]
+
     def test_a_params_fn_that_raises_commits_nothing(self) -> None:
         """The parameters are built before anything is written, for this."""
 
