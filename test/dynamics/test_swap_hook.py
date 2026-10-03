@@ -544,6 +544,91 @@ class TestPairSwapHook:
         hook.attempt_segment(batch, 0)
         assert records == [[True, True]]
 
+    @staticmethod
+    def _record_failing_once() -> tuple[list[list[bool]], object]:
+        """Return a log and a ``record_fn`` that raises on its first call."""
+        records: list[list[bool]] = []
+        calls = {"n": 0}
+
+        def _record(pairs: list[tuple[int, int]], accepted: torch.Tensor) -> None:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("tally failed")
+            records.append(accepted.tolist())
+
+        return records, _record
+
+    def test_a_failed_record_still_repairs_the_swap(self) -> None:
+        """The swap committed, so the forces derived from it are stale."""
+        _, record = self._record_failing_once()
+        repaired: list[int] = []
+        hook = self._hook(record_fn=record, on_swap=lambda batch: repaired.append(1))
+        hook.on_register(_RecordingEngine())
+        batch = _make_batch()
+        with pytest.raises(RuntimeError, match="tally failed"):
+            hook.attempt_segment(batch, 0)
+        assert repaired == [1], "a failed record skipped the post-swap repair"
+        assert batch.slot.reshape(-1).tolist() == [1, 0, 3, 2]
+        assert hook.attempted_segment == 0
+
+    @pytest.mark.parametrize("accept_fn", [_accept_all, _accept_none])
+    def test_a_failed_record_is_retried_without_redeciding(self, accept_fn) -> None:
+        """The decision is final; only its record is missing.
+
+        Re-deciding would swap an already-swapped batch a second time, so the
+        cursor must advance — but advancing it used to drop the record, and
+        the retry was then a silent no-op.
+        """
+        records, record = self._record_failing_once()
+        asked: list[int] = []
+
+        def _spy(batch, i, j):
+            asked.append(i.numel())
+            return accept_fn(batch, i, j)
+
+        hook = self._hook(accept_fn=_spy, record_fn=record)
+        hook.on_register(_RecordingEngine())
+        batch = _make_batch()
+        with pytest.raises(RuntimeError, match="tally failed"):
+            hook.attempt_segment(batch, 0)
+        after_failure = batch.slot.reshape(-1).tolist()
+
+        hook.attempt_segment(batch, 0)
+        assert records == [accept_fn(batch, torch.zeros(2), None).tolist()]
+        assert asked == [2], "the retry asked the rule again"
+        assert batch.slot.reshape(-1).tolist() == after_failure
+
+    def test_a_pending_record_lands_before_the_next_decision(self) -> None:
+        """A rule that draws from its own tally must not decide past a gap."""
+        records: list[tuple[list[tuple[int, int]], list[bool]]] = []
+        fail = {"left": 2}
+
+        def _record(pairs, accepted) -> None:
+            if fail["left"]:
+                fail["left"] -= 1
+                raise RuntimeError("tally failed")
+            records.append((pairs, accepted.tolist()))
+
+        asked: list[int] = []
+
+        def _spy(batch, i, j):
+            asked.append(i.numel())
+            return torch.zeros(i.numel(), dtype=torch.bool)
+
+        hook = self._hook(accept_fn=_spy, record_fn=_record)
+        hook.on_register(_RecordingEngine())
+        batch = _make_batch()
+        with pytest.raises(RuntimeError):
+            hook.attempt_segment(batch, 0)
+        with pytest.raises(RuntimeError):
+            hook.attempt_segment(batch, 1)
+        assert asked == [2], "segment 1 was decided over an unrecorded segment 0"
+        assert hook.attempted_segment == 0
+
+        hook.attempt_segment(batch, 1)
+        assert records == [([(0, 1), (2, 3)], [False, False]), ([(1, 2)], [False])]
+        assert hook.attempted_segment == 1
+
     def test_a_params_fn_that_raises_commits_nothing(self) -> None:
         """The parameters are built before anything is written, for this."""
 

@@ -225,7 +225,10 @@ class PairSwapHook:
         outcome is final: after an accepted swap commits, or when no pair was
         accepted.  Never for a segment that raised before committing, so a
         retried segment is counted once.  Runs before ``on_swap``, so a
-        failed repair does not lose the record of a swap that happened.
+        failed repair does not lose the record of a swap that happened.  If
+        it raises, the record is kept and retried on the next
+        :meth:`attempt_segment` call, before anything else is decided — so it
+        should record all of a call or none of it.
 
     Notes
     -----
@@ -279,6 +282,7 @@ class PairSwapHook:
         self.attempted_segment = -1
         self.dynamics: Any = None
         self._attempting = False
+        self._unrecorded: tuple[list[tuple[int, int]], torch.Tensor] | None = None
 
     def on_register(self, workflow: Any) -> None:
         """Remember the engine whose per-system parameters a swap rebinds.
@@ -353,11 +357,20 @@ class PairSwapHook:
         quantities — forces evaluated under the old parameters — stale, which
         the next force evaluation corrects; a double swap is silent and
         corrects nothing.
+
+        A ``record_fn`` that raises is the same case: the segment is decided
+        and stays decided, ``on_swap`` still runs, and the unrecorded decision
+        is handed to ``record_fn`` again on the next call — before any later
+        segment is decided, since a rule drawing from a counter its record
+        advances would otherwise decide that segment from a stale draw.
         """
-        if segment < 0 or segment <= self.attempted_segment or self._attempting:
+        if self._attempting:
             return
         self._attempting = True
         try:
+            self._record_pending()
+            if segment < 0 or segment <= self.attempted_segment:
+                return
             self._attempt(batch, segment)
         finally:
             self._attempting = False
@@ -522,13 +535,15 @@ class PairSwapHook:
         # this line on a retry would not re-attempt the segment, it would
         # swap an already-swapped batch a second time — two exchanges where
         # the acceptance rule granted one.
-        self._settle(segment, pairs, accepted)
-
-        # Last, and deliberately after the labels: this is repair work on
-        # quantities derived from the swap — forces computed under the old
-        # parameters — so it needs the swap to have happened.
-        if self.on_swap is not None:
-            self.on_swap(batch)
+        try:
+            self._settle(segment, pairs, accepted)
+        finally:
+            # Last, and deliberately after the labels: this is repair work on
+            # quantities derived from the swap — forces computed under the old
+            # parameters — so it needs the swap to have happened, and it is
+            # owed whether or not the swap was recorded.
+            if self.on_swap is not None:
+                self.on_swap(batch)
 
     def _settle(
         self, segment: int, pairs: list[tuple[int, int]], accepted: torch.Tensor
@@ -549,5 +564,18 @@ class PairSwapHook:
             One boolean per pair.
         """
         self.attempted_segment = segment
+        self._unrecorded = (pairs, accepted)
+        self._record_pending()
+
+    def _record_pending(self) -> None:
+        """Hand a decided-but-unrecorded segment to ``record_fn``.
+
+        Cleared only once ``record_fn`` returns, so a record that raised is
+        still pending on the next call rather than lost with the cursor
+        already past it.
+        """
+        if self._unrecorded is None:
+            return
         if self.record_fn is not None:
-            self.record_fn(pairs, accepted)
+            self.record_fn(*self._unrecorded)
+        self._unrecorded = None

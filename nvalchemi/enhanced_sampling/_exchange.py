@@ -572,6 +572,10 @@ class ReplicaExchange:
         Called once per round, when its outcome is final — directly by
         :meth:`decide`, and as the swap hook's ``record_fn`` otherwise.
 
+        All or nothing: a ``record_fn`` that raised is called again, so a
+        partial tally would be counted twice.  Everything that can fail runs
+        before the first counter moves.
+
         Parameters
         ----------
         pairs:
@@ -579,12 +583,17 @@ class ReplicaExchange:
         accepted:
             One boolean per pair.
         """
-        for (state_i, _state_j), take in zip(pairs, accepted.tolist(), strict=True):
-            self.attempts += 1
-            self.pair_attempts[state_i] += 1
+        rounds = list(zip(pairs, accepted.tolist(), strict=True))
+        pair_attempts = list(self.pair_attempts)
+        pair_accepted = list(self.pair_accepted)
+        for (state_i, _state_j), take in rounds:
+            pair_attempts[state_i] += 1
             if take:
-                self.accepted += 1
-                self.pair_accepted[state_i] += 1
+                pair_accepted[state_i] += 1
+        self.attempts += len(rounds)
+        self.accepted += sum(bool(take) for _, take in rounds)
+        self.pair_attempts = pair_attempts
+        self.pair_accepted = pair_accepted
         self.exchange_id += 1
 
     def proposed_assignment(

@@ -669,6 +669,26 @@ class TestDeterminism:
             assert bool(accepted.all()) or not pairs
         assert exchange.accepted == exchange.attempts
 
+    def test_a_tally_that_fails_moves_no_counter(self) -> None:
+        """The swap hook calls a failed record again, so it must be atomic."""
+        exchange = ReplicaExchange(_ladder(4), torch.arange(4))
+        before = (
+            exchange.attempts,
+            exchange.accepted,
+            exchange.exchange_id,
+            list(exchange.pair_attempts),
+            list(exchange.pair_accepted),
+        )
+        with pytest.raises(ValueError):
+            exchange._tally([(0, 1), (2, 3)], torch.tensor([True]))
+        assert before == (
+            exchange.attempts,
+            exchange.accepted,
+            exchange.exchange_id,
+            list(exchange.pair_attempts),
+            list(exchange.pair_accepted),
+        ), "a failed tally left a partial count behind"
+
     def test_a_refused_swap_retried_is_decided_and_counted_once(self) -> None:
         """A segment that failed to apply never happened, so it is not counted.
 
