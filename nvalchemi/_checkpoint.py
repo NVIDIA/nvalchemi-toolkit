@@ -78,6 +78,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import shutil
 from collections.abc import Mapping
@@ -99,6 +100,8 @@ from nvalchemi.data.datapipes.backends.zarr import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "CHECKPOINT_FORMAT_VERSION",
@@ -610,6 +613,14 @@ def _move_into_place(staging: Path, destination: Path) -> None:
     after the new one is in place, so a failure at any point leaves either the
     previous checkpoint or the new one — never a mixture of the two.
 
+    Between the two renames there is a window in which nothing is at
+    *destination* at all.  An exception there is caught and undone below, but
+    a ``SIGKILL`` or a power loss cannot be, and leaves the previous
+    checkpoint intact under a ``.superseded-<pid>`` name with the documented
+    path empty.  :func:`load_checkpoint` puts it back; see
+    :func:`_recover_interrupted_replacement`.  Narrowing the window further
+    would need an atomic directory exchange, which POSIX does not offer.
+
     Parameters
     ----------
     staging:
@@ -630,6 +641,80 @@ def _move_into_place(staging: Path, destination: Path) -> None:
         os.replace(superseded, destination)
         raise
     shutil.rmtree(superseded, ignore_errors=True)
+
+
+def _holds_a_manifest(path: Path) -> bool:
+    """Return whether *path* is a store with a committed manifest.
+
+    Parameters
+    ----------
+    path:
+        Directory to inspect.
+
+    Returns
+    -------
+    bool
+        ``True`` for a complete checkpoint, ``False`` for anything else —
+        a partial write, a directory that is not a Zarr store at all.
+    """
+    try:
+        return _MANIFEST in zarr.open_group(str(path), mode="r")
+    except Exception:  # noqa: BLE001 - any failure to open means "not one"
+        return False
+
+
+def _recover_interrupted_replacement(path: Path) -> None:
+    """Put back a checkpoint that an interrupted replacement left aside.
+
+    :func:`_move_into_place` renames the old store aside before renaming the
+    new one in.  A process killed between those two renames leaves the
+    documented path empty and a complete, loadable checkpoint under
+    ``<name>.superseded-<pid>``.  Without this the run could not restart from
+    the path it was told to use, even though its restart point was sitting
+    intact beside it.
+
+    Only ever moves a store that carries a committed manifest, and only when
+    nothing is at *path* — so it cannot shadow a newer checkpoint, and cannot
+    promote a partial write.
+
+    Parameters
+    ----------
+    path:
+        The destination a caller asked to load.
+
+    Raises
+    ------
+    ValueError
+        If several superseded stores are present, which is ambiguous: picking
+        one would silently resurrect an arbitrary generation.
+    """
+    if path.exists():
+        return
+    candidates = sorted(
+        candidate
+        for candidate in path.parent.glob(f"{path.name}.superseded-*")
+        if candidate.is_dir() and _holds_a_manifest(candidate)
+    )
+    if not candidates:
+        return
+    if len(candidates) > 1:
+        names = ", ".join(candidate.name for candidate in candidates)
+        raise ValueError(
+            f"Checkpoint at {path} is missing, and {len(candidates)} "
+            f"superseded stores sit beside it ({names}). Each is a complete "
+            "checkpoint left by a save that was killed mid-replacement; "
+            "which one is the intended restart point is not recoverable from "
+            "the filesystem. Rename the one you want to "
+            f"{path.name!r} and remove the others."
+        )
+    logger.warning(
+        "Checkpoint at %s was missing; recovering %s, which a save killed "
+        "mid-replacement left aside. The recovered checkpoint is the "
+        "generation before the interrupted one.",
+        path,
+        candidates[0].name,
+    )
+    os.replace(candidates[0], path)
 
 
 def _write_store(
@@ -768,6 +853,8 @@ def load_checkpoint(
         component or batch, does not match; or if *components* names something
         the checkpoint does not hold.
     """
+    path = Path(path)
+    _recover_interrupted_replacement(path)
     root = zarr.open_group(str(path), mode="r")
     if _MANIFEST not in root:
         raise ValueError(

@@ -851,6 +851,13 @@ the commit marker:
   is complete, so saving over an existing checkpoint cannot damage it: an
   interrupted save leaves the previous one intact and loadable. Checkpointing
   every epoch to one path is safe.
+- Moving into place takes two renames, because a directory cannot be renamed
+  onto a populated one, and between them nothing is at the path. A process
+  killed in that window leaves the previous checkpoint under
+  `<name>.superseded-<pid>`; `load_checkpoint` finds it, moves it back, and
+  warns that it is the generation before the interrupted save. Nothing is
+  promoted without a committed manifest, and nothing is touched when the path
+  already holds a checkpoint.
 - **Everything** is checksummed (SHA-256) and verified on read, so damage
   *after* the manifest landed is caught too: each component individually,
   plus a `batch_checksum` covering `meta/`, `core/`, and `custom/`. Cover is

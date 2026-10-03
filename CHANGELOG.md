@@ -448,6 +448,24 @@
 
 ### Fixed
 
+- **A save killed mid-replacement hid the checkpoint** — `_move_into_place`
+  renames the old store aside before renaming the new one in, and between
+  those two renames nothing is at the documented path. An exception there is
+  caught and undone; a `SIGKILL` or a power loss cannot be. The previous,
+  perfectly good checkpoint was left under `<name>.superseded-<pid>` and
+  `load_checkpoint(path)` raised `FileNotFoundError`, so a run could not
+  restart from the path it was told to use even though its restart point had
+  survived intact beside it.
+
+  `load_checkpoint` now recovers it: when nothing is at *path* and exactly one
+  sibling `.superseded-*` store carries a committed manifest, it is moved back
+  and loaded, with a warning saying it is the generation before the
+  interrupted save. It never promotes a store without a manifest, never acts
+  when *path* exists — so it cannot shadow a newer checkpoint — and refuses
+  rather than guesses when several superseded stores are present. Closing the
+  window itself would need an atomic directory exchange, which POSIX does not
+  offer.
+
 - **Walkers sampled the constructor temperature, not their rung** — a
   thermodynamic state is a temperature, but only `PairSwapHook` ever told the
   integrator so. `WalkerIdentityHook` wrote the assignment onto the batch and

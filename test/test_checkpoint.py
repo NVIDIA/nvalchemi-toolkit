@@ -25,6 +25,8 @@ biases, a replica-exchange ladder — lives in
 
 from __future__ import annotations
 
+import os
+import shutil
 from collections.abc import Mapping
 from typing import Any
 from unittest.mock import patch
@@ -399,6 +401,64 @@ class TestSaveOverAnExistingCheckpoint:
             assert contents.states["counter"]["count"] == generation
             assert contents.batch is not None
             assert contents.batch.num_graphs == 2
+
+    def test_a_kill_between_the_two_renames_is_recoverable(self, tmp_path) -> None:
+        """The window the two-rename replacement cannot close.
+
+        ``_move_into_place`` renames the old store aside before renaming the
+        new one in.  An exception in between is caught and undone, but a
+        ``SIGKILL`` or a power loss is not: the documented path is left empty
+        with a complete checkpoint beside it under ``.superseded-<pid>``.
+        Loading has to find it, or the run cannot restart from the path it
+        was told to use even though its restart point survived intact.
+
+        The post-crash state is built directly rather than by killing a
+        child, which is the same arrangement on disk without the flakiness.
+        """
+        path = tmp_path / "run.zarr"
+        save_checkpoint(path, {"counter": _Counter(1)})
+        os.replace(path, tmp_path / f"run.zarr.superseded-{os.getpid()}")
+        assert not path.exists()
+
+        assert load_checkpoint(path).states["counter"]["count"] == 1
+        # Put back where it belongs, not merely read from where it landed.
+        assert path.exists()
+        assert not list(tmp_path.glob("run.zarr.superseded-*"))
+
+    def test_a_superseded_store_never_shadows_a_live_one(self, tmp_path) -> None:
+        """Recovery is for an empty path only; it must not undo a good save."""
+        path = tmp_path / "run.zarr"
+        save_checkpoint(path, {"counter": _Counter(1)})
+        # A pid that is not this process's, so the next save does not clear it.
+        aside = tmp_path / "run.zarr.superseded-999999"
+        shutil.copytree(path, aside)
+        save_checkpoint(path, {"counter": _Counter(2)})
+
+        assert load_checkpoint(path).states["counter"]["count"] == 2
+        assert aside.exists(), "a live path must not consume the aside copy"
+
+    def test_a_partial_superseded_store_is_not_promoted(self, tmp_path) -> None:
+        """Only a committed manifest makes a store a restart point."""
+        path = tmp_path / "run.zarr"
+        save_checkpoint(path, {"counter": _Counter(1)})
+        aside = tmp_path / f"run.zarr.superseded-{os.getpid()}"
+        os.replace(path, aside)
+        shutil.rmtree(aside / "checkpoint" / "manifest")
+
+        with pytest.raises((FileNotFoundError, ValueError)):
+            load_checkpoint(path)
+
+    def test_several_superseded_stores_are_refused_rather_than_guessed(
+        self, tmp_path
+    ) -> None:
+        """Which generation to restart from is not on the filesystem."""
+        path = tmp_path / "run.zarr"
+        save_checkpoint(path, {"counter": _Counter(1)})
+        shutil.copytree(path, tmp_path / "run.zarr.superseded-111")
+        os.replace(path, tmp_path / "run.zarr.superseded-222")
+
+        with pytest.raises(ValueError, match="superseded stores sit beside it"):
+            load_checkpoint(path)
 
     def test_a_missing_parent_directory_is_created(self, tmp_path) -> None:
         path = tmp_path / "nested" / "deeper" / "run.zarr"
