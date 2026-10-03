@@ -978,6 +978,15 @@ Both are configuration errors that would otherwise surface much later and much
 less clearly — a size mismatch as `Length mismatch: 4 vs 2` from inside the
 batch storage, a duplicate as a bare `KeyError` from the pair lookup.
 
+### The ladder binds the thermostat
+
+`engine_kwargs` names one temperature; the ladder names the rest. The
+assignment is pushed onto the integrator whenever it changes — at the first
+stamp, after a refill, and on an accepted swap — so a walker's thermostat
+always targets the rung its label claims. You do not need to pass a per-walker
+temperature tensor to the engine, and passing one is overwritten by the
+ladder.
+
 ### Labels move, coordinates do not
 
 An accepted swap permutes `thermodynamic_state_id`. The walker keeps its row,

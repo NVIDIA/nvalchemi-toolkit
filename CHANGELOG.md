@@ -448,6 +448,31 @@
 
 ### Fixed
 
+- **Walkers sampled the constructor temperature, not their rung** — a
+  thermodynamic state is a temperature, but only `PairSwapHook` ever told the
+  integrator so. `WalkerIdentityHook` wrote the assignment onto the batch and
+  left the thermostat alone, so the two moments where the assignment changes
+  without a swap sampled the wrong ensemble:
+
+  - **The first stamp.** The documented recipe builds the engine with one
+    scalar `temperature` and lets the ladder say the rest. On a four-rung
+    ladder from 300 K, every walker targeted 300 K from step zero while its
+    label claimed 300/360/432/518 K; three of the four sampled the wrong
+    ensemble until a swap happened to touch them. Measured over 20 steps with
+    exchange disabled, per-walker kinetic energy was `[0.215, 0.138, 0.148,
+    0.140]` — flat, where the ladder calls for `[0.215, 0.154, 0.191, 0.204]`.
+  - **A refill.** `_sync_state_to_batch` appends *default* integrator state
+    for an admitted walker, so a replacement given a vacant rung by
+    `_assign_state_ids` ran at the constructor temperature until an accepted
+    swap corrected it.
+
+  The hook now rebinds through `apply_per_system_params` whenever it writes an
+  assignment, forcing the integrator's lazy state allocation so the binding
+  lands before the first step rather than after it. **This changes the
+  trajectory of every existing replica-exchange run** that did not pass a
+  per-walker temperature tensor to the engine — the previous trajectories were
+  sampling the wrong ensembles, so the change is the fix, not a regression.
+
 - **A FIFO reference ring smaller than one deposition dropped references
   silently** — `RMSDMetaDynamicsBias` and `WellTemperedMetaDynamicsBias` each
   carried their own copy of the same ring-buffer subsystem, and the copies had

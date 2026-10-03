@@ -138,6 +138,20 @@ class WalkerIdentityHook:
         self.current_batch: Batch | None = None
         # One-shot: the walker/state bijection is checked on the first stamp.
         self._validated_assignment = False
+        # The engine whose per-system parameters follow the assignment, set
+        # by on_register, and whether it has been told the current one.
+        self.dynamics: Any | None = None
+        self._states_bound = False
+
+    def on_register(self, workflow: Any) -> None:
+        """Remember the engine the thermodynamic assignment has to drive.
+
+        Parameters
+        ----------
+        workflow:
+            The ``BaseDynamics`` doing the registering.
+        """
+        self.dynamics = workflow
 
     def __call__(self, ctx: HookContext, stage: Enum) -> None:
         """Stamp the live batch.
@@ -261,6 +275,7 @@ class WalkerIdentityHook:
                     n_graphs, dtype=torch.long, device=device
                 )
             self._validated_assignment = True
+            self._bind_states(batch)
             return
 
         ids = existing.reshape(-1).to(torch.long)
@@ -269,6 +284,9 @@ class WalkerIdentityHook:
             ids = ids.clone()
             ids[unassigned] = self._vacant_states(ids, unassigned, device)
             batch["thermodynamic_state_id"] = ids
+            # The replacement took a vacant rung, so the integrator is now
+            # targeting the temperature of whoever held that row before.
+            self._states_bound = False
             if self.exchange is not None:
                 # Re-checked after a refill, not only on arrival: the batch
                 # membership just changed, which is the one event that can
@@ -284,6 +302,51 @@ class WalkerIdentityHook:
                 existing, n_graphs, source="batch.thermodynamic_state_id"
             )
         self._validated_assignment = True
+        self._bind_states(batch)
+
+    def _bind_states(self, batch: Batch) -> None:
+        """Make the integrator target the temperatures the assignment names.
+
+        The label and the thermostat target are two halves of one fact, and
+        only one of them was ever written here.  An accepted swap rebinds
+        both together, which left the two moments where the assignment
+        changes *without* a swap sampling the wrong ensemble:
+
+        * **The first stamp.**  The engine is built from ``engine_kwargs``
+          with one temperature — the documented recipe passes a scalar — so
+          every walker started at that temperature while its label claimed a
+          rung.  On a four-rung ladder from 300 K, three of the four walkers
+          sampled 300 K until a swap happened to touch them.
+        * **A refill.**  A replacement is given a vacant rung by
+          :meth:`_assign_state_ids`, but inherits the integrator row of the
+          walker that graduated, and so its temperature.
+
+        Both are silent: the trajectory looks healthy and the acceptance
+        rate looks merely badly tuned.
+
+        Integrator state is allocated lazily, on the first step, and this
+        hook runs before it.  Rather than let the first step integrate
+        unbound, the allocation is forced through the idempotent
+        ``_ensure_state_initialized`` the step itself calls; an engine that
+        keeps no per-system state is left alone, having nothing to bind.
+
+        Parameters
+        ----------
+        batch:
+            The live batch, carrying the assignment to bind.
+        """
+        if self._states_bound or self.exchange is None or self.dynamics is None:
+            return
+        ensure = getattr(self.dynamics, "_ensure_state_initialized", None)
+        if callable(ensure):
+            ensure(batch)
+        if getattr(self.dynamics, "_state", None) is None:
+            return
+        ids = batch.thermodynamic_state_id.reshape(-1).to(torch.long)
+        self.dynamics.apply_per_system_params(
+            self.exchange.per_system_params(ids), batch
+        )
+        self._states_bound = True
 
     def _vacant_states(
         self, ids: torch.Tensor, unassigned: torch.Tensor, device: torch.device

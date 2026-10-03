@@ -31,6 +31,7 @@ from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import NVE, NVTLangevin, SizeAwareSampler
 from nvalchemi.dynamics.base import DynamicsStage
 from nvalchemi.dynamics.hooks import PairSwapHook
+from nvalchemi.dynamics.hooks._utils import KB_EV
 from nvalchemi.enhanced_sampling import (
     BiasHook,
     ConservativeBias,
@@ -678,6 +679,111 @@ class TestIdentityThroughRefill:
             assert sorted(assignment) == [0, 1, 2], (
                 f"refill {step} left the ladder as {assignment}"
             )
+
+
+class TestTheIntegratorFollowsTheAssignment:
+    """A rung is a temperature, so writing the label is only half the move.
+
+    An accepted swap rebinds both together.  The two moments where the
+    assignment changes *without* a swap did not, leaving walkers sampling an
+    ensemble their own label said they had left.
+    """
+
+    @staticmethod
+    def _batch(n_walkers: int) -> Batch:
+        items = [
+            AtomicData(
+                positions=torch.tensor([[0.0, 0.0, 0.0], [1.5, 0.0, 0.0]]),
+                atomic_numbers=torch.full((2,), 6, dtype=torch.long),
+                atomic_masses=torch.ones(2),
+                forces=torch.zeros(2, 3),
+                energy=torch.zeros(1, 1),
+            )
+            for _ in range(n_walkers)
+        ]
+        for item in items:
+            item.add_node_property("velocities", torch.zeros(2, 3))
+        return Batch.from_data_list(items)
+
+    def test_the_initial_assignment_binds_the_whole_ladder(self) -> None:
+        """Every walker starts on its own rung, not on ``engine_kwargs``.
+
+        The documented recipe passes one scalar temperature and lets the
+        ladder say the rest, so without this the engine started all four
+        walkers at 300 K while their labels claimed 300/360/432/518 K. Three
+        of the four sampled the wrong ensemble from step zero until a swap
+        happened to touch them, with nothing in the trajectory to show it.
+        """
+        ladder = _ladder(4)
+        model = DemoModelWrapper(DemoModel())
+        sampling = EnhancedSampling(
+            engine=NVTLangevin,
+            engine_kwargs={"dt": 0.1, "temperature": 300.0, "friction": 0.1},
+            biases={},
+            replica_exchange=ReplicaExchange(
+                ladder, torch.arange(4), attempt_interval=1000
+            ),
+            steps_per_epoch=1000,
+        )
+        batch = self._batch(4)
+        sampling.prime_forces(batch, model)
+
+        targets = sampling.dynamics(model)._state.temperature.reshape(-1) / KB_EV
+        assert batch.thermodynamic_state_id.reshape(-1).tolist() == [0, 1, 2, 3]
+        assert targets.tolist() == pytest.approx(
+            [state.temperature for state in ladder], rel=1e-6
+        )
+
+    def test_a_replacement_is_bound_to_the_rung_it_was_given(self) -> None:
+        """The refill case: a vacant rung is a temperature, not just a label.
+
+        ``_sync_state_to_batch`` appends *default* integrator state for an
+        admitted walker, which is the engine's constructor temperature. The
+        replacement is handed the rung its predecessor's slot vacated, so
+        without rebinding it samples whatever ``engine_kwargs`` said while
+        its label claims the rung — and the exchange path would only correct
+        it on an accepted swap.
+        """
+        from nvalchemi.dynamics.sinks import HostMemory
+
+        ladder = _ladder(3)
+        sampler = SizeAwareSampler(
+            TestIdentityThroughRefill._Dataset(30),
+            max_atoms=20,
+            max_edges=10,
+            max_batch_size=3,
+        )
+        engine = NVTLangevin(
+            model=DemoModelWrapper(DemoModel()),
+            dt=0.1,
+            temperature=300.0,
+            friction=0.1,
+            sampler=sampler,
+            sinks=[HostMemory(capacity=200)],
+            device_type="cpu",
+        )
+        batch = sampler.build_initial_batch()
+        batch["forces"] = torch.zeros(batch.num_nodes, 3)
+        batch["energy"] = torch.zeros(batch.num_graphs, 1)
+        batch["velocities"] = torch.zeros(batch.num_nodes, 3)
+
+        exchange = ReplicaExchange(ladder, torch.arange(3), attempt_interval=1000)
+        hook = WalkerIdentityHook(steps_per_epoch=1000, exchange=exchange)
+        hook.on_register(engine)
+        hook.stamp(batch, 0)
+
+        batch["status"] = torch.tensor([[0], [1], [1]])
+        batch = engine.refill_check(batch, exit_status=1)
+        assert batch is not None
+        batch["velocities"] = torch.zeros(batch.num_nodes, 3)
+        hook.stamp(batch, 1)
+
+        assignment = batch.thermodynamic_state_id.reshape(-1).tolist()
+        targets = (engine._state.temperature.reshape(-1) / KB_EV).tolist()
+        expected = [ladder[state_id].temperature for state_id in assignment]
+        assert targets == pytest.approx(expected, rel=1e-6), (
+            f"assignment {assignment} wants {expected}, integrator has {targets}"
+        )
 
 
 # ===========================================================================
