@@ -91,15 +91,15 @@ def _sampling(
     **kwargs: object,
 ) -> tuple[EnhancedSampling, DemoModelWrapper]:
     """Return a strategy over ``NVTLangevin`` and the model it drives."""
-    return (
-        EnhancedSampling(
-            engine=NVTLangevin,
-            engine_kwargs=_ENGINE_KWARGS,
-            biases=biases or {},
-            **kwargs,
-        ),
-        _make_model(device),
+    model = _make_model(device)
+    sampling = EnhancedSampling(
+        model=model,
+        engine=NVTLangevin,
+        engine_kwargs=_ENGINE_KWARGS,
+        biases=biases or {},
+        **kwargs,
     )
+    return sampling, model
 
 
 class _ConstantForceBias(ConservativeBias):
@@ -177,7 +177,10 @@ class TestRunnerConstruction:
     def test_none_biases_allowed(self) -> None:
         assert (
             EnhancedSampling(
-                engine=NVTLangevin, engine_kwargs=_ENGINE_KWARGS, biases={}
+                model=_make_model(),
+                engine=NVTLangevin,
+                engine_kwargs=_ENGINE_KWARGS,
+                biases={},
             ).biases
             == {}
         )
@@ -188,6 +191,7 @@ class TestRunnerConstruction:
 
         with pytest.raises(TypeError, match="not a BaseModelMixin"):
             EnhancedSampling(
+                model=_make_model(),
                 engine=NVTLangevin,
                 engine_kwargs=_ENGINE_KWARGS,
                 biases={"x": NotABias()},
@@ -197,6 +201,7 @@ class TestRunnerConstruction:
         bias = _ConstantForceBias(name="actual_name")
         with pytest.raises(ValueError, match="key and the bias name must agree"):
             EnhancedSampling(
+                model=_make_model(),
                 engine=NVTLangevin,
                 engine_kwargs=_ENGINE_KWARGS,
                 biases={"different_key": bias},
@@ -207,6 +212,7 @@ class TestRunnerConstruction:
         """It is a divisor: zero raises deep in a run rather than here."""
         with pytest.raises(ValueError, match="steps_per_epoch must be at least 1"):
             EnhancedSampling(
+                model=_make_model(),
                 engine=NVTLangevin,
                 engine_kwargs=_ENGINE_KWARGS,
                 biases={},
@@ -229,7 +235,7 @@ class TestRunnerConstruction:
 
         user_hook = _NoopHook()
         runner, model = _sampling(extra_hooks=[user_hook])
-        installed = runner.dynamics(model).hooks
+        installed = runner.dynamics().hooks
         assert installed[-1] is user_hook
         assert installed.index(runner._bias_hook) < installed.index(user_hook)
 
@@ -249,7 +255,7 @@ class TestWalkerIdentity:
     def test_fields_stamped(self, device: str) -> None:
         batch = _make_batch(n_graphs=3, device=device)
         runner, model = _sampling(device, {})
-        runner.run(batch, model, n_steps=1)
+        runner.run(batch, n_steps=1)
 
         for field in (
             "walker_id",
@@ -266,11 +272,11 @@ class TestWalkerIdentity:
         """walker_id is an identity: assigned once, never reshuffled."""
         batch = _make_batch(n_graphs=4, device=device)
         runner, model = _sampling(device, {})
-        runner.run(batch, model, n_steps=1)
+        runner.run(batch, n_steps=1)
         first = batch.walker_id.clone()
         assert len(set(first.reshape(-1).tolist())) == 4
 
-        runner.run(batch, model, n_steps=3, prime=False)
+        runner.run(batch, n_steps=3, prime=False)
         assert torch.equal(batch.walker_id, first)
 
     def test_user_supplied_state_ids_preserved(self, device: str) -> None:
@@ -278,22 +284,21 @@ class TestWalkerIdentity:
         batch = _make_batch(n_graphs=3, device=device)
         batch["thermodynamic_state_id"] = torch.tensor([2, 0, 1], device=device)
         runner, model = _sampling(device, {})
-        runner.run(batch, model, n_steps=2)
+        runner.run(batch, n_steps=2)
         assert batch.thermodynamic_state_id.reshape(-1).tolist() == [2, 0, 1]
 
     def test_sampling_step_tracks_dynamics(self, device: str) -> None:
         batch = _make_batch(device=device)
         runner, model = _sampling(device, {})
-        runner.run(batch, model, n_steps=5)
+        runner.run(batch, n_steps=5)
         assert (
-            int(batch.sampling_step.reshape(-1)[0])
-            == runner.dynamics(model).step_count - 1
+            int(batch.sampling_step.reshape(-1)[0]) == runner.dynamics().step_count - 1
         )
 
     def test_epoch_advances_with_steps_per_epoch(self, device: str) -> None:
         batch = _make_batch(device=device)
         runner, model = _sampling(device, {}, steps_per_epoch=3)
-        runner.run(batch, model, n_steps=7)
+        runner.run(batch, n_steps=7)
         assert int(batch.sampling_epoch.reshape(-1)[0]) == 6 // 3
 
 
@@ -309,7 +314,7 @@ class TestForceStepOrdering:
         """Total force is physical + bias, with the documented sign."""
         batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
         runner, model = _sampling(device, {"cf": _ConstantForceBias(2.0, name="cf")})
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
 
         physical = runner.last_outputs["physical/forces"]
         total = batch.forces
@@ -325,7 +330,7 @@ class TestForceStepOrdering:
             batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device, seed=7)
             biases = {n: _ConstantForceBias(c, name=n) for n, c in order}
             runner, model = _sampling(device, biases)
-            runner.prime_forces(batch, model)
+            runner.prime_forces(batch)
             results.append(batch.forces.clone())
         assert torch.allclose(results[0], results[1], atol=1e-6)
 
@@ -349,7 +354,7 @@ class TestForceStepOrdering:
             device,
             {"cf": _ConstantForceBias(5.0, name="cf"), "reader": _ForceReadingBias()},
         )
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
 
         physical = runner.last_outputs["physical/forces"]
         assert seen, "reader bias never ran"
@@ -361,7 +366,7 @@ class TestForceStepOrdering:
     def test_diagnostics_namespaced(self, device: str) -> None:
         batch = _make_batch(device=device)
         runner, model = _sampling(device, {"cf": _ConstantForceBias(name="cf")})
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         keys = set(runner.last_outputs)
         assert "physical/forces" in keys
         assert "bias/cf/forces" in keys
@@ -383,7 +388,7 @@ class TestForceStepOrdering:
                 "b": _ConstantForceBias(3.0, name="b"),
             },
         )
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
 
         physical = runner.last_outputs["physical/forces"]
         bias_total = runner.last_outputs["bias_total/forces"]
@@ -404,7 +409,7 @@ class TestForceStepOrdering:
                 "b": _ConstantForceBias(3.0, name="b"),
             },
         )
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         summed = (
             runner.last_outputs["bias/a/forces"] + runner.last_outputs["bias/b/forces"]
         )
@@ -415,7 +420,7 @@ class TestForceStepOrdering:
     def test_total_energy_matches_batch(self, device: str) -> None:
         batch = _make_batch(n_graphs=2, device=device)
         runner, model = _sampling(device, {"cf": _ConstantForceBias(2.0, name="cf")})
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         assert torch.allclose(
             runner.last_outputs["total/energy"].reshape(batch.energy.shape),
             batch.energy,
@@ -426,7 +431,7 @@ class TestForceStepOrdering:
         """A later in-place hook must not retroactively rewrite the record."""
         batch = _make_batch(device=device)
         runner, model = _sampling(device, {"cf": _ConstantForceBias(name="cf")})
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         recorded = runner.last_outputs["total/forces"].clone()
         batch.forces.mul_(0.0)
         assert torch.allclose(runner.last_outputs["total/forces"], recorded)
@@ -454,7 +459,7 @@ class TestForceStepOrdering:
             device,
             {"first": _DiagnosticBias("first"), "second": _DiagnosticBias("second")},
         )
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         assert "bias/first/cv" in runner.last_outputs
         assert "bias/second/cv" in runner.last_outputs
 
@@ -471,7 +476,7 @@ class TestForceStepOrdering:
         batch = _make_batch(device=device)
         runner, model = _sampling(device, {"virial_bias": _VirialBias()})
         with pytest.raises(ValueError, match="applies 'stress' to the batch"):
-            runner.prime_forces(batch, model)
+            runner.prime_forces(batch)
 
     def test_stress_applied_for_periodic_batch(self, device: str) -> None:
         batch = _make_batch(n_graphs=1, device=device, with_cell=True)
@@ -483,7 +488,7 @@ class TestForceStepOrdering:
             name="umbrella",
         )
         runner, model = _sampling(device, {"umbrella": bias})
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         assert "bias/umbrella/stress" in runner.last_outputs
         assert torch.count_nonzero(runner.last_outputs["bias/umbrella/stress"]) > 0
 
@@ -529,7 +534,7 @@ class TestUnapplicableBiasOutputs:
         batch = _make_batch(n_graphs=1, device=device)
         runner, model = _sampling(device, {"hb": _HessianBias()})
         with pytest.raises(ValueError, match=r"_HessianBias 'hb'.*cannot be applied"):
-            runner.run(batch, model, n_steps=1)
+            runner.run(batch, n_steps=1)
 
     def test_the_same_quantity_is_fine_when_reported(self, device: str) -> None:
         """``diagnostics/`` is the documented way to carry one through."""
@@ -555,7 +560,7 @@ class TestUnapplicableBiasOutputs:
 
         batch = _make_batch(n_graphs=1, device=device)
         runner, model = _sampling(device, {"rb": _ReportingBias()})
-        runner.run(batch, model, n_steps=1)
+        runner.run(batch, n_steps=1)
         assert "bias/rb/hessian_trace" in runner.last_outputs
 
 
@@ -616,7 +621,7 @@ class TestBroadcastableBiasOutputs:
         batch = _make_batch(n_graphs=1, atoms_per_graph=4, device=device)
         runner, model = _sampling(device, {"ov": self._OneVectorBias()})
         with pytest.raises(ValueError, match=r"_OneVectorBias 'ov'.*1 row\(s\)"):
-            runner.prime_forces(batch, model)
+            runner.prime_forces(batch)
 
     def test_it_is_caught_even_beside_a_correct_bias(self, device: str) -> None:
         """The case a check on the aggregate would miss.
@@ -632,13 +637,13 @@ class TestBroadcastableBiasOutputs:
             {"zero": self._ZeroForceBias(), "ov": self._OneVectorBias()},
         )
         with pytest.raises(ValueError, match=r"_OneVectorBias 'ov'.*1 row\(s\)"):
-            runner.prime_forces(batch, model)
+            runner.prime_forces(batch)
 
     def test_a_correctly_shaped_bias_still_applies(self, device: str) -> None:
         """The guard must not be stricter than the contract it enforces."""
         batch = _make_batch(n_graphs=1, atoms_per_graph=4, device=device)
         runner, model = _sampling(device, {"cf": _ConstantForceBias(2.0, name="cf")})
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         physical = runner.last_outputs["physical/forces"]
         expected = torch.zeros_like(batch.forces)
         expected[:, 0] = -2.0
@@ -687,7 +692,7 @@ class TestMissingDestinationBuffers:
         batch = self._periodic_batch_without("stress", device)
         runner, model = _sampling(device, {"umbrella": self._umbrella(device)})
         with pytest.raises(ValueError, match="no destination buffer"):
-            runner.prime_forces(batch, model)
+            runner.prime_forces(batch)
 
     def test_missing_stress_error_names_bias_and_barostat_risk(
         self, device: str
@@ -695,7 +700,7 @@ class TestMissingDestinationBuffers:
         batch = self._periodic_batch_without("stress", device)
         runner, model = _sampling(device, {"umbrella": self._umbrella(device)})
         with pytest.raises(ValueError) as excinfo:
-            runner.prime_forces(batch, model)
+            runner.prime_forces(batch)
         message = str(excinfo.value)
         assert "'stress'" in message
         assert "umbrella" in message
@@ -708,30 +713,32 @@ class TestMissingDestinationBuffers:
         runner, model = _sampling(
             device, {"umbrella": self._umbrella(device, compute_stress=False)}
         )
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         assert "bias_total/stress" not in runner.last_outputs
 
-    def test_missing_energy_buffer_raises(self, device: str) -> None:
+    def test_an_absent_energy_buffer_still_receives_the_bias(self, device: str) -> None:
+        """``compute()`` creates the field, and the bias energy lands on it."""
         batch = self._periodic_batch_without("energy", device)
         runner, model = _sampling(device, {"cf": _ConstantForceBias(name="cf")})
-        with pytest.raises(ValueError, match="'energy'"):
-            runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
+        outputs = runner.last_outputs
+        assert torch.allclose(
+            batch.energy, outputs["physical/energy"] + outputs["bias_total/energy"]
+        )
 
     def test_error_fires_before_any_step_is_taken(self, device: str) -> None:
         """Priming is what makes this a setup error, not a mid-run surprise."""
         batch = self._periodic_batch_without("stress", device)
         runner, model = _sampling(device, {"umbrella": self._umbrella(device)})
         with pytest.raises(ValueError, match="no destination buffer"):
-            runner.run(batch, model, n_steps=100)
-        assert runner.dynamics(model).step_count == 0, (
-            "a step ran before the error surfaced"
-        )
+            runner.run(batch, n_steps=100)
+        assert runner.dynamics().step_count == 0, "a step ran before the error surfaced"
 
     def test_allocated_stress_buffer_receives_contribution(self, device: str) -> None:
         """The positive case: with the buffer present, stress lands on it."""
         batch = _make_batch(n_graphs=1, device=device, with_cell=True)
         runner, model = _sampling(device, {"umbrella": self._umbrella(device)})
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         assert torch.count_nonzero(batch.stress) > 0
 
 
@@ -746,28 +753,28 @@ class TestPriming:
         batch = Batch.from_data_list([data]).to(device)
         runner, model = _sampling(device, {})
         with pytest.raises(ValueError, match="batch has no 'forces' field"):
-            runner.prime_forces(batch, model)
+            runner.prime_forces(batch)
 
     def test_prime_populates_total_force(self, device: str) -> None:
         batch = _make_batch(device=device)
         assert torch.count_nonzero(batch.forces) == 0
         runner, model = _sampling(device, {"cf": _ConstantForceBias(name="cf")})
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         assert torch.count_nonzero(batch.forces) > 0
 
     def test_run_primes_by_default(self, device: str) -> None:
         """Without priming, step 0 would integrate against a zero force buffer."""
         batch = _make_batch(device=device)
         runner, model = _sampling(device, {"cf": _ConstantForceBias(name="cf")})
-        runner.run(batch, model, n_steps=1)
+        runner.run(batch, n_steps=1)
         assert runner.last_outputs, "no force evaluation recorded"
 
     def test_prime_is_idempotent(self, device: str) -> None:
         batch = _make_batch(device=device)
         runner, model = _sampling(device, {"cf": _ConstantForceBias(name="cf")})
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         first = batch.forces.clone()
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         assert torch.allclose(batch.forces, first, atol=1e-6), (
             "priming twice at the same coordinates must not accumulate the bias"
         )
@@ -785,7 +792,7 @@ class TestAdaptiveUpdates:
         batch = _make_batch(device=device)
         bias = _RecordingAdaptiveBias(frequency=1)
         runner, model = _sampling(device, {"recording": bias})
-        runner.run(batch, model, n_steps=5)
+        runner.run(batch, n_steps=5)
         assert bias.update_steps == sorted(bias.update_steps)
         assert len(bias.update_steps) == len(set(bias.update_steps)), (
             f"update() delivered more than once for some step: {bias.update_steps}"
@@ -796,7 +803,7 @@ class TestAdaptiveUpdates:
         batch = _make_batch(device=device)
         bias = _RecordingAdaptiveBias(frequency=3)
         runner, model = _sampling(device, {"recording": bias})
-        runner.run(batch, model, n_steps=9)
+        runner.run(batch, n_steps=9)
         assert all(step % 3 == 0 for step in bias.update_steps), bias.update_steps
 
     def test_after_compute_observation_sees_unbiased_forces(self, device: str) -> None:
@@ -808,7 +815,7 @@ class TestAdaptiveUpdates:
         runner, model = _sampling(
             device, {"cf": _ConstantForceBias(5.0, name="cf"), "observer": observer}
         )
-        runner.run(batch, model, n_steps=2)
+        runner.run(batch, n_steps=2)
 
         assert observer.observed_forces
         physical = runner.last_outputs["physical/forces"]
@@ -837,7 +844,7 @@ class TestAdaptiveUpdates:
 
         batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
         runner, model = _sampling(device, {"recorder": _ResultRecordingBias()})
-        runner.run(batch, model, n_steps=2)
+        runner.run(batch, n_steps=2)
 
         assert received, "update() never called"
         for result in received:
@@ -864,7 +871,7 @@ class TestAdaptiveUpdates:
 
         batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
         runner, model = _sampling(device, {"recorder": _ResultRecordingBias()})
-        runner.run(batch, model, n_steps=2)
+        runner.run(batch, n_steps=2)
 
         assert received
         for result in received:
@@ -891,7 +898,7 @@ class TestAdaptiveUpdates:
 
         batch = _make_batch(n_graphs=1, atoms_per_graph=3, device=device)
         runner, model = _sampling(device, {"a": _make("a", 1.0), "b": _make("b", 4.0)})
-        runner.run(batch, model, n_steps=2)
+        runner.run(batch, n_steps=2)
 
         assert all(abs(v - (-1.0)) < 1e-5 for v in seen["a"]), seen["a"]
         assert all(abs(v - (-4.0)) < 1e-5 for v in seen["b"]), seen["b"]
@@ -899,14 +906,14 @@ class TestAdaptiveUpdates:
     def test_non_adaptive_bias_never_asked_to_update(self, device: str) -> None:
         batch = _make_batch(device=device)
         runner, model = _sampling(device, {"cf": _ConstantForceBias(name="cf")})
-        runner.run(batch, model, n_steps=3)  # must not raise NotImplementedError
+        runner.run(batch, n_steps=3)  # must not raise NotImplementedError
         assert runner._adaptive_biases() == {}
 
     def test_commit_fires_at_boundary(self, device: str) -> None:
         batch = _make_batch(device=device)
         bias = _RecordingAdaptiveBias()
         runner, model = _sampling(device, {"recording": bias}, steps_per_epoch=2)
-        runner.run(batch, model, n_steps=6)
+        runner.run(batch, n_steps=6)
         assert bias.commit_calls >= 2, (
             f"commit fired {bias.commit_calls} times over 3 epochs"
         )
@@ -915,7 +922,7 @@ class TestAdaptiveUpdates:
         batch = _make_batch(device=device)
         bias = _RecordingAdaptiveBias(bump=True)
         runner, model = _sampling(device, {"recording": bias}, prime_after_update=True)
-        runner.run(batch, model, n_steps=2)
+        runner.run(batch, n_steps=2)
         assert bias.state_version == 2
 
     def test_no_bump_no_reprime(self, device: str) -> None:
@@ -923,7 +930,7 @@ class TestAdaptiveUpdates:
         batch = _make_batch(device=device)
         bias = _RecordingAdaptiveBias(bump=False)
         runner, model = _sampling(device, {"recording": bias})
-        runner.run(batch, model, n_steps=3)
+        runner.run(batch, n_steps=3)
         assert bias.state_version == 0
         assert len(bias.update_steps) == 3
 
@@ -941,19 +948,19 @@ class TestWarmStart:
         history["sampling_step"] = torch.arange(4, device=device)
         bias = _RecordingAdaptiveBias()
         runner, model = _sampling(device, {"recording": bias})
-        runner.warm_start(history, model)
+        runner.warm_start(history)
         assert bias.update_steps == [0, 1, 2, 3]
 
     def test_warm_start_without_adaptive_is_noop(self, device: str) -> None:
         history = _make_batch(n_graphs=2, device=device)
         runner, model = _sampling(device, {"cf": _ConstantForceBias(name="cf")})
-        runner.warm_start(history, model)  # must not raise
+        runner.warm_start(history)  # must not raise
 
     def test_warm_start_after_restore_raises(self, device: str) -> None:
         runner, model = _sampling(device, {})
         runner._restored = True
         with pytest.raises(RuntimeError, match="mutually exclusive"):
-            runner.warm_start(_make_batch(device=device), model)
+            runner.warm_start(_make_batch(device=device))
 
     def test_checkpoint_requires_an_engine(self) -> None:
         """A strategy that has never run has no step count to check against."""
@@ -964,7 +971,7 @@ class TestWarmStart:
     def test_checkpoint_requires_a_batch(self) -> None:
         """checkpoint() is implemented; it needs something to save."""
         runner, model = _sampling(biases={})
-        runner.dynamics(model)
+        runner.dynamics()
         with pytest.raises(RuntimeError, match="no batch to save"):
             runner.checkpoint("x.zarr")
 
@@ -1072,6 +1079,6 @@ class TestCompileBiases:
                 {"cf": _ConstantForceBias(2.0, name="cf")},
                 compile_biases=compile_biases,
             )
-            runner.prime_forces(batch, model)
+            runner.prime_forces(batch)
             results.append(batch.forces.clone())
         assert torch.allclose(results[0], results[1], atol=1e-5)

@@ -51,6 +51,7 @@ from nvalchemi._typing import ModelOutputs
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.enhanced_sampling import ConservativeBias, pair_distance
 from nvalchemi.models._utils import DIAGNOSTIC_PREFIX
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 # ---------------------------------------------------------------------------
 # Shared batch-construction helpers
@@ -136,6 +137,19 @@ def _make_triclinic_batch(
 # ===========================================================================
 
 
+def _materialised(batch: Batch) -> Batch:
+    """Return *batch* with its lazy segment pointers built, as a run leaves it.
+
+    ``Batch.batch_ptr`` is computed on first access behind a data-dependent
+    check that ``torch.compile(fullgraph=True)`` cannot trace.  The engine
+    reads it long before any bias is evaluated, so a compiled ``energy()``
+    never meets it unbuilt; a test handing a fresh batch straight to the
+    compiler has to do the same.
+    """
+    _ = batch.batch_ptr
+    return batch
+
+
 class TestBiasIsAModel:
     """A bias is an additive potential, not a category of its own.
 
@@ -180,7 +194,11 @@ class TestBiasIsAModel:
                 return OrderedDict()
 
         with pytest.raises(TypeError, match="not a BaseModelMixin"):
-            EnhancedSampling(engine=NVTLangevin, biases={"not_a_bias": NotABias()})
+            EnhancedSampling(
+                model=DemoModelWrapper(DemoModel()),
+                engine=NVTLangevin,
+                biases={"not_a_bias": NotABias()},
+            )
 
     def test_diagnostics_ride_in_the_same_mapping(self) -> None:
         """A diagnostic is a namespaced key, not a second payload."""
@@ -1318,7 +1336,9 @@ class TestCompile:
 
     def test_pair_distance_compiles_fullgraph(self, device: str) -> None:
         """pair_distance compiles with fullgraph=True (no graph breaks)."""
-        batch = _make_nonperiodic_batch(n_graphs=2, atoms_per_graph=3, device=device)
+        batch = _materialised(
+            _make_nonperiodic_batch(n_graphs=2, atoms_per_graph=3, device=device)
+        )
         idx = torch.tensor([0, 1], device=device)
 
         compiled = torch.compile(pair_distance, **self._compile_kw_full(device))
@@ -1343,7 +1363,9 @@ class TestCompile:
         # sharing the pair_distance compiled-function cache.
         torch._dynamo.reset()
 
-        batch = _make_cubic_batch(n_graphs=2, atoms_per_graph=3, box=6.0, device=device)
+        batch = _materialised(
+            _make_cubic_batch(n_graphs=2, atoms_per_graph=3, box=6.0, device=device)
+        )
         idx = torch.tensor([0, 1], device=device)
 
         compiled = torch.compile(pair_distance, **self._compile_kw_full(device))
@@ -1362,7 +1384,9 @@ class TestCompile:
         This is the actual compile target when compile_biases=True.
         forward() stays eager; energy() is compiled per the fallback.
         """
-        batch = _make_nonperiodic_batch(n_graphs=2, atoms_per_graph=4, device=device)
+        batch = _materialised(
+            _make_nonperiodic_batch(n_graphs=2, atoms_per_graph=4, device=device)
+        )
         bias = _QuadraticBias(k=1.0)
 
         # Simulate the runner compiling energy() not forward()
@@ -1447,7 +1471,9 @@ class TestCompile:
 
     def test_pair_distance_inside_energy_compiles(self, device: str) -> None:
         """pair_distance used as CV inside energy() compiles with fullgraph=True."""
-        batch = _make_nonperiodic_batch(n_graphs=2, atoms_per_graph=4, device=device)
+        batch = _materialised(
+            _make_nonperiodic_batch(n_graphs=2, atoms_per_graph=4, device=device)
+        )
         idx = torch.tensor([0, 1], device=device)
         bias = _PairDistanceBias(atom_indices=idx, k=1.0)
 

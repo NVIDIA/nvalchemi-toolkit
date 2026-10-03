@@ -171,19 +171,20 @@ rmsd_bias = RMSDMetaDynamicsBias(
 model = LennardJonesModelWrapper(sigma=3.4, epsilon=0.0104, cutoff=8.5).to(DEVICE)
 
 sampling = EnhancedSampling(
+    model=model,
     engine=NVTLangevin,
     engine_kwargs={"dt": 0.5, "temperature": TEMPERATURE, "friction": 0.02},
     biases={"rmsd": rmsd_bias},
     extra_hooks=list(model.make_neighbor_hooks()),
 )
 
-initial = sampling.prime_forces(batch, model)
+initial = sampling.prime_forces(batch)
 logger.info(
     "Initial potential energy: %s",
     [round(v, 4) for v in sampling.last_outputs["physical/energy"].flatten().tolist()],
 )
 
-batch = sampling.run(batch, model, n_steps=N_STEPS, prime=False)
+batch = sampling.run(batch, n_steps=N_STEPS, prime=False)
 
 logger.info(
     "Depositions: %d, references retained: %d of %d (written: %d)",
@@ -243,12 +244,13 @@ recorder = RMSDMetaDynamicsBias(
     name="rmsd",
 )
 control = EnhancedSampling(
+    model=control_model,
     engine=NVTLangevin,
     engine_kwargs={"dt": 0.5, "temperature": TEMPERATURE, "friction": 0.02},
     biases={"rmsd": recorder},
     extra_hooks=list(control_model.make_neighbor_hooks()),
 )
-control.run(control_batch, control_model, n_steps=N_STEPS)
+control.run(control_batch, n_steps=N_STEPS)
 
 control_refs = recorder.reference_coords[: int(recorder.reference_count)]
 control_mean, control_max = spread(control_refs)

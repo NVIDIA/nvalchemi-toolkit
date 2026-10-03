@@ -111,15 +111,15 @@ def _sampling(
     **kwargs: object,
 ) -> tuple[EnhancedSampling, DemoModelWrapper]:
     """Return a strategy over ``NVTLangevin`` and the model it drives."""
-    return (
-        EnhancedSampling(
-            engine=NVTLangevin,
-            engine_kwargs=_ENGINE_KWARGS,
-            biases=biases or {},
-            **kwargs,
-        ),
-        _make_model(device),
+    model = _make_model(device)
+    sampling = EnhancedSampling(
+        model=model,
+        engine=NVTLangevin,
+        engine_kwargs=_ENGINE_KWARGS,
+        biases=biases or {},
+        **kwargs,
     )
+    return sampling, model
 
 
 def _pair_cv(indices: tuple[int, int] = (0, 1)):
@@ -153,6 +153,19 @@ def _rot() -> Tensor:
 # ===========================================================================
 # 1. Well-tempered metadynamics: construction
 # ===========================================================================
+
+
+def _materialised(batch: Batch) -> Batch:
+    """Return *batch* with its lazy segment pointers built, as a run leaves it.
+
+    ``Batch.batch_ptr`` is computed on first access behind a data-dependent
+    check that ``torch.compile(fullgraph=True)`` cannot trace.  The engine
+    reads it long before any bias is evaluated, so a compiled ``energy()``
+    never meets it unbuilt; a test handing a fresh batch straight to the
+    compiler has to do the same.
+    """
+    _ = batch.batch_ptr
+    return batch
 
 
 class TestWellTemperedConstruction:
@@ -498,7 +511,7 @@ class TestCVDimensionality:
         frame = _pair_batch([1.0], device)
         bias.update(_ctx(frame, bias(frame)), bias.stage)
 
-        batch = _pair_batch([1.3, 2.0], device)
+        batch = _materialised(_pair_batch([1.3, 2.0], device))
         compiled = torch.compile(bias.energy, fullgraph=True)
         assert torch.allclose(compiled(batch), bias.energy(batch), atol=1e-6)
 
@@ -849,7 +862,7 @@ class TestMultiWalkerHistory:
         """The stamp is what makes walker-private history work in a real run."""
         bias = _metad(device, name="meta", history="walker", frequency=1)
         runner, model = _sampling(device, {"meta": bias})
-        runner.run(_random_batch(device=device), model, n_steps=2)
+        runner.run(_random_batch(device=device), n_steps=2)
 
         assert int(bias.deposits) == 2
         assert sorted(bias.hill_owner[:2].tolist()) == [0, 1]
@@ -946,7 +959,7 @@ class TestWellTemperedCompile:
         torch._dynamo.reset()
         bias = _metad(device, sigma=0.4, max_hills=8)
         compiled = torch.compile(bias.energy, fullgraph=True)
-        batch = _pair_batch([1.0], device)
+        batch = _materialised(_pair_batch([1.0], device))
         assert float(compiled(batch).sum()) == pytest.approx(0.0, abs=1e-9)
 
         bias.update(_ctx(batch, bias(batch)), bias.stage)
@@ -1847,7 +1860,7 @@ class TestRunnerIntegration:
     def test_deposition_follows_frequency(self, device: str) -> None:
         bias = _metad(device, name="meta", frequency=3, max_hills=64)
         runner, model = _sampling(device, {"meta": bias})
-        runner.run(_random_batch(device=device), model, n_steps=9)
+        runner.run(_random_batch(device=device), n_steps=9)
 
         # Two walkers deposit one hill each per due step.
         assert int(bias.deposits) == 3
@@ -1857,7 +1870,7 @@ class TestRunnerIntegration:
         """Priming evaluates forces; it must not advance the history."""
         bias = _metad(device, name="meta", frequency=1)
         runner, model = _sampling(device, {"meta": bias})
-        runner.prime_forces(_random_batch(device=device), model)
+        runner.prime_forces(_random_batch(device=device))
         assert int(bias.deposits) == 0
 
     def test_hills_are_deposited_at_post_step_coordinates(self, device: str) -> None:
@@ -1869,17 +1882,17 @@ class TestRunnerIntegration:
         bias = _metad(device, name="meta", frequency=1, sigma=0.6, height=0.5)
         runner, model = _sampling(device, {"meta": bias}, prime_after_update=True)
         batch = _random_batch(device=device)
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         before = int(bias.state_version)
 
-        runner.run(batch, model, n_steps=1, prime=False)
+        runner.run(batch, n_steps=1, prime=False)
         assert int(bias.state_version) > before
         assert float(runner.last_outputs["bias/meta/energy"].abs().sum()) > 0.0
 
     def test_total_is_physical_plus_bias(self, device: str) -> None:
         bias = _metad(device, name="meta", frequency=1, sigma=0.6)
         runner, model = _sampling(device, {"meta": bias})
-        runner.run(_random_batch(device=device), model, n_steps=4)
+        runner.run(_random_batch(device=device), n_steps=4)
 
         outputs = runner.last_outputs
         assert float(outputs["total/energy"].sum()) == pytest.approx(
@@ -1897,7 +1910,7 @@ class TestRunnerIntegration:
             name="rmsd",
         ).to(device)
         runner, model = _sampling(device, {"rmsd": bias})
-        runner.run(_random_batch(device=device), model, n_steps=6)
+        runner.run(_random_batch(device=device), n_steps=6)
 
         assert int(bias.deposits) == 3
         assert int(bias.reference_count) == 6
@@ -1914,7 +1927,7 @@ class TestRunnerIntegration:
             name="rmsd",
         ).to(device)
         runner, model = _sampling(device, {"meta": meta, "rmsd": rmsd})
-        runner.run(_random_batch(device=device), model, n_steps=6)
+        runner.run(_random_batch(device=device), n_steps=6)
 
         assert int(meta.deposits) == 3
         assert int(rmsd.deposits) == 2
@@ -1926,14 +1939,14 @@ class TestRunnerIntegration:
         bias = _metad(device, name="meta", frequency=1, max_hills=32)
         runner, model = _sampling(device, {"meta": bias}, steps_per_epoch=4)
         batch = _random_batch(device=device)
-        batch = runner.run(batch, model, n_steps=4)
+        batch = runner.run(batch, n_steps=4)
 
         path = tmp_path / "metad.zarr"
         runner.checkpoint(path, batch)
 
         fresh_bias = _metad(device, name="meta", frequency=1, max_hills=32)
         fresh, model = _sampling(device, {"meta": fresh_bias}, steps_per_epoch=4)
-        restored = fresh.restore(path, model, device=device)
+        restored = fresh.restore(path, device=device)
 
         assert int(fresh_bias.hill_count) == int(bias.hill_count)
         assert int(fresh_bias.deposits) == int(bias.deposits)

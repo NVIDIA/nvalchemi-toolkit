@@ -137,6 +137,7 @@ class TestBuildHooks:
         """Exchange precedes commit: a commit under stale labels publishes wrong."""
         exchange = ReplicaExchange(_ladder(2), torch.arange(2), attempt_interval=3)
         sampling = EnhancedSampling(
+            model=_make_model(),
             engine=NVTLangevin,
             engine_kwargs=_ENGINE_KWARGS,
             biases={},
@@ -151,7 +152,9 @@ class TestBuildHooks:
         ]
 
     def test_exchange_hook_absent_without_a_ladder(self) -> None:
-        sampling = EnhancedSampling(engine=NVTLangevin, engine_kwargs=_ENGINE_KWARGS)
+        sampling = EnhancedSampling(
+            model=_make_model(), engine=NVTLangevin, engine_kwargs=_ENGINE_KWARGS
+        )
         kinds = [type(hook) for hook in sampling.build_hooks()]
         assert PairSwapHook not in kinds
         assert kinds == [WalkerIdentityHook, BiasHook, EpochCommitHook]
@@ -168,7 +171,10 @@ class TestBuildHooks:
 
         extra = _NoopHook()
         sampling = EnhancedSampling(
-            engine=NVTLangevin, engine_kwargs=_ENGINE_KWARGS, extra_hooks=[extra]
+            model=_make_model(),
+            engine=NVTLangevin,
+            engine_kwargs=_ENGINE_KWARGS,
+            extra_hooks=[extra],
         )
         hooks = sampling.build_hooks()
         assert hooks[-1] is extra
@@ -177,6 +183,7 @@ class TestBuildHooks:
     def test_every_contributed_hook_satisfies_the_protocol(self) -> None:
         exchange = ReplicaExchange(_ladder(2), torch.arange(2), attempt_interval=3)
         sampling = EnhancedSampling(
+            model=_make_model(),
             engine=NVTLangevin,
             engine_kwargs=_ENGINE_KWARGS,
             biases={},
@@ -186,15 +193,19 @@ class TestBuildHooks:
             assert isinstance(hook, Hook), hook
 
     def test_engine_registers_exactly_the_contributed_hooks(self) -> None:
-        sampling = EnhancedSampling(engine=NVTLangevin, engine_kwargs=_ENGINE_KWARGS)
-        engine = sampling.dynamics(_make_model())
+        sampling = EnhancedSampling(
+            model=_make_model(), engine=NVTLangevin, engine_kwargs=_ENGINE_KWARGS
+        )
+        engine = sampling.dynamics()
         assert engine.hooks == sampling.build_hooks()
 
     def test_dynamics_is_cached(self) -> None:
         """Consecutive run() calls must continue one trajectory, not restart it."""
         model = _make_model()
-        sampling = EnhancedSampling(engine=NVTLangevin, engine_kwargs=_ENGINE_KWARGS)
-        assert sampling.dynamics(model) is sampling.dynamics(model)
+        sampling = EnhancedSampling(
+            model=model, engine=NVTLangevin, engine_kwargs=_ENGINE_KWARGS
+        )
+        assert sampling.dynamics() is sampling.dynamics()
 
 
 # ===========================================================================
@@ -207,13 +218,17 @@ class TestCadence:
 
     def test_epoch_hook_frequency_is_steps_per_epoch(self) -> None:
         sampling = EnhancedSampling(
-            engine=NVTLangevin, engine_kwargs=_ENGINE_KWARGS, steps_per_epoch=7
+            model=_make_model(),
+            engine=NVTLangevin,
+            engine_kwargs=_ENGINE_KWARGS,
+            steps_per_epoch=7,
         )
         assert sampling._epoch_hook.frequency == 7
 
     def test_exchange_hook_frequency_is_attempt_interval(self) -> None:
         exchange = ReplicaExchange(_ladder(2), torch.arange(2), attempt_interval=5)
         sampling = EnhancedSampling(
+            model=_make_model(),
             engine=NVTLangevin,
             engine_kwargs=_ENGINE_KWARGS,
             replica_exchange=exchange,
@@ -754,6 +769,7 @@ class TestTheIntegratorFollowsTheAssignment:
         ladder = _ladder(4)
         model = DemoModelWrapper(DemoModel())
         sampling = EnhancedSampling(
+            model=model,
             engine=NVTLangevin,
             engine_kwargs={"dt": 0.1, "temperature": 300.0, "friction": 0.1},
             biases={},
@@ -763,9 +779,9 @@ class TestTheIntegratorFollowsTheAssignment:
             steps_per_epoch=1000,
         )
         batch = self._batch(4)
-        sampling.prime_forces(batch, model)
+        sampling.prime_forces(batch)
 
-        targets = sampling.dynamics(model)._state.temperature.reshape(-1) / KB_EV
+        targets = sampling.dynamics()._state.temperature.reshape(-1) / KB_EV
         assert batch.thermodynamic_state_id.reshape(-1).tolist() == [0, 1, 2, 3]
         assert targets.tolist() == pytest.approx(
             [state.temperature for state in ladder], rel=1e-6
@@ -834,6 +850,7 @@ class TestStrategySurface:
     def test_spec_carries_the_knobs_and_omits_live_objects(self) -> None:
         exchange = ReplicaExchange(_ladder(2), torch.arange(2), attempt_interval=3)
         spec = EnhancedSampling(
+            model=_make_model(),
             engine=NVTLangevin,
             engine_kwargs=_ENGINE_KWARGS,
             biases={},
@@ -857,10 +874,15 @@ class TestStrategySurface:
         exchange = ReplicaExchange(_ladder(2), torch.arange(2))
         with pytest.raises(TypeError, match="replica exchange needs"):
             EnhancedSampling(
-                engine=NVE, engine_kwargs={"dt": 0.1}, replica_exchange=exchange
+                model=_make_model(),
+                engine=NVE,
+                engine_kwargs={"dt": 0.1},
+                replica_exchange=exchange,
             )
 
     def test_state_that_needs_an_engine_says_so(self) -> None:
-        sampling = EnhancedSampling(engine=NVTLangevin, engine_kwargs=_ENGINE_KWARGS)
+        sampling = EnhancedSampling(
+            model=_make_model(), engine=NVTLangevin, engine_kwargs=_ENGINE_KWARGS
+        )
         with pytest.raises(RuntimeError, match="no engine has been built"):
             sampling.checkpoint("unused.zarr")

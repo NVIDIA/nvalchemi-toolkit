@@ -151,6 +151,7 @@ logger.info("Segment 1 pairs: %s", exchange.pair_schedule(1))
 model = LennardJonesModelWrapper(sigma=3.4, epsilon=0.0104, cutoff=8.5).to(DEVICE)
 
 sampling = EnhancedSampling(
+    model=model,
     engine=NVTLangevin,
     engine_kwargs={
         "dt": 0.5,
@@ -163,7 +164,7 @@ sampling = EnhancedSampling(
     extra_hooks=list(model.make_neighbor_hooks()),
 )
 
-batch = sampling.run(batch, model, n_steps=N_STEPS)
+batch = sampling.run(batch, n_steps=N_STEPS)
 
 # %%
 # Read the acceptance statistics
@@ -206,7 +207,7 @@ for index, rate in enumerate(exchange.pair_acceptance_rates()):
 # silently, so it is worth asserting rather than assuming.
 
 assignment = batch.thermodynamic_state_id.reshape(-1).tolist()
-engine = sampling.dynamics(model)
+engine = sampling.dynamics()
 targets = (engine._state.temperature.reshape(-1) / KB_EV).tolist()
 
 logger.info("")

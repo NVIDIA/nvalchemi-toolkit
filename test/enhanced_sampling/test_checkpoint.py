@@ -92,15 +92,15 @@ def _sampling(
     **kwargs: object,
 ) -> tuple[EnhancedSampling, DemoModelWrapper]:
     """Return a strategy over ``NVTLangevin`` and the model it drives."""
-    return (
-        EnhancedSampling(
-            engine=NVTLangevin,
-            engine_kwargs=_ENGINE_KWARGS,
-            biases=biases or {},
-            **kwargs,
-        ),
-        _make_model(device, seed),
+    model = _make_model(device, seed)
+    sampling = EnhancedSampling(
+        model=model,
+        engine=NVTLangevin,
+        engine_kwargs=_ENGINE_KWARGS,
+        biases=biases or {},
+        **kwargs,
     )
+    return sampling, model
 
 
 def _make_runner(
@@ -264,7 +264,7 @@ class TestCheckpointTransactionality:
     def test_round_trip(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        batch = runner.run(batch, model, n_steps=4)
+        batch = runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
@@ -291,7 +291,7 @@ class TestCheckpointTransactionality:
         """Every declared component must already exist when the manifest lands."""
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
@@ -307,7 +307,7 @@ class TestCheckpointTransactionality:
         """Damage after the manifest landed is caught on read."""
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
@@ -321,7 +321,7 @@ class TestCheckpointTransactionality:
     def test_missing_declared_component_is_caught(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
@@ -336,8 +336,8 @@ class TestCheckpointTransactionality:
             "core/positions",
             "core/velocities",
             "core/forces",
-            "custom/walker_id",
-            "custom/thermodynamic_state_id",
+            "core/walker_id",
+            "core/thermodynamic_state_id",
         ],
     )
     def test_corrupted_walker_batch_is_rejected(
@@ -353,7 +353,7 @@ class TestCheckpointTransactionality:
         """
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
@@ -367,7 +367,7 @@ class TestCheckpointTransactionality:
         """meta/ carries the CSR pointers that define graph boundaries."""
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
@@ -380,7 +380,7 @@ class TestCheckpointTransactionality:
     def test_manifest_records_a_batch_checksum(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
@@ -396,7 +396,7 @@ class TestCheckpointTransactionality:
 
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
@@ -408,7 +408,7 @@ class TestCheckpointTransactionality:
         """The guard must not reject a healthy store."""
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
         restored = load_checkpoint(path, device=device).batch
@@ -425,7 +425,7 @@ class TestCheckpointTransactionality:
     def _committed(self, tmp_path, device: str):
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
         return path
@@ -483,7 +483,7 @@ class TestCheckpointTransactionality:
         """A checkpoint must not be executable on load."""
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
         assert not list(path.rglob("*.pkl"))
@@ -503,7 +503,7 @@ class TestRunnerCheckpointRestore:
     ) -> None:
         batch = _make_batch(device=device)
         runner, model = _make_runner(device, steps_per_epoch=4)
-        runner.run(batch, model, n_steps=3)
+        runner.run(batch, n_steps=3)
         with pytest.raises(ValueError) as excinfo:
             runner.checkpoint(tmp_path / "ck.zarr")
         message = str(excinfo.value)
@@ -511,7 +511,7 @@ class TestRunnerCheckpointRestore:
 
     def test_checkpoint_without_batch_raises(self, tmp_path, device: str) -> None:
         runner, model = _make_runner(device)
-        runner.dynamics(model)
+        runner.dynamics()
         with pytest.raises(RuntimeError, match="no batch to save"):
             runner.checkpoint(tmp_path / "ck.zarr")
 
@@ -520,14 +520,14 @@ class TestRunnerCheckpointRestore:
         batch = _make_batch(n_graphs=3, device=device)
         batch["thermodynamic_state_id"] = torch.tensor([2, 0, 1], device=device)
         runner, model = _make_runner(device, n_states=3)
-        batch = runner.run(batch, model, n_steps=4)
+        batch = runner.run(batch, n_steps=4)
         walker_ids = batch.walker_id.reshape(-1).tolist()
 
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
         runner2, model = _make_runner(device, n_states=3)
-        restored = runner2.restore(path, model)
+        restored = runner2.restore(path)
         assert restored.walker_id.reshape(-1).tolist() == walker_ids
         assert restored.thermodynamic_state_id.reshape(-1).tolist() == [2, 0, 1]
 
@@ -535,16 +535,16 @@ class TestRunnerCheckpointRestore:
         """The point of exact restart: identical trajectory after resuming."""
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        batch = runner.run(batch, model, n_steps=4)
+        batch = runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
-        batch = runner.run(batch, model, n_steps=4, prime=False)
+        batch = runner.run(batch, n_steps=4, prime=False)
         reference = batch.positions.clone()
 
         runner2, model = _make_runner(device)
-        resumed = runner2.restore(path, model)
-        resumed = runner2.run(resumed, model, n_steps=4, prime=False)
+        resumed = runner2.restore(path)
+        resumed = runner2.run(resumed, n_steps=4, prime=False)
 
         assert torch.allclose(reference, resumed.positions, atol=1e-6), (
             f"max deviation {float((reference - resumed.positions).abs().max())}"
@@ -554,7 +554,7 @@ class TestRunnerCheckpointRestore:
         batch = _make_batch(device=device)
         bias = _CountingBias()
         runner, model = _sampling(device, {"counter": bias}, steps_per_epoch=4)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         assert float(bias.deposits) == 4
         assert bias.state_version == 4
 
@@ -563,56 +563,56 @@ class TestRunnerCheckpointRestore:
 
         bias2 = _CountingBias()
         runner2, model = _sampling(device, {"counter": bias2}, steps_per_epoch=4)
-        runner2.restore(path, model)
+        runner2.restore(path)
         assert float(bias2.deposits) == 4, "bias buffer not restored"
         assert bias2.state_version == 4, "bias history version not restored"
 
     def test_restore_rejects_different_bias_set(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
         other, model = _sampling(device, {}, steps_per_epoch=4)
         with pytest.raises(ValueError, match="different configuration"):
-            other.restore(path, model)
+            other.restore(path)
 
     def test_restore_error_mentions_weights_are_not_restored(
         self, tmp_path, device: str
     ) -> None:
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
         other, model = _sampling(device, {}, steps_per_epoch=4)
         with pytest.raises(ValueError, match="weights"):
-            other.restore(path, model)
+            other.restore(path)
 
     def test_warm_start_after_restore_raises(self, tmp_path, device: str) -> None:
         """The two are mutually exclusive; replaying over a restore corrupts it."""
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
         runner2, model = _make_runner(device)
-        runner2.restore(path, model)
+        runner2.restore(path)
         with pytest.raises(RuntimeError, match="mutually exclusive"):
-            runner2.warm_start(_make_batch(device=device), model)
+            runner2.warm_start(_make_batch(device=device))
 
     def test_restore_primes_forces(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
         runner2, model = _make_runner(device)
-        restored = runner2.restore(path, model)
+        restored = runner2.restore(path)
         assert torch.count_nonzero(restored.forces) > 0
         assert runner2.last_outputs, "restore did not prime forces"
 
@@ -627,7 +627,7 @@ class TestRunnerCheckpointRestore:
         batch = _make_batch(device=device)
         bias = _SharedHistoryBias()
         runner, model = _sampling(device, {"shared": bias}, steps_per_epoch=4)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         assert float(bias.pending) == 4, "precondition: commit has not run yet"
         assert float(bias.published) == 0
 
@@ -648,14 +648,14 @@ class TestRunnerCheckpointRestore:
         batch = _make_batch(device=device)
         bias = _SharedHistoryBias()
         runner, model = _sampling(device, {"shared": bias}, steps_per_epoch=4)
-        batch = runner.run(batch, model, n_steps=4)
+        batch = runner.run(batch, n_steps=4)
         runner.checkpoint(tmp_path / "a.zarr")
         assert bias.commit_calls == 1
 
         # Continuing crosses into epoch 1. Its first step observes the epoch
         # change and takes the lazy path for epoch 0 — which must be a no-op,
         # since the checkpoint already drained it.
-        batch = runner.run(batch, model, n_steps=4, prime=False)
+        batch = runner.run(batch, n_steps=4, prime=False)
         assert bias.commit_calls == 1, (
             f"epoch 0 was committed {bias.commit_calls} times"
         )
@@ -670,7 +670,7 @@ class TestRunnerCheckpointRestore:
         batch = _make_batch(device=device)
         bias = _SharedHistoryBias()
         runner, model = _sampling(device, {"shared": bias}, steps_per_epoch=4)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         runner.checkpoint(tmp_path / "a.zarr")
         runner.checkpoint(tmp_path / "b.zarr")
         assert bias.commit_calls == 1
@@ -681,18 +681,18 @@ class TestRunnerCheckpointRestore:
         batch = _make_batch(device=device)
         bias = _SharedHistoryBias()
         runner, model = _sampling(device, {"shared": bias}, steps_per_epoch=4)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
         bias2 = _SharedHistoryBias()
         runner2, model = _sampling(device, {"shared": bias2}, steps_per_epoch=4)
-        resumed = runner2.restore(path, model)
+        resumed = runner2.restore(path)
         assert bias2.commit_calls == 0, "restore re-ran a committed epoch"
         assert float(bias2.published) == 4
 
         # Crossing into epoch 1 must not re-commit epoch 0 either.
-        resumed = runner2.run(resumed, model, n_steps=4, prime=False)
+        resumed = runner2.run(resumed, n_steps=4, prime=False)
         assert bias2.commit_calls == 0
         assert float(bias2.published) == 4
 
@@ -708,7 +708,7 @@ class TestRunnerCheckpointRestore:
         batch = _make_batch(device=device)
         bias = _SharedHistoryBias()
         runner, model = _sampling(device, {"shared": bias}, steps_per_epoch=4)
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         runner.checkpoint(tmp_path / "ck.zarr")
         assert bias.commit_calls == 0
 
@@ -716,7 +716,7 @@ class TestRunnerCheckpointRestore:
         """The cache must match the restored bias, not the fresh one."""
         batch = _make_batch(device=device)
         runner, model = _sampling(device, {"quiet": _QuietBias()}, steps_per_epoch=4)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         saved_version = runner.biases["quiet"].state_version
         assert saved_version == 4
 
@@ -725,7 +725,7 @@ class TestRunnerCheckpointRestore:
 
         bias2 = _QuietBias(bump=False)
         runner2, model = _sampling(device, {"quiet": bias2}, steps_per_epoch=4)
-        runner2.restore(path, model)
+        runner2.restore(path)
         assert bias2.state_version == saved_version
         assert runner2._bias_hook._last_seen_version["quiet"] == saved_version, (
             "seen-version cache still reflects the fresh bias, not the restored one"
@@ -740,14 +740,14 @@ class TestRunnerCheckpointRestore:
         """
         batch = _make_batch(device=device)
         runner, model = _sampling(device, {"quiet": _QuietBias()}, steps_per_epoch=4)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
         runner2, model = _sampling(
             device, {"quiet": _QuietBias(bump=False)}, steps_per_epoch=4
         )
-        resumed = runner2.restore(path, model)
+        resumed = runner2.restore(path)
 
         calls = {"n": 0}
         original = runner2._bias_hook._reprime
@@ -757,7 +757,7 @@ class TestRunnerCheckpointRestore:
             original(b)
 
         runner2._bias_hook._reprime = _counting_reprime  # type: ignore[method-assign]
-        runner2.run(resumed, model, n_steps=1, prime=False)
+        runner2.run(resumed, n_steps=1, prime=False)
         assert calls["n"] == 0, (
             f"re-primed {calls['n']} time(s) although no bias changed"
         )
@@ -768,14 +768,14 @@ class TestRunnerCheckpointRestore:
         """Re-baselining must not silence a genuine change."""
         batch = _make_batch(device=device)
         runner, model = _sampling(device, {"quiet": _QuietBias()}, steps_per_epoch=4)
-        runner.run(batch, model, n_steps=4)
+        runner.run(batch, n_steps=4)
         path = tmp_path / "ck.zarr"
         runner.checkpoint(path)
 
         runner2, model = _sampling(
             device, {"quiet": _QuietBias(bump=True)}, steps_per_epoch=4
         )
-        resumed = runner2.restore(path, model)
+        resumed = runner2.restore(path)
 
         calls = {"n": 0}
         original = runner2._bias_hook._reprime
@@ -785,11 +785,11 @@ class TestRunnerCheckpointRestore:
             original(b)
 
         runner2._bias_hook._reprime = _counting_reprime  # type: ignore[method-assign]
-        runner2.run(resumed, model, n_steps=1, prime=False)
+        runner2.run(resumed, n_steps=1, prime=False)
         assert calls["n"] == 1, "a genuine bias change no longer re-primes"
 
     def test_checkpoint_at_step_zero_is_a_boundary(self, tmp_path, device: str) -> None:
         batch = _make_batch(device=device)
         runner, model = _make_runner(device)
-        runner.prime_forces(batch, model)
+        runner.prime_forces(batch)
         runner.checkpoint(tmp_path / "ck.zarr")  # step 0 % N == 0

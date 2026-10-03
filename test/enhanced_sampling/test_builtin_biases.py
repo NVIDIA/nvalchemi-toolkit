@@ -61,6 +61,19 @@ def _cv(batch: Batch) -> torch.Tensor:
 # ===========================================================================
 
 
+def _materialised(batch: Batch) -> Batch:
+    """Return *batch* with its lazy segment pointers built, as a run leaves it.
+
+    ``Batch.batch_ptr`` is computed on first access behind a data-dependent
+    check that ``torch.compile(fullgraph=True)`` cannot trace.  The engine
+    reads it long before any bias is evaluated, so a compiled ``energy()``
+    never meets it unbuilt; a test handing a fresh batch straight to the
+    compiler has to do the same.
+    """
+    _ = batch.batch_ptr
+    return batch
+
+
 class TestPeriodicDifference:
     """Wrapping CV differences onto a circle."""
 
@@ -406,7 +419,7 @@ class TestBuiltinBiasCompile:
     ) -> None:
         """Per-state selection must not introduce a data-dependent branch."""
         torch._dynamo.reset()
-        batch = self._state_batch(device)
+        batch = _materialised(self._state_batch(device))
         bias = self._umbrella(device)
         compiled = torch.compile(bias.energy, fullgraph=True)
         energy = compiled(batch)
@@ -428,7 +441,8 @@ class TestBuiltinBiasCompile:
         torch._dynamo.reset()
         bias = self._umbrella(device)
         compiled = torch.compile(bias.energy, fullgraph=True)
-        assert compiled(_pair_batch([3.0], device=device)).shape == (1, 1)
+        batch = _materialised(_pair_batch([3.0], device=device))
+        assert compiled(batch).shape == (1, 1)
 
     def test_state_id_validation_survives_compilation(self, device: str) -> None:
         """Moving the check to evaluate() must not have removed it.
@@ -504,12 +518,13 @@ class TestBuiltinBiasCompile:
             torch.manual_seed(0)
             model = DemoModelWrapper(DemoModel()).to(device)
             runner = EnhancedSampling(
+                model=model,
                 engine=NVTLangevin,
                 engine_kwargs={"dt": 0.1, "temperature": 300.0, "friction": 0.1},
                 biases={"u": self._umbrella()},
                 compile_biases=compile_biases,
             )
-            runner.prime_forces(batch, model)
+            runner.prime_forces(batch)
             results.append(batch.forces.clone())
         assert torch.allclose(results[0], results[1], atol=1e-5)
 

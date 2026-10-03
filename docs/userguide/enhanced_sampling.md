@@ -36,15 +36,16 @@ umbrella = HarmonicUmbrellaBias(
 )
 
 sampling = EnhancedSampling(
+    model=model,                                    # any BaseModelMixin
     engine=NVTLangevin,                             # the class, not an instance
     engine_kwargs={"dt": 0.5, "temperature": 300.0, "friction": 0.05},
     biases={"umbrella": umbrella},
 )
 
 # One window per graph. batch already carries forces/energy buffers — see
-# "Batch requirements" below. `model` is any BaseModelMixin.
+# "Batch requirements" below.
 batch["thermodynamic_state_id"] = torch.tensor([0, 1, 2], device=device)
-batch = sampling.run(batch, model, n_steps=10_000)
+batch = sampling.run(batch, n_steps=10_000)
 ```
 
 Every window is a row of one batch, so all three are advanced by a single
@@ -53,8 +54,10 @@ batched force evaluation per step rather than three separate simulations.
 `EnhancedSampling` is a {class}`~nvalchemi.dynamics.DynamicsStrategy`: it holds
 a *recipe* for the engine — the class and its constructor arguments — rather
 than a live engine, and `run()` builds one on first use and drives it.
-`sampling.dynamics(model)` returns that engine if you need it directly; it is
-cached, so consecutive `run()` calls continue one trajectory.
+`sampling.dynamics()` returns that engine if you need it directly; it is
+cached, so consecutive `run()` calls continue one trajectory. Unlike the base
+class, `cache_engine` is always `True` here: the strategy's hooks hold the
+run's bookkeeping and belong to one engine.
 
 ## Collective variables
 
@@ -791,12 +794,13 @@ sampling.checkpoint("run.zarr")          # only at an epoch boundary
 
 # ... later, in a fresh process ...
 sampling2 = EnhancedSampling(
+    model=model,
     engine=NVTLangevin,
     engine_kwargs={"dt": 0.5, "temperature": 300.0, "friction": 0.05},
     biases={"umbrella": umbrella},
 )
-batch = sampling2.restore("run.zarr", model)   # returns a force-primed batch
-batch = sampling2.run(batch, model, n_steps=10_000, prime=False)
+batch = sampling2.restore("run.zarr")   # returns a force-primed batch
+batch = sampling2.run(batch, n_steps=10_000, prime=False)
 ```
 
 Resuming reproduces the **identical trajectory**. `NVTLangevin` derives its
@@ -960,12 +964,13 @@ exchange = ReplicaExchange(
     random_seed=2024,
 )
 sampling = EnhancedSampling(
+    model=model,
     engine=NVTLangevin,
     engine_kwargs={"dt": 0.5, "temperature": 300.0, "friction": 0.05},
     biases={},
     replica_exchange=exchange,
 )
-batch = sampling.run(batch, model, n_steps=100_000)
+batch = sampling.run(batch, n_steps=100_000)
 ```
 
 ### One walker per rung

@@ -166,6 +166,7 @@ wall = UpperWall(
 model = LennardJonesModelWrapper(sigma=3.4, epsilon=0.0104, cutoff=8.5).to(DEVICE)
 
 sampling = EnhancedSampling(
+    model=model,
     engine=NVTLangevin,
     engine_kwargs={"dt": 0.5, "temperature": 120.0, "friction": 0.05},
     biases={"umbrella": umbrella, "dissociation_wall": wall},
@@ -178,7 +179,7 @@ sampling = EnhancedSampling(
 
 logger.info("Initial CV per window: %s", bond_distance(batch).flatten().tolist())
 
-batch = sampling.run(batch, model, n_steps=N_STEPS)
+batch = sampling.run(batch, n_steps=N_STEPS)
 
 final_cv = bond_distance(batch).flatten().tolist()
 logger.info("Target centers:        %s", WINDOW_CENTERS)

@@ -185,6 +185,7 @@ wall = UpperWall(cv=bond_distance, threshold=9.0, stiffness=20.0, name="wall")
 model = LennardJonesModelWrapper(sigma=3.4, epsilon=0.0104, cutoff=8.5).to(DEVICE)
 
 sampling = EnhancedSampling(
+    model=model,
     engine=NVTLangevin,
     engine_kwargs={"dt": 0.5, "temperature": TEMPERATURE, "friction": 0.05},
     biases={"metad": metad, "wall": wall},
@@ -196,7 +197,7 @@ logger.info(
     [round(v, 3) for v in bond_distance(batch).flatten().tolist()],
 )
 
-batch = sampling.run(batch, model, n_steps=N_STEPS)
+batch = sampling.run(batch, n_steps=N_STEPS)
 
 logger.info(
     "Final CV per walker:   %s",
