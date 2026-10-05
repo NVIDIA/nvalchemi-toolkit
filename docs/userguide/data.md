@@ -229,62 +229,128 @@ custom field:
 All three routes record field ownership in the batch-owned schema. The explicit
 `field_levels` form is useful when the input objects should remain unchanged.
 
-### Storing a Hessian
+### Extending an existing Batch schema
 
-An atom-by-atom Hessian can use a separate product level whose left and right parents
-are both the built-in `atoms` level:
+An already-created {py:class}`~nvalchemi.data.Batch` can copy level declarations
+from another batch or register additional levels directly:
 
 ```python
-hessian_schema = LevelSchema()
-hessian_schema.add_product_level(
+destination.extend_level_schema(source.get_level_schema())
+destination.add_product_level(
     "atom_atom",
     left="atoms",
     right="atoms",
 )
-
-print(hessian_schema.level_kind("atom_atom"))  # 'product'
 ```
 
-The `atom_atom` level can hold atom-pair blocks from a Hessian. For a system with
-`N_i` atoms, a field on this level has logical shape `[N_i, N_i, 3, 3]`: the first
-two axes select the ordered atom pair, and the final axes contain the Cartesian
-second-derivative block. Product parent order is part of the definition; for
-different parents, `left × right` and `right × left` have different logical axis
-orders. Both parents must be registered ordinary segmented levels; products cannot
-use a uniform or product parent.
+{py:meth}`~nvalchemi.data.Batch.get_level_schema` returns a defensive copy, so
+changing the returned {py:class}`~nvalchemi.data.LevelSchema` does not modify the
+source batch. Schema extension copies declarations only; it does not copy tensor
+data, allocate storage groups, or create placeholder fields. Materialize a field
+separately with {py:meth}`~nvalchemi.data.Batch.add_key` after its level has been
+registered.
 
-Position Hessians returned by PyTorch normally interleave the atom and Cartesian
-axes as `[N_i, 3, N_i, 3]`. Move the second atom axis next to the first before
-storing the Cartesian `3 x 3` blocks on the product level:
+The names `get_level_schema`, `extend_level_schema`, `add_level`, and
+`add_product_level` are reserved for the `Batch` API during attribute-style access.
+Custom tensor fields may still use those names, but access them through item syntax:
 
 ```python
-def quadratic_energy(positions):
-    return positions.square().sum()
-
-
-raw_hessians = [
-    torch.func.hessian(quadratic_energy)(data.positions) for data in data_list
-]
-# Each raw Hessian has shape [N_i, 3, N_i, 3].
-hessian_blocks = [
-    hessian.permute(0, 2, 1, 3).contiguous() for hessian in raw_hessians
-]
-# Each stored value now has shape [N_i, N_i, 3, 3].
-
-hessian_batch = Batch.from_data_list(data_list, attr_map=hessian_schema)
-hessian_batch.add_key("hessian_blocks", hessian_blocks, level="atom_atom")
-
-print(hessian_batch.level_ptr("atom_atom").tolist())  # [0, 4, 13]
-print(hessian_batch.hessian_blocks.shape)  # torch.Size([13, 3, 3])
-print(hessian_batch.get_data(0).hessian_blocks.shape)  # torch.Size([2, 2, 3, 3])
+batch["get_level_schema"]
+batch["add_product_level"]
 ```
 
-The two systems contain two and three atoms, so their Hessians contribute four and
-nine atom-pair blocks. The supplied blocks are packed without padding inside the
-batch and restored with their two atom axes by
+Attribute syntax such as `batch.get_level_schema()` and
+`batch.add_product_level(...)` always resolves to the corresponding `Batch` API.
+
+### Adding fields to a zero-graph Batch
+
+A zero-graph batch has no per-system tensors from which `add_key()` can infer a
+field's dtype or trailing payload shape. Supply both explicitly when materializing
+such a field:
+
+```python
+empty_batch.add_product_level(
+    "atom_atom",
+    left="atoms",
+    right="atoms",
+)
+empty_batch.add_key(
+    "pair_blocks",
+    [],
+    level="atom_atom",
+    dtype=torch.float32,
+    payload_shape=(3, 3),
+)
+
+print(empty_batch.pair_blocks.shape)  # torch.Size([0, 3, 3])
+print(empty_batch.level_ptr("atom_atom").tolist())  # [0]
+```
+
+`payload_shape` contains only dimensions not owned by the level. Uniform levels
+own the graph axis, segmented levels own one cardinality axis, and product levels
+own two parent-cardinality axes. Existing pre-allocated group capacity is retained;
+a newly materialized group starts with zero capacity. For non-empty values these
+keywords are optional consistency checks, and ordinary shape and dtype inference
+remains unchanged.
+
+### Storing a Hessian
+
+{py:meth}`~nvalchemi.models.base.BaseModelMixin.compute_hessian` stores the
+Hessian of total energy with respect to Cartesian positions on a product level
+whose left and right parents are both the built-in `atoms` level:
+
+```python
+result = model.compute_hessian(
+    batch,
+    strategy="vmap",
+    row_chunk_size=32,
+)
+
+assert result is batch
+print(result.get_level_schema().product_parents["atom_atom"])
+# ('atoms', 'atoms')
+```
+
+To keep a simulation batch unchanged, supply a separate analysis batch with its
+required neighbor data already prepared.
+
+For a system with `N_i` atoms, `get_data(i).hessian` has logical shape
+`[N_i, N_i, 3, 3]`. Its axes are
+`[atom_out, atom_in, xyz_out, xyz_in]`. A batch containing systems with two and
+three atoms packs their four and nine atom-pair blocks without padding:
+
+```python
+print(result.level_ptr("atom_atom").tolist())  # [0, 4, 13]
+print(result.hessian.shape)  # torch.Size([13, 3, 3])
+print(result.get_data(0).hessian.shape)  # torch.Size([2, 2, 3, 3])
+```
+
+The product blocks are restored with their two atom axes by
 {py:meth}`~nvalchemi.data.Batch.get_data` and
-{py:meth}`~nvalchemi.data.Batch.to_data_list`. `Batch` stores and reconstructs these
-values; it does not compute the Hessian.
+{py:meth}`~nvalchemi.data.Batch.to_data_list`. They retain their schema, pointers,
+dtype, and values through cloning, selection, compatible append, and device
+movement. The stored tensor is detached from the construction graph.
+
+The field also uses the existing custom-level Zarr representation:
+
+```python
+from nvalchemi.data import AtomicDataZarrReader, AtomicDataZarrWriter, Dataset
+
+writer = AtomicDataZarrWriter("hessians.zarr")
+writer.write(result)
+
+dataset = Dataset(AtomicDataZarrReader("hessians.zarr"), device="cpu")
+loaded = dataset.load_batches([[0, 1]])[0]
+print(loaded.get_data(1).hessian.shape)  # torch.Size([3, 3, 3, 3])
+```
+
+Appending another Hessian batch requires the same level definitions, field set,
+dtype, and trailing `[3, 3]` payload shape. Zarr stores the packed product payload
+and an `int64` dataset-wide pointer; no Hessian-specific on-disk format is used.
+
+Dense Hessians have quadratic storage cost and are intended for explicit analysis
+or dataset generation. Do not carry them through active in-flight dynamics
+batches. Use the matrix-free model HVP APIs when dense storage is unnecessary.
 
 | Field kind | Per-system logical shape | Packed `Batch` shape |
 |---|---|---|
