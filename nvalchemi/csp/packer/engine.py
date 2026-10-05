@@ -58,7 +58,7 @@ _REFILL_COUNT_SEED_STRIDE = 9176
 
 @dataclass
 class _OverlapReliefCore:
-    """Mutable local packing state advanced in bounded, resumable rounds."""
+    """Mutable local packing state for one packing run."""
 
     packer: OverlapReliefPacker
     inputs: MolecularPackingInput
@@ -149,13 +149,9 @@ class _OverlapReliefCore:
         )
         return selected_rows
 
-    def advance(
-        self, *, max_iterations: int, progress_callback: Callable[..., Any] | None
-    ) -> bool:
-        """Advance local state by at most ``max_iterations`` relaxation steps."""
-        for _ in range(max_iterations):
-            if self.accepted_total >= self.local_target or not self.active_rows:
-                break
+    def run(self, *, progress_callback: Callable[..., Any] | None) -> None:
+        """Run local packing until the target is reached or candidates are exhausted."""
+        while self.accepted_total < self.local_target and self.active_rows:
             self.fresh_rows.zero_()
             contacts = contact_forces(
                 conformer_positions=self.formula["conformer_positions"],
@@ -282,7 +278,6 @@ class _OverlapReliefCore:
             self.iteration += 1
         if self.accepted_total >= self.local_target:
             self.stop_reason = PackingStopReason.TARGET_REACHED
-        return self.accepted_total >= self.local_target or not self.active_rows
 
 
 class OverlapReliefPacker:
@@ -656,11 +651,7 @@ class OverlapReliefPacker:
         initial_count = min(count_cap, core.remaining_budget())
         initial_rows = torch.arange(initial_count, dtype=torch.int64, device=device)
         core.active_rows = core.refill(initial_rows).tolist()
-        while not core.advance(
-            max_iterations=32,
-            progress_callback=progress_callback,
-        ):
-            pass
+        core.run(progress_callback=progress_callback)
 
         report = PackingReport(
             rank=call_context.rank,
