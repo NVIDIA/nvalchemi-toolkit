@@ -276,42 +276,60 @@ def _propagator_tree(dynamics: BaseDynamics) -> Iterator[BaseDynamics]:
         pending.extend(stages.values() if isinstance(stages, Mapping) else stages)
 
 
-def _competing_migrators(
-    dynamics: BaseDynamics, criterion: ConvergenceHook
-) -> list[ConvergenceHook]:
-    """Return the status migrators already on *dynamics* that are not *criterion*.
+def _status_migrators(dynamics: BaseDynamics) -> list[ConvergenceHook]:
+    """Return every status migrator on *dynamics* and its sub-stages.
 
     A status migrator is a :class:`~nvalchemi.dynamics.base.ConvergenceHook`
     with both ``source_status`` and ``target_status`` set. Every place a
     propagator can hold one is searched. That covers its registered hooks (on
     a :class:`~nvalchemi.dynamics.FusedStage`, the hooks registered at the
-    fused level) and its ``convergence_hook``, which the lifecycle is about to
-    replace. It also covers the same two places on every sub-stage, where a
-    fused stage puts the migrators it builds itself: one on every sub-stage
-    except the last, and one on the last whenever it declares a
-    ``convergence_hook``.
+    fused level) and its ``convergence_hook``. It also covers the same two
+    places on every sub-stage, where a fused stage puts the migrators it
+    builds itself: one on every sub-stage except the last, and one on the
+    last whenever it declares a ``convergence_hook``.
 
     Parameters
     ----------
     dynamics : BaseDynamics
-        Propagator the lifecycle is being installed on.
-    criterion : ConvergenceHook
-        The lifecycle's own criterion, which is not a competitor.
+        Propagator to walk.
 
     Returns
     -------
     list[ConvergenceHook]
-        The competing criteria, in the order they were found.
+        The migrators, in the order they were found.
     """
     return [
         hook
         for propagator in _propagator_tree(dynamics)
         for hook in (*propagator.hooks, propagator.convergence_hook)
         if isinstance(hook, ConvergenceHook)
-        and hook is not criterion
         and hook.source_status is not None
         and hook.target_status is not None
     ]
+
+
+def _competing_migrators(
+    dynamics: BaseDynamics, criterion: ConvergenceHook
+) -> list[ConvergenceHook]:
+    """Return the status migrators already on *dynamics* that are not *criterion*.
+
+    The lifecycle is about to install *criterion* as the propagator's
+    ``convergence_hook`` and as a registered hook, so *criterion* itself is
+    not a competitor wherever the walk finds it.
+
+    Parameters
+    ----------
+    dynamics : BaseDynamics
+        Propagator the lifecycle is being installed on.
+    criterion : ConvergenceHook
+        The lifecycle's own criterion.
+
+    Returns
+    -------
+    list[ConvergenceHook]
+        The competing criteria, in the order they were found.
+    """
+    return [hook for hook in _status_migrators(dynamics) if hook is not criterion]
 
 
 def _check_sole_migrator(dynamics: BaseDynamics, criterion: ConvergenceHook) -> None:
@@ -415,7 +433,9 @@ class OnPolicySettings(BaseModel):
         Propagator steps between teacher labelings. Each segment's last frame
         is labeled in addition. Default ``100``.
     replay_capacity : int | None, optional
-        Frame capacity of the replay buffer. Default ``None`` (unbounded).
+        Frame capacity of the replay buffer. Default ``None`` (unbounded). A
+        Boltzmann objective needs a bound; see the :class:`OnPolicyConfig`
+        Notes.
     replay_eviction : {"fifo"}, optional
         Eviction policy of the replay buffer, as a name a recipe can store. A
         policy instance is passed to :class:`OnPolicyConfig` instead. Default
@@ -435,6 +455,14 @@ class OnPolicySettings(BaseModel):
         Whether a multi-rank run refuses to start unless the ``SETUP`` stage
         replaced the student with a wrapper that owns it, as a ``DDPHook``
         does. Default ``True``.
+    samples_equilibrium : bool | None, optional
+        Whether the propagator samples an equilibrium ensemble, the ensemble a
+        distribution-matching objective is defined on. Default ``None`` infers
+        the answer from the propagator: a stage whose class declares
+        :attr:`~nvalchemi.dynamics.BaseDynamics.samples_equilibrium` false, as
+        the relaxation optimizers do, or a convergence criterion counts as not
+        sampling one. ``True`` or ``False`` overrides that inference for the
+        objective's guard.
     fmax : float | None, optional
         Max force norm below which a generated trajectory counts as finished.
         Setting it turns on the trajectory lifecycle of a relaxation run, in
@@ -673,6 +701,20 @@ class OnPolicySettings(BaseModel):
             ),
         ),
     ] = True
+    samples_equilibrium: Annotated[
+        bool | None,
+        Field(
+            default=None,
+            description=(
+                "Whether the propagator samples an equilibrium ensemble. None "
+                "infers it: a stage declaring samples_equilibrium=False on its "
+                "class, as the relaxation optimizers do, or a convergence "
+                "criterion is treated as not sampling equilibrium. True or "
+                "False overrides that inference for a distribution-matching "
+                "objective's guard."
+            ),
+        ),
+    ] = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -923,6 +965,17 @@ class OnPolicyConfig(OnPolicySettings):
     migrator already on the propagator is refused when the config is built,
     and one registered afterwards is refused when the run starts. See
     :ref:`training-distillation-api` for the capture routes and the backfill.
+
+    Distribution-matching objectives are defined on equilibrium ensembles, and
+    a relaxation path is not one. A
+    :class:`~nvalchemi.training.distillation.BoltzmannMatchingLoss` is
+    therefore refused at construction beside a relaxation propagator or any
+    convergence criterion, unless ``samples_equilibrium=True`` declares that
+    the propagator does sample an equilibrium ensemble. ``False`` refuses the
+    term whatever the propagator is. The term should also have a bounded
+    ``replay_capacity``. Energy, force, and atomic-energy matching are
+    pointwise, so they distill a relaxation path exactly as they distill a
+    trajectory.
     """
 
     dynamics: Annotated[

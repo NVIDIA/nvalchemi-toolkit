@@ -44,6 +44,7 @@ from nvalchemi.training.losses import (
     assert_same_shape,
     frobenius_mse,
     graph_balanced_mean,
+    masked_mean,
     per_graph_mean,
     per_graph_sum,
 )
@@ -378,6 +379,92 @@ class TestReductions:
         with pytest.raises(ValueError, match=f"toy requires {missing}=... metadata"):
             graph_balanced_mean(
                 torch.zeros(6), torch.ones(6), batch_idx, num_graphs, loss_name="toy"
+            )
+
+    def test_masked_mean_global_divides_by_the_valid_count(self) -> None:
+        """Without graph balancing every valid entry weighs the same, whatever its graph."""
+        residual = torch.tensor([2.0, 4.0, 0.0, 6.0, 0.0, 8.0])
+        valid = torch.tensor([True, True, False, True, False, True])
+
+        loss, per_sample = masked_mean(residual, valid, graph_balanced=False)
+
+        assert loss.item() == pytest.approx(5.0)
+        assert per_sample is None
+
+    def test_masked_mean_graph_balanced_is_graph_balanced_mean(self) -> None:
+        """With graph balancing the scalar and the per-graph means are graph_balanced_mean's."""
+        residual = torch.tensor([2.0, 4.0, 0.0, 6.0, 0.0, 8.0])
+        valid = torch.tensor([True, True, False, True, False, True])
+
+        loss, per_sample = masked_mean(
+            residual, valid, graph_balanced=True, batch_idx=self.batch_idx, num_graphs=3
+        )
+
+        expected, expected_per_sample = graph_balanced_mean(
+            residual, valid, self.batch_idx, 3, loss_name="toy"
+        )
+        torch.testing.assert_close(loss, expected)
+        torch.testing.assert_close(per_sample, expected_per_sample)
+        assert loss.item() != pytest.approx(5.0)
+
+    def test_masked_mean_reads_graph_metadata_from_a_batch(self) -> None:
+        """A batch stands in for batch_idx and num_graphs when the keywords are left out."""
+        batch = SimpleNamespace(batch_idx=self.batch_idx, num_graphs=3)
+        residual, valid = torch.arange(6.0), torch.ones(6, dtype=torch.bool)
+
+        loss, per_sample = masked_mean(
+            residual, valid, graph_balanced=True, batch=batch
+        )
+
+        expected, _ = graph_balanced_mean(
+            residual, valid, self.batch_idx, 3, loss_name="toy"
+        )
+        torch.testing.assert_close(loss, expected)
+        assert per_sample is not None and per_sample.shape == (3,)
+
+    @pytest.mark.parametrize(
+        "graph_balanced", [False, True], ids=["global", "balanced"]
+    )
+    def test_masked_mean_half_precision_residual_reduces_in_float32(
+        self, graph_balanced: bool
+    ) -> None:
+        """Three thousand fp16 ones average to one in a float32 result on either branch."""
+        num_nodes = 3000
+        residual = torch.ones(num_nodes, dtype=torch.float16)
+        valid = torch.ones(num_nodes, dtype=torch.bool)
+
+        loss, _ = masked_mean(
+            residual,
+            valid,
+            graph_balanced=graph_balanced,
+            batch_idx=torch.zeros(num_nodes, dtype=torch.int32),
+            num_graphs=1,
+        )
+
+        assert loss.dtype == torch.float32
+        assert loss.item() == pytest.approx(1.0)
+
+    @pytest.mark.parametrize(
+        "graph_balanced", [False, True], ids=["global", "balanced"]
+    )
+    def test_masked_mean_fully_masked_residual_is_zero(
+        self, graph_balanced: bool
+    ) -> None:
+        """No valid entry reduces to 0.0 rather than dividing by zero."""
+        loss, _ = masked_mean(
+            torch.zeros(6),
+            torch.zeros(6, dtype=torch.bool),
+            graph_balanced=graph_balanced,
+            batch_idx=self.batch_idx,
+            num_graphs=3,
+        )
+        assert loss.item() == 0.0
+
+    def test_masked_mean_missing_metadata_names_the_loss(self) -> None:
+        """The graph-balanced branch reports the calling loss and the missing keyword."""
+        with pytest.raises(ValueError, match="toy requires batch_idx=... metadata"):
+            masked_mean(
+                torch.zeros(6), torch.ones(6), graph_balanced=True, loss_name="toy"
             )
 
     @pytest.mark.parametrize(

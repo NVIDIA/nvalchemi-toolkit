@@ -20,8 +20,12 @@ than duplicated, and its autouse seeding fixture applies here too.
 
 from __future__ import annotations
 
+import itertools
+import socket
+import time
 from collections import OrderedDict
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
+from queue import Empty
 from typing import Any, Literal
 
 import pytest
@@ -30,6 +34,7 @@ from torch import nn
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.data.datapipes.in_memory_dataset import InMemoryDataset
+from nvalchemi.hooks import TrainContext
 from nvalchemi.models.base import (
     BaseModelMixin,
     ModelConfig,
@@ -37,6 +42,7 @@ from nvalchemi.models.base import (
     NeighborListFormat,
 )
 from nvalchemi.models.lj import LennardJonesModelWrapper
+from nvalchemi.training import TrainingStage
 from nvalchemi.training.distillation._attach import _attach_teacher_labels
 from nvalchemi.training.distillation.scoring import TeacherScorer
 from nvalchemi.training.distillation.seeding import FitPolicy
@@ -60,6 +66,12 @@ _REFERENCE_ELEMENT = 6
 
 _ATOMS_PER_SYSTEM = 4
 """Atoms in every synthetic on-policy system, so batches stay small and uniform."""
+
+_RANK_REPORT_TIMEOUT = 600.0
+"""Seconds every spawned rank has to report before the world is declared hung."""
+
+_LATTICE_SPACING = 3.82
+"""Simple-cubic spacing sitting at the Lennard-Jones teacher's energy minimum."""
 
 
 class _DirectForceModel(nn.Module):
@@ -356,6 +368,71 @@ class _ListSource:
         self._cursor = int(state["cursor"])
 
 
+class _RecordingLossHook:
+    """Record the total loss of every completed training batch."""
+
+    frequency = 1
+    stage = TrainingStage.AFTER_BATCH
+
+    def __init__(self) -> None:
+        """Start with an empty loss trace."""
+        self.losses: list[float] = []
+
+    def __call__(self, ctx: TrainContext, stage: TrainingStage) -> None:  # noqa: ARG002
+        """Append the loss the strategy just backpropagated."""
+        self.losses.append(float(ctx.loss))
+
+
+def _free_port() -> int:
+    """Return an available localhost TCP port for process-group setup."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def _spawn_ranks(
+    worker: Callable[..., None], rank_args: Sequence[tuple[Any, ...]]
+) -> dict[int, dict[str, Any]]:
+    """Spawn one process per entry of *rank_args* and collect what each reports.
+
+    Every worker is handed its own arguments followed by the result queue. The
+    wait polls the children rather than blocking on the queue for the whole
+    timeout, so a rank that dies without reporting, taking its peers down into
+    a collective that will never complete, fails the call in seconds.
+    """
+    ctx = torch.multiprocessing.get_context("spawn")
+    result_queue = ctx.Queue()
+    procs = [
+        ctx.Process(target=worker, args=(*args, result_queue)) for args in rank_args
+    ]
+    for proc in procs:
+        proc.start()
+    results: dict[int, dict[str, Any]] = {}
+    deadline = time.monotonic() + _RANK_REPORT_TIMEOUT
+    try:
+        while len(results) < len(procs):
+            try:
+                rank, payload = result_queue.get(timeout=1)
+            except Empty:
+                dead = {
+                    index: proc.exitcode
+                    for index, proc in enumerate(procs)
+                    if proc.exitcode not in (None, 0)
+                }
+                assert not dead, f"ranks exited before reporting: {dead}."
+                assert time.monotonic() < deadline, (
+                    f"{len(procs) - len(results)} rank(s) never reported."
+                )
+                continue
+            results[rank] = payload
+    finally:
+        for proc in procs:
+            proc.join(timeout=60)
+            if proc.is_alive():
+                proc.kill()
+    return results
+
+
 def _build_pair_potential_teacher(
     num_atom_types: int = 20, cutoff: float = _PAIR_CUTOFF, seed: int = 0
 ) -> _PairPotentialTeacher:
@@ -386,6 +463,47 @@ def _build_small_dataset(n_systems: int = 5, base_seed: int = 200) -> InMemoryDa
         for index in range(n_systems)
     ]
     return InMemoryDataset(in_memory_batch=Batch.from_data_list(data_list))
+
+
+def _build_replica_atomic_data(
+    n_atoms: int = 4, seed: int = 0, predictions: bool = True
+) -> AtomicData:
+    generator = torch.Generator().manual_seed(seed)
+    predicted = (
+        {"energy": torch.zeros(1, 1), "forces": torch.zeros(n_atoms, 3)}
+        if predictions
+        else {}
+    )
+    return AtomicData(
+        positions=torch.randn(n_atoms, 3, generator=generator),
+        atomic_numbers=torch.full((n_atoms,), 6, dtype=torch.long),
+        atomic_masses=torch.ones(n_atoms),
+        **predicted,
+    )
+
+
+def _build_replica_batch(
+    n_systems: int = 5,
+    n_atoms: int = 4,
+    base_seed: int = 500,
+    predictions: bool = True,
+) -> Batch:
+    return Batch.from_data_list(
+        [
+            _build_replica_atomic_data(
+                n_atoms, seed=base_seed + index, predictions=predictions
+            )
+            for index in range(n_systems)
+        ]
+    )
+
+
+def _build_replica_dataset(
+    n_systems: int = 5, n_atoms: int = 4, base_seed: int = 500
+) -> InMemoryDataset:
+    return InMemoryDataset(
+        in_memory_batch=_build_replica_batch(n_systems, n_atoms, base_seed)
+    )
 
 
 def _build_atom_only_dataset(
@@ -500,6 +618,65 @@ def _build_reference_dataset(
     return InMemoryDataset(in_memory_batch=frames)
 
 
+def _build_lattice_data(
+    cells: int = 3,
+    spacing: float = _LATTICE_SPACING,
+    speed: float = 0.0,
+    jitter: float = 0.0,
+) -> AtomicData:
+    """Return a simple-cubic argon lattice, optionally jittered and given velocities."""
+    positions = torch.tensor(
+        [
+            [i * spacing, j * spacing, k * spacing]
+            for i, j, k in itertools.product(range(cells), repeat=3)
+        ],
+        dtype=torch.float32,
+    )
+    n_atoms = positions.shape[0]
+    if jitter != 0.0:
+        generator = torch.Generator().manual_seed(5)
+        offsets = torch.rand(n_atoms, 3, generator=generator) * 2.0 - 1.0
+        positions = positions + jitter * offsets
+    data = AtomicData(
+        positions=positions,
+        atomic_numbers=torch.full((n_atoms,), 18, dtype=torch.long),
+        atomic_masses=torch.full((n_atoms,), 39.948),
+        cell=torch.eye(3).unsqueeze(0) * (cells * spacing),
+        pbc=torch.ones(1, 3, dtype=torch.bool),
+        forces=torch.zeros(n_atoms, 3),
+        energy=torch.zeros(1, 1),
+    )
+    velocities = torch.zeros(n_atoms, 3)
+    if speed != 0.0:
+        generator = torch.Generator().manual_seed(7)
+        velocities = speed * torch.randn(n_atoms, 3, generator=generator)
+        velocities -= velocities.mean(dim=0, keepdim=True)
+    data.add_node_property("velocities", velocities)
+    return data
+
+
+def _build_lattice_batch(
+    cells: int = 3,
+    spacing: float = _LATTICE_SPACING,
+    speed: float = 0.0,
+    jitter: float = 0.0,
+) -> Batch:
+    """Return the :func:`_build_lattice_data` lattice as a one-graph batch."""
+    return Batch.from_data_list([_build_lattice_data(cells, spacing, speed, jitter)])
+
+
+def _build_pair_batch(distance: float, cell_length: float = 20.0) -> Batch:
+    """Return one graph of two hydrogen atoms *distance* apart in a cubic box."""
+    data = AtomicData(
+        positions=torch.tensor([[0.0, 0.0, 0.0], [distance, 0.0, 0.0]]),
+        atomic_numbers=torch.ones(2, dtype=torch.long),
+        atomic_masses=torch.ones(2),
+        cell=torch.eye(3).unsqueeze(0) * cell_length,
+        pbc=torch.ones(1, 3, dtype=torch.bool),
+    )
+    return Batch.from_data_list([data])
+
+
 @pytest.fixture
 def demo_teacher() -> Any:
     """Return a freshly-seeded autograd-force :class:`DemoModelWrapper` teacher."""
@@ -552,3 +729,9 @@ def periodic_batch() -> Batch:
 def periodic_dataset() -> InMemoryDataset:
     """Return an :class:`InMemoryDataset` of 4 periodic systems with 4-7 atoms each."""
     return _build_periodic_dataset()
+
+
+@pytest.fixture
+def lj_lattice_batch() -> Batch:
+    """Return a 27-atom simple-cubic argon lattice at rest, one graph."""
+    return _build_lattice_batch()

@@ -40,10 +40,13 @@ For install options, refer to the install guide below.
   - {doc}`Training: Strategy and Runtime <training>`
   - {doc}`Losses: Composable Training Terms <losses>`
   - {doc}`Fine-Tuning Pretrained Models <finetuning>`
+  - {doc}`Distilling a Teacher Into a Student <distillation>`
 - {doc}`Serialization & Reproducibility <serialization>`
 - {doc}`Hooks: Observe & Modify <hooks>`
 - {doc}`Reporting: Summaries and Dashboards <reporting>`
 - [Dynamics: Optimization and MD](dynamics)
+- {doc}`Enhanced Sampling: Biases and Free Energy <enhanced_sampling>`
+- {doc}`Generative Models <generative>`
 
 ## Distributed Simulations
 
@@ -88,6 +91,8 @@ serialization
 hooks
 reporting
 dynamics
+enhanced_sampling
+generative
 ```
 
 ```{toctree}

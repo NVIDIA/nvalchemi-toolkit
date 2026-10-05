@@ -77,6 +77,45 @@ Each step then proceeds through these stages in order:
 {py:class}`~nvalchemi.dynamics.base.DynamicsStage` stage it should fire at and at
 what frequency, so you have fine-grained control over when callbacks execute.
 
+## Declarative dynamics strategies
+
+{py:class}`~nvalchemi.dynamics.strategy.DynamicsStrategy` stores engine
+configuration and reconstructible hook specs. For a workflow using one engine,
+set `engine` and pass additional constructor arguments in `engine_kwargs`:
+
+```python
+from nvalchemi.dynamics import DynamicsStrategy, NVTLangevin
+
+strategy = DynamicsStrategy(
+    model=model,
+    engine=NVTLangevin,
+    engine_kwargs={"dt": 1.0, "temperature": 300.0, "friction": 0.01},
+    n_steps=100,
+    cache_engine=True,
+)
+batch = strategy.run(batch)
+batch = strategy.run(batch, n_steps=200)
+```
+
+The default `build_engine()` supplies `model`, `n_steps`, and `build_hooks()`
+to the engine. Keep those three keys out of `engine_kwargs`. `build_hooks()`
+returns a new list of `extra_hooks`. Subclasses can override it to add their own
+hooks, or override `build_engine()` for workflows with multiple stages, such as
+{py:class}`~nvalchemi.dynamics.mep.NEB`. Without an `engine` or a
+`build_engine()` override, construction raises `NotImplementedError` when the
+builder is called.
+
+By default, every `run()` builds a fresh engine. With `cache_engine=True`, the
+first run builds the engine and later runs reuse its original configuration and
+runtime state, including the step counter. A subclass can opt in by declaring
+`cache_engine: bool = True`. Calling `build_engine()` directly always constructs
+a fresh engine.
+
+`to_spec_dict()` serializes the engine class as an importable dotted path and
+hooks as constructor specs. Restore it with
+`DynamicsStrategy.from_spec_dict(spec, model=model)`. The live model and cached
+engine state are excluded, so a restored strategy starts with an empty cache.
+
 ## Using dynamics as a context manager
 
 All dynamics objects (optimizers, integrators, fused stages) support Python's
@@ -85,9 +124,14 @@ context manager protocol. The `with` block manages a dedicated
 properly opened and closed:
 
 ```python
-from nvalchemi.dynamics import FIRE, ConvergenceHook
+from nvalchemi.dynamics import FIRE2, ConvergenceHook
 
-with FIRE(model=model, dt=0.1, n_steps=500, hooks=[ConvergenceHook.from_fmax(0.05)]) as opt:
+with FIRE2(
+    model=model,
+    dt=0.1,
+    n_steps=500,
+    convergence_hook=ConvergenceHook.from_fmax(0.05),
+) as opt:
     relaxed = opt.run(batch)
 ```
 
@@ -106,7 +150,9 @@ with the `+` operator:
 ```python
 from nvalchemi.dynamics import FIRE, NVTLangevin, ConvergenceHook
 
-relax = FIRE(model=model, dt=0.1, n_steps=200, hooks=[ConvergenceHook.from_fmax(0.05)])
+relax = FIRE(
+    model=model, dt=0.1, n_steps=200, convergence_hook=ConvergenceHook.from_fmax(0.05)
+)
 md = NVTLangevin(model=model, dt=1.0, temperature=300.0, friction=0.01, n_steps=5000)
 
 pipeline = relax + md
@@ -354,17 +400,69 @@ The {doc}`/examples/distributed/index` gallery contains end-to-end examples,
 including multi-pipeline topologies and monitoring with persistent storage.
 ```
 
+(dynamics-structure-sources)=
+
+## Structure sources
+
+A run that graduates structures needs fresh ones to take their place, and a run
+that starts many trajectories needs them dealt out once.
+{py:class}`~nvalchemi.dynamics.OrderedStructureSampler` is that supply: a
+dataset served in row order from one position, `next_row`. The initial batch,
+and every later *backfill* (the structures drawn to replace the ones that
+finished) read from that position. A structure is therefore propagated once per
+pass over the rows, and a sampler restored from its `state_dict()` (`next_row`,
+`wraps`, `next_system_id`, `rank`, and `world_size`) picks up where it stopped
+rather than at row zero. `shard()` resets the position, so a caller that
+re-shards at start-up, as the distillation segment loop does, begins at the
+first row of the shard unless it restores the state afterwards.
+
+An *unbudgeted* sampler serves every row it owns as one batch, so that batch
+*is* the set of systems the run generates from. A budget --- `max_atoms`,
+`max_batch_size`, or `max_edges` --- packs the initial batch first-fit in row
+order instead. Packing stops at the first structure that does not fit and leaves
+the remainder, in row order, for the backfill. The initial packing and each
+backfill are one {py:meth}`~nvalchemi.dynamics.OrderedStructureSampler.draw`
+call under a {py:class}`~nvalchemi.dynamics.WithinBudget` policy: the initial
+batch with `on_miss="stop"`, and a backfill with `on_miss="skip"`, which passes
+over a row that does not fit rather than stalling on it. When you drive `draw`
+yourself, `fits=` takes any {py:class}`~nvalchemi.dynamics.FitPolicy`, a
+callable over the running atom and edge totals of the batch being drawn.
+`max_edges` counts the edges a store saved, not the neighbor list a propagator's
+hook rebuilds each step, so set it only when the stored count is the one that
+matters.
+
+{py:meth}`~nvalchemi.dynamics.OrderedStructureSampler.shard` narrows the
+sampler to the rows one rank owns, dealt strided and unpadded through
+{py:func}`~nvalchemi.data.datapipes.distributed_shard`: rank `r` takes every
+`world_size`-th row from offset `r`, so the shards are disjoint and cover the
+dataset. `recycle=True` wraps the position to the front of the shard when it
+reaches the end instead of reporting the sampler exhausted; `wraps` counts how
+often that happened, and the `system_id`s keep climbing across a wrap. One
+`draw` reaches every row at most once, so a single call never serves two copies
+of one structure.
+
+Every batch the sampler hands over is stamped with the bookkeeping an in-flight
+run maintains: `status` zeros and consecutive `system_id`s. A store written by an
+earlier run, whose exit statuses a propagator would otherwise read as finished,
+can therefore be propagated again without a manual cleanup pass. Any object
+satisfying the {py:class}`~nvalchemi.dynamics.StructureSource` protocol can
+stand in for the sampler; {doc}`/modules/dynamics/api` lists its members.
+
 ## What's next
 
 ```{toctree}
 :maxdepth: 1
 
 dynamics_simulations
+dynamics_mep
 dynamics_sinks
 ```
 
 - [Optimization and Integrators](dynamics_simulations) --- FIRE, NVE, NVT, NPT and
   their configuration.
+- [Reaction Paths and NEB](dynamics_mep_guide) --- batched nudged elastic band,
+  using either the high-level `NEB` strategy or hooks attached directly to an
+  optimizer.
 - [Hooks](hooks_guide) --- the hook protocol, built-in hooks, and writing custom
   hooks.
 - [Data Sinks](dynamics_sinks) --- recording trajectories and simulation results.

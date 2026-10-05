@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from nvalchemi.dynamics import hooks, integrators, optimizers
 from nvalchemi.dynamics._ops.thermostat_utils import initialize_velocities
+from nvalchemi.dynamics._units import KB_EV
 from nvalchemi.dynamics.base import (
     BaseDynamics,
     ConvergenceHook,
@@ -32,8 +33,10 @@ from nvalchemi.dynamics.integrators import NPH, NPT, NVE, NVTLangevin, NVTNoseHo
 from nvalchemi.dynamics.optimizers import (
     FIRE,
     FIRE2,
+    LBFGS,
     FIRE2VariableCell,
     FIREVariableCell,
+    LBFGSVariableCell,
 )
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 from nvalchemi.dynamics.sinks import (
@@ -43,6 +46,7 @@ from nvalchemi.dynamics.sinks import (
     ResizableSink,
     ZarrData,
 )
+from nvalchemi.dynamics.strategy import DynamicsStrategy
 from nvalchemi.dynamics.structure_sampler import (
     FitPolicy,
     OrderedStructureSampler,
@@ -57,6 +61,7 @@ __all__ = [
     "DemoDynamics",
     "DistributedPipeline",
     "DynamicsStage",
+    "DynamicsStrategy",
     "FIRE",
     "FIRE2",
     "FIRE2VariableCell",
@@ -66,6 +71,9 @@ __all__ = [
     "GPUBuffer",
     "Hook",
     "HostMemory",
+    "KB_EV",
+    "LBFGS",
+    "LBFGSVariableCell",
     "ResizableSink",
     "NPH",
     "NPT",

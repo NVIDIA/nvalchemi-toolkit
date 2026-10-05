@@ -16,7 +16,7 @@
 
 This package provides the
 :class:`~nvalchemi.gen.generator.AtomisticGenerator` inference driver: a
-fixed generate → map pipeline with lifecycle hooks
+condition → generate pipeline with lifecycle hooks
 (:class:`~nvalchemi.gen.stages.GenerationStage`,
 :class:`~nvalchemi.hooks.GenerationContext`), plus sequential composition
 via :class:`~nvalchemi.gen.pipeline.GenerationPipeline`.

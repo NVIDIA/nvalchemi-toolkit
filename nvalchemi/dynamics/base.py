@@ -58,6 +58,7 @@ from typing import (
     TYPE_CHECKING,
     Annotated,
     Any,
+    ClassVar,
     Literal,
     TypeAlias,
 )
@@ -71,6 +72,7 @@ from torch import distributed as dist
 
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import Batch
+from nvalchemi.data.level_storage import SegmentedLevelStorage
 from nvalchemi.hooks._context import DynamicsContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.hooks._registry import HookRegistryMixin
@@ -1489,6 +1491,16 @@ class _CommunicationMixin:
         ------
         TypeError
             If either ``self`` or ``other`` is not a ``BaseDynamics`` instance.
+
+        Notes
+        -----
+        **Known limitation — retained composition.**  ``self`` and ``other``
+        become the new ``FusedStage``'s sub-stages by reference, and their
+        ``_enclosing_hooks`` is repointed at that stage's ``hooks``.  If you
+        keep ``self`` or ``other`` around and run them standalone afterward,
+        their hook-dependent behavior reads the fused stage's hooks instead
+        of their own — see :meth:`FusedStage.__add__` for the full
+        explanation.  Not fixed here; tracked separately.
         """
         # FusedStage is defined later in this file
         if not isinstance(self, BaseDynamics):
@@ -1501,7 +1513,22 @@ class _CommunicationMixin:
                 "Both operands of + must be BaseDynamics instances. "
                 f"other is {type(other).__name__}, not BaseDynamics."
             )
-        return FusedStage(sub_stages=[(0, self), (1, other)])
+        return FusedStage(
+            sub_stages=[(0, self), (1, other)],
+            by_group=self.by_group,
+        )
+
+
+def _level_mask(
+    state: Batch, level: str, graph_mask: Bool[torch.Tensor, "B"]
+) -> torch.Tensor:
+    """Broadcast a per-graph mask to the rows of one materialized state level."""
+    group = state._storage.groups.get(level)
+    if group is None:
+        raise KeyError(f"state level {level!r} is not materialized")
+    if isinstance(group, SegmentedLevelStorage):
+        return graph_mask[group.batch_idx.long()]
+    return graph_mask
 
 
 class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
@@ -1552,6 +1579,15 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         ``status >= exit_status`` are treated as no-ops during
         ``step()`` — their positions and velocities are preserved
         through the integrator. Default is 1.
+    by_group : bool
+        Whether dynamics update units are graph groups rather than individual
+        graphs. Grouped batches must provide a valid group layout.
+    samples_equilibrium : ClassVar[bool]
+        Whether stepping samples an equilibrium ensemble, so that a frame
+        along a trajectory is a draw from a distribution rather than a point
+        on a path to a minimum. ``True`` here and on the integrators;
+        ``False`` on the relaxation optimizers, which descend. A
+        distribution-matching objective reads it to tell the two apart.
     __needs_keys__ : set[str]
         Set of output keys that this dynamics requires from the model.
         Empty by default on ``BaseDynamics``. Subclasses declare their
@@ -1601,7 +1637,22 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     __needs_keys__: set[str] = set()
     __provides_keys__: set[str] = set()
 
+    samples_equilibrium: ClassVar[bool] = True
+
     _mutable_fields: tuple[str, ...] = ("positions", "velocities", "cell")
+
+    # Hooks of the enclosing FusedStage, if any; set (live) by FusedStage.
+    _enclosing_hooks: Sequence[Hook] = ()
+
+    #: Set ``True`` on a subclass whose ``post_update`` is unconditionally a
+    #: no-op (reads nothing, writes nothing) to let
+    #: :meth:`_masked_post_update` skip its save/blend-back of every mutable
+    #: field and state tensor — work whose only purpose is undoing changes
+    #: ``post_update`` never makes.  A subclass that sets this to ``True``
+    #: while giving ``post_update`` a real body silently applies that body
+    #: to every graph instead of only the masked ones; the flag is a
+    #: correctness promise, not something inferred automatically.
+    _post_update_is_noop: bool = False
 
     _bookkeeping_keys: dict[str, Callable[[int, torch.device], torch.Tensor]] = {
         "status": lambda n, dev: torch.zeros(n, 1, dtype=torch.long, device=dev),
@@ -1645,6 +1696,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         convergence_hook: Any = None,
         n_steps: int | None = None,
         exit_status: int = 1,
+        by_group: bool = False,
         **kwargs: Any,
     ) -> None:
         """
@@ -1672,12 +1724,20 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             ``step()`` — their positions and velocities are preserved
             through the integrator. Default is 1. Subclasses like
             ``FusedStage`` may compute this dynamically.
+        by_group : bool, optional
+            Whether graph groups are treated as dynamics update units.
+            Requires a valid group layout. Default is False.
         **kwargs : Any
             Additional keyword arguments forwarded to the next class
             in the MRO (for cooperative multiple inheritance).
         """
         self._validate_n_steps(n_steps)
         super().__init__(**kwargs)
+        self.by_group = by_group
+        if self.by_group and self.sampler is not None:
+            raise NotImplementedError(
+                "Sampling and refill are not implemented for by_group=True."
+            )
         if not isinstance(model, BaseModelMixin):
             raise TypeError(
                 f"Expected a `BaseModelMixin` instance, got {type(model).__name__}."
@@ -1687,6 +1747,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         self.step_count: int = 0
         if isinstance(convergence_hook, dict):
             convergence_hook = ConvergenceHook(**convergence_hook)
+        if callable(getattr(convergence_hook, "on_register", None)):
+            convergence_hook.on_register(self)
         self.convergence_hook = convergence_hook
         self.n_steps = n_steps
         self.exit_status = exit_status
@@ -1713,6 +1775,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             f"n_steps={self.n_steps}, "
             f"step_count={self.step_count}, "
             f"conservative={conservative}, "
+            f"by_group={self.by_group}, "
             f"convergence_hook={self.convergence_hook!r}, "
             f"hooks={n_hooks})"
         )
@@ -2081,6 +2144,18 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     # Per-system integrator state management
     # ------------------------------------------------------------------
 
+    def _num_update_units(self, batch: Batch) -> int:
+        """Return the number of independent dynamics update units."""
+        if self.by_group:
+            return batch.group_layout.num_groups
+        return batch.num_graphs
+
+    def _update_idx(self, batch: Batch) -> torch.Tensor:
+        """Return the contiguous per-node int32 update-unit index."""
+        if self.by_group:
+            return batch.group_layout.node_to_group.to(dtype=torch.int32).contiguous()
+        return batch.batch_idx.to(dtype=torch.int32).contiguous()
+
     def _save_state_fields(self) -> dict[str, torch.Tensor]:
         """Clone all integrator state fields, preserving each field's shape."""
         state = getattr(self, "_state", None)
@@ -2090,29 +2165,65 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
     def _restore_unmasked_state(
         self,
+        batch: Batch,
         saved: dict[str, torch.Tensor],
         graph_mask: Bool[torch.Tensor, "B"],
     ) -> None:
-        """Restore inactive per-system state after a masked fused-stage update.
+        """Restore inactive update-unit state after a masked fused-stage update.
 
         :class:`FusedStage` calls each sub-stage's ``pre_update`` or
         ``post_update`` on the full batch to preserve static shapes. State
-        changes are retained for graphs selected by ``graph_mask``, while rows
-        belonging to other sub-stages are restored from ``saved``. Thus,
-        ``True`` retains updated state and ``False`` restores previous state.
+        changes are retained for update units selected by ``graph_mask``. A
+        grouped state row is retained when at least one graph in its group is
+        selected; other rows are restored from ``saved``. Segmented state
+        levels expand that same (possibly group-reduced) mask through their
+        own ``batch_idx`` — but ``self._state`` need not be a full ``Batch``;
+        the minimal state contract (``num_graphs`` plus iteration, see
+        ``_TestState`` in ``test_state_management.py``) has no levels at
+        all, so a state without ``level_keys`` falls back to one flat mask
+        over every saved field.
         """
         if not saved:
             return
-        if self._state.num_graphs != graph_mask.shape[0]:
+        state_mask = (
+            batch.group_layout.reduce_any(graph_mask) if self.by_group else graph_mask
+        )
+        if self._state.num_graphs != state_mask.shape[0]:
             raise RuntimeError(
-                "Integrator state cardinality does not match the graph mask: "
-                f"state={self._state.num_graphs}, "
-                f"graphs={graph_mask.shape[0]}."
+                "Integrator state cardinality does not match the dynamics "
+                f"update units: state={self._state.num_graphs}, "
+                f"updates={state_mask.shape[0]}."
             )
-        for key, previous in saved.items():
-            value = getattr(self._state, key)
-            mask = graph_mask.view(graph_mask.shape[0], *([1] * (value.dim() - 1)))
-            torch.where(mask, value, previous, out=value)
+        level_keys = getattr(self._state, "level_keys", None)
+        if level_keys is None:
+            for key, previous in saved.items():
+                value = getattr(self._state, key)
+                mask = state_mask.view(state_mask.shape[0], *([1] * (value.dim() - 1)))
+                torch.where(mask, value, previous, out=value)
+            return
+        for level, keys in level_keys.items():
+            keys = keys & saved.keys()
+            if not keys:
+                continue
+            level_mask = _level_mask(self._state, level, state_mask)
+            for key in keys:
+                value = getattr(self._state, key)
+                mask = level_mask.view(level_mask.shape[0], *([1] * (value.dim() - 1)))
+                torch.where(mask, value, saved[key], out=value)
+
+    def _warm_state_levels(self) -> None:
+        """Build lazy segmented-level topology outside a compiled step.
+
+        No-op for a state without ``_storage`` — the minimal state contract
+        (``num_graphs`` plus iteration) has no levels to warm.
+        """
+        state = getattr(self, "_state", None)
+        storage = getattr(state, "_storage", None)
+        if storage is None:
+            return
+        for group in storage.groups.values():
+            if isinstance(group, SegmentedLevelStorage):
+                _ = group.batch_idx, group.batch_ptr
 
     def _init_state(self, batch: Batch) -> None:
         """Allocate per-system integrator state from the first concrete batch.
@@ -2149,6 +2260,259 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             dynamics does not maintain per-system state.
         """
         return None
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return the integrator state needed to resume this run exactly.
+
+        Covers the step counter, the RNG seed, and every per-system tensor in
+        ``self._state`` — thermostat chain variables, per-system timesteps,
+        barostat auxiliaries, whatever the subclass put there.
+
+        Nothing here is a Python object graph: values are tensors and
+        scalars, so the result is directly representable in Zarr without a
+        pickle payload.
+
+        Returns
+        -------
+        dict[str, Any]
+            ``step_count``, ``random_seed`` (when the integrator has one),
+            and a ``state`` submapping of per-system tensors.  ``state`` is
+            empty for an integrator that keeps none, and for one whose lazy
+            initialisation has not run yet.
+
+        Notes
+        -----
+        Reproducibility of stochastic integrators
+            ``NVTLangevin`` derives its noise from ``random_seed +
+            step_count`` rather than advancing a stateful generator, so
+            restoring those two integers reproduces the identical noise
+            sequence.  There is no generator object to serialise.
+        """
+        state: dict[str, torch.Tensor] = {}
+        internal = getattr(self, "_state", None)
+        if internal is not None:
+            # Batch yields (name, value) pairs from __iter__; it has no .items().
+            for key, value in internal:
+                if isinstance(value, torch.Tensor):
+                    state[key] = value.detach().clone()
+
+        out: dict[str, Any] = {
+            "step_count": int(self.step_count),
+            "state": state,
+        }
+        seed = getattr(self, "_random_seed", None)
+        if seed is not None:
+            out["random_seed"] = int(seed)
+        return out
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore integrator state produced by :meth:`state_dict`.
+
+        Parameters
+        ----------
+        state:
+            The mapping previously returned by :meth:`state_dict`.
+
+        Raises
+        ------
+        RuntimeError
+            If the checkpoint carries per-system state but this integrator
+            has not initialised its own — restoring into an uninitialised
+            integrator would leave the two silently out of step.  Prime the
+            dynamics once (or run a step) before restoring.
+        KeyError
+            If a restored key is absent from the live state, which means the
+            checkpoint came from a differently-configured integrator.
+        """
+        self.step_count = int(state.get("step_count", 0))
+        if "random_seed" in state and hasattr(self, "_random_seed"):
+            self._random_seed = int(state["random_seed"])
+
+        saved: Mapping[str, torch.Tensor] = state.get("state", {}) or {}
+        if not saved:
+            return
+
+        internal = getattr(self, "_state", None)
+        if internal is None:
+            raise RuntimeError(
+                f"{type(self).__name__}.load_state_dict: the checkpoint holds "
+                f"per-system integrator state ({sorted(saved)}) but this "
+                "instance has not initialised its own yet. Prime the dynamics "
+                "against the restored batch before loading, so the shapes are "
+                "known."
+            )
+        for key, value in saved.items():
+            target = getattr(internal, key, None)
+            if target is None:
+                raise KeyError(
+                    f"{type(self).__name__}.load_state_dict: checkpoint key "
+                    f"{key!r} has no counterpart in the live integrator state "
+                    f"({sorted(k for k, _ in internal)}). The "
+                    "checkpoint was written by a differently-configured "
+                    "integrator."
+                )
+            with torch.no_grad():
+                target.copy_(value.reshape(target.shape).to(target.device))
+
+    def redistribute_state(self, walker_ids: torch.Tensor) -> None:
+        """Reorder per-system state to match a new walker layout.
+
+        Needed only when a checkpoint is restored into a batch whose rows are
+        ordered differently from the one it was written from.  Batch position
+        is not an identity, so the caller supplies the permutation.
+
+        Parameters
+        ----------
+        walker_ids : torch.Tensor
+            Row permutation, shape ``[B]``: entry *i* is the index in the
+            current state that should become row *i*.
+
+        Raises
+        ------
+        RuntimeError
+            If the integrator has no per-system state to reorder.
+        """
+        internal = getattr(self, "_state", None)
+        if internal is None:
+            raise RuntimeError(
+                f"{type(self).__name__}.redistribute_state: no per-system "
+                "state to reorder."
+            )
+        # Index on the state's own device: ``self.device`` reports the
+        # process compute device, which is CUDA whenever a GPU is visible even
+        # for state that was never moved off the CPU.
+        index = walker_ids.reshape(-1).to(dtype=torch.long)
+        for key, value in list(internal):
+            if isinstance(value, torch.Tensor) and value.shape[0] == index.numel():
+                internal[key] = value[index.to(value.device)].contiguous()
+
+    def apply_per_system_params(
+        self, params: Mapping[str, torch.Tensor], batch: Batch
+    ) -> None:
+        """Rebind per-system parameters — temperature, timestep, and so on.
+
+        The reusable half of any method that permutes per-system state across
+        walkers: replica exchange over a temperature ladder, basin hopping
+        with swaps, a population or evolutionary structure search, any
+        annealing schedule.  What they share is "walker *b* is now running
+        under these parameters"; what differs is the rule that decided it.
+
+        Implementations must transform dependent private state — thermostat
+        chain masses, velocity scaling — as **one indivisible change**.  An
+        integrator that accepted the new target while leaving its velocities
+        and thermostat at the old one would keep sampling the ensemble the
+        walker just left, with no symptom the run would show.  That is why
+        *batch* is a parameter rather than a follow-up call: the velocity
+        rescale needs the live batch, and a caller who forgot the second call
+        would get exactly the silent failure this method exists to prevent.
+
+        Parameters
+        ----------
+        params : Mapping[str, torch.Tensor]
+            Parameter name to its new per-graph value, shape ``[B]``.
+            ``"temperature"`` is in Kelvin.
+        batch : Batch
+            The live batch, so dependent fields — velocities — move with the
+            parameters.
+
+        Raises
+        ------
+        NotImplementedError
+            Always, on the base class.  An integrator that cannot rebind must
+            fail rather than silently accept a label-only change.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support per-system parameter "
+            "rebinding. Methods that permute per-system state across walkers "
+            "require an integrator that can rescale velocities and transform "
+            "its thermostat state; NVTLangevin and NVTNoseHoover implement "
+            "this."
+        )
+
+    def _validated_temperature(
+        self, params: Mapping[str, torch.Tensor], reference: torch.Tensor
+    ) -> torch.Tensor:
+        """Check *params* and return the new per-graph temperature in Kelvin.
+
+        Shared by every integrator whose rebindable parameter set is exactly
+        ``{"temperature"}``, so the two checks cannot drift apart between
+        them.  Both run **before** any state is touched, which is what
+        ``apply_per_system_params`` promises: a rebinding it refuses leaves
+        the integrator and the batch as they were, and callers that permute
+        per-system state build their own atomicity on that.
+
+        Temperature is rejected unless strictly positive and finite.  It is
+        not merely out of range — it propagates:
+
+        * a negative target makes the velocity scale ``sqrt(T_new / T_old)``
+          imaginary, so velocities come back ``nan``;
+        * zero scales a Nosé-Hoover chain's masses ``Q ∝ kT`` to zero — a
+          massless thermostat — and ``eta_dot ∝ 1/sqrt(kT)`` to infinity;
+        * infinity reaches velocities and chain masses directly.
+
+        None of those raise on their own.  The run continues with ``nan``
+        coordinates a few steps later, pointing at the integrator rather than
+        at the caller that asked for the temperature.
+
+        Parameters
+        ----------
+        params : Mapping[str, torch.Tensor]
+            Parameter name to its new per-graph value.
+        reference : torch.Tensor
+            Existing per-system temperature, for device and dtype.
+
+        Returns
+        -------
+        torch.Tensor
+            The new temperature in Kelvin, shape ``[B]``.
+
+        Raises
+        ------
+        KeyError
+            If *params* names anything other than ``"temperature"``.
+        ValueError
+            If any temperature is non-positive or not finite.
+        """
+        name = type(self).__name__
+        unknown = sorted(set(params) - {"temperature"})
+        if unknown:
+            raise KeyError(
+                f"{name}.apply_per_system_params: cannot rebind {unknown}; "
+                "this integrator rebinds 'temperature' only. Silently "
+                "ignoring a parameter would leave the walker sampling the "
+                "state it was supposed to leave."
+            )
+        temperature = (
+            params["temperature"]
+            .reshape(-1)
+            .to(device=reference.device, dtype=reference.dtype)
+        )
+        if not bool(temperature.isfinite().all()) or bool((temperature <= 0).any()):
+            raise ValueError(
+                f"{name}.apply_per_system_params: temperature must be "
+                f"positive and finite, got {temperature.tolist()}. A "
+                "non-positive or infinite target does not fail here on its "
+                "own — it makes the velocity rescale imaginary or infinite "
+                "and, for a thermostat chain, its masses zero or infinite, "
+                "so the run continues and surfaces as nan coordinates later."
+            )
+        return temperature
+
+    def _rescale_velocities(self, scale_per_graph: torch.Tensor, batch: Batch) -> None:
+        """Scale each graph's velocities by a per-graph factor, in place.
+
+        Parameters
+        ----------
+        scale_per_graph : torch.Tensor
+            Multiplicative factor per graph, shape ``[B]``.
+        batch : Batch
+            The live batch; ``velocities`` is modified in place.
+        """
+        velocities = getattr(batch, "velocities", None)
+        if velocities is None:
+            return
+        with torch.no_grad():
+            velocities.mul_(scale_per_graph[batch.batch_idx].unsqueeze(-1))
 
     def _autograd_input_tensors(
         self, batch: Batch | AtomsLike
@@ -2205,6 +2569,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         batch : Batch
             The current batch; forwarded to ``_init_state`` if needed.
         """
+        if self.by_group:
+            _ = batch.group_layout
         if not hasattr(self, "_state"):
             self._init_state(batch)
 
@@ -2260,6 +2626,20 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         else:
             del self._state
 
+    def _check_hook_compatibility(self) -> None:
+        """Run-start checks for hooks incompatible with this dynamics' algorithm.
+
+        No-op in the base class; a subclass overrides this to warn (or raise)
+        when a hook registered on ``self.hooks`` or ``self._enclosing_hooks``
+        would corrupt its per-step state.  Called every step — standalone
+        from :meth:`step`, and per sub-stage from
+        :meth:`FusedStage.step` — rather than once at admission, so hooks
+        registered *after* the first step (directly, or on an enclosing
+        ``FusedStage``) are still caught.  Deliberately called from the
+        uncompiled driver, not from :meth:`pre_update`/:meth:`post_update`
+        themselves, which may run inside a compiled ``FusedStage`` step.
+        """
+
     def pre_update(self, batch: Batch) -> None:
         """
         Perform the first half of the integration step.
@@ -2298,7 +2678,11 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         "stress": "stress",
     }
 
-    def compute(self, batch: Batch | AtomsLike) -> ModelOutputs:
+    def compute(
+        self,
+        batch: Batch | AtomsLike,
+        active_graph_mask: Bool[torch.Tensor, "B"] | None = None,
+    ) -> ModelOutputs:
         """
         Perform the model forward pass to compute forces and energies.
 
@@ -2327,8 +2711,13 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         Parameters
         ----------
         batch : Batch
-            The current batch of atomic data. Will have forces and
-            energies updated in-place.
+            The current batch of atomic data. Will have forces and energies
+            updated in-place.
+        active_graph_mask : torch.Tensor | None, optional
+            Boolean mask selecting graph rows whose model outputs may be
+            published to the batch. Node-level outputs use the corresponding
+            broadcast node mask. Inactive rows retain their existing values.
+            When None, publish every output row.
 
         Returns
         -------
@@ -2344,11 +2733,135 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             specified by ``__needs_keys__``.
         """
         if getattr(self, "_autograd_cleanup_deferred", False):
-            return self._compute(batch)
+            return self._compute(batch, active_graph_mask)
         with requires_grad_ctx(*self._autograd_input_tensors(batch)):
-            return self._compute(batch)
+            return self._compute(batch, active_graph_mask)
 
-    def _compute(self, batch: Batch | AtomsLike) -> ModelOutputs:
+    @staticmethod
+    def _infer_output_group(
+        batch: Batch | AtomsLike, key: str, tensor: torch.Tensor
+    ) -> str:
+        """The level *tensor*'s own length says an unregistered output belongs to.
+
+        Checks every materialized segmented group (``"atoms"``, ``"edges"``)
+        whose element count matches *tensor*'s leading dimension.  A total
+        match alone is not decisive — two groups can have the same total
+        while differing per graph — but it is also not necessarily
+        *ambiguous*: masking only ever applies ``active_graph_mask``
+        expanded through a group's own per-graph ``segment_lengths``, so
+        two matching groups with identical ``segment_lengths`` would be
+        masked identically regardless of which is picked.  Only raise when
+        matching groups disagree on a graph; otherwise prefer ``"atoms"``
+        (the common case: a per-atom extra output like an energy
+        decomposition) over ``"edges"``.  Falls back to ``"system"`` — the
+        same default ``MultiLevelStorage`` uses for a key with no schema
+        entry — when no segmented group matches at all.
+        """
+        n = tensor.shape[0]
+        candidates = [
+            group_name
+            for group_name, count in (
+                ("atoms", batch.num_nodes),
+                ("edges", batch.num_edges),
+            )
+            if group_name in batch._storage.groups and n == count
+        ]
+        if len(candidates) > 1:
+            lengths = [batch._storage.groups[g].segment_lengths for g in candidates]
+            if any(not torch.equal(lengths[0], length) for length in lengths[1:]):
+                raise RuntimeError(
+                    f"Cannot determine the storage level for unregistered "
+                    f"model output {key!r} of length {n}: it matches more "
+                    f"than one of {candidates} by total element count, and "
+                    "their per-graph counts disagree. Register this key's "
+                    "level explicitly rather than relying on shape inference."
+                )
+        return candidates[0] if candidates else "system"
+
+    def _publish_model_output(
+        self,
+        batch: Batch | AtomsLike,
+        batch_attr: str,
+        target: torch.Tensor,
+        value: torch.Tensor,
+        active_graph_mask: Bool[torch.Tensor, "B"] | None,
+    ) -> None:
+        """Publish one detached model output while preserving inactive rows."""
+        source = value.view(target.shape).to(dtype=target.dtype)
+        if active_graph_mask is None:
+            target.copy_(source)
+            return
+
+        group_name = batch._storage._group_name_from_attr(batch_attr)
+        if group_name == "system":
+            output_mask = active_graph_mask
+        elif group_name == "atoms":
+            output_mask = active_graph_mask[batch.batch_idx]
+        elif group_name == "edges":
+            edge_graph_idx = batch.batch_idx[batch.neighbor_list[:, 0]]
+            output_mask = active_graph_mask[edge_graph_idx]
+        else:
+            raise RuntimeError(
+                f"Cannot apply a graph activity mask to model output {batch_attr!r} "
+                f"stored at level {group_name!r}."
+            )
+
+        output_mask = output_mask.view(
+            output_mask.shape[0], *([1] * (target.dim() - 1))
+        )
+        torch.where(output_mask, source, target, out=target)
+
+    def _publish_unmapped_outputs(
+        self,
+        batch: Batch | AtomsLike,
+        outputs: ModelOutputs,
+        active_graph_mask: Bool[torch.Tensor, "B"] | None,
+    ) -> None:
+        """Publish every model output *compute* didn't already know how to.
+
+        Allocating a never-seen key calls :meth:`_infer_output_group`, which
+        branches on tensor *values* (``torch.equal`` on ``segment_lengths``)
+        rather than shapes alone, so it cannot run inside a
+        ``torch.compile(fullgraph=True)`` graph.  This must therefore only
+        be reached for keys the batch has already seen once — callers
+        compiling the step (:class:`FusedStage`'s ``_prime_forces``) call it
+        eagerly on the first, uncompiled step so every key is allocated
+        before any compiled call needs to publish it.
+
+        Allocation goes through :meth:`Batch.add_key` — the same public
+        route model wrappers use for extra outputs (see
+        ``neb_force.py``'s ``set_batch_field``) — rather than a raw storage
+        write, so the key stays visible to schema-driven consumers (e.g.
+        the Zarr writer, which enumerates ``attr_map``) and masked-out rows
+        hold this priming compute's real values instead of uninitialized
+        memory.
+        """
+        for key, tensor in outputs.items():
+            if key not in self._OUTPUT_KEY_TO_BATCH_ATTR and tensor is not None:
+                target = getattr(batch, key, None)
+                if target is None:
+                    # add_key, not a raw storage write -- see docstring.
+                    group_name = self._infer_output_group(batch, key, tensor)
+                    if group_name == "system":
+                        values = list(tensor.split(1))
+                    else:
+                        # Eager-only (see docstring): .tolist() forces a
+                        # host sync that would break under torch.compile.
+                        counts = batch._storage.groups[
+                            group_name
+                        ].segment_lengths.tolist()
+                        values = list(tensor.split(counts))
+                    batch.add_key(key, values, level=group_name)
+                    target = getattr(batch, key)
+                self._publish_model_output(
+                    batch, key, target, tensor, active_graph_mask
+                )
+
+    def _compute(
+        self,
+        batch: Batch | AtomsLike,
+        active_graph_mask: Bool[torch.Tensor, "B"] | None = None,
+    ) -> ModelOutputs:
         """Execute model evaluation while autograd input state is managed."""
         self._last_outputs = None
 
@@ -2382,7 +2895,13 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                     # allocate storage for model outputs lazily.
                     setattr(batch, batch_attr, torch.empty_like(value))
                     target = getattr(batch, batch_attr)
-                target.copy_(value.view(target.shape))
+                self._publish_model_output(
+                    batch,
+                    batch_attr,
+                    target,
+                    value,
+                    active_graph_mask,
+                )
 
         self._last_outputs = detached
 
@@ -2428,6 +2947,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         """
         self._ensure_state_initialized(batch)
         self._ensure_admission_initialized(batch)
+        self._check_hook_compatibility()
 
         # Prepare status-based active-graph filtering for this step.
         active_graph_mask = self.active_graph_mask(batch, self.exit_status)
@@ -2472,7 +2992,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 active_graph_mask,
             )
             self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch, active_graph_mask)
-            self.compute(batch)
+            self.compute(batch, active_graph_mask)
             self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch, active_graph_mask)
             self._call_hooks(
                 DynamicsStage.BEFORE_POST_UPDATE,
@@ -2543,7 +3063,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 batch,
                 active_graph_mask,
             )
-            self.compute(batch)
+            self.compute(batch, active_graph_mask)
             self._call_hooks(
                 DynamicsStage.AFTER_COMPUTE,
                 batch,
@@ -2832,7 +3352,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             saved_state = self._save_state_fields()
             self.pre_update(batch)
             self._restore_unmasked_fields(batch, saved, mask, node_mask)
-            self._restore_unmasked_state(saved_state, mask)
+            self._restore_unmasked_state(batch, saved_state, mask)
 
     def _masked_post_update(
         self,
@@ -2847,14 +3367,25 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
         Uses the same static-shape save/blend strategy as
         :meth:`_masked_pre_update` — see that method for the rationale.
+
+        When :attr:`_post_update_is_noop` is set, the save/blend-back is
+        skipped entirely: ``post_update`` is still called (so a subclass
+        that violates the flag's contract is still *invoked*, just not
+        correctly masked), but there is nothing to restore because nothing
+        is expected to change.  This only affects ``_masked_post_update``;
+        :meth:`_masked_pre_update` always does the full save/restore.
         """
+        if self._post_update_is_noop:
+            with torch.no_grad():
+                self.post_update(batch)
+            return
         with torch.no_grad():
             node_mask = mask[batch.batch_idx]
             saved = self._save_mutable_fields(batch)
             saved_state = self._save_state_fields()
             self.post_update(batch)
             self._restore_unmasked_fields(batch, saved, mask, node_mask)
-            self._restore_unmasked_state(saved_state, mask)
+            self._restore_unmasked_state(batch, saved_state, mask)
 
     def _save_mutable_fields(self, batch: Batch) -> dict[str, torch.Tensor]:
         """Clone every mutable field in full (static shapes, no mask indexing)."""
@@ -2911,6 +3442,10 @@ class ConvergenceHook:
     target_status : int | None
         Status code to assign to converged samples.  ``None``
         disables status migration.
+    by_group : bool
+        If ``True``, mark a group as converged only when every updatable graph
+        in that group has converged. Requires ``batch.group_layout`` to be
+        configured.
 
     Examples
     --------
@@ -2941,6 +3476,7 @@ class ConvergenceHook:
         source_status: int | None = None,
         target_status: int | None = None,
         frequency: int = 1,
+        by_group: bool = False,
     ) -> None:
         """Initialize the convergence hook.
 
@@ -2958,11 +3494,14 @@ class ConvergenceHook:
             status migration.
         frequency : int, optional
             Execute every N steps. Default 1.
+        by_group : bool, optional
+            Whether convergence is reduced across graph groups. Default ``False``.
         """
         self.frequency = frequency
         self.stage = DynamicsStage.AFTER_STEP
         self.source_status = source_status
         self.target_status = target_status
+        self.by_group = by_group
 
         if criteria is None:
             self.criteria: list[_ConvergenceCriterion] = [
@@ -3002,7 +3541,28 @@ class ConvergenceHook:
         if self.target_status is not None:
             parts.append(f"target_status={self.target_status}")
         parts.append(f"frequency={self.frequency}")
-        return f"ConvergenceHook({', '.join(parts)})"
+        if self.by_group:
+            parts.append("by_group=True")
+        return f"{type(self).__name__}({', '.join(parts)})"
+
+    def on_register(self, workflow: object) -> None:
+        """Require convergence and dynamics to use the same grouping mode.
+
+        Parameters
+        ----------
+        workflow : object
+            Workflow on which this hook is being registered.
+
+        Raises
+        ------
+        ValueError
+            If convergence and the workflow use different grouping modes.
+        """
+        workflow_by_group = getattr(workflow, "by_group", False)
+        if self.by_group != workflow_by_group:
+            raise ValueError(
+                "ConvergenceHook and dynamics must use the same by_group setting"
+            )
 
     @classmethod
     def from_fmax(
@@ -3011,6 +3571,7 @@ class ConvergenceHook:
         source_status: int | None = None,
         target_status: int | None = None,
         frequency: int = 1,
+        by_group: bool = False,
     ) -> ConvergenceHook:
         """Create a forces-based convergence hook (fmax-compatible).
 
@@ -3028,6 +3589,8 @@ class ConvergenceHook:
             status migration.
         frequency : int, optional
             Execute every N steps.  Default 1.
+        by_group : bool, optional
+            Whether convergence is reduced across graph groups. Default ``False``.
 
         Returns
         -------
@@ -3039,6 +3602,7 @@ class ConvergenceHook:
             frequency=frequency,
             source_status=source_status,
             target_status=target_status,
+            by_group=by_group,
         )
 
     @classmethod
@@ -3048,6 +3612,7 @@ class ConvergenceHook:
         frequency: int = 1,
         source_status: int | None = None,
         target_status: int | None = None,
+        by_group: bool = False,
     ) -> ConvergenceHook:
         """Construct from force-norm threshold (reads 'forces' key, norm reduction).
 
@@ -3061,6 +3626,8 @@ class ConvergenceHook:
             Status code that eligible systems must have. Default None (any status).
         target_status : int | None, optional
             Status code to assign to converged systems. Default None (no status change).
+        by_group : bool, optional
+            Whether convergence is reduced across graph groups. Default ``False``.
 
         Returns
         -------
@@ -3079,6 +3646,7 @@ class ConvergenceHook:
             frequency=frequency,
             source_status=source_status,
             target_status=target_status,
+            by_group=by_group,
         )
 
     @property
@@ -3141,8 +3709,14 @@ class ConvergenceHook:
 
         for i, criterion in enumerate(self.criteria):
             results[i] = criterion(batch)
+        converged_mask = torch.all(results, dim=0)
 
-        return torch.all(results, dim=0)
+        if self.by_group:
+            # A group converges only when every graph in the group has converged.
+            layout = batch.group_layout
+            converged_mask = layout.broadcast(layout.reduce_all(converged_mask))
+
+        return converged_mask
 
     def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:
         """Evaluate convergence and optionally migrate sample status.
@@ -3363,7 +3937,7 @@ class FusedStage(BaseDynamics):
         Raises
         ------
         ValueError
-            If sub-stages have different ``device_type`` values.
+            If sub-stages have different ``device_type`` or ``by_group`` values.
         """
         first_dynamics = sub_stages[0][1]
         model = first_dynamics.model
@@ -3377,9 +3951,20 @@ class FusedStage(BaseDynamics):
                 f"on a single device with a shared batch and forward pass."
             )
 
+        group_modes = {dynamics.by_group for _, dynamics in sub_stages}
+        if len(group_modes) > 1:
+            raise ValueError(
+                "All FusedStage sub-stages must agree on whether updates are "
+                "group-aware."
+            )
+
         super().__init__(model=model, **kwargs)
 
         self.sub_stages = sub_stages
+        # Live back-pointer onto the shared sub-stage objects, not copies —
+        # see the "retained composition" limitation in FusedStage.__add__.
+        for _, dynamics in sub_stages:
+            dynamics._enclosing_hooks = self.hooks
 
         known_status_codes = {code for code, _ in sub_stages}
         requested_reprime = set() if reprime_on_entry is None else reprime_on_entry
@@ -3450,12 +4035,15 @@ class FusedStage(BaseDynamics):
             ]
 
             criteria = None
+            by_group = source_dynamics.by_group
             if source_dynamics.convergence_hook is not None:
                 criteria = source_dynamics.convergence_hook.criteria
+                by_group = source_dynamics.convergence_hook.by_group
             hook = ConvergenceHook(
                 criteria=criteria,
                 source_status=source_code,
                 target_status=target_code,
+                by_group=by_group,
             )
             source_dynamics.register_hook(hook)
 
@@ -3516,12 +4104,12 @@ class FusedStage(BaseDynamics):
         self._compiled_step = torch.compile(self._step_impl, **merged)
         return self
 
-    @staticmethod
-    def _mark_cudagraph_static_inputs(batch: Batch) -> None:
-        """Mark CUDA batch tensors as stable buffers for graph replay.
+    def _mark_cudagraph_static_inputs(self, batch: Batch) -> None:
+        """Mark CUDA batch and sub-stage state tensors for graph replay.
 
-        ``_step_impl`` mutates batch tensors in place. Inductor permits those
-        mutations in CUDA graphs when their inputs have stable addresses.
+        ``_step_impl`` mutates batch and optimizer-state tensors in place.
+        Inductor permits those mutations in CUDA graphs when their inputs
+        have stable addresses.
         The default unguarded marking lets CUDA graphs re-record if a refill or
         another batch operation replaces a tensor with a different address.
 
@@ -3534,6 +4122,11 @@ class FusedStage(BaseDynamics):
             return
         for _, tensor in batch:
             torch._dynamo.mark_static_address(tensor)
+        for _, dynamics in self.sub_stages:
+            state = getattr(dynamics, "_state", None)
+            if state is not None:
+                for _, tensor in state:
+                    torch._dynamo.mark_static_address(tensor)
 
     def __enter__(self) -> FusedStage:
         """Enter the stream context and propagate to all sub-stages.
@@ -3861,12 +4454,9 @@ class FusedStage(BaseDynamics):
                 active_graph_mask,
             )
 
-        outputs: ModelOutputs = self.compute(batch)
+        outputs: ModelOutputs = self.compute(batch, overall_active_graph_mask)
 
-        # Skip None placeholders — writing them only churns dynamo guards.
-        for key, tensor in outputs.items():
-            if key not in ("forces", "energy") and tensor is not None:
-                batch[key] = tensor
+        self._publish_unmapped_outputs(batch, outputs, overall_active_graph_mask)
 
         for (_, dynamics), active_graph_mask in zip(
             self.sub_stages, stage_active_masks, strict=True
@@ -4066,6 +4656,12 @@ class FusedStage(BaseDynamics):
         self._ensure_bookkeeping_fields(batch)
         for _, dynamics in self.sub_stages:
             dynamics._ensure_state_initialized(batch)
+            dynamics._warm_state_levels()
+            # Every step, not just admission: a hook (e.g. on this
+            # FusedStage) registered after the sub-stage's first step must
+            # still be caught, and this loop already runs outside the
+            # compiled step.
+            dynamics._check_hook_compatibility()
 
         # Admission hooks remain outside of the compiled step
         self._ensure_admission_initialized(batch)
@@ -4173,7 +4769,13 @@ class FusedStage(BaseDynamics):
                     stage_active_mask,
                 )
 
-            self.compute(batch)
+            outputs = self.compute(batch, active_graph_mask)
+            # Allocate every unmapped output's storage here, eagerly: this
+            # is the one call to _publish_unmapped_outputs that runs before
+            # any compiled step, so a key _step_impl sees for the first
+            # time is never new to a compiled call — see that method's
+            # docstring for why a never-seen key cannot be allocated there.
+            self._publish_unmapped_outputs(batch, outputs, active_graph_mask)
 
             for (_, dynamics), stage_active_mask in zip(
                 self.sub_stages, stage_active_masks, strict=True
@@ -4355,6 +4957,19 @@ class FusedStage(BaseDynamics):
         preserves that intent but does **not** compile eagerly.  Call
         ``.compile()`` explicitly or enter the context manager to trigger
         compilation.
+
+        **Known limitation — retained composition.**  This reuses ``self``'s
+        existing sub-stage objects rather than copying them, and the
+        returned ``FusedStage`` repoints every one of those sub-stages'
+        ``_enclosing_hooks`` at its own ``hooks`` (see
+        ``FusedStage.__init__``).  If you keep running ``self`` *after*
+        deriving a new stage from it, ``self``'s own hook-dependent behavior
+        can silently change — e.g. a sub-stage's
+        ``AlignCellHook``-on-``self`` detection now sees the derived stage's
+        (possibly empty) hook list instead.  Treat a ``FusedStage`` as
+        consumed once you have composed a new stage from it; this is a
+        known gap tracked for a future fix alongside stage nesting and
+        hook/optimizer-state ownership, not something resolved here.
         """
         if not isinstance(other, BaseDynamics):
             raise TypeError(
@@ -4369,6 +4984,7 @@ class FusedStage(BaseDynamics):
             compile_step=False,
             compile_kwargs=self.compile_kwargs,
             reprime_on_entry=set(self.reprime_on_entry),
+            by_group=self.by_group,
         )
         # Defer compilation to __enter__ or an explicit .compile() call.
         new_fused.compile_step = self.compile_step

@@ -12,7 +12,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.15"
 license = {file="LICENSE"}
 dependencies = [
-    "nvalchemi-toolkit-ops>=0.4.1",
+    "nvalchemi-toolkit-ops>=0.5.0",
     "torch>=2.8",
     "click",
     "loguru",
@@ -68,7 +68,7 @@ ase = [
     "ase>=3.27.0",
 ]
 cu12 = [
-    "nvalchemi-toolkit-ops[torch-cu12]>=0.4.1; sys_platform != 'darwin'",
+    "nvalchemi-toolkit-ops[torch-cu12]>=0.5.0; sys_platform != 'darwin'",
     # PhysicsNeMo core only: its [cuXX] extras pin cupy<14 (no cp314 wheels),
     # and nothing in nvalchemi imports the RAPIDS stack (cuml/cupy/DALI).
     # Users needing RAPIDS should install it directly.
@@ -78,7 +78,7 @@ cu12 = [
     "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform != 'darwin'",
 ]
 cu13 = [
-    "nvalchemi-toolkit-ops[torch-cu13]>=0.4.1; sys_platform != 'darwin'",
+    "nvalchemi-toolkit-ops[torch-cu13]>=0.5.0; sys_platform != 'darwin'",
     # PhysicsNeMo core only — see the cu12 extra note.
     "nvidia-physicsnemo>=2.2.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
@@ -106,7 +106,7 @@ uma = [
 uma-cu12 = [
     "fairchem-core>=2.22.0",
     "setuptools>=70.0.0,<81",
-    "nvalchemi-toolkit-ops[torch-cu12]>=0.4.1; sys_platform != 'darwin'",
+    "nvalchemi-toolkit-ops[torch-cu12]>=0.5.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
     "torchvision; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu12>=0.8.0; sys_platform != 'darwin'",
@@ -114,7 +114,7 @@ uma-cu12 = [
 uma-cu13 = [
     "fairchem-core>=2.22.0",
     "setuptools>=70.0.0,<81",
-    "nvalchemi-toolkit-ops[torch-cu13]>=0.4.1; sys_platform != 'darwin'",
+    "nvalchemi-toolkit-ops[torch-cu13]>=0.5.0; sys_platform != 'darwin'",
     "torch; sys_platform != 'darwin'",
     "torchvision; sys_platform != 'darwin'",
     "cuequivariance-ops-torch-cu13>=0.8.0; sys_platform != 'darwin'",

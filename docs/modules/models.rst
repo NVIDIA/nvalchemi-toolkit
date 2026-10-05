@@ -32,7 +32,17 @@ Hessian operator
 
 :meth:`~nvalchemi.models.base.BaseModelMixin.prepare_hessian` returns a
 :class:`~nvalchemi.models.HessianOperator` for repeated Hessian-vector
-products at one geometry.
+products at one geometry. It runs its own energy-only forward on a private
+snapshot of the batch.
+:meth:`~nvalchemi.models.HessianOperator.from_energy` builds the same operator
+from an energy the caller already computed, with ``requires_grad`` enabled on
+the positions it was computed from, so it serves any model exposed through
+:class:`~nvalchemi.models.base.BaseModelMixin` and any forward the caller
+controls, such as one taken through a DDP wrapper. Either way,
+:meth:`~nvalchemi.models.HessianOperator.matvec` returns a detached product by
+default and keeps it attached to the energy graph when ``create_graph`` is
+set, so a loss can backpropagate through the product. A student loss and a
+teacher label can therefore share one estimator.
 
 .. currentmodule:: nvalchemi.models
 

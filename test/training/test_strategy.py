@@ -1498,6 +1498,67 @@ class TestTrainingStrategySpecRoundTrip:
         assert "training_fn" not in spec
 
 
+class _RuntimeObjectStrategy(TrainingStrategy):
+    """Strategy whose ``from_spec_dict`` takes a live object no spec carries."""
+
+    received: Any = None
+
+    @classmethod
+    def from_spec_dict(
+        cls,
+        spec: Mapping[str, Any],
+        *,
+        models: Any = None,
+        hooks: Any = None,
+        training_fn: Any = None,
+        marker: object | None = None,
+    ) -> TrainingStrategy:
+        """Record *marker* and rebuild through the base class."""
+        cls.received = marker
+        return super().from_spec_dict(
+            spec, models=models, hooks=hooks, training_fn=training_fn
+        )
+
+
+class TestRuntimeOverrides:
+    """Runtime overrides that a checkpoint rebuild forwards to ``from_spec_dict``."""
+
+    def test_base_from_spec_dict_refuses_unknown_overrides_by_name(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        """A misspelled keyword is refused rather than dropped."""
+        spec = TrainingStrategy(**baseline_strategy_kwargs).to_spec_dict()
+        with pytest.raises(TypeError, match=r"\['on_polcy'\]"):
+            TrainingStrategy.from_spec_dict(
+                spec, models=_build_demo_model(), hooks=[], on_polcy=object()
+            )
+
+    def test_from_checkpoint_dict_forwards_overrides_to_the_subclass(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        """The subclass a spec names receives the override through the base rebuild."""
+        spec = _RuntimeObjectStrategy(**baseline_strategy_kwargs).to_checkpoint_dict()
+        marker = object()
+        _RuntimeObjectStrategy.received = None
+
+        restored = TrainingStrategy.from_checkpoint_dict(
+            spec, models=_build_demo_model(), hooks=[], marker=marker
+        )
+
+        assert isinstance(restored, _RuntimeObjectStrategy)
+        assert _RuntimeObjectStrategy.received is marker
+
+    def test_from_checkpoint_dict_refuses_an_override_the_subclass_lacks(
+        self, baseline_strategy_kwargs: dict[str, Any]
+    ) -> None:
+        """An override the named class cannot take surfaces as a TypeError."""
+        spec = _RuntimeObjectStrategy(**baseline_strategy_kwargs).to_checkpoint_dict()
+        with pytest.raises(TypeError, match="unexpected keyword argument 'other'"):
+            TrainingStrategy.from_checkpoint_dict(
+                spec, models=_build_demo_model(), hooks=[], other=object()
+            )
+
+
 class TestValidationCapabilities:
     """Phase A introspection methods on TrainingStrategy."""
 

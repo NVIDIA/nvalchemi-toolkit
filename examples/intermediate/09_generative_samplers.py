@@ -20,10 +20,12 @@ The generative driver runs any callable that matches the
 :class:`~nvalchemi.gen.generator.GeneratingFunction` protocol:
 ``(inputs=None, *, num_samples=1, rng=None, **kwargs) -> Batch``.
 
-In the model-owning sampler pattern, the callable owns the trained model
-and exposes metadata attributes like ``device``, ``required_inputs``,
-``outputs``, and an optional ``condition`` hook. The driver reads these
-attributes as defaults instead of managing model internals directly.
+In the model-owning sampler pattern, a callable object holds the trained
+model and implements ``__call__``. The callable exposes metadata attributes
+such as ``device``, ``required_inputs``, and ``outputs``, and packages raw
+coordinate arrays into a :class:`~nvalchemi.data.Batch`. The driver reads
+these metadata attributes as defaults without managing model internals
+directly.
 
 We walk through two sampling approaches:
 1. Single-pass latent decoding with a GAN.
@@ -190,14 +192,15 @@ with diffusion:
 print(f"Diffusion batch: {batch.num_graphs} graphs at sigma_max=2.0")
 
 # %%
-# Conditional generation: batch input handling
-# ---------------------------------------------
-# Passing a batch as the first argument runs conditional generation.
-#
-# If the sampler defines a ``condition`` attribute or the driver has a
-# ``condition_func``, the driver runs that transform first. Without one, the
-# input batch goes straight to the callable, which reads ``inputs.num_graphs``
-# and generates matching structures.
+# Batch input handling
+# --------------------
+# Passing a batch as the first argument provides input structures to the
+# driver. If the sampler defines a ``condition`` attribute or the driver
+# receives a ``condition_func``, the driver runs that transform before
+# generation; without one, the input batch passes directly to the callable.
+# These demo samplers are unconditional: they read ``inputs.num_graphs`` and
+# emit one structure per input graph. A genuinely conditional model would
+# read the input structures' features here instead.
 
 conditioning = Batch.from_data_list(
     [

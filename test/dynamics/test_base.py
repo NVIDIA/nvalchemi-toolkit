@@ -36,6 +36,9 @@ from nvalchemi.dynamics.base import (
 )
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin
+from nvalchemi.dynamics.optimizers.fire import FIRE, FIREVariableCell
+from nvalchemi.dynamics.optimizers.fire2 import FIRE2, FIRE2VariableCell
+from nvalchemi.dynamics.optimizers.lbfgs import LBFGS, LBFGSVariableCell
 from nvalchemi.hooks import DynamicsContext, Hook
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -522,6 +525,39 @@ class TestBaseDynamics:
             convergence_hook=hook,
         )
         assert dynamics.convergence_hook is hook
+
+    def test_compute_publishes_only_active_graph_and_node_rows(self) -> None:
+        """Active rows convert model outputs and inactive rows stay unchanged."""
+        self.model.double()
+        dynamics = BaseDynamics(self.model)
+        batch = create_simple_batch()
+        batch.energy.fill_(-11.0)
+        batch.forces.fill_(-13.0)
+        active_graph_mask = torch.tensor([True, False])
+        active_node_mask = active_graph_mask[batch.batch_idx]
+
+        outputs = dynamics.compute(batch, active_graph_mask)
+
+        assert outputs["energy"].dtype == torch.float64
+        assert outputs["forces"].dtype == torch.float64
+        assert batch.energy.dtype == torch.float32
+        assert batch.forces.dtype == torch.float32
+        torch.testing.assert_close(
+            batch.energy[active_graph_mask],
+            outputs["energy"][active_graph_mask].to(batch.energy.dtype),
+        )
+        torch.testing.assert_close(
+            batch.forces[active_node_mask],
+            outputs["forces"][active_node_mask].to(batch.forces.dtype),
+        )
+        torch.testing.assert_close(
+            batch.energy[~active_graph_mask],
+            torch.full_like(batch.energy[~active_graph_mask], -11.0),
+        )
+        torch.testing.assert_close(
+            batch.forces[~active_node_mask],
+            torch.full_like(batch.forces[~active_node_mask], -13.0),
+        )
 
     def test_compute_restores_requires_grad_on_autograd_inputs(self) -> None:
         """Verify compute() restores requires_grad on positions after forwarding.
@@ -1063,6 +1099,23 @@ class TestConvergenceHook:
 
         assert result is not None
         assert result.tolist() == [0]
+
+    def test_by_group_requires_all_graphs_to_converge(self) -> None:
+        """Grouped convergence should return either every group member or none."""
+        batch = create_simple_batch()
+        batch.set_group_layout(torch.tensor([0, 0]))
+        batch["fmax"] = torch.tensor([0.01, 0.10])
+        hook = self.ConvergenceHook(
+            criteria={"key": "fmax", "threshold": 0.05},
+            by_group=True,
+        )
+
+        assert hook.evaluate(batch) is None
+
+        batch["fmax"] = torch.tensor([0.01, 0.02])
+        converged = hook.evaluate(batch)
+        assert converged is not None
+        assert converged.tolist() == [0, 1]
 
     def test_multi_criteria_and_semantics(self) -> None:
         """Verify two criteria (fmax AND energy_change) require both to converge."""
@@ -2222,3 +2275,43 @@ class TestSeedOffset:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestSamplesEquilibrium:
+    """Tests for the samples_equilibrium declaration on dynamics classes."""
+
+    @pytest.mark.parametrize(
+        "dynamics_cls", [BaseDynamics, DemoDynamics, NVTLangevin, FusedStage]
+    )
+    def test_the_engine_and_the_integrators_declare_sampling(
+        self, dynamics_cls: type[BaseDynamics]
+    ) -> None:
+        """The base declaration is True and an integrator inherits it."""
+        assert dynamics_cls.samples_equilibrium is True
+
+    @pytest.mark.parametrize(
+        "optimizer_cls",
+        [FIRE, FIREVariableCell, FIRE2, FIRE2VariableCell, LBFGS, LBFGSVariableCell],
+    )
+    def test_the_relaxation_optimizers_declare_a_descent(
+        self, optimizer_cls: type[BaseDynamics]
+    ) -> None:
+        """Every built-in minimizer declares that it does not sample an ensemble."""
+        assert optimizer_cls.samples_equilibrium is False
+
+    def test_a_subclass_inherits_its_parents_declaration(self) -> None:
+        """A user optimizer built on FIRE is a descent unless it says otherwise."""
+
+        class _Quenched(FIRE):
+            pass
+
+        class _Sampling(FIRE):
+            samples_equilibrium = True
+
+        assert _Quenched.samples_equilibrium is False
+        assert _Sampling.samples_equilibrium is True
+
+    def test_the_declaration_is_read_on_an_instance_too(self) -> None:
+        """An instance reports its class's declaration."""
+        dynamics = DemoDynamics(DemoModelWrapper(DemoModel()), n_steps=1)
+        assert dynamics.samples_equilibrium is True

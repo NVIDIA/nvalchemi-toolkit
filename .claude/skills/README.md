@@ -11,15 +11,17 @@ copy the skill folders into your project's or home skills directory.
 
 | Task | Skill |
 | --- | --- |
-| Build or batch atomic systems; debug shape, dtype, or device errors | `nvalchemi-data-structures` |
+| Build, batch, or group atomic systems; debug shape, dtype, or device errors | `nvalchemi-data-structures` |
 | Write, read, compose, or stream atomic data with the Zarr pipeline | `nvalchemi-data-storage` |
 | Tune Dataset/DataLoader throughput or Zarr chunking | `nvalchemi-zarr-perf` |
 | Wrap an MLIP or custom PyTorch model for use in nvalchemi | `nvalchemi-model-wrapping` |
 | Train a model from scratch, or scale it across GPUs/nodes (DDP) | `nvalchemi-training-api` |
 | Adapt a pretrained model to new reference data | `nvalchemi-fine-tuning` |
+| Distill a large teacher MLIP into a small student, offline or on-policy | `nvalchemi-distillation` |
 | Choose, weight, mask, or implement loss functions | `nvalchemi-loss-api` |
 | Run MD, relaxation, or EOS scans; compose batched pipelines | `nvalchemi-dynamics-api` |
 | Add per-step callbacks (neighbor lists, convergence, logging) | `nvalchemi-dynamics-hooks` |
+| Build reaction paths or run NEB for minimum-energy paths | `nvalchemi-mep` |
 | Implement a new integrator, optimizer, or sampler class | `nvalchemi-dynamics-implementation` |
 | Add progress dashboards, TensorBoard, or CSV observability | `nvalchemi-reporting` |
 
@@ -32,8 +34,9 @@ when you are new to an area:
 
 ```text
 data-structures -> data-storage -> zarr-perf
-model-wrapping + loss-api -> training-api -> fine-tuning
+model-wrapping + loss-api -> training-api -> fine-tuning | distillation
 dynamics-hooks -> dynamics-api | dynamics-implementation
+dynamics-hooks + dynamics-api -> mep
 reporting (orthogonal: attaches to training and dynamics)
 ```
 

@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from nvalchemi.data import AtomicData, Batch
@@ -146,8 +147,15 @@ class TestLoggingHook:
 # ===========================================================================
 
 
+@pytest.mark.filterwarnings(
+    "ignore:BiasedPotentialHook is deprecated:DeprecationWarning"
+)
 class TestBiasedPotentialHook:
-    """BiasedPotentialHook fires correctly under DynamicsStage."""
+    """BiasedPotentialHook fires correctly under DynamicsStage.
+
+    Deprecated in favour of :mod:`nvalchemi.enhanced_sampling`, but still
+    functional, so its behaviour stays under test.
+    """
 
     def test_dynamics_stage_adds_bias(self) -> None:
         """Bias is applied to forces and energy under DynamicsStage."""

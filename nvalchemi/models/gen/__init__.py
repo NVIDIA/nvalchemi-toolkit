@@ -19,8 +19,8 @@ non-energy counterpart to :mod:`nvalchemi.models.base`. The mixin owns
 only the raw model output (predicted flow/velocity) from one forward
 call, structured by ``adapt_output``.
 It owns no scheduler, sampler, or guidance; those compose on the
-:class:`~nvalchemi.gen.generator.AtomisticGenerator` via a
-:class:`~nvalchemi.gen.generator.GeneratingFunction`.
+:class:`~nvalchemi.gen.AtomisticGenerator` via a
+:class:`~nvalchemi.gen.GeneratingFunction`.
 """
 
 from __future__ import annotations

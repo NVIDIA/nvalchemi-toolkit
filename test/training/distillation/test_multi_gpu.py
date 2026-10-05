@@ -17,13 +17,10 @@
 from __future__ import annotations
 
 import os
-import socket
-import time
 import warnings
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Iterator
 from itertools import combinations
 from pathlib import Path
-from queue import Empty
 from typing import Any
 from unittest.mock import patch
 
@@ -78,7 +75,9 @@ from test.training.distillation.conftest import (
     _build_propagator_system,
     _build_reference_dataset,
     _build_small_dataset,
+    _free_port,
     _ListSource,
+    _spawn_ranks,
 )
 from test.training.distillation.test_on_policy import (
     _LANGEVIN_KWARGS,
@@ -134,16 +133,6 @@ _RELAXATION_WORLDS = [
     pytest.param(2, True, id="recycled_one_row_shards"),
 ]
 """Structure counts and recycling a two-rank relaxation loop is dealt."""
-
-_RANK_REPORT_TIMEOUT = 600.0
-"""Seconds every spawned rank has to report before the world is declared hung."""
-
-
-def _free_port() -> int:
-    """Return an available localhost TCP port for process-group setup."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
 
 
 def _make_distributed_strategy(
@@ -525,51 +514,6 @@ def _run_union_worker(rank: int, world_size: int, port: int, result_queue: Any) 
     )
 
 
-def _spawn_ranks(
-    worker: Callable[..., None], rank_args: Sequence[tuple[Any, ...]]
-) -> dict[int, dict[str, Any]]:
-    """Spawn one process per entry of *rank_args* and collect what each reports.
-
-    Every worker is handed its own arguments followed by the result queue. The
-    wait polls the children rather than blocking on the queue for the whole
-    timeout, so a rank that dies without reporting — taking its peers down into
-    a collective that will never complete — fails the call in seconds.
-    """
-    ctx = torch.multiprocessing.get_context("spawn")
-    result_queue = ctx.Queue()
-    procs = [
-        ctx.Process(target=worker, args=(*args, result_queue)) for args in rank_args
-    ]
-    for proc in procs:
-        proc.start()
-    results: dict[int, dict[str, Any]] = {}
-    deadline = time.monotonic() + _RANK_REPORT_TIMEOUT
-    try:
-        while len(results) < len(procs):
-            try:
-                rank, payload = result_queue.get(timeout=1)
-            except Empty:
-                dead = {
-                    index: proc.exitcode
-                    for index, proc in enumerate(procs)
-                    if proc.exitcode not in (None, 0)
-                }
-                assert not dead, f"ranks exited before reporting: {dead}."
-                assert time.monotonic() < deadline, (
-                    f"{len(procs) - len(results)} rank(s) never reported."
-                )
-                continue
-            results[rank] = payload
-        for proc in procs:
-            proc.join(timeout=60)
-            assert proc.exitcode == 0
-    finally:
-        for proc in procs:
-            if proc.is_alive():
-                proc.terminate()
-    return results
-
-
 def _run_ranks(
     world_size: int,
     *,
@@ -728,6 +672,16 @@ class _StudentWrapperHook:
     def __call__(self, ctx: Any, stage: Any) -> None:  # noqa: ARG002
         """Replace the registered student with a wrapper owning it."""
         ctx.workflow.models["student"] = _RecordingDDP(ctx.workflow.models["student"])
+
+
+def _init_single_rank_group(tmp_path: Path) -> None:
+    """Initialize a single-rank gloo group, enough to build a real replica on CPU."""
+    dist.init_process_group(
+        "gloo",
+        init_method=f"file://{tmp_path / 'ddp_init'}",
+        rank=0,
+        world_size=1,
+    )
 
 
 class _RankZeroOnlySource(_ListSource):
@@ -1688,6 +1642,73 @@ class TestGradientSynchronization:
             strategy.run()
 
         assert strategy.step_count == 0
+
+    @pytest.mark.skipif(not dist.is_gloo_available(), reason="gloo backend required")
+    def test_a_student_wrapped_before_the_run_passes_beside_an_idle_ddp_hook(
+        self, tmp_path: Path
+    ) -> None:
+        """A DDPHook leaves a real replica alone, and the replica itself counts."""
+        if dist.is_initialized():
+            pytest.skip("test requires ownership of the process group")
+        _init_single_rank_group(tmp_path)
+        student = _build_demo_model()
+        hook = DDPHook()
+        strategy = _make_on_policy_strategy(
+            num_steps=2,
+            student=student,
+            distributed_manager=_FakeManager(world_size=2),
+            hooks=[hook],
+        )
+        strategy.models["student"] = torch.nn.parallel.DistributedDataParallel(student)
+
+        strategy.run()
+
+        assert strategy.step_count == 2
+        assert hook.wrapped_keys == frozenset()
+        assert unwrap_model(strategy.models["student"]) is student
+
+    def test_a_student_wrapped_before_the_run_by_an_unrecognized_wrapper_is_rejected(
+        self,
+    ) -> None:
+        """Owning the student is not reducing its gradients, so a plain wrapper fails."""
+        student = _build_demo_model()
+        strategy = _make_on_policy_strategy(
+            num_steps=2,
+            student=student,
+            distributed_manager=_FakeManager(world_size=2),
+        )
+        strategy.models["student"] = _RecordingDDP(student)
+
+        assert not isinstance(
+            strategy.models["student"], torch.nn.parallel.DistributedDataParallel
+        )
+        with pytest.raises(
+            ValueError, match="gradients have to be synchronized"
+        ) as info:
+            strategy.run()
+
+        assert "a wrapper this check does not recognize" in str(info.value)
+        assert "require_wrapped_student=False" in str(info.value)
+        assert strategy.step_count == 0
+
+    def test_an_unrecognized_wrapper_runs_under_the_waiver_with_a_warning(
+        self,
+    ) -> None:
+        """Opting out keeps the caller's wrapper and hands it the synchronization."""
+        student = _build_demo_model()
+        strategy = _make_on_policy_strategy(
+            num_steps=2,
+            student=student,
+            distributed_manager=_FakeManager(world_size=2),
+            config_overrides={"require_wrapped_student": False},
+        )
+        strategy.models["student"] = _RecordingDDP(student)
+
+        with pytest.warns(UserWarning, match="caller's responsibility"):
+            strategy.run()
+
+        assert strategy.step_count == 2
+        assert unwrap_model(strategy.models["student"]) is student
 
     def test_a_bare_student_holding_a_submodule_named_module_is_rejected(self) -> None:
         """Unwrapping alone reads an accidental ``module`` child as a wrapper."""

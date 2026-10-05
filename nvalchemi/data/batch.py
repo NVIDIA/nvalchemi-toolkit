@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from typing import Any, TypeAlias
 
 import numpy as np
@@ -45,6 +46,10 @@ from torch.distributed import ProcessGroup, Work
 
 from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.data import DataMixin
+from nvalchemi.data.group_layout import (
+    GroupLayout,
+    _normalize_and_validate_group_idx,
+)
 from nvalchemi.data.level_storage import (
     LevelSchema,
     MultiLevelStorage,
@@ -79,7 +84,7 @@ _UNIFORM_BUFFER_DTYPES = frozenset(
 )
 
 
-_OWN_ATTRS = frozenset({"device", "keys", "_storage", "_data_class"})
+_OWN_ATTRS = frozenset({"device", "keys", "_storage", "_data_class", "_group_layout"})
 
 LevelStorage: TypeAlias = UniformLevelStorage | SegmentedLevelStorage
 
@@ -815,6 +820,9 @@ class Batch(DataMixin):
         if name in _OWN_ATTRS:
             object.__setattr__(self, name, value)
         elif isinstance(value, torch.Tensor):
+            if name == "group_idx":
+                # Remove outdated properties
+                self._invalidate_group_layout()
             self._storage[name] = value
         else:
             object.__setattr__(self, name, value)
@@ -1076,6 +1084,53 @@ class Batch(DataMixin):
         """Maximum node count in any graph."""
         nodes = self.num_nodes_list
         return max(nodes) if nodes else 0
+
+    # ------------------------------------------------------------------
+    # Group-related properties
+    # ------------------------------------------------------------------
+
+    @property
+    def group_layout(self) -> GroupLayout:
+        """Derived group-cardinality layout, built lazily from ``group_idx``."""
+        if getattr(self, "_group_layout", None) is None:
+            object.__setattr__(self, "_group_layout", GroupLayout.from_batch(self))
+        return self._group_layout
+
+    def set_group_layout(self, group_idx: Tensor) -> None:
+        """Store graph grouping metadata and immediately rebuild its layout.
+
+        Arbitrary integer labels are normalized by order of appearance to dense
+        local group indices. Graphs belonging to one group must be contiguous.
+
+        Parameters
+        ----------
+        group_idx : torch.Tensor
+            Integer group label for every graph, shape ``[B]``.
+        """
+        normalized = _normalize_and_validate_group_idx(
+            group_idx,
+            num_graphs=self.num_graphs,
+            device=self.device,
+        )
+        system = self._storage.groups.get("system")
+        if system is None:
+            self._storage.groups["system"] = UniformLevelStorage(
+                data={"group_idx": normalized},
+                device=self.device,
+                attr_map=self._storage.attr_map,
+                validate=False,
+            )
+        else:
+            system["group_idx"] = normalized
+        if self.keys is not None:
+            self.keys.setdefault("system", set()).add("group_idx")
+        object.__setattr__(self, "_group_layout", GroupLayout.from_batch(self))
+
+    def _invalidate_group_layout(self) -> None:
+        """Clear the cached group layout without modifying ``group_idx`` after a
+        mutation that may affect grouping."""
+        if getattr(self, "_group_layout", None) is not None:
+            object.__setattr__(self, "_group_layout", None)
 
     # ------------------------------------------------------------------
     # Internal group accessors
@@ -1444,7 +1499,8 @@ class Batch(DataMixin):
 
         Zeros all leaf data tensors while preserving the allocated storage
         capacity.  After calling ``zero()``, ``num_graphs`` returns 0 but
-        ``system_capacity`` remains unchanged.
+        ``system_capacity`` remains unchanged. Group-label storage is retained,
+        while :attr:`group_layout` describes zero occupied graphs and groups.
 
         This method is used to reset pre-allocated communication buffers
         (created via :meth:`empty`) between pipeline steps without
@@ -1465,10 +1521,11 @@ class Batch(DataMixin):
         >>> batch.system_capacity
         10
         """
+        self._invalidate_group_layout()
         for group in self._storage.groups.values():
             group._data.apply_(lambda x: x.zero_())
 
-            if hasattr(group, "_num_kept"):
+            if isinstance(group, UniformLevelStorage):
                 object.__setattr__(group, "_num_kept", 0)
 
             if hasattr(group, "segment_lengths"):
@@ -1720,7 +1777,9 @@ class Batch(DataMixin):
         Raises
         ------
         ValueError
-            If *src_batch* is on another device than this batch, or if a mask's
+            If either batch has ``group_idx`` metadata (because graph-level
+            insertion cannot preserve whole groups), or if *src_batch* is on
+            another device than this batch, or if a mask's
             length does not match ``src_batch.num_graphs``.
 
         Notes
@@ -1730,6 +1789,13 @@ class Batch(DataMixin):
         hide a per-step host-device transfer inside what callers use as an
         in-place buffer write.
         """
+        if "group_idx" in self or "group_idx" in src_batch:
+            raise ValueError(
+                "put does not support grouped batches; group_idx must be absent "
+                "from both source and destination. Use append() to combine "
+                "grouped batches."
+            )
+        self._invalidate_group_layout()
         device = self.device
         if src_batch.device != device:
             raise ValueError(
@@ -1845,6 +1911,7 @@ class Batch(DataMixin):
         Self
             For method chaining.
         """
+        self._invalidate_group_layout()
         if copied_mask is None:
             copied_mask = getattr(self, "_copied_mask", None)
             if copied_mask is None:
@@ -1972,6 +2039,8 @@ class Batch(DataMixin):
 
     def __setitem__(self, key: str, value: Any) -> None:
         """Set an attribute, routing to the correct group."""
+        if key == "group_idx":
+            object.__setattr__(self, "_group_layout", None)
         self._storage[key] = value
 
     def __contains__(self, key: str) -> bool:
@@ -2011,6 +2080,8 @@ class Batch(DataMixin):
 
     def __delitem__(self, key: str) -> None:
         """Delete an attribute from the underlying storage."""
+        if key == "group_idx":
+            object.__setattr__(self, "_group_layout", None)
         del self._storage[key]
 
     # ------------------------------------------------------------------
@@ -2154,6 +2225,8 @@ class Batch(DataMixin):
         schema: LevelSchema,
     ) -> tuple[str, list[Tensor]]:
         """Validate common ``add_key`` arguments and normalize its values."""
+        if key == "group_idx":
+            raise ValueError("group_idx must be assigned through set_group_layout()")
         if dtype is not None and not isinstance(dtype, torch.dtype):
             raise TypeError(
                 f"dtype must be a torch.dtype or None, got {type(dtype).__name__}"
@@ -2732,6 +2805,11 @@ class Batch(DataMixin):
         data), this batch's tensors in that group are extended with zeros so
         that the first dimension (num graphs) stays aligned.
 
+        Grouped batches may only be appended to other grouped batches. The
+        appended batch's local ``group_idx`` values are rebased after the
+        receiver's existing groups. Appending a grouped and an ungrouped batch
+        is rejected before either batch is modified.
+
         Parameters
         ----------
         other : Batch
@@ -2777,6 +2855,26 @@ class Batch(DataMixin):
                 group.device,
             )
 
+        self_grouped = "group_idx" in self
+        other_grouped = "group_idx" in other
+        if self_grouped != other_grouped:
+            raise ValueError(
+                "Cannot append grouped and ungrouped batches; group_idx must be "
+                "present on both batches or neither batch"
+            )
+
+        combined_group_idx: Tensor | None = None
+        if self_grouped:
+            num_groups = self.group_layout.num_groups
+            other.group_layout  # validate before mutating either batch
+            combined_group_idx = torch.cat(
+                [
+                    self.group_idx,
+                    other.group_idx.to(device=self.device) + num_groups,
+                ]
+            )
+
+        self._invalidate_group_layout()
         atoms = self._atoms_group
         other_atoms = other._atoms_group
         saved_ei = None
@@ -2818,6 +2916,9 @@ class Batch(DataMixin):
             if saved_ei is not None:
                 other_edges._data["neighbor_list"] = saved_ei
 
+        if combined_group_idx is not None:
+            self.set_group_layout(combined_group_idx)
+
     def append_data(
         self,
         data_list: list[AtomicData],
@@ -2835,10 +2936,15 @@ class Batch(DataMixin):
         Raises
         ------
         ValueError
-            If *data_list* is empty.
+            If *data_list* is empty or this batch has ``group_idx`` metadata.
         """
         if not data_list:
             raise ValueError("No data provided to append.")
+        if "group_idx" in self:
+            raise ValueError(
+                "Cannot append AtomicData objects to a grouped batch. Construct a "
+                "grouped Batch and use append() so group_idx can be rebased"
+            )
         other = Batch.from_data_list(
             data_list,
             device=self.device,
@@ -2893,7 +2999,7 @@ class Batch(DataMixin):
             values does not match the batch size, shape, dtype, or level
             cardinality, if empty-field metadata is incomplete or invalid, or
             if the batch has no atom or edge group to add a field at that level
-            to.
+            to, or if *key* is ``"group_idx"``.
         TypeError
             If *level* is not a string, a value is not a tensor, or an explicit
             dtype or payload shape has the wrong type.
@@ -3230,6 +3336,69 @@ class Batch(DataMixin):
     # DataMixin overrides (performance-critical)
     # ------------------------------------------------------------------
 
+    @contextmanager
+    def without_keys(self, *keys: str) -> Iterator[None]:
+        """Hide *keys* from the batch for the duration of a block.
+
+        Each of *keys* the batch carries is removed on entry and put back on
+        exit, at the level it came from and as the same tensor. Every one of
+        *keys* the batch carries when the block ends, whether written inside
+        it or not, is removed first, so a model that writes
+        ``node_embeddings`` onto the batch leaves no trace of the write, and a
+        tensor read inside the block outlives it, autograd graph included. A
+        key the batch does not carry is ignored on entry. The tracked key
+        sets in :attr:`keys` are hidden and restored alongside.
+
+        Parameters
+        ----------
+        *keys : str
+            Field names to hide.
+
+        Yields
+        ------
+        None
+            Control while the batch carries none of *keys*.
+
+        Examples
+        --------
+        >>> with batch.without_keys("node_embeddings", "graph_embeddings"):  # doctest: +SKIP
+        ...     model.compute_embeddings(batch)
+        ...     embeddings = batch["node_embeddings"]
+        >>> "node_embeddings" in batch  # doctest: +SKIP
+        False
+
+        Notes
+        -----
+        A hidden key is written back into the level group it was read from
+        rather than through :meth:`__setitem__`, because ``del`` drops a key
+        from every level, after which ``__setitem__`` would route it by the
+        attribute registry rather than by where the tensor was stored.
+        """
+        hidden = frozenset(keys)
+        saved_levels = {
+            key: level
+            for level, fields in self.level_keys.items()
+            for key in hidden & fields
+        }
+        saved_values = {key: self[key] for key in saved_levels}
+        for key in saved_levels:
+            del self[key]
+        saved_tracked = {
+            level: names & hidden for level, names in (self.keys or {}).items()
+        }
+        for level in saved_tracked:
+            self.keys[level] -= hidden
+        try:
+            yield
+        finally:
+            for key in hidden:
+                if key in self:
+                    del self[key]
+            for key, value in saved_values.items():
+                self._storage.groups[saved_levels[key]][key] = value
+            for level, names in saved_tracked.items():
+                self.keys[level] = (self.keys[level] - hidden) | names
+
     def to(
         self,
         device: torch.device | str,
@@ -3315,6 +3484,7 @@ class Batch(DataMixin):
         Self
             For method chaining.
         """
+        self._invalidate_group_layout()
         for group in self._storage.groups.values():
             for key, tensor in list(group.items()):
                 group._data[key] = tensor.pin_memory()
@@ -3322,6 +3492,7 @@ class Batch(DataMixin):
 
     def _make_contiguous(self) -> Batch:
         """Ensure all tensors are contiguous. Returns self for chaining."""
+        self._invalidate_group_layout()
         for group in self._storage.groups.values():
             for key, tensor in list(group.items()):
                 if not tensor.is_contiguous():

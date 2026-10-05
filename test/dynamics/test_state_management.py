@@ -16,115 +16,62 @@
 Tests for BaseDynamics per-system _state batch lifecycle:
   - Lazy initialization via _ensure_state_initialized
   - Correct tensor shapes for every integrator
-  - _state.num_graphs == batch.num_graphs invariant
+  - State cardinality matches graphs or group-aware update units
   - State sync after inflight batch refills (refill_check)
   - FusedStage sub-stage initialization via masked_update
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from unittest.mock import Mock, patch
 
 import pytest
 import torch
 
-from nvalchemi.data import AtomicData, Batch
+from nvalchemi.data import Batch
+from nvalchemi.dynamics.base import BaseDynamics
 
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_atomic_data(
-    n_atoms: int, seed: int = 0, with_cell: bool = False
-) -> AtomicData:
-    """Return a minimal AtomicData suitable for dynamics tests."""
-    g = torch.Generator()
-    g.manual_seed(seed)
-    kwargs = dict(
-        positions=torch.randn(n_atoms, 3, generator=g),
-        atomic_numbers=torch.randint(1, 10, (n_atoms,), dtype=torch.long, generator=g),
-        atomic_masses=torch.ones(n_atoms),
-        forces=torch.zeros(n_atoms, 3),
-        energy=torch.zeros(1, 1),
-    )
-    if with_cell:
-        kwargs["cell"] = torch.eye(3).unsqueeze(0)
-        kwargs["stress"] = torch.zeros(1, 3, 3)
-    data = AtomicData(**kwargs)
-    data.add_node_property("velocities", torch.zeros(n_atoms, 3))
-    return data
+from .conftest import _make_atomic_data, _make_batch, _make_model, _MockSampler
 
 
-def _make_batch(
-    n_systems: int, n_atoms_each: int = 4, seed: int = 0, with_cell: bool = False
-) -> Batch:
-    data_list = [
-        _make_atomic_data(n_atoms_each, seed + i, with_cell=with_cell)
-        for i in range(n_systems)
-    ]
-    return Batch.from_data_list(data_list)
+class _TestState:
+    """Minimal iterable state container matching BaseDynamics' state contract."""
+
+    def __init__(self, value: torch.Tensor) -> None:
+        self.value = value
+
+    @property
+    def num_graphs(self) -> int:
+        """Return the number of state rows."""
+        return self.value.shape[0]
+
+    def __iter__(self) -> Iterator[tuple[str, torch.Tensor]]:
+        """Iterate over named state tensors."""
+        return iter((("value", self.value),))
 
 
-def _make_stress_model():
-    """Return a DemoModelWrapper subclass that also reports zero stress.
+class _StatefulDynamics(BaseDynamics):
+    """Minimal dynamics implementation for generic state-management tests."""
 
-    NPT/NPH declare ``"stress"`` in ``__needs_keys__``, so ``step()``
-    requires the model to produce stress in its output dict.  This
-    factory builds a minimal subclass that appends a (M, 3, 3) zero
-    stress tensor so that ``_validate_model_outputs`` passes.  The
-    actual stress value used by NPT/NPH kernels is read from
-    ``batch.stress``, which is initialised to zeros when the batch is
-    built with ``with_cell=True``.
-    """
-    from collections import OrderedDict
+    __provides_keys__: set[str] = {"positions"}
 
-    from nvalchemi.models.base import ModelConfig
-    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
-
-    class _Wrapper(DemoModelWrapper):
-        def __init__(self):
-            super().__init__(DemoModel())
-            base = self.model_config
-            self.model_config = ModelConfig(
-                outputs=frozenset(set(base.outputs) | {"stress"}),
-                autograd_outputs=base.autograd_outputs,
-                autograd_inputs=base.autograd_inputs,
-                required_inputs=base.required_inputs,
-                optional_inputs=base.optional_inputs,
-                supports_pbc=base.supports_pbc,
-                neighbor_config=base.neighbor_config,
-                needs_pbc=base.needs_pbc,
+    def _init_state(self, batch: Batch) -> None:
+        self._state = _TestState(
+            torch.zeros(
+                self._num_update_units(batch),
+                dtype=batch.positions.dtype,
+                device=batch.device,
             )
+        )
 
-        def adapt_output(self, model_output, data):
-            M = data.num_graphs if hasattr(data, "num_graphs") else 1
-            return OrderedDict(
-                [
-                    ("energy", model_output["energy"]),
-                    ("forces", model_output["forces"]),
-                    (
-                        "stress",
-                        torch.zeros(
-                            M,
-                            3,
-                            3,
-                            device=data.positions.device,
-                            dtype=data.positions.dtype,
-                        ),
-                    ),
-                ]
-            )
+    def pre_update(self, batch: Batch) -> None:
+        """Increment positions and every update unit's state."""
+        batch.positions.add_(1.0)
+        self._state.value.add_(1.0)
 
-    return _Wrapper()
-
-
-def _make_model(needs_stress: bool = False):
-    from nvalchemi.models.demo import DemoModel, DemoModelWrapper
-
-    if needs_stress:
-        return _make_stress_model()
-    return DemoModelWrapper(DemoModel())
+    def post_update(self, batch: Batch) -> None:
+        """No-op after the model evaluation."""
 
 
 def _discover_dynamics_implementations() -> list[type]:
@@ -222,6 +169,16 @@ class TestStateLazyInit:
         self._run_step(dyn, batch)
         assert hasattr(dyn, "_state")
 
+    def test_lbfgs_state_initialized_on_first_step(self):
+        from nvalchemi.dynamics.optimizers.lbfgs import LBFGS
+
+        model = _make_model()
+        batch = _make_batch(2)
+        dyn = LBFGS(model=model)
+        assert not hasattr(dyn, "_state")
+        self._run_step(dyn, batch)
+        assert hasattr(dyn, "_state")
+
     def test_npt_state_initialized_on_first_step(self):
         # NPT/NPH step() exercises warp kernels that require a GPU or a
         # specific dtype configuration not available in the CPU test env.
@@ -301,13 +258,13 @@ class TestStateShapes:
         _discover_dynamics_implementations(),
         ids=lambda cls: cls.__name__,
     )
-    def test_all_state_fields_are_system_major(self, dynamics_cls):
-        """Require every state tensor to have one leading row per graph.
+    def test_all_state_fields_are_entity_major(self, dynamics_cls):
+        """Require every state tensor to lead with its owning entity.
 
         BaseDynamics._save_state_fields clones every state field, and
-        BaseDynamics._restore_unmasked_state expands a graph mask across
-        each field's trailing dimensions. Both methods therefore require
-        state tensors to have shape [num_graphs, *trailing_dimensions].
+        index_select/append gather along dimension zero, so each field must
+        have shape [level cardinality, *trailing]: num_graphs for the system
+        level, the summed segment lengths for a segmented level.
 
         Implementations are discovered automatically so a newly added
         integrator or optimizer cannot be silently omitted. A new required
@@ -348,13 +305,28 @@ class TestStateShapes:
             assert dynamics._save_state_fields() == {}
             return
 
+        from nvalchemi.data.level_storage import SegmentedLevelStorage
+
         saved = dynamics._save_state_fields()
         assert state.num_graphs == num_graphs
         assert saved.keys() == {key for key, _ in state}
+
+        # Expected leading dimension per level: graphs for a uniform level,
+        # total elements for a segmented one.
+        expected_leading = {}
+        for group in state._storage.groups.values():
+            leading = (
+                int(group.segment_lengths.sum())
+                if isinstance(group, SegmentedLevelStorage)
+                else num_graphs
+            )
+            for key in group.keys():
+                expected_leading[key] = leading
+
         for key, value in state:
             assert isinstance(value, torch.Tensor), key
             assert value.ndim > 0, key
-            assert value.shape[0] == num_graphs, key
+            assert value.shape[0] == expected_leading[key], key
             assert saved[key].shape == value.shape, key
             assert saved[key].data_ptr() != value.data_ptr(), key
 
@@ -489,6 +461,29 @@ class TestStateShapes:
         assert dyn._state.cell_velocities.shape == (M, 3, 3)
         assert dyn._state.num_graphs == M
 
+    @pytest.mark.parametrize("M", [1, 3])
+    def test_lbfgs_shapes(self, M):
+        from nvalchemi.dynamics.optimizers.lbfgs import LBFGS
+
+        batch = _make_batch(M)
+        dyn = LBFGS(model=_make_model(), history_size=4)
+        dyn._init_state(batch)
+        assert dyn._state.s_history.shape == (batch.num_nodes, 4, 3)
+        assert dyn._state.ys.shape == (M, 4)
+        assert dyn._state.iteration.dtype == torch.int32
+        assert dyn._state.num_graphs == M
+
+    @pytest.mark.parametrize("M", [1, 2])
+    def test_lbfgs_variable_cell_shapes(self, M):
+        from nvalchemi.dynamics.optimizers.lbfgs import LBFGSVariableCell
+
+        batch = _make_batch(M, with_cell=True)
+        dyn = LBFGSVariableCell(model=_make_model())
+        dyn._init_state(batch)
+        assert dyn._state.ref_cell.shape == (M, 3, 3)
+        assert dyn._state.x_base.shape == (batch.num_nodes + 2 * M, 3)
+        assert dyn._state.num_graphs == M
+
     def test_nve_state_dtype_matches_positions(self):
         from nvalchemi.dynamics.integrators.nve import NVE
 
@@ -498,6 +493,51 @@ class TestStateShapes:
         dyn._init_state(batch)
         # State dtype must match the actual positions dtype of the batch.
         assert dyn._state.dt.dtype == batch.positions.dtype
+
+
+class TestGroupedState:
+    """BaseDynamics manages state by graph group when requested."""
+
+    def _grouped_batch(self) -> Batch:
+        batch = _make_batch(4, n_atoms_each=2)
+        batch.set_group_layout(torch.tensor([0, 0, 1, 1]))
+        return batch
+
+    def test_grouped_state_and_update_index(self):
+        batch = self._grouped_batch()
+        original_batch_idx = batch.batch_idx.clone()
+        dyn = _StatefulDynamics(model=_make_model(), by_group=True)
+        dyn._ensure_state_initialized(batch)
+
+        assert dyn._state.num_graphs == 2
+        assert dyn._state.value.shape == (2,)
+        assert dyn._num_update_units(batch) == 2
+        torch.testing.assert_close(
+            dyn._update_idx(batch),
+            torch.tensor([0, 0, 0, 0, 1, 1, 1, 1], dtype=torch.int32),
+        )
+        torch.testing.assert_close(batch.batch_idx, original_batch_idx)
+
+    def test_masked_pre_update_preserves_inactive_group_state(self):
+        batch = self._grouped_batch()
+        dyn = _StatefulDynamics(model=_make_model(), by_group=True)
+        dyn._ensure_state_initialized(batch)
+        original_positions = batch.positions.clone()
+
+        dyn._masked_pre_update(
+            batch,
+            torch.tensor([True, True, False, False]),
+        )
+
+        torch.testing.assert_close(batch.positions[:4], original_positions[:4] + 1.0)
+        torch.testing.assert_close(batch.positions[4:], original_positions[4:])
+        torch.testing.assert_close(dyn._state.value, torch.tensor([1.0, 0.0]))
+
+    def test_grouped_batch_requires_layout(self):
+        dyn = _StatefulDynamics(model=_make_model(), by_group=True)
+
+        with pytest.raises(ValueError, match="no group_idx"):
+            dyn._ensure_state_initialized(_make_batch(2))
 
 
 # ---------------------------------------------------------------------------
@@ -705,6 +745,18 @@ class TestMakeNewState:
         assert state.alpha.shape == (n_new,)
         assert state.num_graphs == n_new
 
+    @pytest.mark.parametrize("n_new", [1, 2])
+    def test_lbfgs_make_new_state(self, n_new):
+        from nvalchemi.dynamics.optimizers.lbfgs import LBFGS
+
+        template = self._template()
+        dyn = LBFGS(model=_make_model())
+        state = dyn._make_new_state(n_new, template)
+        assert state.num_graphs == n_new
+        # Fresh state: never evaluated, no history.
+        assert (state.iteration == -1).all()
+        assert (state.history_count == 0).all()
+
     def test_demo_dynamics_make_new_state_returns_none(self):
         from nvalchemi.dynamics.demo import DemoDynamics
 
@@ -752,6 +804,29 @@ class TestFusedStageStateInit:
         assert hasattr(fire, "_state")
         assert hasattr(lang, "_state")
 
+    def test_grouped_stage_preserves_inactive_group_state(self):
+        model = _make_model()
+        grouped = _StatefulDynamics(model=model, by_group=True)
+        second = _StatefulDynamics(model=model, by_group=True)
+        fused = grouped + second
+
+        batch = self._make_status_batch(4, n_atoms=2)
+        batch.set_group_layout(torch.tensor([0, 0, 1, 1]))
+        batch.status.copy_(torch.tensor([[0], [0], [1], [1]]))
+        fused.step(batch)
+
+        torch.testing.assert_close(grouped._state.value, torch.tensor([1.0, 0.0]))
+
+    def test_sub_stages_must_agree_on_group_mode(self):
+        from nvalchemi.dynamics.demo import DemoDynamics
+
+        model = _make_model()
+        grouped = _StatefulDynamics(model=model, by_group=True)
+        per_graph = DemoDynamics(model=model, n_steps=1)
+
+        with pytest.raises(ValueError, match="must agree"):
+            grouped + per_graph
+
     def test_sub_stage_state_shapes_match_full_batch(self):
         """Sub-stage _state.num_graphs == batch.num_graphs (not masked count)."""
         from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin
@@ -797,47 +872,13 @@ class TestFusedStageStateInit:
 
         saved = first._save_state_fields()
         wrong_cardinality_mask = torch.ones(3, dtype=torch.bool)
-        with pytest.raises(RuntimeError, match="state=2, graphs=3"):
-            first._restore_unmasked_state(saved, wrong_cardinality_mask)
+        with pytest.raises(RuntimeError, match="state=2, updates=3"):
+            first._restore_unmasked_state(batch, saved, wrong_cardinality_mask)
 
 
 # ---------------------------------------------------------------------------
 # TestStateSyncInflight
 # ---------------------------------------------------------------------------
-
-
-class _MockSampler:
-    """Minimal sampler stub for inflight batching tests."""
-
-    def __init__(self, replacements: list):
-        self._queue = list(replacements)
-        # Eagerly reflect exhausted state so base.py can snapshot it before requesting
-        self.exhausted = len(self._queue) == 0
-
-    @property
-    def max_atoms(self) -> int | None:
-        return None
-
-    @property
-    def max_edges(self) -> int | None:
-        return None
-
-    @property
-    def max_batch_size(self) -> int | None:
-        return None
-
-    def request_replacements_budget(
-        self,
-        atom_budget: int | None = None,
-        edge_budget: int | None = None,
-        max_count: int | None = None,
-    ) -> list:
-        if not self._queue:
-            self.exhausted = True
-            return []
-        result = self._queue.pop(0)
-        self.exhausted = len(self._queue) == 0
-        return [result]
 
 
 class TestStateSyncInflight:

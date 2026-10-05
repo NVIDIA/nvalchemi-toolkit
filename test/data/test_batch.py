@@ -2908,6 +2908,88 @@ class TestBatchDeviceAndCopy:
         assert batch["positions"].is_contiguous()
 
 
+class TestBatchWithoutKeys:
+    """Tests for Batch.without_keys."""
+
+    def _make_batch(self) -> Batch:
+        """Return a two-graph batch with a system-level energy and a custom node key."""
+        batch = Batch.from_data_list(
+            [_atomic_data_with_system(2), _atomic_data_with_system(3)]
+        )
+        batch.add_key("score", [torch.ones(2), torch.ones(3)], level="node")
+        return batch
+
+    def test_the_hidden_keys_are_absent_inside_the_block(self) -> None:
+        """The batch carries none of the named keys while the block runs."""
+        batch = self._make_batch()
+        with batch.without_keys("energy", "score"):
+            assert "energy" not in batch and "score" not in batch
+            assert "positions" in batch
+
+    def test_a_pre_existing_key_is_restored_at_its_level_as_the_same_tensor(
+        self,
+    ) -> None:
+        """A hidden key comes back where it was stored, as the object that was there."""
+        batch = self._make_batch()
+        energy, score = batch.energy, batch.score
+        with batch.without_keys("energy", "score"):
+            pass
+        assert batch.energy is energy and batch.score is score
+        assert "energy" in batch.level_keys["system"]
+        assert "score" in batch.level_keys["atoms"]
+
+    def test_a_key_written_inside_the_block_is_gone_afterwards(self) -> None:
+        """A field a model writes while the key is hidden leaves no trace."""
+        batch = self._make_batch()
+        with batch.without_keys("forces"):
+            batch.forces = torch.randn(batch.num_nodes, 3)
+            assert "forces" in batch
+        assert "forces" not in batch
+
+    def test_a_tensor_read_inside_the_block_outlives_it_with_its_graph(self) -> None:
+        """A value read inside stays usable, autograd graph included."""
+        batch = self._make_batch()
+        weight = torch.ones((), requires_grad=True)
+        with batch.without_keys("forces"):
+            batch.forces = weight * torch.randn(batch.num_nodes, 3)
+            forces = batch["forces"]
+        forces.sum().backward()
+        assert forces.shape == (batch.num_nodes, 3)
+        assert weight.grad is not None
+
+    def test_a_key_written_over_a_hidden_one_yields_to_the_original(self) -> None:
+        """A write over a hidden key inside the block is dropped when it ends."""
+        batch = self._make_batch()
+        energy = batch.energy
+        with batch.without_keys("energy"):
+            batch.energy = torch.full_like(energy, 7.0)
+        assert batch.energy is energy
+
+    def test_a_key_the_batch_lacks_is_ignored(self) -> None:
+        """Hiding an absent key neither raises nor creates it."""
+        batch = self._make_batch()
+        with batch.without_keys("not_there"):
+            assert "not_there" not in batch
+        assert "not_there" not in batch
+
+    def test_the_tracked_key_sets_are_hidden_and_restored(self) -> None:
+        """The level categorisation in ``keys`` follows the field in and out."""
+        batch = self._make_batch()
+        assert "energy" in batch.keys["system"]
+        with batch.without_keys("energy"):
+            assert "energy" not in batch.keys["system"]
+        assert "energy" in batch.keys["system"]
+
+    def test_the_keys_are_restored_when_the_block_raises(self) -> None:
+        """A block that raises still puts every hidden key back."""
+        batch = self._make_batch()
+        energy = batch.energy
+        with pytest.raises(RuntimeError, match="boom"):
+            with batch.without_keys("energy"):
+                raise RuntimeError("boom")
+        assert batch.energy is energy
+
+
 class TestBatchSerialization:
     """Tests for model_dump and round-trip."""
 
