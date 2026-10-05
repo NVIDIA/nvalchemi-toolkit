@@ -222,6 +222,56 @@ def _make_scoring_kernels(
             log_bound,
         )
 
+    @wp.func
+    def directed_log_mismatch(
+        distances_source: wp.array(dtype=wp.float32),
+        types_source: wp.array(dtype=wp.int32),
+        centers_source: wp.array(dtype=wp.int32),
+        row_start_source: wp.int64,
+        atom_start_source: wp.int64,
+        width_source: int,
+        atom_count_source: int,
+        distances_target: wp.array(dtype=wp.float32),
+        types_target: wp.array(dtype=wp.int32),
+        centers_target: wp.array(dtype=wp.int32),
+        row_start_target: wp.int64,
+        atom_start_target: wp.int64,
+        width_target: int,
+        atom_count_target: int,
+        log_cutoff: float,
+    ) -> float:
+        """Return the directed nearest-row mismatch from source to target."""
+        directed = float(0.0)
+        for atom_source in range(atom_count_source):
+            best = float(_MAX_MISMATCH)
+            row_source = row_start_source + wp.int64(atom_source) * wp.int64(
+                width_source
+            )
+            center_source = atom_start_source + wp.int64(atom_source)
+            for atom_target in range(atom_count_target):
+                row_target = row_start_target + wp.int64(atom_target) * wp.int64(
+                    width_target
+                )
+                center_target = atom_start_target + wp.int64(atom_target)
+                mismatch = candidate_log_mismatch(
+                    distances_source,
+                    types_source,
+                    centers_source,
+                    center_source,
+                    row_source,
+                    width_source,
+                    distances_target,
+                    types_target,
+                    centers_target,
+                    center_target,
+                    row_target,
+                    width_target,
+                    log_cutoff,
+                )
+                best = wp.min(best, mismatch)
+            directed = wp.max(directed, best)
+        return directed
+
     @wp.kernel(module="unique")
     def score_pairs_kernel(
         distances_a: wp.array(dtype=wp.float32),
@@ -253,57 +303,40 @@ def _make_scoring_kernels(
         atom_start_a = atom_offsets_a[structure_a]
         atom_start_b = atom_offsets_b[structure_b]
 
-        directed_ab = float(0.0)
-        for atom_a in range(atom_counts_a[structure_a]):
-            best = float(_MAX_MISMATCH)
-            row_a = row_start_a + wp.int64(atom_a) * wp.int64(width_a)
-            center_a = atom_start_a + wp.int64(atom_a)
-            for atom_b in range(atom_counts_b[structure_b]):
-                row_b = row_start_b + wp.int64(atom_b) * wp.int64(width_b)
-                center_b = atom_start_b + wp.int64(atom_b)
-                mismatch = candidate_log_mismatch(
-                    distances_a,
-                    types_a,
-                    centers_a,
-                    center_a,
-                    row_a,
-                    width_a,
-                    distances_b,
-                    types_b,
-                    centers_b,
-                    center_b,
-                    row_b,
-                    width_b,
-                    log_cutoff,
-                )
-                best = wp.min(best, mismatch)
-            directed_ab = wp.max(directed_ab, best)
-
-        directed_ba = float(0.0)
-        for atom_b in range(atom_counts_b[structure_b]):
-            best = float(_MAX_MISMATCH)
-            row_b = row_start_b + wp.int64(atom_b) * wp.int64(width_b)
-            center_b = atom_start_b + wp.int64(atom_b)
-            for atom_a in range(atom_counts_a[structure_a]):
-                row_a = row_start_a + wp.int64(atom_a) * wp.int64(width_a)
-                center_a = atom_start_a + wp.int64(atom_a)
-                mismatch = candidate_log_mismatch(
-                    distances_b,
-                    types_b,
-                    centers_b,
-                    center_b,
-                    row_b,
-                    width_b,
-                    distances_a,
-                    types_a,
-                    centers_a,
-                    center_a,
-                    row_a,
-                    width_a,
-                    log_cutoff,
-                )
-                best = wp.min(best, mismatch)
-            directed_ba = wp.max(directed_ba, best)
+        directed_ab = directed_log_mismatch(
+            distances_a,
+            types_a,
+            centers_a,
+            row_start_a,
+            atom_start_a,
+            width_a,
+            atom_counts_a[structure_a],
+            distances_b,
+            types_b,
+            centers_b,
+            row_start_b,
+            atom_start_b,
+            width_b,
+            atom_counts_b[structure_b],
+            log_cutoff,
+        )
+        directed_ba = directed_log_mismatch(
+            distances_b,
+            types_b,
+            centers_b,
+            row_start_b,
+            atom_start_b,
+            width_b,
+            atom_counts_b[structure_b],
+            distances_a,
+            types_a,
+            centers_a,
+            row_start_a,
+            atom_start_a,
+            width_a,
+            atom_counts_a[structure_a],
+            log_cutoff,
+        )
         log_scores[pair] = wp.max(directed_ab, directed_ba)
 
     @wp.kernel(module="unique")
@@ -483,56 +516,40 @@ def _make_scoring_kernels(
 
         # This pair lies in the conservative endpoint band. Preserve the exact
         # FP32 score and leave the inclusive threshold decision to Torch.
-        directed_ab = float(0.0)
-        for atom_a in range(atom_counts_a[structure_a]):
-            best = float(_MAX_MISMATCH)
-            row_a = row_start_a + wp.int64(atom_a) * wp.int64(width_a)
-            center_a = atom_start_a + wp.int64(atom_a)
-            for atom_b in range(atom_counts_b[structure_b]):
-                row_b = row_start_b + wp.int64(atom_b) * wp.int64(width_b)
-                center_b = atom_start_b + wp.int64(atom_b)
-                mismatch = candidate_log_mismatch(
-                    distances_a,
-                    types_a,
-                    centers_a,
-                    center_a,
-                    row_a,
-                    width_a,
-                    distances_b,
-                    types_b,
-                    centers_b,
-                    center_b,
-                    row_b,
-                    width_b,
-                    log_cutoff,
-                )
-                best = wp.min(best, mismatch)
-            directed_ab = wp.max(directed_ab, best)
-        directed_ba = float(0.0)
-        for atom_b in range(atom_counts_b[structure_b]):
-            best = float(_MAX_MISMATCH)
-            row_b = row_start_b + wp.int64(atom_b) * wp.int64(width_b)
-            center_b = atom_start_b + wp.int64(atom_b)
-            for atom_a in range(atom_counts_a[structure_a]):
-                row_a = row_start_a + wp.int64(atom_a) * wp.int64(width_a)
-                center_a = atom_start_a + wp.int64(atom_a)
-                mismatch = candidate_log_mismatch(
-                    distances_b,
-                    types_b,
-                    centers_b,
-                    center_b,
-                    row_b,
-                    width_b,
-                    distances_a,
-                    types_a,
-                    centers_a,
-                    center_a,
-                    row_a,
-                    width_a,
-                    log_cutoff,
-                )
-                best = wp.min(best, mismatch)
-            directed_ba = wp.max(directed_ba, best)
+        directed_ab = directed_log_mismatch(
+            distances_a,
+            types_a,
+            centers_a,
+            row_start_a,
+            atom_start_a,
+            width_a,
+            atom_counts_a[structure_a],
+            distances_b,
+            types_b,
+            centers_b,
+            row_start_b,
+            atom_start_b,
+            width_b,
+            atom_counts_b[structure_b],
+            log_cutoff,
+        )
+        directed_ba = directed_log_mismatch(
+            distances_b,
+            types_b,
+            centers_b,
+            row_start_b,
+            atom_start_b,
+            width_b,
+            atom_counts_b[structure_b],
+            distances_a,
+            types_a,
+            centers_a,
+            row_start_a,
+            atom_start_a,
+            width_a,
+            atom_counts_a[structure_a],
+            log_cutoff,
+        )
         log_scores[pair] = wp.max(directed_ab, directed_ba)
         outcomes[pair] = 1
 
