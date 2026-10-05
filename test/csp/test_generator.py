@@ -197,6 +197,12 @@ class _FakePacker:
         )
 
 
+def test_generator_repr_succeeds() -> None:
+    generator = CSPGenerator(_FakePacker(), dedicated_stream=False)
+
+    assert "CSPGenerator" in repr(generator)
+
+
 class _AfterGenerate:
     """Record the ordinary Batch hook boundary."""
 
@@ -210,7 +216,8 @@ class _AfterGenerate:
         self.events.append(("after_generate", context.sample))
 
 
-def test_public_export_local_conversion_and_callback_order() -> None:
+@pytest.mark.parametrize("use_call", [False, True])
+def test_public_export_local_conversion_and_callback_order(use_call: bool) -> None:
     assert CSP_OUTPUT_FIELDS == frozenset(
         {
             "positions",
@@ -240,7 +247,8 @@ def test_public_export_local_conversion_and_callback_order() -> None:
         dedicated_stream=False,
     )
     rng = torch.Generator().manual_seed(5)
-    result = generator.sample(_formula(), num_samples=2, rng=rng, option_marker=7)
+    invoke = generator if use_call else generator.sample
+    result = invoke(_formula(), num_samples=2, rng=rng, option_marker=7)
 
     assert isinstance(result, Batch)
     assert generator.required_inputs == frozenset()
@@ -253,7 +261,6 @@ def test_public_export_local_conversion_and_callback_order() -> None:
             "csp_source_structure_id",
         }
     )
-    assert generator.generator_func.outputs == generator.outputs
     assert [event[0] for event in events] == [
         "condition",
         "result",
@@ -390,7 +397,6 @@ def test_explicit_outputs_declare_asu_charge_for_pipeline(
 
     assert isinstance(result, Batch)
     assert producer.outputs == CSP_OUTPUT_FIELDS | {"charge"}
-    assert producer.generator_func.outputs == producer.outputs
     assert len(observed) == 1
     assert observed[0].tolist() == [[expected_charge]]
     assert result["charge"].tolist() == [[expected_charge]]
@@ -412,7 +418,6 @@ def test_native_batch_preserves_explicit_total_charge(total_charge: float) -> No
 
     assert isinstance(result, Batch)
     assert generator.outputs == frozenset(declared_outputs)
-    assert generator.generator_func.outputs == generator.outputs
     assert len(callbacks) == 1
     assert callbacks[0].structures is result
     assert result["charge"].dtype == torch.float32
@@ -445,7 +450,10 @@ def test_native_zero_accepted_batch_keeps_charge_omitted() -> None:
     assert "charge" not in empty_accepted.level_keys["system"]
 
 
-def test_compact_mode_returns_packing_result_without_batch_hooks() -> None:
+@pytest.mark.parametrize("use_call", [False, True])
+def test_compact_mode_returns_packing_result_without_batch_hooks(
+    use_call: bool,
+) -> None:
     events: list[tuple[str, Any]] = []
     packer = _FakePacker()
     generator = CSPGenerator(
@@ -456,13 +464,13 @@ def test_compact_mode_returns_packing_result_without_batch_hooks() -> None:
         dedicated_stream=False,
     )
 
-    result = generator.sample(_formula(), num_samples=1, run_id=19)
+    invoke = generator if use_call else generator.sample
+    result = invoke(_formula(), num_samples=1, run_id=19)
 
     assert isinstance(result, PackingResult)
     assert result.run_id == 19
     assert result.structures.structure_ids.tolist() == [[19, 0]]
     assert generator.outputs == frozenset()
-    assert generator.generator_func.outputs == generator.outputs
     assert events == []
 
 

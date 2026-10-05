@@ -25,7 +25,7 @@ from typing import Any
 
 import torch
 import torch.distributed as dist
-from pydantic import PrivateAttr
+from pydantic import Field, PrivateAttr
 from torch.distributed import ProcessGroup
 
 from nvalchemi.csp._packing_transport import (
@@ -45,7 +45,11 @@ from nvalchemi.csp.packer.result import PackingReport, PackingResult
 from nvalchemi.data import Batch
 from nvalchemi.distributed import ProcessGroupContext, collective_error_sync
 from nvalchemi.gen._device import normalize_device
-from nvalchemi.gen.generator import AtomisticGenerator, _PreparedGeneration
+from nvalchemi.gen.generator import (
+    AtomisticGenerator,
+    GeneratingFunction,
+    _PreparedGeneration,
+)
 
 __all__ = ["CSPGenerator", "CSP_OUTPUT_FIELDS"]
 
@@ -106,35 +110,6 @@ class _CSPCallPlan:
     expand: bool
 
 
-class _CSPGeneratingFunction:
-    """Private callable carrying fixed declarations for AtomisticGenerator."""
-
-    def __init__(self, *, device: torch.device, outputs: frozenset[str]) -> None:
-        self.device = device
-        self.required_inputs = frozenset()
-        self.outputs = outputs
-        self._driver: CSPGenerator | None = None
-
-    def bind(self, driver: CSPGenerator) -> None:
-        """Bind the completed adapter after normal generator initialization."""
-        self._driver = driver
-
-    def __call__(
-        self,
-        inputs: Any = None,
-        *,
-        num_samples: int = 1,
-        rng: torch.Generator | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        """Delegate the call to the CSP driver."""
-        if self._driver is None:
-            raise RuntimeError("CSP generating function was not bound to its driver")
-        return self._driver._pack_call(
-            inputs, num_samples=num_samples, rng=rng, **kwargs
-        )
-
-
 class CSPGenerator(AtomisticGenerator):
     """A Toolkit generation driver for running crystal packers
     in local or distributed searches.
@@ -179,6 +154,7 @@ class CSPGenerator(AtomisticGenerator):
         compile_generate. CSP packing is not torch.compile-compatible.
     """
 
+    generator_func: GeneratingFunction = Field(repr=False)
     _packer: Any = PrivateAttr()
     _process_group: Any = PrivateAttr(default=None)
     _gather_to_rank: int | None = PrivateAttr(default=None)
@@ -219,26 +195,25 @@ class CSPGenerator(AtomisticGenerator):
         if not isinstance(packer_device, (torch.device, str)):
             raise TypeError("packer.device must be a torch.device or device string")
         device = normalize_device(packer_device)
-        default_outputs = CSP_OUTPUT_FIELDS if expand else frozenset()
-        generator_func = _CSPGeneratingFunction(device=device, outputs=default_outputs)
+        declared_outputs = outputs
+        if declared_outputs is None:
+            declared_outputs = CSP_OUTPUT_FIELDS if expand else frozenset()
         super().__init__(
-            generator_func=generator_func,
+            generator_func=self._pack_call,
             device=device,
             required_inputs=frozenset(),
-            outputs=outputs,
+            outputs=declared_outputs,
             **generator_options,
         )
         if not expand and self.outputs:
             raise ValueError(
                 "raw-result mode (expand=False) accepts only an empty outputs declaration"
             )
-        generator_func.outputs = self.outputs
         self._packer = packer
         self._process_group = process_group
         self._gather_to_rank = gather_to_rank
         self._expand = expand
         self._on_result = on_result
-        generator_func.bind(self)
 
     @staticmethod
     def _rank_vector(values: Any, *, name: str, world_size: int) -> tuple[int, ...]:
