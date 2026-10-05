@@ -32,6 +32,7 @@ from nvalchemi.csp._comparison.store import (
     DescriptorStore,
     available_cuda_bytes,
     build_descriptor_store,
+    comparison_geometry,
     workspace_reserve,
 )
 from nvalchemi.csp._validation import finite_nonnegative
@@ -201,6 +202,7 @@ class RadialComparisonIndex:
         summary: Tensor,
         typed_summary: Tensor,
         center_type_presence: Tensor,
+        include_hydrogens: bool = True,
     ) -> None:
         """Bind a descriptor pool and its comparison-time accounting state.
 
@@ -226,6 +228,8 @@ class RadialComparisonIndex:
             Compact per-structure extrema on the comparison device or host.
         center_type_presence : torch.Tensor
             Boolean per-structure center-type presence matrix.
+        include_hydrogens : bool, default=True
+            Hydrogen-selection setting attached to the source geometry.
 
         Notes
         -----
@@ -233,6 +237,7 @@ class RadialComparisonIndex:
         workspace so cross-pool queries can account for all live indexes.
         """
         self._store = descriptor_store
+        self._include_hydrogens = include_hydrogens
         self.cutoff = cutoff
         self._typed_neighbors = typed_neighbors and atom_types is not None
         self._has_center_types = atom_types is not None
@@ -361,6 +366,7 @@ class RadialComparisonIndex:
         device: torch.device,
         max_memory_fraction: float,
         cuda_memory_budget_bytes: int | None,
+        include_hydrogens: bool = True,
     ) -> RadialComparisonIndex:
         """Create an index around an already-built descriptor store.
 
@@ -380,6 +386,8 @@ class RadialComparisonIndex:
             Configured fraction used for estimated CUDA workspace.
         cuda_memory_budget_bytes : int or None
             Shared CUDA allowance in bytes, or ``None`` on CPU.
+        include_hydrogens : bool, default=True
+            Hydrogen-selection setting associated with the prebuilt geometry.
 
         Returns
         -------
@@ -403,6 +411,7 @@ class RadialComparisonIndex:
             descriptor_store.summaries,
             descriptor_store.typed_summaries,
             descriptor_store.center_type_presence,
+            include_hydrogens,
         )
 
     @classmethod
@@ -417,6 +426,7 @@ class RadialComparisonIndex:
         device: torch.device | str | None = None,
         max_memory_fraction: float = 0.70,
         structure_block_size: int | None = None,
+        include_hydrogens: bool = True,
     ) -> RadialComparisonIndex:
         """Build a reusable index of local atom-neighbor distances for each
         structure.
@@ -429,9 +439,10 @@ class RadialComparisonIndex:
         cutoff : float
             Maximum atom-neighbor distance included, in angstroms.
         atom_types : torch.Tensor, optional
-            Caller-supplied integer type for each atom, using one shared ID
-            mapping across structures. Values must fit signed int32; the int32
-            minimum is reserved for descriptor padding.
+            Caller-supplied integer type for each original, unfiltered atom,
+            using one shared ID mapping across structures. Retained atoms keep
+            these labels when hydrogens are omitted; values must fit signed
+            int32, and the int32 minimum is reserved for descriptor padding.
         typed_neighbors : bool, default=True
             When types are supplied, compare neighbor distances separately by type.
         dtype : torch.dtype, default=torch.float32
@@ -452,6 +463,11 @@ class RadialComparisonIndex:
         structure_block_size : int, optional
             Target limit on distinct structures staged for a descriptor block.
             One pair may require more; resident descriptor blocks are not sliced.
+        include_hydrogens : bool, default=True
+            Whether hydrogen atoms participate in descriptors. When false,
+            the batch must include atomic numbers; atoms with atomic number 1
+            are removed before neighbor lists and descriptors are built, for
+            both centers and neighbors. Source data remains unchanged.
 
         Returns
         -------
@@ -471,6 +487,9 @@ class RadialComparisonIndex:
         """
         if not isinstance(batch, Batch):
             raise TypeError("batch must be a nvalchemi.data.Batch")
+        batch, atom_types = comparison_geometry(
+            batch, atom_types, include_hydrogens=include_hydrogens
+        )
         if dtype is not torch.float32:
             raise TypeError("structure comparison supports dtype=torch.float32 only")
         if (
@@ -530,25 +549,6 @@ class RadialComparisonIndex:
                     torch.linalg.det(batch.cell[periodic]).abs() <= 1e-10
                 ):
                     raise ValueError("periodic structures require nonsingular cells")
-        if atom_types is not None:
-            if (
-                not isinstance(atom_types, Tensor)
-                or atom_types.ndim != 1
-                or atom_types.numel() != batch.num_nodes
-            ):
-                raise ValueError(
-                    "atom_types must be a one-dimensional tensor with one entry per atom"
-                )
-            if atom_types.dtype not in (torch.int32, torch.int64):
-                raise TypeError("atom_types must have dtype torch.int32 or torch.int64")
-            int32_info = torch.iinfo(torch.int32)
-            if atom_types.dtype is torch.int64 and torch.any(
-                (atom_types < int32_info.min) | (atom_types > int32_info.max)
-            ):
-                raise ValueError("atom_types values must fit signed int32")
-            if torch.any(atom_types == int32_info.min):
-                raise ValueError("atom_types cannot use the reserved int32 minimum")
-            atom_types = atom_types.detach().to(dtype=torch.int32).contiguous()
         target_device = torch.device(device) if device is not None else batch.device
         if target_device.type not in ("cpu", "cuda"):
             raise ValueError("device must be a CPU or CUDA device")
@@ -604,7 +604,13 @@ class RadialComparisonIndex:
             summary,
             typed_summary,
             center_type_presence,
+            include_hydrogens,
         )
+
+    @property
+    def include_hydrogens(self) -> bool:
+        """Whether this index includes hydrogen atoms in its descriptors."""
+        return self._include_hydrogens
 
     @property
     def num_structures(self) -> int:
@@ -658,7 +664,7 @@ class RadialComparisonIndex:
         TypeError
             If ``other`` is not a comparison index.
         ValueError
-            If cutoff, device, or typing modes differ.
+            If cutoff, device, typing modes, or hydrogen-selection settings differ.
 
         Notes
         -----
@@ -672,14 +678,17 @@ class RadialComparisonIndex:
             self.device,
             self._typed_neighbors,
             self._has_center_types,
+            self.include_hydrogens,
         ) != (
             other.cutoff,
             other.device,
             other._typed_neighbors,
             other._has_center_types,
+            other.include_hydrogens,
         ):
             raise ValueError(
-                "comparison indexes must have matching cutoff, device, and typing modes"
+                "comparison indexes must have matching cutoff, device, typing modes, "
+                "and include_hydrogens settings"
             )
 
     def _validate_pairs(self, pair_indices: Tensor, right_count: int) -> Tensor:
@@ -1282,6 +1291,8 @@ class RadialComparisonIndex:
         presence_b = right._center_type_presence[
             ids_b.to(device=right._center_type_presence.device)
         ].to(device=self.device)
+        if not self._typed_type_vocab:
+            return torch.zeros(pairs.shape[0], dtype=torch.bool, device=self.device)
         shared_types = (presence_a & presence_b).view(pairs.shape[0], -1, 1, 1, 1)
         summary_a.sub_(summary_b).abs_()
         separated = summary_a > log_bound
@@ -1651,6 +1662,7 @@ def deduplicate_stream(
     max_batch_atoms: int = 200_000,
     max_memory_fraction: float = 0.85,
     summary_coordinate_count: int = 32,
+    include_hydrogens: bool = True,
     confirm: Callable[[Tensor], Tensor] | None = None,
 ) -> DeduplicationResult:
     """Deduplicate a pool in priority order while bounding descriptor blocks.
@@ -1699,7 +1711,8 @@ def deduplicate_stream(
         Maximum earlier representatives considered together; it does not limit
         candidate chunk size. Defaults to 256 on CUDA and 32 on CPU.
     max_batch_atoms : int, default=200000
-        Maximum atoms in a descriptor tile.
+        Maximum retained comparison atoms in one descriptor tile. Hydrogens
+        are not counted when ``include_hydrogens=False``.
     max_memory_fraction : float, default=0.85
         Maximum fraction of CUDA memory available to PyTorch assigned to
         descriptor construction and scoring workspace, including reusable
@@ -1712,6 +1725,11 @@ def deduplicate_stream(
         outer check and sends all still-eligible pairs to the index matcher,
         which may use its built-in conservative summary bounds before scoring
         full descriptors.
+    include_hydrogens : bool, default=True
+        Whether hydrogen atoms participate in comparison. False removes all
+        atomic-number-1 atoms before neighbor lists and descriptors are built.
+        Supply types aligned with original atoms; retained labels and original
+        structure-row IDs are preserved.
     confirm : callable, optional
         Receives ordered radial-match proposals as int32 [K, 2] original row
         IDs on the comparison device. Column zero is the candidate; column one
@@ -1752,6 +1770,7 @@ def deduplicate_stream(
         max_batch_atoms=max_batch_atoms,
         max_memory_fraction=max_memory_fraction,
         summary_coordinate_count=summary_coordinate_count,
+        include_hydrogens=include_hydrogens,
         confirm=confirm,
     )
 
@@ -1767,6 +1786,7 @@ def deduplicate_batch(
     max_batch_atoms: int = 200_000,
     max_memory_fraction: float = 0.85,
     summary_coordinate_count: int = 32,
+    include_hydrogens: bool = True,
     confirm: Callable[[Tensor], Tensor] | None = None,
 ) -> DeduplicationResult:
     """Deduplicate every structure in one Batch with the tiled stream engine.
@@ -1794,7 +1814,8 @@ def deduplicate_batch(
     device : torch.device or str, optional
         Descriptor and score device. Defaults to ``batch.device``.
     max_batch_atoms : int, default=200000
-        Maximum atoms in one descriptor tile.
+        Maximum retained comparison atoms in one descriptor tile; hydrogens
+        are not counted when ``include_hydrogens=False``.
     max_memory_fraction : float, default=0.85
         Maximum fraction of CUDA memory available to PyTorch assigned to
         descriptor construction and scoring workspace, including reusable
@@ -1807,6 +1828,11 @@ def deduplicate_batch(
         and sends all still-eligible pairs to the index matcher, which may use
         its built-in conservative summary bounds before scoring full
         descriptors.
+    include_hydrogens : bool, default=True
+        Whether hydrogen atoms participate in comparison. False removes all
+        atomic-number-1 atoms before neighbor lists and descriptors are built.
+        Supply types aligned with original atoms; retained labels and original
+        structure-row IDs are preserved.
     confirm : callable, optional
         Receives ordered radial-match proposals as int32 [K, 2] original row
         IDs on the comparison device. Column zero is the candidate; column one
@@ -1824,6 +1850,8 @@ def deduplicate_batch(
     """
     if not isinstance(batch, Batch):
         raise TypeError("batch must be a nvalchemi.data.Batch")
+    if not isinstance(include_hydrogens, bool):
+        raise TypeError("include_hydrogens must be bool")
     if confirm is not None and not callable(confirm):
         raise TypeError("confirm must be callable or None")
     if atom_types is not None:
@@ -1878,6 +1906,7 @@ def deduplicate_batch(
         max_batch_atoms=max_batch_atoms,
         max_memory_fraction=max_memory_fraction,
         summary_coordinate_count=summary_coordinate_count,
+        include_hydrogens=include_hydrogens,
         confirm=confirm,
     )
 
@@ -1897,6 +1926,7 @@ def iter_matches_stream(
     max_memory_fraction: float = 0.85,
     pair_chunk_size: int = 8192,
     summary_coordinate_count: int = 32,
+    include_hydrogens: bool = True,
 ) -> Iterator[Tensor]:
     """Yield radial matches from one or two loader-backed structure pools.
 
@@ -1939,9 +1969,10 @@ def iter_matches_stream(
     device : torch.device or str, default="cpu"
         Device used to build and score descriptor tiles.
     max_batch_atoms : int, default=200000
-        Maximum atom count in each active descriptor tile. Cross-comparison may
-        keep up to this many atoms on both sides at once; the shared CUDA memory
-        budget accounts for both live descriptor sets.
+        Maximum retained comparison atom count in each active descriptor tile.
+        Hydrogens are not counted when ``include_hydrogens=False``.
+        Cross-comparison may keep up to this many atoms on both sides at once;
+        the shared CUDA memory budget accounts for both live descriptor sets.
     max_memory_fraction : float, default=0.85
         Maximum fraction of CUDA memory available to PyTorch assigned to
         descriptor construction and scoring workspace, including reusable
@@ -1954,6 +1985,12 @@ def iter_matches_stream(
         to the radial index matcher; summary bounds can reject but not match.
         Zero disables only the outer pilot check; the matcher may retain its
         built-in conservative summary bound.
+    include_hydrogens : bool, default=True
+        Whether hydrogen atoms participate in comparison. False removes all
+        atomic-number-1 atoms before neighbor lists and descriptors are built.
+        Supply types aligned with original atoms; retained labels and original
+        structure-row IDs are preserved. The same setting applies to both
+        loaders.
 
     Yields
     ------
@@ -1986,4 +2023,5 @@ def iter_matches_stream(
         max_memory_fraction=max_memory_fraction,
         pair_chunk_size=pair_chunk_size,
         summary_coordinate_count=summary_coordinate_count,
+        include_hydrogens=include_hydrogens,
     )

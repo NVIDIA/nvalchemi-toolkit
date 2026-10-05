@@ -1043,6 +1043,78 @@ call-local state and leaves both caller-owned loaders open. `max_batch_atoms`
 bounds each live left or right descriptor tile independently; their combined
 CUDA descriptor residency remains within one shared memory allowance.
 
+### Compare without hydrogens
+
+Hydrogens can be omitted from comparison by passing `include_hydrogens=False`
+when building an index or calling a batch or streaming comparison helper. The
+library removes every atom with atomic number 1 from the internal comparison
+geometry before constructing neighbor lists and descriptors. Both centers and
+neighbors exclude hydrogens. The input structures remain unchanged.
+
+Supply `atom_types` for the original, unfiltered atoms. Retained atoms keep
+their supplied types; chemical typing is not recomputed after removing
+hydrogens. Returned indices and confirmation-callback pairs refer to the
+original structure rows, so selecting retained rows preserves their
+hydrogens and other data.
+
+An index fixes its hydrogen setting at construction. Indexes compared with each
+other must use the same setting; rebuild an index to change it. In streamed
+cross-pool matching, `include_hydrogens` applies to both pools.
+
+Hydrogen-free comparison follows the existing empty-structure behavior of each
+API. Index construction rejects a row with no remaining atoms. Streaming
+matching treats empty rows as matching each other and separate from nonempty
+rows. An empty pool still returns empty results.
+
+All-atom and hydrogen-free scores compare different geometries; removing
+hydrogens does not guarantee a smaller score. The radial comparison remains
+approximate and does not establish crystal equivalence.
+
+```python
+from nvalchemi.csp.comparison import (
+    RadialComparisonIndex,
+    deduplicate_batch,
+    deduplicate_stream,
+    iter_matches_stream,
+)
+
+index = RadialComparisonIndex.build(
+    batch,
+    cutoff=15.0,
+    atom_types=topology_types,  # Labels for every original atom, including H.
+    include_hydrogens=False,
+)
+scores = index.score_pairs(pair_indices)  # Pair IDs remain original Batch rows.
+
+result = deduplicate_batch(
+    batch,
+    atom_types=topology_types,
+    cutoff=15.0,
+    threshold=0.05,
+    include_hydrogens=False,
+)
+retained_with_hydrogens = batch[result.retained_indices]
+
+stream_result = deduplicate_stream(
+    count,
+    read_typed_batch,
+    type_vocabulary=type_vocabulary,
+    cutoff=15.0,
+    threshold=0.05,
+    include_hydrogens=False,
+)
+match_chunks = iter_matches_stream(
+    left_count,
+    read_left_typed_batch,
+    other_count=right_count,
+    read_other_typed_batch=read_right_typed_batch,
+    type_vocabulary=type_vocabulary,
+    cutoff=15.0,
+    threshold=0.05,
+    include_hydrogens=False,
+)
+```
+
 ### Compare with an experimental structure
 
 Here, `batch` contains relaxed `OverlapReliefPacker` structures from

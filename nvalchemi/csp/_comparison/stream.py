@@ -30,6 +30,8 @@ from nvalchemi.csp._comparison.store import (
     _log_cutoff_fp32,
     available_cuda_bytes,
     build_descriptor_stores,
+    comparison_geometry,
+    validate_include_hydrogens,
 )
 from nvalchemi.csp._validation import (
     finite_nonnegative as _finite_nonnegative,
@@ -206,6 +208,8 @@ def _read_batch(
     loader: Callable[[Tensor], tuple[Batch, Tensor | None]],
     ids: Sequence[int],
     vocabulary: tuple[int, ...] | None,
+    *,
+    include_hydrogens: bool = True,
 ) -> tuple[Batch, Tensor | None]:
     """Read and validate one set of logical rows from a caller-owned loader.
 
@@ -217,6 +221,8 @@ def _read_batch(
         Logical row IDs in desired output order.
     vocabulary : tuple of int or None
         Fixed signed-int32 type vocabulary required when types are present.
+    include_hydrogens : bool
+        Whether atomic-number-one atoms remain in the comparison geometry.
 
     Returns
     -------
@@ -243,7 +249,12 @@ def _read_batch(
     if atom_types is None:
         if vocabulary is not None:
             raise ValueError("type_vocabulary requires atom_types from every batch")
-        return batch, None
+        return comparison_geometry(
+            batch,
+            None,
+            include_hydrogens=include_hydrogens,
+            atom_types_validated=True,
+        )
     if vocabulary is None:
         raise ValueError("atom_types require a fixed type_vocabulary")
     if (
@@ -270,7 +281,12 @@ def _read_batch(
                 raise ValueError("atom_types contain a value outside type_vocabulary")
         elif not set(types.tolist()).issubset(vocabulary):
             raise ValueError("atom_types contain a value outside type_vocabulary")
-    return batch, types
+    return comparison_geometry(
+        batch,
+        types,
+        include_hydrogens=include_hydrogens,
+        atom_types_validated=True,
+    )
 
 
 def _build_atom_counts(
@@ -279,6 +295,7 @@ def _build_atom_counts(
     vocabulary: tuple[int, ...] | None,
     chunk_size: int,
     max_batch_atoms: int,
+    include_hydrogens: bool = True,
 ) -> Tensor:
     """Read atom counts in bounded loader chunks without building descriptors.
 
@@ -294,6 +311,8 @@ def _build_atom_counts(
         Maximum rows requested from the loader at once.
     max_batch_atoms : int
         Maximum allowed atoms in any one structure.
+    include_hydrogens : bool
+        Whether atom counts include hydrogen atoms.
 
     Returns
     -------
@@ -312,7 +331,9 @@ def _build_atom_counts(
     atom_counts = torch.empty((count,), dtype=torch.int32)
     for start in range(0, count, chunk_size):
         ids = list(range(start, min(count, start + chunk_size)))
-        batch, types = _read_batch(loader, ids, vocabulary)
+        batch, types = _read_batch(
+            loader, ids, vocabulary, include_hydrogens=include_hydrogens
+        )
         pointers = batch.batch_ptr.detach().cpu().tolist()
         counts = [pointers[i + 1] - pointers[i] for i in range(len(ids))]
         for row_id, atom_count in zip(ids, counts, strict=True):
@@ -433,6 +454,7 @@ def _build_mode_indices(
     device: torch.device,
     max_memory_fraction: float,
     cuda_memory_budget_bytes: int | None = None,
+    include_hydrogens: bool = True,
 ) -> dict[str, RadialComparisonIndex]:
     """Build each radial mode from one input tile and shared descriptor stores.
 
@@ -450,6 +472,8 @@ def _build_mode_indices(
         Fraction of current PyTorch-available CUDA bytes for this call.
     cuda_memory_budget_bytes : int, optional
         Shared byte allowance, overriding a fresh estimate when provided.
+    include_hydrogens : bool
+        Hydrogen-selection setting associated with the shared geometry.
 
     Returns
     -------
@@ -500,6 +524,7 @@ def _build_mode_indices(
             device=device,
             max_memory_fraction=max_memory_fraction,
             cuda_memory_budget_bytes=budget,
+            include_hydrogens=include_hydrogens,
         )
         for name, mode_types, typed_neighbors in modes
     }
@@ -654,6 +679,7 @@ def _build_summaries(
     max_batch_atoms: int = _MAX_BATCH_ATOMS,
     max_memory_fraction: float = 0.85,
     return_atom_counts: bool = False,
+    include_hydrogens: bool = True,
 ) -> tuple[Tensor, Tensor, int] | tuple[Tensor, Tensor, Tensor, int]:
     """Build pool summaries in atom-bounded tiles with recursive OOM retries.
 
@@ -677,6 +703,8 @@ def _build_summaries(
         Estimated CUDA fraction assigned to builds and workspace.
     return_atom_counts : bool
         Whether to return a CPU int32 atom-count vector as well.
+    include_hydrogens : bool
+        Whether hydrogens remain in summaries and atom counts.
 
     Returns
     -------
@@ -724,7 +752,12 @@ def _build_summaries(
     rebuilds = 0
     for start in range(0, len(ids), chunk_size):
         block_ids = ids[start : start + chunk_size]
-        batch, types = _read_batch(loader, block_ids, vocabulary)
+        batch, types = _read_batch(
+            loader,
+            block_ids,
+            vocabulary,
+            include_hydrogens=include_hydrogens,
+        )
         ptr = batch.batch_ptr.detach().cpu().tolist()
         local_counts = [ptr[i + 1] - ptr[i] for i in range(len(block_ids))]
 
@@ -1686,6 +1719,7 @@ def _screen_candidate(
     atom_counts: Tensor | None = None,
     max_batch_atoms: int = _MAX_BATCH_ATOMS,
     max_memory_fraction: float = 0.85,
+    include_hydrogens: bool = True,
     confirm: Callable[[Tensor], Tensor] | None = None,
 ) -> tuple[int | None, dict[str, float | int]]:
     """Screen one candidate against ordered retained representatives.
@@ -1714,6 +1748,8 @@ def _screen_candidate(
         Maximum atom count in one active descriptor tile.
     max_memory_fraction : float
         Fraction of PyTorch-available CUDA memory assigned to the operation.
+    include_hydrogens : bool
+        Whether hydrogen atoms remain in the comparison geometry.
     confirm : callable, optional
         Callback that accepts an ordered subset of radial proposals.
 
@@ -1792,6 +1828,7 @@ def _screen_candidate(
             atom_counts=atom_counts,
             max_batch_atoms=max_batch_atoms,
             max_memory_fraction=max_memory_fraction,
+            include_hydrogens=include_hydrogens,
         )
         stats["screen_seconds"] += time.perf_counter() - screen_start
         if matching:
@@ -1823,6 +1860,7 @@ def _screen_candidates_against_representatives(
     pair_block_size: int,
     max_batch_atoms: int,
     max_memory_fraction: float,
+    include_hydrogens: bool = True,
     confirm: Callable[[Tensor], Tensor] | None = None,
 ) -> dict[int, int]:
     """Compare candidate tiles with retained blocks under one shared budget.
@@ -1855,6 +1893,8 @@ def _screen_candidates_against_representatives(
         Maximum atoms in each candidate or representative descriptor tile.
     max_memory_fraction : float
         Fraction of PyTorch-available CUDA bytes assigned to the operation.
+    include_hydrogens : bool
+        Whether hydrogen atoms remain in the comparison geometry.
     confirm : callable, optional
         Callback filtering radial proposals against already-retained rows.
 
@@ -1951,7 +1991,9 @@ def _screen_candidates_against_representatives(
         split_tile = False
         output: dict[int, int] = {}
         try:
-            candidate_batch, candidate_types = _read_batch(loader, tile, vocabulary)
+            candidate_batch, candidate_types = _read_batch(
+                loader, tile, vocabulary, include_hydrogens=include_hydrogens
+            )
             budget = _cuda_budget(device, max_memory_fraction)
             try:
                 candidate_indexes = _build_mode_indices(
@@ -1961,6 +2003,7 @@ def _screen_candidates_against_representatives(
                     device=device,
                     max_memory_fraction=max_memory_fraction,
                     cuda_memory_budget_bytes=budget,
+                    include_hydrogens=include_hydrogens,
                 )
             except (MemoryError, torch.cuda.OutOfMemoryError) as exc:
                 if len(tile) == 1:
@@ -2026,7 +2069,12 @@ def _screen_candidates_against_representatives(
                     rep_types: Tensor | None = None
                     rep_indexes: dict[str, RadialComparisonIndex] | None = None
                     pair_tensor: Tensor | None = None
-                    rep_batch, rep_types = _read_batch(loader, rep_block, vocabulary)
+                    rep_batch, rep_types = _read_batch(
+                        loader,
+                        rep_block,
+                        vocabulary,
+                        include_hydrogens=include_hydrogens,
+                    )
                     matched_pairs: list[tuple[int, int]] = []
                     try:
                         candidate_local = {
@@ -2041,6 +2089,7 @@ def _screen_candidates_against_representatives(
                             device=device,
                             max_memory_fraction=max_memory_fraction,
                             cuda_memory_budget_bytes=rep_budget,
+                            include_hydrogens=include_hydrogens,
                         )
                         _configure_active_bundles(
                             (candidate_indexes, rep_indexes), budget
@@ -2184,6 +2233,7 @@ def _screen_pair_group(
     atom_counts: Tensor | None = None,
     max_batch_atoms: int = _MAX_BATCH_ATOMS,
     max_memory_fraction: float = 0.85,
+    include_hydrogens: bool = True,
 ) -> list[tuple[int, int]]:
     """Score ordered pairs from atom-bounded endpoint descriptor tiles.
 
@@ -2339,10 +2389,18 @@ def _screen_pair_group(
             try:
                 # Loader failures are caller errors and propagate unchanged;
                 # only descriptor/scoring capacity failures split this group.
-                left_batch, left_types = _read_batch(loader, left_ids, vocabulary)
+                left_batch, left_types = _read_batch(
+                    loader,
+                    left_ids,
+                    vocabulary,
+                    include_hydrogens=include_hydrogens,
+                )
                 if not combine_endpoints:
                     right_batch, right_types = _read_batch(
-                        loader, right_ids, vocabulary
+                        loader,
+                        right_ids,
+                        vocabulary,
+                        include_hydrogens=include_hydrogens,
                     )
                 try:
                     budget = _cuda_budget(device, max_memory_fraction)
@@ -2353,6 +2411,7 @@ def _screen_pair_group(
                         device=device,
                         max_memory_fraction=max_memory_fraction,
                         cuda_memory_budget_bytes=budget,
+                        include_hydrogens=include_hydrogens,
                     )
                     if combine_endpoints:
                         _configure_active_bundles((left_indexes,), budget)
@@ -2367,6 +2426,7 @@ def _screen_pair_group(
                             device=device,
                             max_memory_fraction=max_memory_fraction,
                             cuda_memory_budget_bytes=right_budget,
+                            include_hydrogens=include_hydrogens,
                         )
                         _configure_active_bundles((left_indexes, right_indexes), budget)
                     pairs = torch.tensor(
@@ -2729,6 +2789,7 @@ def deduplicate_stream(
     max_batch_atoms: int = _MAX_BATCH_ATOMS,
     max_memory_fraction: float = 0.85,
     summary_coordinate_count: int = _DEFAULT_SUMMARY_COORDINATE_COUNT,
+    include_hydrogens: bool = True,
     confirm: Callable[[Tensor], Tensor] | None = None,
 ) -> DeduplicationResult:
     """Deduplicate a pool in priority order using bounded descriptor blocks.
@@ -2812,6 +2873,7 @@ def deduplicate_stream(
     The requested and selected summary coordinate counts are also recorded.
     """
     _LAST_STREAM_STATS.set(None)
+    validate_include_hydrogens(include_hydrogens)
     if isinstance(count, bool) or not isinstance(count, int) or count < 0:
         raise ValueError("count must be a nonnegative integer")
     if count > torch.iinfo(torch.int32).max:
@@ -2938,6 +3000,7 @@ def deduplicate_stream(
             vocabulary,
             input_batch_size,
             max_batch_atoms,
+            include_hydrogens,
         )
         presence_width = len(vocabulary) if vocabulary is not None else (16 + 13) // 14
         features = torch.empty((count, 0), dtype=torch.float32, device=target_device)
@@ -2957,6 +3020,7 @@ def deduplicate_stream(
             max_batch_atoms=max_batch_atoms,
             max_memory_fraction=max_memory_fraction,
             return_atom_counts=True,
+            include_hydrogens=include_hydrogens,
         )
         stats["summary_preparation_seconds"] += time.perf_counter() - start
         stats["summary_descriptor_rebuilds"] += rebuilds
@@ -3003,6 +3067,7 @@ def deduplicate_stream(
                     max_batch_atoms=max_batch_atoms,
                     max_memory_fraction=max_memory_fraction,
                     return_atom_counts=True,
+                    include_hydrogens=include_hydrogens,
                 )
             )
             stats["summary_preparation_seconds"] += time.perf_counter() - start
@@ -3168,6 +3233,7 @@ def deduplicate_stream(
                 max_batch_atoms=max_batch_atoms,
                 max_memory_fraction=max_memory_fraction,
                 confirm=confirm,
+                include_hydrogens=include_hydrogens,
             )
 
         assignments: dict[int, int] = {}
@@ -3208,6 +3274,7 @@ def deduplicate_stream(
                         atom_counts=atom_counts,
                         max_batch_atoms=max_batch_atoms,
                         max_memory_fraction=max_memory_fraction,
+                        include_hydrogens=include_hydrogens,
                     )
                     within_chunk_matches = set(matches)
 
@@ -3265,6 +3332,7 @@ def deduplicate_stream(
                     max_batch_atoms=max_batch_atoms,
                     max_memory_fraction=max_memory_fraction,
                     confirm=confirm,
+                    include_hydrogens=include_hydrogens,
                 )
                 stats["old_shortlisted_pairs"] += screen_stats[
                     "screened_pair_candidates"
@@ -3332,6 +3400,7 @@ def deduplicate_stream(
                         max_batch_atoms=max_batch_atoms,
                         max_memory_fraction=max_memory_fraction,
                         confirm=confirm,
+                        include_hydrogens=include_hydrogens,
                     )
                     _add_screen_stats(stats, screen_stats)
                 if representative is None:
@@ -3395,6 +3464,7 @@ def iter_matches_stream(
     max_memory_fraction: float = 0.85,
     pair_chunk_size: int = 8192,
     summary_coordinate_count: int = _DEFAULT_SUMMARY_COORDINATE_COUNT,
+    include_hydrogens: bool = True,
 ) -> Iterator[Tensor]:
     """Yield radial matches from one or two loader-backed structure pools.
 
@@ -3467,6 +3537,7 @@ def iter_matches_stream(
     MemoryError
         If one structure or pair cannot fit the atom or CUDA memory limit.
     """
+    validate_include_hydrogens(include_hydrogens)
     if isinstance(count, bool) or not isinstance(count, int) or count < 0:
         raise ValueError("count must be a nonnegative integer")
     if count > torch.iinfo(torch.int32).max:
@@ -3566,6 +3637,7 @@ def iter_matches_stream(
                 vocabulary,
                 input_batch_size,
                 max_batch_atoms,
+                include_hydrogens,
             )
             if cross_pool:
                 right_atom_counts = _build_atom_counts(
@@ -3574,6 +3646,7 @@ def iter_matches_stream(
                     vocabulary,
                     input_batch_size,
                     max_batch_atoms,
+                    include_hydrogens,
                 )
             else:
                 right_atom_counts = left_atom_counts
@@ -3605,6 +3678,7 @@ def iter_matches_stream(
                 max_batch_atoms=max_batch_atoms,
                 max_memory_fraction=max_memory_fraction,
                 return_atom_counts=True,
+                include_hydrogens=include_hydrogens,
             )
             if cross_pool:
                 right_pilot_ids, right_labels = _pilot_ids(list(range(right_count)))
@@ -3618,6 +3692,7 @@ def iter_matches_stream(
                     max_batch_atoms=max_batch_atoms,
                     max_memory_fraction=max_memory_fraction,
                     return_atom_counts=True,
+                    include_hydrogens=include_hydrogens,
                 )
                 pilot_features = torch.cat((left_pilot, right_pilot))
                 pilot_presence = torch.cat((left_pilot_presence, right_pilot_presence))
@@ -3677,6 +3752,7 @@ def iter_matches_stream(
                     max_batch_atoms=max_batch_atoms,
                     max_memory_fraction=max_memory_fraction,
                     return_atom_counts=True,
+                    include_hydrogens=include_hydrogens,
                 )
                 stop = start + len(ids)
                 left_features[start:stop] = features[:, selected]
@@ -3696,6 +3772,7 @@ def iter_matches_stream(
                         max_batch_atoms=max_batch_atoms,
                         max_memory_fraction=max_memory_fraction,
                         return_atom_counts=True,
+                        include_hydrogens=include_hydrogens,
                     )
                     stop = start + len(ids)
                     right_features[start:stop] = features[:, selected]
@@ -3779,7 +3856,10 @@ def iter_matches_stream(
             left_indexes: dict[str, RadialComparisonIndex] | None = None
             try:
                 left_batch, left_types = _read_batch(
-                    read_typed_batch, [left_id], vocabulary
+                    read_typed_batch,
+                    [left_id],
+                    vocabulary,
+                    include_hydrogens=include_hydrogens,
                 )
                 left_atoms = int(left_atom_counts[left_id])
                 if left_atoms > max_batch_atoms:
@@ -3796,6 +3876,7 @@ def iter_matches_stream(
                         device=target_device,
                         max_memory_fraction=max_memory_fraction,
                         cuda_memory_budget_bytes=budget,
+                        include_hydrogens=include_hydrogens,
                     )
                 except (MemoryError, torch.cuda.OutOfMemoryError) as exc:
                     # Only descriptor construction is normalized here. Loader
@@ -3842,7 +3923,10 @@ def iter_matches_stream(
                         pair_tensor: Tensor | None = None
                         output_chunk: Tensor | None = None
                         right_batch, right_types = _read_batch(
-                            read_right, right_block, vocabulary
+                            read_right,
+                            right_block,
+                            vocabulary,
+                            include_hydrogens=include_hydrogens,
                         )
                         try:
                             if (left_types is None) != (right_types is None):
@@ -3858,6 +3942,7 @@ def iter_matches_stream(
                                 device=target_device,
                                 max_memory_fraction=max_memory_fraction,
                                 cuda_memory_budget_bytes=right_budget,
+                                include_hydrogens=include_hydrogens,
                             )
                             _configure_active_bundles(
                                 (left_indexes, right_indexes), budget

@@ -26,6 +26,7 @@ from torch import Tensor
 
 from nvalchemi.csp._comparison.descriptor import build_descriptor_tiles
 from nvalchemi.data import Batch, resolve_device
+from nvalchemi.data.level_storage import LevelSchema, MultiLevelStorage
 
 _TYPE_PAD = torch.iinfo(torch.int32).min
 
@@ -1155,3 +1156,115 @@ def _build_summaries(
             (0, feature_count * 2), dtype=torch.float32, device=distances.device
         )
     )
+
+
+def validate_include_hydrogens(include_hydrogens: bool) -> None:
+    """Require the public hydrogen-selection option to be a Python bool."""
+    if not isinstance(include_hydrogens, bool):
+        raise TypeError("include_hydrogens must be bool")
+
+
+def comparison_geometry(
+    batch: Batch,
+    atom_types: Tensor | None,
+    *,
+    include_hydrogens: bool,
+    atom_types_validated: bool = False,
+) -> tuple[Batch, Tensor | None]:
+    """Return comparison geometry and types aligned to its retained atoms.
+
+    The source batch is never modified. With hydrogen inclusion enabled, the
+    original batch is returned directly so the default path adds no geometry
+    copy. A zero-structure pool also passes through without requiring atom
+    fields.
+    """
+    validate_include_hydrogens(include_hydrogens)
+    if not isinstance(batch, Batch):
+        raise TypeError("batch must be a nvalchemi.data.Batch")
+    if atom_types is not None and not atom_types_validated:
+        if (
+            not isinstance(atom_types, Tensor)
+            or atom_types.ndim != 1
+            or atom_types.numel() != batch.num_nodes
+        ):
+            raise ValueError(
+                "atom_types must be a one-dimensional tensor with one entry per atom"
+            )
+        if atom_types.dtype not in (torch.int32, torch.int64):
+            raise TypeError("atom_types must have dtype torch.int32 or torch.int64")
+        int32_info = torch.iinfo(torch.int32)
+        if atom_types.dtype == torch.int64 and torch.any(
+            (atom_types < int32_info.min) | (atom_types > int32_info.max)
+        ):
+            raise ValueError("atom_types values must fit signed int32")
+        if torch.any(atom_types == int32_info.min):
+            raise ValueError("atom_types cannot use the reserved int32 minimum")
+        atom_types = atom_types.detach().to(dtype=torch.int32).contiguous()
+
+    if include_hydrogens or batch.num_graphs == 0:
+        return batch, atom_types
+
+    if "atomic_numbers" not in batch:
+        raise ValueError(
+            "batch.atomic_numbers is required when include_hydrogens=False"
+        )
+    atomic_numbers = batch.atomic_numbers
+    if atomic_numbers.ndim != 1 or atomic_numbers.numel() != batch.num_nodes:
+        raise ValueError("batch.atomic_numbers must have shape [num_nodes]")
+    if "positions" not in batch:
+        raise ValueError("batch must contain positions with shape [num_nodes, 3]")
+    positions = batch.positions
+    if positions.ndim == 0 or positions.shape[0] != batch.num_nodes:
+        raise ValueError("batch.positions must align with batch.atomic_numbers")
+
+    keep = atomic_numbers != 1
+    selected_positions = positions[keep]
+    selected_numbers = atomic_numbers[keep]
+    selected_types = (
+        atom_types[keep.to(device=atom_types.device)].contiguous()
+        if atom_types is not None
+        else None
+    )
+    selected_counts = torch.bincount(
+        batch.batch_idx[keep].to(torch.int64), minlength=batch.num_graphs
+    ).to(dtype=torch.int32)
+
+    fields: dict[str, Tensor] = {
+        "positions": selected_positions,
+        "atomic_numbers": selected_numbers,
+    }
+    if "cell" in batch:
+        cell = batch.cell
+        if cell.shape != (batch.num_graphs, 3, 3) or not cell.dtype.is_floating_point:
+            raise ValueError(
+                "batch.cell must have shape [num_graphs, 3, 3] and a floating dtype"
+            )
+        fields["cell"] = cell
+    if "pbc" in batch:
+        pbc = batch.pbc
+        if pbc.shape not in ((3,), (batch.num_graphs, 3)) or pbc.dtype != torch.bool:
+            raise ValueError("batch.pbc must be bool with shape [3] or [num_graphs, 3]")
+        fields["pbc"] = (
+            pbc.reshape(1, 3).expand(batch.num_graphs, 3).contiguous()
+            if pbc.ndim == 1
+            else pbc
+        )
+    else:
+        fields["pbc"] = torch.zeros(
+            (batch.num_graphs, 3), dtype=torch.bool, device=batch.device
+        )
+
+    schema = LevelSchema()
+    storage = MultiLevelStorage.from_data(
+        fields,
+        attr_map=schema,
+        segment_lengths={"atoms": selected_counts},
+        device=batch.device,
+        validate=False,
+    )
+    keys = {
+        "node": {"positions", "atomic_numbers"},
+        "edge": set(),
+        "system": set(fields).difference({"positions", "atomic_numbers"}),
+    }
+    return Batch(device=batch.device, storage=storage, keys=keys), selected_types
