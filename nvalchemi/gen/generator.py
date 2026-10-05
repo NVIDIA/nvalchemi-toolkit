@@ -142,10 +142,9 @@ from pydantic import (
 from tensordict import TensorDictBase
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.gen._device import normalize_device
 from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.hooks import GenerationContext, Hook, HookRegistryMixin
-
-from ._device import normalize_device
 
 if TYPE_CHECKING:
     from nvalchemi.gen.pipeline import GenerationPipeline
