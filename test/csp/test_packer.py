@@ -410,7 +410,10 @@ def test_cpu_one_rigid_and_cell_step_matches_pinned_source_fixture() -> None:
     )
 
 
-@pytest.mark.parametrize("device", ["cuda:0", "cuda:1"])
+@pytest.mark.parametrize(
+    "device",
+    ["cuda:0", pytest.param("cuda:1", marks=pytest.mark.multigpu)],
+)
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 def test_cuda_fixed_state_contact_and_one_step_match_source_fixture(
     device: str,
@@ -1148,7 +1151,7 @@ def test_cuda_packer_launches_on_active_torch_stream(
     )
 
 
-@pytest.mark.skipif(torch.cuda.device_count() < 2, reason="requires two CUDA devices")
+@pytest.mark.multigpu
 def test_cuda_input_on_other_device_is_rejected_before_copy() -> None:
     inputs = _one_atom_input().to("cuda:1")
     config = OverlapReliefConfig(
@@ -1165,7 +1168,7 @@ def test_cuda_input_on_other_device_is_rejected_before_copy() -> None:
 
 
 @pytest.mark.parametrize(("num_samples", "candidate_budget"), [(0, "config"), (2, 0)])
-@pytest.mark.skipif(torch.cuda.device_count() < 2, reason="requires two CUDA devices")
+@pytest.mark.multigpu
 def test_cuda_empty_call_still_validates_input_placement(
     num_samples: int, candidate_budget: int | str
 ) -> None:
@@ -1189,7 +1192,10 @@ def test_cuda_empty_call_still_validates_input_placement(
     assert torch.equal(rng.get_state(), initial_rng_state)
 
 
-@pytest.mark.parametrize("device", ["cuda:0", "cuda:1"])
+@pytest.mark.parametrize(
+    "device",
+    ["cuda:0", pytest.param("cuda:1", marks=pytest.mark.multigpu)],
+)
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 def test_cuda_public_packer_preserves_selected_device(device: str) -> None:
     inputs = _one_atom_input()
@@ -1258,7 +1264,10 @@ def test_cuda_packer_identity_survives_p1_expansion() -> None:
     assert batch.csp_source_structure_id.tolist() == [[73, 0], [73, 1]]
 
 
-@pytest.mark.parametrize("device", ["cuda:0", "cuda:1"])
+@pytest.mark.parametrize(
+    "device",
+    ["cuda:0", pytest.param("cuda:1", marks=pytest.mark.multigpu)],
+)
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 def test_cuda_zero_accepted_shortfall_keeps_empty_outputs_on_device(
     device: str,

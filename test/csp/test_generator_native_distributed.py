@@ -1082,10 +1082,6 @@ def test_gloo_native_metadata_disagreement_fails_before_payload_transfer(
 
 
 @pytest.mark.multigpu
-@pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < 2,
-    reason="requires two CUDA devices for NCCL",
-)
 def test_nccl_native_batch_scopes_packer_device_and_propagates_local_failure() -> None:
     context = mp.get_context("spawn")
     queue = context.Queue()

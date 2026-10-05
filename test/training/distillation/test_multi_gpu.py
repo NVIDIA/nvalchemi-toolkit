@@ -2070,7 +2070,7 @@ def test_two_gpu_ranks_train_one_student_from_disjoint_trajectories() -> None:
     _assert_one_student(results)
 
 
-@pytest.mark.multigpu
+@pytest.mark.multigpu(min_gpus=4)
 @pytest.mark.slow
 def test_four_gpu_ranks_train_one_student_from_disjoint_trajectories() -> None:
     """Scaling the node out changes the world size and nothing else."""

@@ -1353,10 +1353,6 @@ def test_gloo_condition_and_rng_startup_failures_reach_every_rank() -> None:
 
 
 @pytest.mark.multigpu
-@pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < 2,
-    reason="requires two CUDA devices for NCCL",
-)
 def test_nccl_local_gather_and_failure_coordination() -> None:
     context = mp.get_context("spawn")
     queue = context.Queue()

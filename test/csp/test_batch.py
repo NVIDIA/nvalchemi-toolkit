@@ -456,10 +456,17 @@ def test_cuda_operation_cache_resolves_unindexed_device_aliases() -> None:
             get_space_group_operations(4),
         )
 
-    if torch.cuda.device_count() > 1:
-        other = (current + 1) % torch.cuda.device_count()
-        with torch.cuda.device(other):
-            other_unindexed = _operation_tables(torch.device("cuda"))
-            other_explicit = _operation_tables(torch.device("cuda", other))
-            assert other_unindexed is other_explicit
-        assert other_unindexed is not explicit
+
+@pytest.mark.multigpu
+def test_cuda_operation_cache_isolated_between_indexed_devices() -> None:
+    from nvalchemi.csp._batch import _operation_tables
+
+    with torch.cuda.device(0):
+        device_zero = _operation_tables(torch.device("cuda"))
+        assert device_zero is _operation_tables(torch.device("cuda", 0))
+
+    with torch.cuda.device(1):
+        device_one = _operation_tables(torch.device("cuda"))
+        assert device_one is _operation_tables(torch.device("cuda", 1))
+
+    assert device_zero is not device_one

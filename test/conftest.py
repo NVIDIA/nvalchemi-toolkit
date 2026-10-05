@@ -51,24 +51,26 @@ def _fairchem_installed() -> bool:
 def pytest_collection_modifyitems(
     config: pytest.Config, items: list[pytest.Item]
 ) -> None:
-    """Auto-skip environment-gated tests so they skip (not fail) where a
-    capability is absent:
+    """Skip tests when required hardware or dependencies are unavailable.
 
-    * ``@pytest.mark.multigpu`` — needs >=2 CUDA GPUs (override with
-      ``NVALCHEMI_FORCE_MULTIGPU=1`` to see the underlying error).
-    * ``@pytest.mark.requires_cueq`` — needs the ``cuequivariance`` torch ops
-      *registered* (not merely the package installed).
-    * ``@pytest.mark.requires_uma`` — needs ``fairchem-core`` installed.
+    Parameters
+    ----------
+    config : pytest.Config
+        Pytest configuration for this collection run.
+    items : list[pytest.Item]
+        Collected test items to mark for skipping.
+
+    Notes
+    -----
+    ``@pytest.mark.multigpu`` accepts integer ``min_gpus`` >= 2 (default 2).
+    ``NVALCHEMI_FORCE_MULTIGPU=1`` bypasses the device-count gate.
+    ``requires_cueq`` needs registered cuequivariance ops, and ``requires_uma``
+    needs ``fairchem-core`` installed.
     """
     import os
 
     force_multigpu = os.environ.get("NVALCHEMI_FORCE_MULTIGPU") == "1"
-    have_multigpu = torch.cuda.is_available() and torch.cuda.device_count() >= 2
-    skip_multigpu = (
-        None
-        if (force_multigpu or have_multigpu)
-        else pytest.mark.skip(reason="requires >=2 CUDA GPUs (mark: multigpu)")
-    )
+    available_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
     skip_cueq = (
         None
         if _cueq_ops_registered()
@@ -80,8 +82,27 @@ def pytest_collection_modifyitems(
         else pytest.mark.skip(reason="fairchem-core not installed")
     )
     for item in items:
-        if skip_multigpu is not None and "multigpu" in item.keywords:
-            item.add_marker(skip_multigpu)
+        multigpu_marker = item.get_closest_marker("multigpu")
+        if multigpu_marker is not None:
+            min_gpus = multigpu_marker.kwargs.get("min_gpus", 2)
+            if (
+                isinstance(min_gpus, bool)
+                or not isinstance(min_gpus, int)
+                or min_gpus < 2
+            ):
+                raise pytest.UsageError(
+                    f"{item.nodeid}: multigpu min_gpus must be an integer >= 2; "
+                    f"got {min_gpus!r}"
+                )
+            if not force_multigpu and available_gpus < min_gpus:
+                marker_name = (
+                    "multigpu" if min_gpus == 2 else f"multigpu(min_gpus={min_gpus})"
+                )
+                item.add_marker(
+                    pytest.mark.skip(
+                        reason=f"requires >={min_gpus} CUDA GPUs (mark: {marker_name})"
+                    )
+                )
         if skip_cueq is not None and "requires_cueq" in item.keywords:
             item.add_marker(skip_cueq)
         if skip_uma is not None and "requires_uma" in item.keywords:

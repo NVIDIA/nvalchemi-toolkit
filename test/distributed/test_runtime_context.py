@@ -627,10 +627,6 @@ def test_mocked_nccl_device_priority_and_explicit_failures() -> None:
 
 
 @pytest.mark.multigpu
-@pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < 2,
-    reason="two CUDA devices required for Manager/NCCL runtime validation",
-)
 def test_manager_named_nccl_group_scopes_device_and_agrees_on_errors() -> None:
     ctx = mp.get_context("spawn")
     manager_port = free_port()
