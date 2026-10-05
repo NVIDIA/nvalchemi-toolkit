@@ -74,6 +74,9 @@
 
 ### Fixed
 
+- Keep lazy batch-pointer initialization outside `torch.compile` to prevent
+  `Tensor.item()` warnings in compiled neighbor-list hooks. Metadata validation
+  remains unchanged.
 - `AlignCellHook` no longer fails under `FusedStage` when positions require
   grad, and compiles with `fullgraph=True`.
 - **Dynamics hook lifecycle** — fused-level hooks now fire at the
