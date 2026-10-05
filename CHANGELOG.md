@@ -98,6 +98,10 @@
   method instead; hooks on a `FusedStage` already observe the complete fused
   batch.
 
+- `FIRE` and `FIREVariableCell` geometry optimizers. Use `FIRE2` /
+  `FIRE2VariableCell` or `LBFGS` / `LBFGSVariableCell` instead. They still
+  work and now emit a `DeprecationWarning` on construction.
+
 ## 0.2.0 — 2026-08-07
 
 ### Added
