@@ -635,6 +635,31 @@ Expanded non-destination ranks receive an empty Batch. Driver compilation is
 unsupported: `CSPGenerator.compile()` and pipeline compilation through a CSP
 stage raise; compiled scientific internals inside a packer remain possible.
 
+### Save a generation recipe
+
+Local CSP generators and pipelines can be saved as JSON construction recipes. The
+recipe includes the packer's configuration and device, generator options, output
+declaration, and supported hooks and callbacks. Loading reconstructs the packer
+and CSP generator rather than importing an unbound generation method.
+
+```python
+from nvalchemi.gen import GenerationPipeline
+
+recipe = pipeline.model_dump_json()
+restored_pipeline = GenerationPipeline.model_validate_json(recipe)
+```
+
+A restored recipe starts a fresh generation session. It preserves the configured
+seed, but not a consumed random-number state, call counters, or run identifiers.
+Molecular inputs and per-call options are supplied again when running the
+restored pipeline.
+
+Custom packers must provide `to_spec()` returning a `BaseSpec` to support
+serialization. Callback functions must be importable, or callable objects must
+provide their own construction spec. Ordinary instance-bound methods are not
+serializable by import path alone. A live distributed process group cannot be
+saved in this recipe; its lifetime and binding remain caller-owned.
+
 ### Supply another packing algorithm
 
 Implement `CrystalPacker` structurally: expose `device` and a local `pack`

@@ -25,9 +25,10 @@ from typing import Any
 
 import torch
 import torch.distributed as dist
-from pydantic import Field, PrivateAttr
+from pydantic import Field, PrivateAttr, model_serializer, model_validator
 from torch.distributed import ProcessGroup
 
+from nvalchemi._serialization import capture_callable_spec
 from nvalchemi.csp._packing_transport import (
     _assemble_result,
     _describe_native,
@@ -50,6 +51,7 @@ from nvalchemi.gen.generator import (
     GeneratingFunction,
     _PreparedGeneration,
 )
+from nvalchemi.specs import BaseSpec, create_model_spec, create_model_spec_from_json
 
 __all__ = ["CSPGenerator", "CSP_OUTPUT_FIELDS"]
 
@@ -237,6 +239,87 @@ class CSPGenerator(AtomisticGenerator):
     def compile(self, **kwargs: Any) -> CSPGenerator:
         """Reject driver-level compilation for the dynamic packing lifecycle."""
         raise NotImplementedError("CSPGenerator does not support compile()")
+
+    def to_spec(self) -> BaseSpec:
+        """Capture the construction recipe for this local CSP generator.
+
+        The recipe retains constructor settings and rebuilds the packer,
+        callbacks, and hooks. Runtime session state and the active distributed
+        process group are not serializable.
+
+        Returns
+        -------
+        BaseSpec
+            A JSON-serializable construction recipe.
+
+        Raises
+        ------
+        TypeError
+            If a live process group is attached, or a packer or callback does
+            not provide an importable path or its own ``to_spec()`` method.
+        """
+        if self._process_group is not None:
+            raise TypeError(
+                "CSPGenerator with a live process_group cannot be serialized; "
+                "construct the generator with its caller-owned group after "
+                "loading the recipe."
+            )
+
+        packer_spec = capture_callable_spec(self._packer, field_name="packer")
+        condition_spec = (
+            capture_callable_spec(self.condition_func, field_name="condition_func")
+            if self.condition_func is not None
+            else None
+        )
+        callback_spec = (
+            capture_callable_spec(self._on_result, field_name="on_result")
+            if self._on_result is not None
+            else None
+        )
+        hook_specs = [
+            create_model_spec_from_json(payload)
+            for payload in self._serialize_hooks(self.hooks)
+        ]
+        return create_model_spec(
+            type(self),
+            packer=packer_spec,
+            gather_to_rank=self._gather_to_rank,
+            expand=self._expand,
+            outputs=self.outputs,
+            on_result=callback_spec,
+            condition_func=condition_spec,
+            hooks=hook_specs,
+            seed=self.seed,
+            num_samples=self.num_samples,
+            dedicated_stream=self.dedicated_stream,
+            enable_inference_mode=self.enable_inference_mode,
+            compile_generate=self.compile_generate,
+        )
+
+    @model_serializer(mode="plain")
+    def _serialize_recipe(self) -> dict[str, Any]:
+        """Serialize only the JSON-safe construction recipe."""
+        return self.to_spec().model_dump(mode="json")
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _restore_recipe(cls, value: Any, handler: Any) -> Any:
+        """Rebuild this class's recipe and delegate ordinary inputs."""
+        if not isinstance(value, dict) or "cls_path" not in value:
+            return handler(value)
+        expected_path = f"{cls.__module__}.{cls.__qualname__}"
+        if value["cls_path"] != expected_path:
+            raise ValueError(
+                f"CSP generator recipe must target {expected_path!r}, got "
+                f"{value['cls_path']!r}"
+            )
+        restored = create_model_spec_from_json(value).build()
+        if type(restored) is not cls:
+            raise TypeError(
+                f"CSP generator recipe built {type(restored).__name__}, "
+                f"expected {cls.__name__}"
+            )
+        return restored
 
     def _startup_plan(
         self,

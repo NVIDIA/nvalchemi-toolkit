@@ -21,7 +21,7 @@ import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from numbers import Integral
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import torch
 from torch import Tensor
@@ -43,6 +43,9 @@ from nvalchemi.csp.packer.result import (
     PackingStopReason,
 )
 from nvalchemi.data import resolve_device
+
+if TYPE_CHECKING:
+    from nvalchemi.specs import BaseSpec
 
 __all__ = ["OverlapReliefPacker"]
 
@@ -337,6 +340,20 @@ class OverlapReliefPacker:
             raise ValueError("device must be 'cpu' or a CUDA device")
         self.config = config
         self.device = target
+
+    def to_spec(self) -> BaseSpec:
+        """Capture this packer's configuration and resolved execution device.
+
+        Returns
+        -------
+        BaseSpec
+            A JSON-serializable constructor recipe for a fresh packer.
+        """
+        from nvalchemi.specs import create_model_spec
+
+        return create_model_spec(
+            type(self), config=self.config, device=str(self.device)
+        )
 
     def __call__(
         self,

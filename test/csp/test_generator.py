@@ -20,19 +20,24 @@ from typing import Any
 
 import pytest
 import torch
+from pydantic import ValidationError
 
 from nvalchemi.csp import CSP_OUTPUT_FIELDS, CSPGenerator
 from nvalchemi.csp.data import MolecularPackingInput, RigidMoleculeASUBatch
 from nvalchemi.csp.packer import (
+    OverlapReliefConfig,
+    OverlapReliefPacker,
     PackingContext,
     PackingReport,
     PackingResult,
     PackingStopReason,
 )
+from nvalchemi.csp.symmetry import SpaceGroupPolicy
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.gen.generator import AtomisticGenerator
 from nvalchemi.gen.pipeline import GenerationPipeline
 from nvalchemi.gen.stages import GenerationStage
+from nvalchemi.specs import create_model_spec
 
 
 def _formula(
@@ -197,10 +202,240 @@ class _FakePacker:
         )
 
 
+class _SpecFakePacker(_FakePacker):
+    """Protocol fake that opts into nested construction-spec serialization."""
+
+    def to_spec(self):
+        """Capture the constructor settings needed to rebuild this fake."""
+        return create_model_spec(
+            type(self),
+            budget=self.budget,
+            accepted=self.accepted,
+            generated=self.generated,
+            native_batch=self.native_batch,
+            omit_native_charge=self.omit_native_charge,
+            native_charge=self.native_charge,
+        )
+
+
+_RECIPE_EVENTS: list[tuple[str, Any]] = []
+_UNRELATED_RECIPE_CONSTRUCTIONS = 0
+
+
+def _recipe_condition(inputs, *, num_samples, rng):
+    """Record conditioning and pass the formula input through unchanged."""
+    _RECIPE_EVENTS.append(("condition", num_samples))
+    return inputs
+
+
+def _recipe_result(result: PackingResult) -> None:
+    """Record the accepted count before optional ASU expansion."""
+    _RECIPE_EVENTS.append(("result", result.accepted_count))
+
+
+class _RecipeHook:
+    """Record that a restored CSP generator fires its ordinary hook."""
+
+    stage = GenerationStage.AFTER_GENERATE
+    frequency = 1
+
+    def __init__(self, events: list[tuple[str, Any]]) -> None:
+        self.events = events
+
+    def __call__(self, context, stage) -> None:
+        """Record the post-generation sample type."""
+        self.events.append(("after_generate", type(context.sample).__name__))
+
+
+class _RecipeConditionBase:
+    """Base class for checking bound classmethod restoration in CSP calls."""
+
+    @classmethod
+    def condition(cls, inputs, *, num_samples, rng):
+        """Record the bound owner and pass through the formula input."""
+        _RECIPE_EVENTS.append(("condition_owner", cls.__name__, num_samples))
+        return inputs
+
+
+class _RecipeConditionDerived(_RecipeConditionBase):
+    """Derived condition whose inherited classmethod is captured by a CSP recipe."""
+
+
+class _UnrelatedRecipeTarget:
+    """Sentinel proving an unrelated spec is rejected before construction."""
+
+    def __init__(self) -> None:
+        global _UNRELATED_RECIPE_CONSTRUCTIONS
+        _UNRELATED_RECIPE_CONSTRUCTIONS += 1
+
+
+def _builtin_recipe_generator(
+    *, condition_func: Any = _recipe_condition
+) -> CSPGenerator:
+    """Build a deterministic CPU packer with non-default recipe settings."""
+    config = OverlapReliefConfig(
+        z=1,
+        z_prime=1,
+        batch_size=2,
+        max_candidates=2,
+        max_steps_per_candidate=2,
+        convergence_check_interval=1,
+        cell_volume_range=(1000.0, 1001.0),
+        space_groups=SpaceGroupPolicy.fixed(1),
+    )
+    packer = OverlapReliefPacker(config, device="cpu")
+    return CSPGenerator(
+        packer,
+        outputs=frozenset({"positions", "atomic_numbers", "cell", "pbc"}),
+        condition_func=condition_func,
+        hooks=[_RecipeHook([])],
+        on_result=_recipe_result,
+        num_samples=2,
+        seed=29,
+        dedicated_stream=False,
+        enable_inference_mode=True,
+    )
+
+
 def test_generator_repr_succeeds() -> None:
     generator = CSPGenerator(_FakePacker(), dedicated_stream=False)
 
     assert "CSPGenerator" in repr(generator)
+
+
+@pytest.mark.parametrize("json_round_trip", [False, True])
+def test_csp_generator_recipe_round_trip_runs_cpu_packer(json_round_trip: bool) -> None:
+    """Dict and JSON recipes rebuild a fresh, working built-in CSP generator."""
+    _RECIPE_EVENTS.clear()
+    generator = _builtin_recipe_generator()
+
+    payload = generator.model_dump_json() if json_round_trip else generator.model_dump()
+    restored = (
+        CSPGenerator.model_validate_json(payload)
+        if json_round_trip
+        else CSPGenerator.model_validate(payload)
+    )
+
+    assert restored.step_count == 0
+    assert restored.seed == 29
+    assert restored.num_samples == 2
+    assert restored.dedicated_stream is False
+    assert restored.enable_inference_mode is True
+    assert restored.outputs == frozenset({"positions", "atomic_numbers", "cell", "pbc"})
+    assert restored.condition_func is _recipe_condition
+    assert restored._packer.device == torch.device("cpu")
+    assert restored._packer.config.batch_size == 2
+    assert restored._packer.config.max_candidates == 2
+    assert restored._packer.config.cell_volume_range == (1000.0, 1001.0)
+    assert restored.generator_func.__self__ is restored
+    assert restored.generator_func.__func__ is CSPGenerator._pack_call
+    assert isinstance(restored.hooks[0], _RecipeHook)
+
+    result = restored(_formula(), run_id=810)
+
+    assert isinstance(result, Batch) and result.num_graphs == 2
+    assert _RECIPE_EVENTS == [("condition", 2), ("result", 2)]
+    assert restored.hooks[0].events == [("after_generate", "Batch")]
+    assert restored.step_count == 1
+
+
+def test_csp_pipeline_recipe_round_trip_runs_and_preserves_callback_order() -> None:
+    """A JSON pipeline recipe restores its CSP stage and observable callbacks."""
+    _RECIPE_EVENTS.clear()
+    generator = _builtin_recipe_generator(
+        condition_func=_RecipeConditionDerived.condition
+    )
+    pipeline = GenerationPipeline(stages=[generator])
+    inputs = _formula()
+
+    with pipeline:
+        baseline = pipeline(inputs, stage_kwargs=[{"run_id": 811}])
+    assert isinstance(baseline, Batch) and baseline.num_graphs == 2
+    assert generator.step_count == 1
+
+    generator.hooks[0].events.clear()
+    _RECIPE_EVENTS.clear()
+    recipe = pipeline.model_dump_json()
+
+    restored = GenerationPipeline.model_validate_json(recipe)
+    restored_generator = restored.stages[0]
+    assert isinstance(restored_generator, CSPGenerator)
+    assert restored_generator.step_count == 0
+    assert restored_generator.generator_func.__self__ is restored_generator
+
+    with restored:
+        result = restored(inputs, stage_kwargs=[{"run_id": 811}])
+
+    assert isinstance(result, Batch) and result.num_graphs == 2
+    assert _RECIPE_EVENTS == [
+        ("condition_owner", "_RecipeConditionDerived", 2),
+        ("result", 2),
+    ]
+    assert restored_generator.hooks[0].events == [("after_generate", "Batch")]
+    torch.testing.assert_close(
+        result.positions, baseline.positions, rtol=1e-6, atol=1e-6
+    )
+    torch.testing.assert_close(result.cell, baseline.cell, rtol=1e-6, atol=1e-6)
+    assert torch.equal(result.atomic_numbers, baseline.atomic_numbers)
+    assert torch.equal(result.pbc, baseline.pbc)
+
+
+def test_raw_csp_recipe_round_trip_and_custom_packer_to_spec() -> None:
+    """Raw mode and an opted-in custom packer both reconstruct via specs."""
+    raw = CSPGenerator(
+        OverlapReliefPacker(
+            OverlapReliefConfig(
+                z=1,
+                z_prime=1,
+                batch_size=1,
+                max_candidates=1,
+                cell_volume_range=(1000.0, 1001.0),
+                space_groups=SpaceGroupPolicy.fixed(1),
+            ),
+            device="cpu",
+        ),
+        expand=False,
+        outputs=frozenset(),
+        dedicated_stream=False,
+    )
+    restored_raw = CSPGenerator.model_validate_json(raw.model_dump_json())
+    assert restored_raw._expand is False and restored_raw.outputs == frozenset()
+    result = restored_raw(_formula(), run_id=812)
+    assert isinstance(result, PackingResult)
+    assert result.accepted_count == 1
+
+    custom = CSPGenerator(
+        _SpecFakePacker(accepted=2),
+        num_samples=2,
+        dedicated_stream=False,
+    )
+    restored_custom = CSPGenerator.model_validate_json(custom.model_dump_json())
+    assert isinstance(restored_custom._packer, _SpecFakePacker)
+    assert restored_custom._packer.accepted == 2
+    assert restored_custom(_formula(), run_id=813).num_graphs == 2
+
+
+def test_csp_recipe_rejects_live_group_and_unrelated_target_before_build() -> None:
+    """Distributed runtime bindings and foreign constructor specs are rejected."""
+    generator = CSPGenerator(
+        _SpecFakePacker(), process_group=object(), dedicated_stream=False
+    )
+    with pytest.raises(TypeError, match="live process_group"):
+        generator.to_spec()
+
+    caller_owned = CSPGenerator(
+        _SpecFakePacker(), gather_to_rank=0, dedicated_stream=False
+    )
+    restored_caller_owned = CSPGenerator.model_validate_json(
+        caller_owned.model_dump_json()
+    )
+    assert restored_caller_owned._process_group is None
+    assert restored_caller_owned._gather_to_rank == 0
+
+    payload = create_model_spec(_UnrelatedRecipeTarget).model_dump(mode="json")
+    with pytest.raises(ValidationError, match="must target"):
+        CSPGenerator.model_validate(payload)
+    assert _UNRELATED_RECIPE_CONSTRUCTIONS == 0
 
 
 class _AfterGenerate:
