@@ -362,6 +362,8 @@ class BaseModelMixin(abc.ABC):
       ordered dict.
     - ``narrowed_outputs()`` — narrow ``active_outputs`` for the duration
       of a block and restore it afterwards.
+    - ``requires_autograd`` — whether the active outputs include one the
+      model differentiates for, so its forward needs autograd enabled.
     """
 
     # model_config must be set as an instance attribute in each subclass __init__:
@@ -823,6 +825,36 @@ class BaseModelMixin(abc.ABC):
         finally:
             self.set_config("active_outputs", previous)
 
+    @property
+    def requires_autograd(self) -> bool:
+        """Whether the model's forward pass needs autograd enabled around it.
+
+        ``True`` when at least one of ``model_config.active_outputs`` is in
+        ``model_config.autograd_outputs``, meaning the model produces it by
+        differentiating its forward. :meth:`adapt_input` marks the
+        ``autograd_inputs`` ``requires_grad`` under the same condition, so a
+        caller that runs the model under :func:`torch.no_grad` reads this
+        first. A model that only publishes direct outputs reports ``False``.
+
+        Returns
+        -------
+        bool
+            Whether an active output is computed by autograd.
+
+        Examples
+        --------
+        >>> from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+        >>> model = DemoModelWrapper(DemoModel())
+        >>> model.requires_autograd
+        True
+        >>> with model.narrowed_outputs({"energy"}):
+        ...     model.requires_autograd
+        False
+        """
+        return bool(
+            self.model_config.autograd_outputs & self.model_config.active_outputs
+        )
+
     def adapt_input(
         self, data: AtomicData | Batch | AtomsLike, **kwargs: Any
     ) -> dict[str, Any]:
@@ -847,8 +879,7 @@ class BaseModelMixin(abc.ABC):
             Input in the format expected by the external model.
         """
         effective_grad_keys = set(self.model_config.gradient_keys)
-        # Enable grad on autograd_inputs if any autograd output is active
-        if self.model_config.autograd_outputs & self.model_config.active_outputs:
+        if self.requires_autograd:
             effective_grad_keys |= self.model_config.autograd_inputs
         for key in effective_grad_keys:
             value = getattr(data, key, None)

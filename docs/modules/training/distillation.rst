@@ -1032,3 +1032,252 @@ instead.
    EmbeddingProjector
    HessianMatchingLoss
    BoltzmannMatchingLoss
+
+
+.. _distillation-evaluation:
+
+Evaluation and acceptance
+-------------------------
+
+``nvalchemi.training.distillation.evaluation`` answers whether a distilled
+student is good enough to ship. It is its own subpackage: its names are
+imported from ``nvalchemi.training.distillation.evaluation``, not from
+``nvalchemi.training.distillation``. A student is accepted when it clears every
+*acceptance bar* it is given. An acceptance bar is a limit on
+one number from the student's measurements, such as a maximum force MAE or a
+maximum energy drift rate.
+
+Accuracy is measured over a held-out set with
+:func:`~nvalchemi.training.distillation.evaluation.evaluate_accuracy`. It
+compares the student against either the dataset's own labels
+(``targets="reference"``) or the teacher's labels (``targets="teacher"``).
+Teacher labels are written offline by
+:func:`~nvalchemi.training.distillation.label_dataset` or scored on the fly by a
+``scorer``. The pass runs through :class:`~nvalchemi.training.ValidationLoop`,
+so eval mode, device placement, and the autograd policy an autograd-force
+student needs behave as they do in training validation. No autocast is
+applied, so the student predicts in its own dtype. A bare model passed as the
+scorer is wrapped in an in-process scorer whose labels are cast to
+``label_dtype``, by default the student's first floating-point parameter dtype
+floored at float32. A supplied scorer's labels are not cast. Every residual is
+accumulated in float64 as an exact global sum rather than read off the
+graph-balanced loss.
+
+The weights scored are exactly the ones passed in. To score a student trained
+under an ``EMAHook`` on its averaged weights, pass
+``strategy.inference_model``. ``StudentEvaluation.weights`` records which of
+the two weight sets was scored. A scorer's labels pass the same ``teacher_*``
+namespace guard that every other labeling route applies. A custom scorer that
+returns ``energy`` or ``positions`` is therefore refused before it can rewrite
+the inputs or reference targets of the batch the student is about to read.
+
+Whenever forces are compared, against either target family, two
+force-alignment numbers fill in. ``force_cosine_mean`` weights every atom
+equally, so atoms whose force is at or below the student's own error dominate
+it. The ``min_force_cosine`` bar therefore reads the
+magnitude-weighted ``force_cosine_aggregate`` instead. The compared quantities
+form an open table. The built-ins are
+:data:`~nvalchemi.training.distillation.evaluation.BUILTIN_ACCURACY_QUANTITIES`,
+one :class:`~nvalchemi.training.distillation.evaluation.AccuracyQuantitySpec`
+each. A spec names the prediction key, the reference field, the teacher signal,
+and the loss term that drives the pass. A spec passed in ``quantities`` scores
+a custom head, or a built-in quantity read from another field, and reports it
+under ``AccuracyMetrics.errors``.
+
+.. currentmodule:: nvalchemi.training.distillation.evaluation
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   evaluate_accuracy
+   AccuracyMetrics
+   AccuracyQuantity
+   AccuracyQuantitySpec
+
+.. data:: BUILTIN_ACCURACY_QUANTITIES
+   :type: Mapping[str, AccuracyQuantitySpec]
+
+   Specs of the built-in quantities, keyed by the name a caller requests them
+   under.
+
+The *non-conservative residual* is the part of a teacher's force field that no
+conservative student can fit.
+:func:`~nvalchemi.training.distillation.evaluation.non_conservative_residual`
+measures it. A student that differentiates an energy produces a curl-free
+field, so it fits only the conservative part of a direct-force teacher. The
+probe integrates the teacher's work around closed loops in configuration space.
+That work is zero for a conservative field. The probe converts the leftover
+work into ``force_floor``: a lower bound on the root-mean-square per-atom force
+error that a conservative student must make somewhere on the loop.
+
+The bound holds at the displacement scale that ``amplitude`` probes, so choose
+an amplitude on the order of a thermal vibration. The bound loosens as
+``1 / sqrt(N)`` with system size, because one randomly oriented loop spans a
+``1 / sqrt(3N)`` fraction of the field's curl. Compare floors only between
+probes of similar system size. A conservative teacher reports the midpoint
+rule's quadrature error, which falls as ``segments`` rises. Below that, it
+reports the round-off of the batch's own dtype. In float32 that round-off is
+near ``1e-9`` eV/A for an argon-like Lennard-Jones solid, and a hundred times
+more for a lattice a hundred times stiffer. A floor below that level needs a
+float64 batch and teacher.
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   non_conservative_residual
+   NonConservativeResidual
+
+Stability is what small students actually fail at, so it is measured on a
+trajectory the student drives itself. The *stability monitor*,
+:class:`~nvalchemi.dynamics.hooks.StabilityMonitor`, is a dynamics hook that
+records the total energy and momentum of that trajectory. It reports energy
+drift and momentum conservation once the run is over. It is the offline
+counterpart of :class:`~nvalchemi.dynamics.hooks.EnergyDriftMonitorHook`: it
+keeps the whole series instead of comparing one live value against a
+threshold. The monitor, its :class:`~nvalchemi.dynamics.hooks.StabilityMetrics`
+record, and :func:`~nvalchemi.dynamics.hooks.total_momentum` live in
+:mod:`nvalchemi.dynamics.hooks`, because nothing about them is specific to
+distillation; the evaluation suite re-exports them.
+
+The endpoint drift and the fitted per-nanosecond rate both include whatever
+transient the series starts with. A student seeded from frames that are not
+equilibria of its own potential therefore needs a ``warmup_steps`` window that
+covers the relaxation. Without one, the transient is reported as drift and can
+cancel a genuine drift. Read ``energy_fluctuation_per_atom`` beside the rate: a
+drift no larger than the fluctuation is a line through an oscillation rather
+than a trend. Momentum is conserved only by an integrator that conserves it, so
+set no ``max_momentum_drift`` bar under a stochastic thermostat.
+
+The monitor's ``divergence`` predicate defaults to
+:func:`~nvalchemi.dynamics.hooks.nonfinite_graph_mask`, the same predicate the
+on-policy loop uses. The first firing that flags a graph ends the
+series, and its step is recorded as ``first_divergence_step``. A trajectory
+that blew up is therefore scored on the segment before it did, not on
+non-finite samples; set the ``no_divergence`` bar so the report fails it
+rather than reading that segment's drift. ``aggregate="mean"`` reports the
+figures as the mean over
+graphs instead of the worst graph. Recording stops with a warning when the
+batch composition changes, so a propagator that graduates systems mid-run is
+scored on the segment before the first graduation.
+``stop_on_composition_change=False`` keeps recording through an inflight refill
+that preserves every graph's size.
+
+*Extensivity* is the property that a structure's energy grows in proportion to
+its size: a ``k``-fold supercell has ``k`` times the energy of the cell it
+replicates.
+:func:`~nvalchemi.training.distillation.evaluation.extensivity_error` checks
+that the student's energy scales this way across replicated cells. The
+*radial distribution* ``g(r)`` is the pair correlation function: how often
+pairs of atoms sit at separation ``r``, normalized so an ideal gas gives ``1``.
+:func:`~nvalchemi.training.distillation.evaluation.radial_distribution`
+accumulates it over a trajectory, reading frames straight out of a
+:class:`~nvalchemi.dynamics.sinks.DataSink` filled by
+:class:`~nvalchemi.dynamics.hooks.SnapshotHook`.
+:func:`~nvalchemi.training.distillation.evaluation.compare_radial_distributions`
+scores the structure a trajectory samples against a reference trajectory's
+structure with a bounded Jensen-Shannon divergence. By default the comparison
+pools every species into one histogram. That histogram cannot see a student
+that puts the right distances between the wrong kinds of atom. Pass ``pair``
+to resolve one species pair and gate a chemically ordered system on its
+partial curves. The extensivity and radial distribution checks read
+periodicity from ``pbc`` when a batch carries it. Both therefore refuse a
+cluster stored with a box but no periodic axis, like one without a cell.
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   extensivity_error
+   ExtensivityMetrics
+   radial_distribution
+   RadialDistribution
+   compare_radial_distributions
+   RDFComparison
+
+The monitor, its record, and ``total_momentum`` are documented on the
+:doc:`dynamics hooks </modules/dynamics/hooks>` page.
+
+The verdict is assembled from those measurements. A caller collects one
+:class:`~nvalchemi.training.distillation.evaluation.StudentEvaluation` per
+candidate student and sets the acceptance bars on an
+:class:`~nvalchemi.training.distillation.evaluation.AcceptanceThresholds`.
+:func:`~nvalchemi.training.distillation.evaluation.build_acceptance_report`
+then returns a report that renders as Rich tables and exports as a plain
+dictionary or a flat scalar map. A bar with no measurement behind it fails the
+student rather than being skipped. A check whose family was measured but whose
+own number was not says which quantity or timestep was missing. A measurement
+that is not finite fails its bar with a ``not finite`` detail, because a NaN
+would fail every comparison and read as an ordinary miss, ``-inf`` would clear
+every maximum, and ``+inf`` every minimum.
+
+The divergence bar, ``no_divergence``, is a flag rather than a limit. Set it
+to ``True`` and a student whose stability series stopped on a divergence fails
+its ``divergence`` row, which reports ``1.0`` against a limit of ``0.0`` and
+names the step the monitor's predicate fired at. The drift bars alone cannot
+catch a divergence, because the series ends at that step and they describe the
+segment before it, which can look perfectly conserved. Like every bar, it
+defaults to not testing, and it fails a student with no stability record.
+
+The from-scratch bar, ``max_from_scratch_ratio``, compares the distilled
+student against an equal-size student trained from scratch. It takes the ratio
+of the distilled error to the from-scratch error on ``energy_per_atom_mae``,
+``forces_mae``, and ``stress_mae``, whichever both carry, and keeps the worst
+ratio. That ratio has to be at most the bar.
+Both students must be scored on the same held-out set, which the bar checks. A
+family scored on different held-out sets is rejected outright.
+
+Each measurement a ``StudentEvaluation`` holds, and the evaluation itself, is a
+*measurement record*: a frozen result, built on
+:class:`~nvalchemi.training.distillation.evaluation.MeasurementRecord`, that
+exports with ``to_dict`` and rebuilds from its own export with ``from_dict``. A
+sweep that evaluates each student in its own job can therefore persist the
+results and assemble one report at the end. A student entry taken out of a
+report export also rebuilds, with its verdict dropped. A caller that runs only
+part of the suite asks
+:func:`~nvalchemi.training.distillation.evaluation.measured_bars` which bars
+its measurements can decide. The answer depends on the families the caller
+filled and, for accuracy, on the quantities the pass compared.
+
+The bars themselves are a public table.
+:data:`~nvalchemi.training.distillation.evaluation.DEFAULT_BARS` is the tuple of
+:class:`~nvalchemi.training.distillation.evaluation.AcceptanceBar` entries the
+report applies by default. Each entry names the threshold it is set under, the
+families it reads, and the field it gates.
+:data:`~nvalchemi.training.distillation.evaluation.BAR_FAMILIES` is derived from
+it. A measurement outside the typed slots is filed under
+``StudentEvaluation.extra`` as a flat map of numbers per family. A bar whose
+family is ``"extra:<family>"`` gates it, and the bar's limit is set under the
+bar's name in ``AcceptanceThresholds.extra``. Pass the extended table as
+``build_acceptance_report(..., bars=...)`` and ``measured_bars(..., bars=...)``.
+A limit set for a bar that the table does not carry is refused rather than
+skipped.
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   build_acceptance_report
+   AcceptanceReport
+   AcceptanceThresholds
+   AcceptanceCheck
+   StudentEvaluation
+   StudentVerdict
+   MeasurementRecord
+   measured_bars
+   MetricFamily
+   AcceptanceBar
+
+.. data:: DEFAULT_BARS
+   :type: tuple[AcceptanceBar, ...]
+
+   Built-in bars of :class:`AcceptanceThresholds`, in the order they are
+   applied.
+
+.. data:: BAR_FAMILIES
+   :type: Mapping[str, frozenset[str]]
+
+   Measurement families each built-in bar reads, keyed by threshold field.
+
+.. currentmodule:: nvalchemi.training.distillation

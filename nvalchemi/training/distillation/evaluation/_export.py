@@ -12,26 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""User-supplied data transforms for :mod:`nvalchemi.data`.
+"""Base class for the measurement records of the evaluation suite.
 
-This package hosts composition infrastructure for transforms that plug
-into :class:`~nvalchemi.data.Dataset` (per-sample transforms) and
-:class:`~nvalchemi.data.DataLoader` (per-batch transforms), and is the
-intended home for future concrete transform submodules
+Every measurement exports with ``to_dict`` and rebuilds with ``from_dict``, so a
+sweep can persist each student's results and aggregate them later. The record
+base is :class:`nvalchemi._serialization.MeasurementRecord`, re-exported here
+so the evaluation suite keeps one import path for it.
 """
 
 from __future__ import annotations
 
-from nvalchemi.data.transforms.compose import Compose
-from nvalchemi.data.transforms.supercell import (
-    DEFAULT_EXTENSIVE_SYSTEM_KEYS,
-    DEFAULT_INTENSIVE_SYSTEM_KEYS,
-    make_supercell,
-)
+from nvalchemi._serialization import MeasurementRecord
 
-__all__ = [
-    "DEFAULT_EXTENSIVE_SYSTEM_KEYS",
-    "DEFAULT_INTENSIVE_SYSTEM_KEYS",
-    "Compose",
-    "make_supercell",
-]
+__all__ = ["MeasurementRecord"]

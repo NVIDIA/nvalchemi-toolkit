@@ -23,7 +23,9 @@ Where possible, these functions delegate to GPU-optimized kernels in
 ``nvalchemiops``.  The Python function signatures are preserved for
 backward compatibility.
 
-This module is **not** part of the public API.
+This module is **not** part of the public API. One of its names is
+re-exported by :mod:`nvalchemi.dynamics.hooks` and is public there:
+:func:`kinetic_energy_per_graph`.
 """
 
 from __future__ import annotations
@@ -43,6 +45,9 @@ from nvalchemiops.segment_ops import (
 
 # ``nvalchemi.dynamics._units`` defines the constant; re-exported for importers.
 from nvalchemi.dynamics._units import KB_EV
+
+_FS_PER_NS = 1.0e6
+"""Femtoseconds in a nanosecond."""
 
 # Supported scatter-reduce operations.
 ScatterReduce = Literal["amax", "sum", "amin", "mean"]
