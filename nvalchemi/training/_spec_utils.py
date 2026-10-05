@@ -307,6 +307,27 @@ def _models_from_spec_and_overrides(
     return merged
 
 
+def _refuse_runtime_overrides(
+    strategy_cls: type, runtime_overrides: Mapping[str, Any]
+) -> None:
+    """Raise when runtime overrides reach a ``from_spec_dict`` that takes none.
+
+    :meth:`~nvalchemi.training.strategy.TrainingStrategy.load_checkpoint` and
+    :meth:`~nvalchemi.training.strategy.TrainingStrategy.from_checkpoint_dict`
+    forward extra keyword arguments, the runtime overrides, verbatim to the
+    strategy class's ``from_spec_dict``. A subclass can therefore be handed
+    live objects that no spec carries. A class that accepts none refuses a
+    non-empty mapping by name rather than dropping it, so a misspelled keyword
+    fails loudly.
+    """
+    if runtime_overrides:
+        raise TypeError(
+            f"from_spec_dict: got runtime overrides {sorted(runtime_overrides)!r}, "
+            f"but {strategy_cls.__name__}.from_spec_dict accepts none. Drop them, "
+            "or rebuild with a strategy class whose from_spec_dict takes them."
+        )
+
+
 def _single_model_input_from_spec(raw: Any) -> bool | None:
     """Return serialized call mode or ``None`` for legacy specs."""
     if raw is None:

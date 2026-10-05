@@ -18,7 +18,8 @@ from __future__ import annotations
 import abc
 import warnings
 from collections import OrderedDict
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal
@@ -359,6 +360,8 @@ class BaseModelMixin(abc.ABC):
       collect input dict.
     - ``adapt_output()`` — map raw model output to :class:`ModelOutputs`
       ordered dict.
+    - ``narrowed_outputs()`` — narrow ``active_outputs`` for the duration
+      of a block and restore it afterwards.
     """
 
     # model_config must be set as an instance attribute in each subclass __init__:
@@ -704,8 +707,10 @@ class BaseModelMixin(abc.ABC):
         self,
         batch: Batch,
         vectors: torch.Tensor,
+        *,
+        create_graph: bool = False,
     ) -> torch.Tensor:
-        """Compute a detached Hessian-vector product.
+        """Compute a Hessian-vector product from one energy-only forward.
 
         This evaluates ``(d^2 E / dR^2) @ vectors`` for the supplied, fixed
         neighbor topology. It does not rebuild neighbors or differentiate
@@ -719,11 +724,15 @@ class BaseModelMixin(abc.ABC):
         vectors : torch.Tensor
             One vector with the same shape, dtype, and device as
             ``batch.positions``.
+        create_graph : bool, optional
+            Keep the product attached to the graph of the forward this method
+            runs, so a loss can backpropagate through it to the model
+            parameters. Default ``False`` returns a detached product.
 
         Returns
         -------
         torch.Tensor
-            Detached Hessian-vector product aligned with ``batch.positions``.
+            Hessian-vector product aligned with ``batch.positions``.
 
         Raises
         ------
@@ -734,6 +743,14 @@ class BaseModelMixin(abc.ABC):
             If vector shape, dtype, or device does not match positions.
         DerivativeNotSupported
             If this wrapper or execution context does not support HVPs.
+
+        Notes
+        -----
+        The forward pass runs on this wrapper directly, so a DDP wrapper
+        around it does not see it and gradients from an attached product are
+        not reduced across ranks. For that case, take the energy from the
+        training forward and use
+        :meth:`HessianOperator.from_energy <nvalchemi.models.HessianOperator.from_energy>`.
         """
         if not isinstance(batch, Batch):
             raise TypeError(f"batch must be a Batch, got {type(batch).__name__}")
@@ -743,7 +760,7 @@ class BaseModelMixin(abc.ABC):
         _validate_hessian_vector(vectors, positions)
 
         with self.prepare_hessian(batch) as operator:
-            return operator.matvec(vectors)
+            return operator.matvec(vectors, create_graph=create_graph)
 
     def set_config(self, key: str, value: Any) -> None:
         """Set a mutable field on :attr:`model_config`.
@@ -771,6 +788,40 @@ class BaseModelMixin(abc.ABC):
                 f"Available fields: {list(self.model_config.model_fields)}"
             )
         setattr(self.model_config, key, value)
+
+    @contextmanager
+    def narrowed_outputs(self, outputs: Iterable[str]) -> Iterator[None]:
+        """Compute only *outputs* for the duration of a block.
+
+        ``active_outputs`` is set to *outputs* on entry and restored on exit,
+        whether the block returns or raises. A caller that needs one output
+        of a model configured for several, such as an energy to differentiate
+        twice while the forces stay off, narrows the pass this way and hands
+        the model back as it found it.
+
+        Parameters
+        ----------
+        outputs : Iterable[str]
+            Output keys to leave active inside the block.
+
+        Yields
+        ------
+        None
+            Control while the narrowed ``active_outputs`` is in force.
+
+        Examples
+        --------
+        >>> with model.narrowed_outputs({"energy"}):  # doctest: +SKIP
+        ...     energy = model(batch)["energy"]
+        >>> "forces" in model.model_config.active_outputs  # doctest: +SKIP
+        True
+        """
+        previous = set(self.model_config.active_outputs)
+        self.set_config("active_outputs", set(outputs))
+        try:
+            yield
+        finally:
+            self.set_config("active_outputs", previous)
 
     def adapt_input(
         self, data: AtomicData | Batch | AtomsLike, **kwargs: Any

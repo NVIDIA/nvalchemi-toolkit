@@ -4,6 +4,28 @@
 
 ### Added
 
+- Enhanced sampling (`nvalchemi.enhanced_sampling`). `EnhancedSampling` is a
+  `DynamicsStrategy` that adds bias, replica-exchange and epoch-commit hooks to
+  the engine it builds. A bias is an ordinary additive potential — a
+  `BaseModelMixin` returning `ModelOutputs` — and all biases are summed once
+  against the unmodified model output. Built-ins: `HarmonicUmbrellaBias`,
+  `UpperWall`, `LowerWall`, `FlatBottomRestraint`,
+  `WellTemperedMetaDynamicsBias`, `RMSDMetaDynamicsBias` and
+  `AdaptiveBiasingForce`. `ReplicaExchange` runs synchronous temperature or
+  umbrella exchange over a ladder of `ThermodynamicState`s, and
+  `checkpoint()` / `restore()` resume a run exactly.
+- `PairSwapHook` — pairwise swaps of per-system state with a caller-supplied
+  acceptance rule, backed by `BaseDynamics.apply_per_system_params()`
+  (implemented for `NVTLangevin` and `NVTNoseHoover`). `BaseDynamics` also
+  gains `state_dict()` / `load_state_dict()`.
+- `save_checkpoint` / `load_checkpoint` in `nvalchemi/_checkpoint.py` —
+  transactional, checksummed, pickle-free Zarr checkpoints for any mapping of
+  named stateful objects.
+- `StatefulHook` protocol, adding `read_only` and `commit()` to `Hook` and
+  `CheckpointableHook` for hooks whose state evolves with the trajectory.
+- `isolated_energy_derivatives`, `validate_contribution` and
+  `aggregate_contributions` in `nvalchemi/models/_utils.py`. `ModelOutputs`
+  gains a `state_version` key and a `diagnostics/` namespace.
 - `LBFGS` and `LBFGSVariableCell` geometry optimizers, wrapping the batched
   L-BFGS in `nvalchemiops`, with the same API shape as FIRE2.
 - `cell_force_scale` on `FIRE2VariableCell` and `LBFGSVariableCell`.
@@ -68,6 +90,11 @@
   `self._state`) is now preserved across masked `pre_update`/`post_update` calls.
 
 ### Deprecated
+
+- `BiasedPotentialHook`, superseded by `nvalchemi.enhanced_sampling`. Its
+  `bias_fn(batch) -> (energy, forces)` contract cannot express stress, so a
+  bias applied through it is invisible to the NPT/NPH barostat. It still works
+  and now emits a `DeprecationWarning`.
 
 - `FusedStage.register_fused_hook()`. Use the inherited `register_hook()`
   method instead; hooks on a `FusedStage` already observe the complete fused

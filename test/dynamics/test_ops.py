@@ -217,7 +217,7 @@ class TestThermostatUtils:
             compute_kinetic_energy,
             initialize_velocities,
         )
-        from nvalchemi.dynamics.hooks._utils import KB_EV
+        from nvalchemi.dynamics._units import KB_EV
 
         M, N = 1, 200  # large enough for good statistics
         vel = torch.zeros(N, 3, dtype=dtype, device=device)
@@ -238,7 +238,7 @@ class TestThermostatUtils:
             compute_kinetic_energy,
             initialize_velocities,
         )
-        from nvalchemi.dynamics.hooks._utils import KB_EV
+        from nvalchemi.dynamics._units import KB_EV
 
         M, N = 1, 200
         vel = torch.zeros(N, 3, dtype=dtype, device=device)
@@ -288,7 +288,7 @@ class TestThermostatUtils:
             compute_kinetic_energy,
             initialize_velocities,
         )
-        from nvalchemi.dynamics.hooks._utils import KB_EV
+        from nvalchemi.dynamics._units import KB_EV
 
         M, N = 1, 200
         torch.manual_seed(7)
@@ -319,7 +319,7 @@ class TestThermostatUtils:
             compute_kinetic_energy,
             initialize_velocities,
         )
-        from nvalchemi.dynamics.hooks._utils import KB_EV
+        from nvalchemi.dynamics._units import KB_EV
 
         N_per = 100
         M = 3

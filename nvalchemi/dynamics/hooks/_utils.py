@@ -41,8 +41,8 @@ from nvalchemiops.segment_ops import (
     segmented_sum,
 )
 
-# Boltzmann constant in eV/K (NIST 2018 CODATA value).
-KB_EV: float = 8.617333262e-5
+# ``nvalchemi.dynamics._units`` defines the constant; re-exported for importers.
+from nvalchemi.dynamics._units import KB_EV
 
 # Supported scatter-reduce operations.
 ScatterReduce = Literal["amax", "sum", "amin", "mean"]

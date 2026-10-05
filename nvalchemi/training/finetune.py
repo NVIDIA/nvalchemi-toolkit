@@ -734,6 +734,7 @@ class FineTuningStrategy(TrainingStrategy):
         models: strategy_validation.ModelInput | None = None,
         hooks: list[Any] | None = None,
         training_fn: Any = None,
+        **runtime_overrides: Any,
     ) -> FineTuningStrategy:
         """Rebuild a :class:`FineTuningStrategy` from ``to_spec_dict`` output.
 
@@ -748,12 +749,23 @@ class FineTuningStrategy(TrainingStrategy):
             Runtime hooks appended after generated fine-tuning hooks.
         training_fn : Any, optional
             Runtime callable or dotted-path override.
+        **runtime_overrides : Any
+            Runtime overrides: extra keyword arguments that a checkpoint
+            rebuild forwards to the strategy class's ``from_spec_dict``.
+            Fine-tuning accepts none, so a non-empty mapping is refused by
+            name.
 
         Returns
         -------
         FineTuningStrategy
             A freshly validated fine-tuning strategy ready to :meth:`run`.
+
+        Raises
+        ------
+        TypeError
+            If ``runtime_overrides`` is not empty.
         """
+        strategy_spec._refuse_runtime_overrides(cls, runtime_overrides)
         required = ("optimizer_configs", "devices", "loss_fn_spec")
         missing = [key for key in required if key not in spec]
         if missing:

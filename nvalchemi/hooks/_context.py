@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +26,7 @@ from torch.nn import ModuleDict
 from torch.optim.lr_scheduler import LRScheduler
 
 if TYPE_CHECKING:
+    from nvalchemi._typing import ModelOutputs
     from nvalchemi.data.batch import Batch
     from nvalchemi.models.base import BaseModelMixin
 
@@ -84,6 +86,22 @@ class DynamicsContext(HookContext):
     converged_mask: Bool[torch.Tensor, "B"] | None = None  # noqa: F722, F821
     active_graph_mask: Bool[torch.Tensor, "B"] | None = None  # noqa: F722, F821
     graduated_mask: Bool[torch.Tensor, "B"] | None = None  # noqa: F722, F821
+
+
+@dataclass(kw_only=True)
+class BiasContext(DynamicsContext):
+    """Context object passed to an enhanced-sampling bias's ``update``.
+
+    Attributes
+    ----------
+    contribution : ModelOutputs
+        What this bias returned during the force evaluation that preceded the
+        capture — the detached mapping, not a recomputation. A metadynamics
+        bias sizing its next hill from the bias energy it just applied needs
+        the real value. Empty when the bias has not been evaluated yet.
+    """
+
+    contribution: ModelOutputs = field(default_factory=OrderedDict)
 
 
 @dataclass(kw_only=True)

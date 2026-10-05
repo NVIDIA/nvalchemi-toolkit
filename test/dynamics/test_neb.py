@@ -60,6 +60,7 @@ from nvalchemi.dynamics.mep.neb_equations import (
     neb_effective_force_from_gram_stats,
 )
 from nvalchemi.dynamics.optimizers.fire2 import FIRE2
+from nvalchemi.dynamics.optimizers.lbfgs import LBFGS
 from nvalchemi.hooks import DynamicsContext, NeighborListHook
 from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -809,6 +810,40 @@ class TestNEBConfiguration:
 
 class TestNEBRun:
     """Exercise the public run entry point on grouped path batches."""
+
+    @pytest.mark.parametrize(
+        "climbing", [None, ClimbingImageConfig(max_regular_steps=1)]
+    )
+    def test_lbfgs_uses_one_history_per_path(
+        self, device: str, climbing: ClimbingImageConfig | None
+    ) -> None:
+        """L-BFGS stages share history within paths and preserve fixed endpoints."""
+        bands = _bands(device)
+        bands.append(_bands(device))
+        bands.positions[1, 1] = 0.5
+        bands.positions[4, 1] = 0.3
+        before = bands.positions.detach().clone()
+        strategy = NEB(
+            model=_CompilerFriendlyModel().to(device).eval(),
+            optimizer=LBFGS,
+            optimizer_kwargs={"history_size": 3, "maxstep": 0.1, "device_type": device},
+            climbing=climbing,
+            fmax=1e-12,
+        )
+        engine = strategy.build_engine()
+        for _ in range(4):
+            engine.step(bands)
+        for _, stage in engine.sub_stages:
+            assert isinstance(stage, LBFGS)
+            assert stage.by_group
+            assert stage._state.num_graphs == 2
+            assert stage._state.level_ptr("lbfgs_dofs").tolist() == [0, 3, 6]
+            assert torch.all(stage._state.iteration >= 0)
+        endpoints = torch.tensor([0, 2, 3, 5], device=device)
+        assert torch.equal(bands.positions[endpoints], before[endpoints])
+        assert not torch.allclose(bands.positions[[1, 4]], before[[1, 4]])
+        if climbing is not None:
+            assert bands.status.unique().tolist() == [1]
 
     def test_runs_build_independent_engines_by_default(self) -> None:
         """Repeated runs use fresh engines unless caching is enabled."""

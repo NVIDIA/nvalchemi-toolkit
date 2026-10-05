@@ -36,6 +36,9 @@ from nvalchemi.dynamics.base import (
 )
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.integrators.nvt_langevin import NVTLangevin
+from nvalchemi.dynamics.optimizers.fire import FIRE, FIREVariableCell
+from nvalchemi.dynamics.optimizers.fire2 import FIRE2, FIRE2VariableCell
+from nvalchemi.dynamics.optimizers.lbfgs import LBFGS, LBFGSVariableCell
 from nvalchemi.hooks import DynamicsContext, Hook
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -2272,3 +2275,43 @@ class TestSeedOffset:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestSamplesEquilibrium:
+    """Tests for the samples_equilibrium declaration on dynamics classes."""
+
+    @pytest.mark.parametrize(
+        "dynamics_cls", [BaseDynamics, DemoDynamics, NVTLangevin, FusedStage]
+    )
+    def test_the_engine_and_the_integrators_declare_sampling(
+        self, dynamics_cls: type[BaseDynamics]
+    ) -> None:
+        """The base declaration is True and an integrator inherits it."""
+        assert dynamics_cls.samples_equilibrium is True
+
+    @pytest.mark.parametrize(
+        "optimizer_cls",
+        [FIRE, FIREVariableCell, FIRE2, FIRE2VariableCell, LBFGS, LBFGSVariableCell],
+    )
+    def test_the_relaxation_optimizers_declare_a_descent(
+        self, optimizer_cls: type[BaseDynamics]
+    ) -> None:
+        """Every built-in minimizer declares that it does not sample an ensemble."""
+        assert optimizer_cls.samples_equilibrium is False
+
+    def test_a_subclass_inherits_its_parents_declaration(self) -> None:
+        """A user optimizer built on FIRE is a descent unless it says otherwise."""
+
+        class _Quenched(FIRE):
+            pass
+
+        class _Sampling(FIRE):
+            samples_equilibrium = True
+
+        assert _Quenched.samples_equilibrium is False
+        assert _Sampling.samples_equilibrium is True
+
+    def test_the_declaration_is_read_on_an_instance_too(self) -> None:
+        """An instance reports its class's declaration."""
+        dynamics = DemoDynamics(DemoModelWrapper(DemoModel()), n_steps=1)
+        assert dynamics.samples_equilibrium is True

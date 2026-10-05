@@ -38,6 +38,7 @@ Martyna, Tobias, Klein (1994); Tuckerman et al. (2006).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Literal
 
 import torch
@@ -50,9 +51,8 @@ from nvalchemi.dynamics._ops.nose_hoover import (
     nhc_position_update,
     nhc_velocity_half_step,
 )
-from nvalchemi.dynamics._units import fs_to_internal_time
+from nvalchemi.dynamics._units import KB_EV, fs_to_internal_time
 from nvalchemi.dynamics.base import BaseDynamics
-from nvalchemi.dynamics.hooks._utils import KB_EV
 
 if TYPE_CHECKING:
     from nvalchemi.dynamics.base import ConvergenceHook
@@ -172,6 +172,57 @@ class NVTNoseHoover(BaseDynamics):
             },
             dev,
         )
+
+    def apply_per_system_params(
+        self, params: Mapping[str, torch.Tensor], batch: Batch
+    ) -> None:
+        """Rebind target temperature, chain masses, and velocities together.
+
+        Unlike Langevin, a Nosé-Hoover chain carries memory: the chain masses
+        ``Q`` are proportional to ``kT tau^2`` and the chain velocities
+        ``eta_dot`` are conjugate to them.  Rebinding the target without
+        transforming both leaves the thermostat driving toward the old
+        temperature and breaks detailed balance, so all four move together:
+
+        * ``temperature`` takes the new ``kT``.
+        * ``Q`` scales by ``kT_new / kT_old``, preserving ``Q ∝ kT tau^2``.
+        * ``eta_dot`` scales by ``sqrt(kT_old / kT_new)``, which keeps the
+          chain kinetic energy ``Q eta_dot^2 / 2`` invariant under the mass
+          change rather than injecting or removing thermostat energy.
+        * atomic velocities scale by ``sqrt(kT_new / kT_old)``.
+
+        ``eta`` itself is a position-like variable and is left untouched.
+
+        Parameters
+        ----------
+        params : Mapping[str, torch.Tensor]
+            Must contain ``"temperature"`` in Kelvin per graph, shape ``[B]``.
+        batch : Batch
+            The live batch; ``velocities`` is modified in place.
+
+        Raises
+        ------
+        RuntimeError
+            If called before the integrator state exists.
+        KeyError
+            If *params* names something this integrator cannot rebind.
+        """
+        state = getattr(self, "_state", None)
+        if state is None:
+            raise RuntimeError(
+                "NVTNoseHoover.apply_per_system_params: integrator state is "
+                "not initialised; run or prime the dynamics first."
+            )
+        temperature = self._validated_temperature(params, state.temperature)
+
+        old_kT = state.temperature.reshape(-1).clone()
+        new_kT = temperature * KB_EV
+        ratio = new_kT / old_kT
+        with torch.no_grad():
+            state.temperature.copy_(new_kT.reshape(state.temperature.shape))
+            state.nhc_Q.mul_(ratio.reshape(-1, 1))
+            state.nhc_eta_dot.mul_(torch.rsqrt(ratio).reshape(-1, 1))
+        self._rescale_velocities(torch.sqrt(ratio), batch)
 
     def _make_new_state(self, n: int, template_batch: Batch) -> Batch:
         dev = template_batch.device

@@ -58,6 +58,11 @@ from nvalchemi.dynamics.hooks.safety import (
     nonfinite_graph_mask,
 )
 from nvalchemi.dynamics.hooks.snapshot import ConvergedSnapshotHook, SnapshotHook
+from nvalchemi.dynamics.hooks.swap import (
+    PairSwapHook,
+    apply_pair_swaps,
+    even_odd_pairs,
+)
 from nvalchemi.hooks.physicsnemo_profiling import TorchProfilerHook
 from nvalchemi.hooks.stage_timing import StageTimingHook
 
@@ -69,9 +74,12 @@ __all__ = [
     "LoggingHook",
     "MaxForceClampHook",
     "NaNDetectorHook",
+    "PairSwapHook",
     "SnapshotHook",
     "StageTimingHook",
     "TorchProfilerHook",
+    "apply_pair_swaps",
+    "even_odd_pairs",
     "nonfinite_graph_mask",
 ]
 

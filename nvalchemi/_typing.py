@@ -96,9 +96,43 @@ BatchIndices: TypeAlias = Integer[torch.Tensor, "V"]  # noqa: F722
 NumSteps: TypeAlias = Integer[torch.Tensor, "B 1"]  # noqa: F722
 Status: TypeAlias = Integer[torch.Tensor, "B 1"]  # noqa: F722
 Fmax: TypeAlias = Float[torch.Tensor, "B 1"]  # noqa: F722
+StateVersion: TypeAlias = Integer[torch.Tensor, "B"]  # noqa: F722
+Diagnostic: TypeAlias = Num[torch.Tensor, "..."]  # noqa: F722
 ModelOutputs: TypeAlias = OrderedDict[
-    str, Energy | Forces | Hessian | Stress | Virials | Dipole | None
+    str,
+    Energy
+    | Forces
+    | Hessian
+    | Stress
+    | Virials
+    | Dipole
+    | StateVersion
+    | Diagnostic
+    | None,
 ]  # noqa: F722
+"""Named outputs of one forward pass, or of one additive contribution to it.
+
+Three key namespaces share the mapping:
+
+``energy``, ``forces``, ``stress``, ``virial``, ``hessian``, ``dipole``
+    Physical quantities with defined shapes and combination rules.
+    :func:`~nvalchemi.models._utils.sum_outputs` adds them; a consumer that
+    applies them to a batch knows which buffer each one belongs in.
+``state_version``
+    Integer version IDs, shape ``[B]``, identifying which revision of a
+    producer's internal state generated the rest of the mapping.  Written by
+    components whose state evolves during a run — an adaptive bias, an
+    on-the-fly-fitted correction — so a consumer can tell a stale result from
+    a current one.
+``diagnostics/<name>``
+    Arbitrary reported tensors, no shape contract, never summed.  For
+    quantities a consumer displays or records rather than applies: a
+    collective-variable value, a per-bin sample count, a convergence measure.
+    Prefix with :data:`~nvalchemi.models._utils.DIAGNOSTIC_PREFIX`.
+
+:func:`~nvalchemi.models._utils.validate_contribution` checks a mapping
+against these conventions.
+"""
 SampleScores: TypeAlias = Float[torch.Tensor, "B 1"]  # noqa: F722
 Centroids: TypeAlias = Float[torch.Tensor, "C H"]  # noqa: F722
 NodeKineticEnergies: TypeAlias = Float[torch.Tensor, "V 1"]  # noqa: F722
