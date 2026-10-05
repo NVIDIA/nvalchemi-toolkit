@@ -45,43 +45,57 @@ def _refine_colors(atomic_numbers: list[int], adjacency: list[list[bool]]) -> li
             return colors
 
 
-def _rooted_isomorphic(
-    adjacency: list[list[bool]], colors: list[int], root: int, target: int
-) -> bool:
-    """Whether an automorphism preserving refined colors maps root to target."""
-    if colors[root] != colors[target]:
-        return False
-    count = len(colors)
-    mapping = {root: target}
-    reverse = {target: root}
+def _find_mapping(
+    source_adjacency: list[list[bool]],
+    target_adjacency: list[list[bool]],
+    candidates: list[list[int]],
+    initial_mapping: list[int] | None = None,
+) -> list[int] | None:
+    """Find an exact graph mapping from ordered per-source candidates."""
+    count = len(source_adjacency)
+    if count != len(target_adjacency) or len(candidates) != count:
+        return None
 
-    def compatible(source: int, destination: int) -> bool:
-        """Check whether a candidate mapping preserves colors and mapped edges."""
-        if colors[source] != colors[destination] or destination in reverse:
-            return False
-        # A partial isomorphism must preserve edges and non-edges to every
-        # vertex already assigned in both directions.
-        for mapped_source, mapped_destination in mapping.items():
-            if (
-                adjacency[source][mapped_source]
-                != adjacency[destination][mapped_destination]
-            ):
-                return False
-        return True
+    mapping = [-1] * count if initial_mapping is None else initial_mapping.copy()
+    if len(mapping) != count:
+        return None
+    used = [False] * count
+    mapped_count = 0
+    for source, target in enumerate(mapping):
+        if target < 0:
+            continue
+        if target >= count or used[target] or target not in candidates[source]:
+            return None
+        if any(
+            mapping[prior] >= 0
+            and source_adjacency[source][prior]
+            != target_adjacency[target][mapping[prior]]
+            for prior in range(source)
+        ):
+            return None
+        used[target] = True
+        mapped_count += 1
 
     def search() -> bool:
-        """Complete a color-preserving graph isomorphism by backtracking."""
-        if len(mapping) == count:
+        """Complete the partial mapping with minimum-options source choice."""
+        nonlocal mapped_count
+        if mapped_count == count:
             return True
         best_source = -1
         best_options: list[int] | None = None
         for source in range(count):
-            if source in mapping:
+            if mapping[source] >= 0:
                 continue
             options = [
-                destination
-                for destination in range(count)
-                if compatible(source, destination)
+                target
+                for target in candidates[source]
+                if not used[target]
+                and all(
+                    source_adjacency[source][prior]
+                    == target_adjacency[target][mapping[prior]]
+                    for prior in range(count)
+                    if mapping[prior] >= 0
+                )
             ]
             if not options:
                 return False
@@ -91,16 +105,38 @@ def _rooted_isomorphic(
                     break
         if best_options is None:
             return False
-        for destination in best_options:
-            mapping[best_source] = destination
-            reverse[destination] = best_source
+        for target in best_options:
+            mapping[best_source] = target
+            used[target] = True
+            mapped_count += 1
             if search():
                 return True
-            del mapping[best_source]
-            del reverse[destination]
+            mapped_count -= 1
+            mapping[best_source] = -1
+            used[target] = False
         return False
 
-    return search()
+    return mapping if search() else None
+
+
+def _rooted_isomorphic(
+    adjacency: list[list[bool]], colors: list[int], root: int, target: int
+) -> bool:
+    """Whether an automorphism preserving refined colors maps root to target."""
+    if colors[root] != colors[target]:
+        return False
+    count = len(colors)
+    candidates = [
+        [
+            destination
+            for destination in range(count)
+            if colors[source] == colors[destination]
+        ]
+        for source in range(count)
+    ]
+    initial_mapping = [-1] * count
+    initial_mapping[root] = target
+    return _find_mapping(adjacency, adjacency, candidates, initial_mapping) is not None
 
 
 def topological_atom_types(
@@ -171,43 +207,4 @@ def find_isomorphism(
     if any(not options for options in candidates):
         return None
 
-    mapping = [-1] * count
-    used = [False] * count
-
-    def search(mapped_count: int) -> bool:
-        if mapped_count == count:
-            return True
-        best_source = -1
-        best_options: list[int] | None = None
-        for source in range(count):
-            if mapping[source] >= 0:
-                continue
-            options = [
-                target
-                for target in candidates[source]
-                if not used[target]
-                and all(
-                    source_adjacency[source][prior]
-                    == target_adjacency[target][mapping[prior]]
-                    for prior in range(count)
-                    if mapping[prior] >= 0
-                )
-            ]
-            if not options:
-                return False
-            if best_options is None or len(options) < len(best_options):
-                best_source, best_options = source, options
-                if len(options) == 1:
-                    break
-        if best_options is None:
-            return False
-        for target in best_options:
-            mapping[best_source] = target
-            used[target] = True
-            if search(mapped_count + 1):
-                return True
-            mapping[best_source] = -1
-            used[target] = False
-        return False
-
-    return mapping if search(0) else None
+    return _find_mapping(source_adjacency, target_adjacency, candidates)
