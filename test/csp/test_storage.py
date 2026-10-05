@@ -171,6 +171,28 @@ def test_round_trip_order_repeats_metadata_and_p1(tmp_path) -> None:
             reader.read_batch(None)
 
 
+def test_write_and_append_preserve_configured_array_layouts(tmp_path) -> None:
+    store = tmp_path / "configured-layout.zarr"
+    config = ZarrWriteConfig(
+        core=ZarrArrayConfig(chunk_size=2, shard_size=4),
+        field_overrides={"cells": ZarrArrayConfig(chunk_size=1, shard_size=3)},
+    )
+    writer = RigidMoleculeASUZarrWriter(store, config=config)
+    writer.write(make_compact())
+    writer.append(make_compact([(12, 0)], scores=[9.0]))
+
+    root = zarr.open_group(store, mode="r")
+    cells = root["core"]["cells"]
+    rotations = root["core"]["rotations"]
+    assert cells.shape == (4, 3, 3)
+    assert cells.chunks == (1, 3, 3)
+    assert cells.metadata.shards == (3, 3, 3)
+    assert rotations.chunks == (2, 3, 3)
+    assert rotations.metadata.shards == (4, 3, 3)
+    with RigidMoleculeASUZarrReader(store) as reader:
+        assert reader.read().structure_ids.tolist()[-1] == [12, 0]
+
+
 def test_external_store_wrong_formula_pool_is_rejected_explicitly(tmp_path) -> None:
     store = tmp_path / "wrong-formula-pool.zarr"
     packing_input = MolecularPackingInput(

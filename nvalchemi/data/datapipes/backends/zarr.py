@@ -266,6 +266,51 @@ class ZarrWriteConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
+def _resolve_array_kwargs(
+    config: ZarrWriteConfig,
+    key: str,
+    group: str,
+    data: np.ndarray,
+    *,
+    cat_dim: int = 0,
+) -> dict[str, Any]:
+    """Resolve configured Zarr creation options for one array."""
+    array_config = config.field_overrides.get(key, getattr(config, group))
+    kwargs: dict[str, Any] = {}
+    if array_config.compressors is not None:
+        kwargs["compressors"] = array_config.compressors
+    if array_config.filters is not None:
+        kwargs["filters"] = array_config.filters
+    if array_config.serializer is not None:
+        kwargs["serializer"] = array_config.serializer
+    if array_config.chunk_size is not None and data.ndim:
+        chunks = list(data.shape)
+        chunks[cat_dim] = array_config.chunk_size
+        kwargs["chunks"] = tuple(chunks)
+    if array_config.shard_size is not None and data.ndim:
+        shards = list(data.shape)
+        shards[cat_dim] = array_config.shard_size
+        kwargs["shards"] = tuple(shards)
+    if not array_config.write_empty_chunks:
+        kwargs["config"] = {"write_empty_chunks": False}
+    return kwargs
+
+
+def _extend_array(arr: zarr.Array, data: np.ndarray, axis: int = 0) -> None:
+    """Append values to a Zarr array along one axis."""
+    if not data.shape[axis]:
+        return
+
+    old_shape = arr.shape
+    new_shape = list(old_shape)
+    new_shape[axis] += data.shape[axis]
+    arr.resize(tuple(new_shape))
+
+    slices: list[slice | int] = [slice(None)] * len(old_shape)
+    slices[axis] = slice(old_shape[axis], new_shape[axis])
+    arr[tuple(slices)] = data
+
+
 def _get_field_level(key: str) -> str:
     """Return 'atom', 'edge', or 'system' for a core field key.
 
@@ -644,27 +689,7 @@ class AtomicDataZarrWriter:
         dict[str, Any]
             Keyword arguments to pass to ``zarr.Group.create_array``.
         """
-        base_cfg: ZarrArrayConfig = getattr(self._config, group)
-        cfg = self._config.field_overrides.get(key, base_cfg)
-
-        kwargs: dict[str, Any] = {}
-        if cfg.compressors is not None:
-            kwargs["compressors"] = cfg.compressors
-        if cfg.filters is not None:
-            kwargs["filters"] = cfg.filters
-        if cfg.serializer is not None:
-            kwargs["serializer"] = cfg.serializer
-        if cfg.chunk_size is not None:
-            shape = list(data.shape)
-            shape[cat_dim] = cfg.chunk_size
-            kwargs["chunks"] = tuple(shape)
-        if cfg.shard_size is not None:
-            shape = list(data.shape)
-            shape[cat_dim] = cfg.shard_size
-            kwargs["shards"] = tuple(shape)
-        if not cfg.write_empty_chunks:
-            kwargs["config"] = {"write_empty_chunks": False}
-        return kwargs
+        return _resolve_array_kwargs(self._config, key, group, data, cat_dim=cat_dim)
 
     @staticmethod
     def _custom_level_names(schema: LevelSchema) -> tuple[str, ...]:
@@ -1987,20 +2012,7 @@ class AtomicDataZarrWriter:
         axis : int
             Axis along which to extend.
         """
-        old_shape = arr.shape
-        new_len = data.shape[axis]
-
-        # Build new shape
-        new_shape = list(old_shape)
-        new_shape[axis] = old_shape[axis] + new_len
-
-        # Resize array
-        arr.resize(tuple(new_shape))
-
-        # Write new data
-        slices: list[slice | int] = [slice(None)] * len(old_shape)
-        slices[axis] = slice(old_shape[axis], new_shape[axis])
-        arr[tuple(slices)] = data
+        _extend_array(arr, data, axis=axis)
 
     @staticmethod
     def _zero_slice(arr: zarr.Array, start: int, end: int, axis: int = 0) -> None:

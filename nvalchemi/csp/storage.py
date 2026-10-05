@@ -34,11 +34,17 @@ import torch
 import zarr
 from zarr.storage import MemoryStore
 
-from nvalchemi.csp.data import MolecularPackingInput, RigidMoleculeASUBatch
+from nvalchemi.csp.data import (
+    MolecularPackingInput,
+    RigidMoleculeASUBatch,
+    _formula_inputs_equal,
+)
 from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes.backends.zarr import (
     StoreLike,
     ZarrWriteConfig,
+    _extend_array,
+    _resolve_array_kwargs,
 )
 
 _REPRESENTATION = "nvalchemi.csp.rigid_molecule_asu"
@@ -80,36 +86,13 @@ def _config(value: ZarrWriteConfig | Mapping[str, Any] | None) -> ZarrWriteConfi
     return ZarrWriteConfig.model_validate(value)
 
 
-def _config_kwargs(
-    config: ZarrWriteConfig, name: str, group: str, data: np.ndarray
-) -> dict[str, Any]:
-    """Build Zarr array creation options for one field and array role."""
-    array_config = config.field_overrides.get(name, getattr(config, group))
-    kwargs: dict[str, Any] = {}
-    if array_config.compressors is not None:
-        kwargs["compressors"] = array_config.compressors
-    if array_config.filters is not None:
-        kwargs["filters"] = array_config.filters
-    if array_config.serializer is not None:
-        kwargs["serializer"] = array_config.serializer
-    if array_config.chunk_size is not None and data.ndim:
-        chunks = list(data.shape)
-        chunks[0] = array_config.chunk_size
-        kwargs["chunks"] = tuple(chunks)
-    if array_config.shard_size is not None and data.ndim:
-        shards = list(data.shape)
-        shards[0] = array_config.shard_size
-        kwargs["shards"] = tuple(shards)
-    if not array_config.write_empty_chunks:
-        kwargs["config"] = {"write_empty_chunks": False}
-    return kwargs
-
-
 def _create(
     group: zarr.Group, key: str, value: np.ndarray, cfg: ZarrWriteConfig, role: str
 ) -> Any:
     """Create a Zarr array using the configured layout for its field."""
-    return group.create_array(key, data=value, **_config_kwargs(cfg, key, role, value))
+    return group.create_array(
+        key, data=value, **_resolve_array_kwargs(cfg, key, role, value)
+    )
 
 
 def _torch_array_metadata(value: torch.Tensor) -> tuple[tuple[int, ...], np.dtype]:
@@ -162,7 +145,7 @@ def _preflight_config(batch: RigidMoleculeASUBatch, config: ZarrWriteConfig) -> 
         group = groups[group_name]
         for name, (shape, dtype) in fields.items():
             exemplar = np.empty((0, *shape[1:]), dtype=dtype)
-            kwargs = _config_kwargs(config, name, role, exemplar)
+            kwargs = _resolve_array_kwargs(config, name, role, exemplar)
             group.create_array(name, shape=shape, dtype=dtype, **kwargs)
 
 
@@ -200,18 +183,6 @@ def _input_arrays(value: MolecularPackingInput) -> dict[str, np.ndarray]:
     return {name: _numpy(getattr(value, name)) for name in _FORMULA_FIELDS}
 
 
-def _same_input(left: MolecularPackingInput, right: MolecularPackingInput) -> bool:
-    """Check exact metadata and array equality for two packing inputs."""
-    if _input_attrs(left) != _input_attrs(right):
-        return False
-    left_arrays = _input_arrays(left)
-    right_arrays = _input_arrays(right)
-    return all(
-        np.array_equal(left_arrays[name], right_arrays[name])
-        for name in _FORMULA_FIELDS
-    )
-
-
 def _batch_arrays(batch: RigidMoleculeASUBatch) -> dict[str, np.ndarray]:
     """Expose structure fields and pointers as host arrays; CPU storage may be shared."""
     values = {name: _numpy(getattr(batch, name)) for name in _STRUCTURE_FIELDS}
@@ -221,7 +192,7 @@ def _batch_arrays(batch: RigidMoleculeASUBatch) -> dict[str, np.ndarray]:
 
 def _same_batch(left: RigidMoleculeASUBatch, right: RigidMoleculeASUBatch) -> bool:
     """Check exact packing-input equality and bitwise structure/property equality."""
-    if not _same_input(left.packing_input, right.packing_input):
+    if not _formula_inputs_equal(left.packing_input, right.packing_input):
         return False
     left_arrays = _batch_arrays(left)
     right_arrays = _batch_arrays(right)
@@ -551,7 +522,7 @@ class RigidMoleculeASUZarrWriter:
         if cache is None:
             cache = self._build_cache(root)
         existing_input, property_schema, active_by_id = cache
-        if not _same_input(existing_input, structures.packing_input):
+        if not _formula_inputs_equal(existing_input, structures.packing_input):
             raise ValueError("packing_input does not exactly match the stored input")
         existing_props = set(property_schema)
         incoming_props = set(structures.properties)
@@ -624,20 +595,20 @@ class RigidMoleculeASUZarrWriter:
         # full schema/ID validation before the next append attempt.
         try:
             meta = root["meta"]
-            _extend(
+            _extend_array(
                 meta["molecules_ptr"],
                 (arrays["molecules_ptr"][1:] + molecule_offset).astype(np.int32),
             )
-            _extend(meta["samples_mask"], np.ones(additions, dtype=np.bool_))
-            _extend(
+            _extend_array(meta["samples_mask"], np.ones(additions, dtype=np.bool_))
+            _extend_array(
                 meta["molecules_mask"],
                 np.ones(int(arrays["molecules_ptr"][-1]), dtype=np.bool_),
             )
-            _extend(meta["structure_ids"], selected_arrays.pop("structure_ids"))
+            _extend_array(meta["structure_ids"], selected_arrays.pop("structure_ids"))
             for name, value in selected_arrays.items():
-                _extend(root["core"][name], value)
+                _extend_array(root["core"][name], value)
             for name, value in incoming_props_np.items():
-                _extend(root["custom"][name], value[append_indices])
+                _extend_array(root["custom"][name], value[append_indices])
             root.attrs["num_samples"] = old_physical + additions
         except Exception:
             self._cache = None
@@ -1060,15 +1031,6 @@ def _indices(indices: torch.Tensor, name: str) -> np.ndarray:
     if indices.dtype not in (torch.int32, torch.int64):
         raise TypeError(f"{name} must have dtype torch.int32 or torch.int64")
     return _numpy(indices).astype(np.int64, copy=False)
-
-
-def _extend(array: Any, values: np.ndarray) -> None:
-    """Append first-axis values to a resizable Zarr array."""
-    if not values.shape[0]:
-        return
-    start = array.shape[0]
-    array.resize((start + values.shape[0], *array.shape[1:]))
-    array[start:] = values
 
 
 def _read_input(group: zarr.Group) -> MolecularPackingInput:
