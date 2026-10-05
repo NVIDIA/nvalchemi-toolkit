@@ -1817,7 +1817,6 @@ def _screen_candidate(
         stats["screened_pair_candidates"] += len(logical_pairs)
         screen_start = time.perf_counter()
         matching = _screen_pair_group(
-            [candidate, *block],
             logical_pairs,
             loader,
             vocabulary,
@@ -2221,7 +2220,6 @@ def _screen_candidates_against_representatives(
 
 
 def _screen_pair_group(
-    structure_ids: list[int],
     logical_pairs: list[tuple[int, int]],
     loader: Callable[[Tensor], tuple[Batch, Tensor | None]],
     vocabulary: tuple[int, ...] | None,
@@ -2239,9 +2237,6 @@ def _screen_pair_group(
 
     Parameters
     ----------
-    structure_ids : list of int
-        Endpoint IDs represented by ``logical_pairs``; retained for call-site
-        compatibility while endpoint sets are derived from the pairs.
     logical_pairs : list of tuple of int
         Ordered logical left/right row IDs to screen.
     loader : callable
@@ -2282,7 +2277,6 @@ def _screen_pair_group(
     """
     if not logical_pairs:
         return []
-    del structure_ids
 
     def split_by_atoms(
         pairs: list[tuple[int, int]],
@@ -3263,7 +3257,6 @@ def deduplicate_stream(
                     # below filters them against the prefix actually retained
                     # and confirms only those non-speculative pairs.
                     matches = _screen_pair_group(
-                        unresolved,
                         local_pairs,
                         read_typed_batch,
                         vocabulary,

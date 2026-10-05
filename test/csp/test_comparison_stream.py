@@ -1010,8 +1010,8 @@ def test_old_match_priority_uses_rank_when_group_results_are_reversed(monkeypatc
     expected = _direct_greedy(batch, types, order, 2.0, 0.06)
     original_screen = stream_module._screen_pair_group
 
-    def reverse_old_group_results(structure_ids, logical_pairs, *args, **kwargs):
-        matches = original_screen(structure_ids, logical_pairs, *args, **kwargs)
+    def reverse_old_group_results(logical_pairs, *args, **kwargs):
+        matches = original_screen(logical_pairs, *args, **kwargs)
         if len(logical_pairs) == 2:
             return list(reversed(matches))
         return matches
@@ -2263,7 +2263,6 @@ def test_pair_group_uses_independent_atom_tiles_and_shared_cuda_budget(
     }
 
     matches = stream_module._screen_pair_group(
-        [0, 1],
         [(1, 0)],
         lambda ids: (batch.index_select(ids.tolist()), None),
         None,
@@ -2329,7 +2328,6 @@ def test_pair_group_builds_endpoint_union_once_when_it_fits_atom_cap(
     }
 
     matches = stream_module._screen_pair_group(
-        [0, 1],
         [(1, 0)],
         loader,
         None,
