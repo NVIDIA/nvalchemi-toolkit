@@ -1631,6 +1631,47 @@ def test_fp32_outward_interval_contains_adjacent_summary_boundary() -> None:
     assert retrieved == [0]
 
 
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="requires CUDA"
+            ),
+        ),
+    ],
+)
+def test_inapplicable_typed_summary_keeps_mixed_presence_fallback(
+    monkeypatch, device: str
+) -> None:
+    batch = _structures([1.0, 1.0, 1.0])
+    types = torch.tensor([1, 1, 2, 2, 2, 2], dtype=torch.int32)
+    monkeypatch.setattr(stream_module, "_select_coordinates", lambda *args: [0])
+
+    result = deduplicate_stream(
+        batch.num_graphs,
+        _typed_loader(batch, types),
+        type_vocabulary=[1, 2],
+        cutoff=2.0,
+        threshold=0.05,
+        input_batch_size=3,
+        pair_block_size=2,
+        summary_coordinate_count=1,
+        device=device,
+    )
+
+    expected = _direct_greedy(batch, types, [0, 1, 2], 2.0, 0.05)
+    assert result.retained_indices.tolist() == expected[0] == [0, 1]
+    assert result.representative_indices.tolist() == expected[1] == [0, 1, 1]
+    assert result.multiplicities.tolist() == expected[2] == [1, 2]
+    stats = _get_last_stream_stats()
+    assert stats["selected_coordinate_ids"] == [0]
+    assert stats["within_chunk_pairs_considered"] == 3
+    assert stats["within_chunk_pairs_shortlisted"] == 3
+
+
 def test_vectorized_within_chunk_filter_preserves_public_greedy_oracle() -> None:
     batch, types = _feature_rich_structures()
     order = [4, 0, 6, 1, 5, 2, 3]
@@ -2929,6 +2970,66 @@ def test_iter_matches_stream_cross_pool_is_exhaustive_and_lexicographic(
     actual = torch.cat(chunks).tolist()
     expected = _exhaustive_match_pairs(left, right, 2.0, 0.2, self_comparison=False)
     assert actual == [list(pair) for pair in expected]
+    assert actual == sorted(actual)
+
+
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="requires CUDA"
+            ),
+        ),
+    ],
+)
+def test_iter_matches_stream_typed_cross_pool_is_inclusive_and_lexicographic(
+    device: str,
+) -> None:
+    left = _structures([1.0, 1.2, 1.05])
+    right = _structures([1.05, 1.2])
+    left_types = torch.tensor([1, 1, 1, 1, 2, 2], dtype=torch.int32)
+    right_types = torch.tensor([1, 1, 2, 2], dtype=torch.int32)
+    left_index = RadialComparisonIndex.build(
+        left, cutoff=2.0, atom_types=left_types, typed_neighbors=True
+    )
+    right_index = RadialComparisonIndex.build(
+        right, cutoff=2.0, atom_types=right_types, typed_neighbors=True
+    )
+    boundary = float(
+        left_index.score_pairs(
+            torch.tensor([[0, 0]], dtype=torch.int32), other=right_index
+        )[0]
+    )
+
+    chunks = list(
+        iter_matches_stream(
+            left.num_graphs,
+            _typed_loader(left, left_types),
+            type_vocabulary=[1, 2],
+            cutoff=2.0,
+            threshold=boundary,
+            other_count=right.num_graphs,
+            read_other_typed_batch=_typed_loader(right, right_types),
+            pair_chunk_size=2,
+            device=device,
+        )
+    )
+    actual = torch.cat(chunks).tolist()
+    expected = _exhaustive_match_pairs(
+        left,
+        right,
+        2.0,
+        boundary,
+        self_comparison=False,
+        left_types=left_types,
+        right_types=right_types,
+    )
+
+    assert actual == [list(pair) for pair in expected]
+    assert [0, 0] in actual
     assert actual == sorted(actual)
 
 

@@ -1041,6 +1041,131 @@ def _pilot_heldout_selectivity(
     return result
 
 
+def _select_summary_intervals(
+    query_features: Tensor,
+    applicable: Tensor,
+    sorted_values: Tensor,
+    outward_bound: Tensor,
+    has_applicable: Tensor | None = None,
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    """Select each query's narrowest applicable outward-rounded interval.
+
+    Parameters
+    ----------
+    query_features : torch.Tensor, shape (F,) or (Q, F)
+        Already selected log-distance summary rows.
+    applicable : torch.Tensor, shape (F,) or (Q, F), dtype bool
+        Per-coordinate applicability masks for those query rows.
+    sorted_values : torch.Tensor, shape (F, N_right)
+        Sorted right-pool values for each summary coordinate.
+    outward_bound : torch.Tensor, scalar FP32
+        Existing FP32 bound after its outward ``nextafter`` step.
+    has_applicable : torch.Tensor, shape (Q,), dtype bool, optional
+        Precomputed batch mask indicating which query rows have an applicable
+        coordinate; batched callers supply this mask. Scalar callers have
+        already checked applicability and omit it.
+
+    Returns
+    -------
+    tuple of torch.Tensor
+        Selected coordinate, left endpoint, right endpoint, and interval width.
+        Scalar queries return zero-dimensional tensors; batched queries return
+        vectors. Inapplicable batch rows have zero width.
+    """
+    device = query_features.device
+    negative_infinity = torch.tensor(float("-inf"), dtype=torch.float32, device=device)
+    positive_infinity = torch.tensor(float("inf"), dtype=torch.float32, device=device)
+    low = torch.nextafter(
+        query_features - outward_bound,
+        negative_infinity,
+    )
+    high = torch.nextafter(
+        query_features + outward_bound,
+        positive_infinity,
+    )
+    if query_features.ndim == 1:
+        left_all = torch.searchsorted(
+            sorted_values, low.unsqueeze(1), right=False
+        ).squeeze(1)
+        right_all = torch.searchsorted(
+            sorted_values, high.unsqueeze(1), right=True
+        ).squeeze(1)
+        del low, high
+        widths = right_all - left_all
+        widths = torch.where(
+            applicable,
+            widths,
+            torch.full_like(widths, sorted_values.shape[1] + 1),
+        )
+        selected_coordinate = torch.argmin(widths)
+        left = left_all[selected_coordinate]
+        right = right_all[selected_coordinate]
+        return (
+            selected_coordinate,
+            left,
+            right,
+            right - left,
+        )
+
+    left_all = torch.searchsorted(
+        sorted_values, low.transpose(0, 1).contiguous(), right=False
+    )
+    right_all = torch.searchsorted(
+        sorted_values, high.transpose(0, 1).contiguous(), right=True
+    )
+    del low, high
+    widths = right_all - left_all
+    widths = torch.where(
+        applicable.transpose(0, 1),
+        widths,
+        torch.full_like(widths, sorted_values.shape[1] + 1),
+    )
+    selected_coordinates = widths.argmin(dim=0)
+    query_columns = torch.arange(
+        query_features.shape[0], dtype=torch.int64, device=device
+    )
+    left = left_all[selected_coordinates, query_columns]
+    right = right_all[selected_coordinates, query_columns]
+    interval_widths = right - left
+    if has_applicable is not None:
+        interval_widths = torch.where(has_applicable, interval_widths, 0)
+    return selected_coordinates, left, right, interval_widths
+
+
+def _safe_summary_features_match(
+    query_features: Tensor,
+    representative_features: Tensor,
+    active_coordinates: Tensor | None,
+    outward_bound: Tensor,
+) -> Tensor:
+    """Compare gathered safe summary features with inclusive FP32 bounds.
+
+    Parameters
+    ----------
+    query_features : torch.Tensor, shape (S,) or (K, S)
+        One query row broadcast over representatives or aligned query rows.
+    representative_features : torch.Tensor, shape (S,) or (K, S)
+        Gathered representative features aligned with the query rows.
+    active_coordinates : torch.Tensor, shape (S,) or (K, S), dtype bool, optional
+        Coordinates that apply to each comparison. ``None`` means all gathered
+        coordinates were narrowed to active safe coordinates by the caller.
+    outward_bound : torch.Tensor, scalar FP32
+        Existing FP32 bound after its outward ``nextafter`` step.
+
+    Returns
+    -------
+    torch.Tensor
+        Scalar bool tensor for one comparison or shape (K,) for aligned rows.
+    """
+    differences = query_features - representative_features
+    del query_features, representative_features
+    differences.abs_()
+    matches = differences <= outward_bound
+    if active_coordinates is not None:
+        matches |= ~active_coordinates
+    return matches.all(dim=-1)
+
+
 def _candidate_representatives(
     candidate_rank: int,
     retained: list[int],
@@ -1106,26 +1231,17 @@ def _candidate_representatives(
         torch.tensor(bound, dtype=torch.float32),
         torch.tensor(float("inf"), dtype=torch.float32),
     )
-    low = torch.nextafter(
-        candidate_features - range_bound,
-        torch.tensor(float("-inf"), dtype=torch.float32),
-    )
-    high = torch.nextafter(
-        candidate_features + range_bound,
-        torch.tensor(float("inf"), dtype=torch.float32),
-    )
-    left = torch.searchsorted(sorted_values, low[:, None], right=False).squeeze(1)
-    right = torch.searchsorted(sorted_values, high[:, None], right=True).squeeze(1)
-    interval_width = right - left
-    interval_width = torch.where(
+    coordinate_tensor, left_tensor, right_tensor, _ = _select_summary_intervals(
+        candidate_features,
         applicable,
-        interval_width,
-        torch.full_like(interval_width, features.shape[0] + 1),
+        sorted_values,
+        range_bound,
     )
-    coordinate = int(torch.argmin(interval_width))
-    interval_ids = sorted_ids[coordinate, left[coordinate] : right[coordinate]].to(
-        torch.int64
-    )
+    coordinate = int(coordinate_tensor)
+    interval_ids = sorted_ids[
+        coordinate,
+        left_tensor:right_tensor,
+    ].to(torch.int64)
     interval_count = interval_ids.numel()
     candidates = interval_ids[retained_mask[interval_ids]]
     retained_interval_count = candidates.numel()
@@ -1142,14 +1258,12 @@ def _candidate_representatives(
         rows = rows[same_presence]
         if not block_ids.numel():
             continue
-        differences = (
-            features[rows][:, safe_coordinates]
-            - candidate_features[safe_coordinates].unsqueeze(0)
-        ).abs()
-        feature_matches = (differences <= range_bound) | ~candidate_presence[
-            selected_centers
-        ].unsqueeze(0)
-        keep = feature_matches.all(dim=1)
+        keep = _safe_summary_features_match(
+            candidate_features[safe_coordinates],
+            features[rows][:, safe_coordinates],
+            candidate_presence[selected_centers],
+            range_bound,
+        )
         if torch.any(keep):
             surviving.append(block_ids[keep])
     if not surviving:
@@ -1254,32 +1368,18 @@ def _candidate_representatives_batch(
         torch.tensor(bound, dtype=torch.float32, device=device),
         torch.tensor(float("inf"), dtype=torch.float32, device=device),
     )
-    low = torch.nextafter(
-        features[candidate_ranks] - outward_bound,
-        torch.tensor(float("-inf"), dtype=torch.float32, device=device),
+    (
+        selected_coordinates,
+        left,
+        right,
+        interval_widths,
+    ) = _select_summary_intervals(
+        features[candidate_ranks],
+        applicable,
+        sorted_values,
+        outward_bound,
+        has_applicable=has_applicable,
     )
-    high = torch.nextafter(
-        features[candidate_ranks] + outward_bound,
-        torch.tensor(float("inf"), dtype=torch.float32, device=device),
-    )
-    left_all = torch.searchsorted(
-        sorted_values, low.transpose(0, 1).contiguous(), right=False
-    )
-    right_all = torch.searchsorted(
-        sorted_values, high.transpose(0, 1).contiguous(), right=True
-    )
-    widths = right_all - left_all
-    widths = torch.where(
-        applicable.transpose(0, 1),
-        widths,
-        torch.full_like(widths, sorted_values.shape[1] + 1),
-    )
-    selected_coordinates = widths.argmin(dim=0)
-    query_columns = torch.arange(candidate_count, dtype=torch.int64, device=device)
-    left = left_all[selected_coordinates, query_columns]
-    right = right_all[selected_coordinates, query_columns]
-    interval_widths = right - left
-    interval_widths = torch.where(has_applicable, interval_widths, 0)
     interval_counts = interval_widths.detach().cpu().tolist()
 
     # Keep interval expansion and its summary-filter workspace bounded while
@@ -1411,15 +1511,18 @@ def _summary_pair_may_match(
     if not torch.equal(candidate_presence, presence[representative_rank]):
         return False
     compared_coordinates = safe_coordinates[active]
-    differences = (
-        features[candidate_rank, compared_coordinates]
-        - features[representative_rank, compared_coordinates]
-    ).abs()
     outward_bound = torch.nextafter(
         torch.tensor(bound, dtype=torch.float32, device=features.device),
         torch.tensor(float("inf"), dtype=torch.float32, device=features.device),
     )
-    return bool(torch.all(differences <= outward_bound))
+    return bool(
+        _safe_summary_features_match(
+            features[candidate_rank, compared_coordinates],
+            features[representative_rank, compared_coordinates],
+            None,
+            outward_bound,
+        )
+    )
 
 
 def _summary_pairs_may_match_batch(
@@ -1488,16 +1591,16 @@ def _summary_pairs_may_match_batch(
     matched_candidates = candidate_ranks[matched_pair_indices]
     matched_representatives = representative_ranks[matched_pair_indices]
     active_feature_coordinates = active_coordinates[matched_pair_indices]
-    differences = (
-        features[matched_candidates][:, safe_coordinates]
-        - features[matched_representatives][:, safe_coordinates]
-    ).abs()
     outward_bound = torch.nextafter(
         torch.tensor(bound, dtype=torch.float32, device=features.device),
         torch.tensor(float("inf"), dtype=torch.float32, device=features.device),
     )
-    feature_matches = (differences <= outward_bound) | ~active_feature_coordinates
-    keep[matched_pair_indices] = feature_matches.all(dim=1)
+    keep[matched_pair_indices] = _safe_summary_features_match(
+        features[matched_candidates][:, safe_coordinates],
+        features[matched_representatives][:, safe_coordinates],
+        active_feature_coordinates,
+        outward_bound,
+    )
     return keep
 
 
@@ -2543,26 +2646,17 @@ def _candidate_matches_across(
         torch.tensor(bound, dtype=torch.float32),
         torch.tensor(float("inf"), dtype=torch.float32),
     )
-    low = torch.nextafter(
-        query_features - range_bound,
-        torch.tensor(float("-inf"), dtype=torch.float32),
-    )
-    high = torch.nextafter(
-        query_features + range_bound,
-        torch.tensor(float("inf"), dtype=torch.float32),
-    )
-    left = torch.searchsorted(sorted_values, low[:, None], right=False).squeeze(1)
-    right = torch.searchsorted(sorted_values, high[:, None], right=True).squeeze(1)
-    interval_width = right - left
-    interval_width = torch.where(
+    coordinate_tensor, left_tensor, right_tensor, _ = _select_summary_intervals(
+        query_features,
         applicable,
-        interval_width,
-        torch.full_like(interval_width, candidate_count + 1),
+        sorted_values,
+        range_bound,
     )
-    coordinate = int(torch.argmin(interval_width))
-    interval_ids = sorted_ids[coordinate, left[coordinate] : right[coordinate]].to(
-        torch.int64
-    )
+    coordinate = int(coordinate_tensor)
+    interval_ids = sorted_ids[
+        coordinate,
+        left_tensor:right_tensor,
+    ].to(torch.int64)
     if not interval_ids.numel():
         return []
     same_presence = (candidate_presence[interval_ids] == query_presence).all(dim=1)
@@ -2570,12 +2664,13 @@ def _candidate_matches_across(
     if interval_ids.numel() == 0:
         return []
     centers = coordinate_centers[safe_coordinates]
-    differences = (
-        candidate_features[interval_ids][:, safe_coordinates]
-        - query_features[safe_coordinates].unsqueeze(0)
-    ).abs()
-    matches = (differences <= range_bound) | ~query_presence[centers].unsqueeze(0)
-    interval_ids = interval_ids[matches.all(dim=1)]
+    matches = _safe_summary_features_match(
+        query_features[safe_coordinates],
+        candidate_features[interval_ids][:, safe_coordinates],
+        query_presence[centers],
+        range_bound,
+    )
+    interval_ids = interval_ids[matches]
     return interval_ids.sort().values.tolist()
 
 
@@ -2648,29 +2743,13 @@ def _candidate_matches_across_batch(
         torch.tensor(bound, dtype=torch.float32, device=device),
         torch.tensor(float("inf"), dtype=torch.float32, device=device),
     )
-    low = torch.nextafter(
-        query_rows - outward_bound,
-        torch.tensor(float("-inf"), dtype=torch.float32, device=device),
+    selected_coordinates, left, right, interval_widths = _select_summary_intervals(
+        query_rows,
+        applicable,
+        sorted_values,
+        outward_bound,
+        has_applicable=has_applicable,
     )
-    high = torch.nextafter(
-        query_rows + outward_bound,
-        torch.tensor(float("inf"), dtype=torch.float32, device=device),
-    )
-    left_all = torch.searchsorted(
-        sorted_values, low.transpose(0, 1).contiguous(), right=False
-    )
-    right_all = torch.searchsorted(
-        sorted_values, high.transpose(0, 1).contiguous(), right=True
-    )
-    widths = right_all - left_all
-    widths = torch.where(
-        applicable.transpose(0, 1), widths, torch.full_like(widths, candidate_count + 1)
-    )
-    selected_coordinates = widths.argmin(dim=0)
-    query_columns = torch.arange(len(query_ids), dtype=torch.int64, device=device)
-    left = left_all[selected_coordinates, query_columns]
-    right = right_all[selected_coordinates, query_columns]
-    interval_widths = torch.where(has_applicable, right - left, 0)
 
     pair_limit = _summary_pair_filter_block_size(
         query_presence.shape[1], int(coordinate_safe.sum())
@@ -2722,11 +2801,12 @@ def _candidate_matches_across_batch(
             active_coordinates = query_presence[query_id_tensor[local_queries]][
                 :, safe_centers
             ]
-            differences = (
-                query_features[query_id_tensor[local_queries]][:, safe_coordinates]
-                - candidate_features[candidate_rows][:, safe_coordinates]
-            ).abs()
-            keep = ((differences <= outward_bound) | ~active_coordinates).all(dim=1)
+            keep = _safe_summary_features_match(
+                query_features[query_id_tensor[local_queries]][:, safe_coordinates],
+                candidate_features[candidate_rows][:, safe_coordinates],
+                active_coordinates,
+                outward_bound,
+            )
             pair_rows = torch.stack(
                 (local_queries.to(torch.int32), candidate_rows.to(torch.int32)), dim=1
             )[keep]
