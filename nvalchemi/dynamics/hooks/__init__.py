@@ -33,7 +33,7 @@ Hooks are organized into the following modules:
    * - :mod:`safety`
      - Numerical safety guards (NaN detection, force clamping).
    * - :mod:`monitors`
-     - Long-running diagnostic monitors (energy drift).
+     - Long-running diagnostic monitors (energy drift, conservation series).
    * - :mod:`freeze`
      - Freeze selected atoms by category during dynamics.
    * - :mod:`cell_align`
@@ -48,10 +48,16 @@ a :class:`~nvalchemi.hooks.DynamicsContext` plus a stage enum in their
 
 from __future__ import annotations
 
+from nvalchemi.dynamics.hooks._utils import kinetic_energy_per_graph
 from nvalchemi.dynamics.hooks.cell_align import AlignCellHook
 from nvalchemi.dynamics.hooks.freeze import FreezeAtomsHook
 from nvalchemi.dynamics.hooks.logging import LoggingHook
-from nvalchemi.dynamics.hooks.monitors import EnergyDriftMonitorHook
+from nvalchemi.dynamics.hooks.monitors import (
+    EnergyDriftMonitorHook,
+    StabilityMetrics,
+    StabilityMonitor,
+    total_momentum,
+)
 from nvalchemi.dynamics.hooks.safety import (
     MaxForceClampHook,
     NaNDetectorHook,
@@ -76,11 +82,15 @@ __all__ = [
     "NaNDetectorHook",
     "PairSwapHook",
     "SnapshotHook",
+    "StabilityMetrics",
+    "StabilityMonitor",
     "StageTimingHook",
     "TorchProfilerHook",
     "apply_pair_swaps",
     "even_odd_pairs",
+    "kinetic_energy_per_graph",
     "nonfinite_graph_mask",
+    "total_momentum",
 ]
 
 _REMOVED_PROFILER_HOOKS = {"ProfilerHook"}
