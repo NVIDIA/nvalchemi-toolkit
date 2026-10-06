@@ -53,7 +53,6 @@ from typing import Any, Callable
 
 import torch.distributed as dist
 import torch.multiprocessing as mp
-from _dd_harness import free_port
 
 __all__ = ["run_gloo"]
 
@@ -110,7 +109,10 @@ def _worker(
     os.environ["RANK"] = str(rank)
     os.environ["WORLD_SIZE"] = str(world_size)
 
-    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+    store = dist.TCPStore("127.0.0.1", int(port), is_master=False)
+    dist.init_process_group(
+        backend="gloo", store=store, rank=rank, world_size=world_size
+    )
     try:
         _patch_all_to_all_for_gloo()
         fn(rank, world_size, queue, *args)
@@ -141,7 +143,11 @@ def run_gloo(
     ctx = mp.get_context("spawn")
     queue = ctx.Queue()
     procs = []
-    port = port or free_port()
+    server_store = dist.TCPStore(
+        "127.0.0.1", int(port) if port else 0, is_master=True, wait_for_workers=False
+    )
+    # Keep the parent-owned rendezvous listener alive through worker cleanup.
+    port = str(server_store.port)
     for rank in range(world_size):
         p = ctx.Process(target=_worker, args=(rank, world_size, fn, queue, args, port))
         p.start()
