@@ -243,6 +243,18 @@ model.set_config("gradient_keys", {"positions"})
 `output_data()` returns `active_outputs & outputs` and warns if you request a
 key the model does not support.
 
+### UMA output behavior
+
+`UMAWrapper` declares and activates energy, forces, and stress for every task.
+`active_outputs` selects returned properties without reconfiguring FairChem's
+prediction tasks. OMol omits stress when `cell` is absent or `None`; with a
+supplied cell, stress is returned if active and produced by the prediction
+unit. Missing OMol PBC flags default to nonperiodic without a cell and periodic
+with one; explicit flags are preserved.
+
+`UMAWrapper.from_checkpoint` enables OMol stress during loading. Directly
+supplied prediction units must already support the declared outputs.
+
 ---
 
 ## Helper methods
