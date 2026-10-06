@@ -74,10 +74,10 @@ from nvalchemi.training.distillation import (
 # Configure the run
 # -----------------
 # These constants configure the dataset, the toy potentials, and the training
-# run. ``DEVICE`` selects where everything runs; set it to
-# ``torch.device("cuda")`` to run on a GPU.
+# run. ``DEVICE`` picks a GPU when one is available and falls back to the
+# CPU otherwise; set it explicitly to pin the run to one device.
 
-DEVICE = torch.device("cpu")
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 NUM_SYSTEMS = 48
 NUM_ATOMS = 6

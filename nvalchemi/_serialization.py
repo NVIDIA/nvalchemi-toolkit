@@ -161,6 +161,47 @@ def _import_callable(target_path: str) -> Callable[..., Any]:
     return obj
 
 
+def capture_callable_spec(fn: Callable[..., Any], *, field_name: str) -> "BaseSpec":
+    """Capture a callable field as a :class:`~nvalchemi.training.BaseSpec`.
+
+    Uses the object's own ``to_spec()`` when it provides one (model-owning
+    procedures carry their construction), else a dotted-path capture through
+    :func:`_import_callable` as the recorded builder. Lambdas, closures, and
+    ``functools.partial`` objects carry no import path and are rejected by
+    :func:`_callable_path_of`.
+
+    Parameters
+    ----------
+    fn
+        The live callable to capture.
+    field_name
+        The model field being serialized; labels capture errors.
+
+    Returns
+    -------
+    BaseSpec
+        The captured construction spec.
+
+    Raises
+    ------
+    TypeError
+        If ``fn.to_spec()`` does not return a
+        :class:`~nvalchemi.training.BaseSpec`.
+    """
+    from nvalchemi.training import BaseSpec, create_model_spec
+
+    to_spec = getattr(fn, "to_spec", None)
+    if callable(to_spec):
+        spec = to_spec()
+        if not isinstance(spec, BaseSpec):
+            raise TypeError(
+                f"{field_name}.to_spec() must return a BaseSpec, "
+                f"got {type(spec).__name__}."
+            )
+        return spec
+    return create_model_spec(_import_callable, target_path=_callable_path_of(fn))
+
+
 def _callable_path_of(target: Callable[..., Any]) -> str:
     """Return the canonical dotted path (``module.QualName``) for ``target``."""
     module = getattr(target, "__module__", None)

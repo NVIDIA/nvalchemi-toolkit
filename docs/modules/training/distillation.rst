@@ -12,6 +12,7 @@ knowledge-distillation workflows.
 
 .. seealso::
 
+   - **User guide**: :ref:`distillation_guide`
    - **Training strategy API**: :ref:`training-strategy-api`
    - **Fine-tuning API**: :ref:`training-finetuning-api`
    - **Loss API**: :ref:`losses-api`
@@ -66,8 +67,17 @@ device default when no region is open, the caller's region's dtype when one is.
    SignalLevel
    SignalNormalizer
    NeighborListPolicy
-   BUILTIN_SIGNALS
-   SUPPORTED_SIGNALS
+
+.. data:: BUILTIN_SIGNALS
+   :type: Mapping[str, TeacherSignal]
+
+   The built-in :class:`~nvalchemi.training.distillation.TeacherSignal` specs,
+   keyed by signal name.
+
+.. data:: SUPPORTED_SIGNALS
+   :type: frozenset[str]
+
+   The names of the built-in signals: the keys of ``BUILTIN_SIGNALS``.
 
 .. data:: TeacherLabels
    :type: TypeAlias
@@ -701,7 +711,7 @@ size, so a sink that fits the initial batch fits every later one, and the
 growth happens at most once, for the first segment. The converged route keeps
 its own host-memory sink, one frame per graph.
 
-A custom :class:`~nvalchemi.training.distillation.InitialStructuresSource`
+A custom :class:`~nvalchemi.dynamics.StructureSource`
 drives the lifecycle too, provided its ``initial_batch`` stamps the ``status``
 zeros and ``system_id`` numbers the lifecycle graduates and backfills on.
 Distribution-matching objectives are defined on equilibrium ensembles, which a
