@@ -499,9 +499,11 @@ def _accumulate_cell_contacts(
     max_overlap: wp.array(dtype=wp.float32),
     virial: wp.array(dtype=wp.mat33f),
 ) -> None:
-    """Accumulate periodic pair forces, torques, overlaps, and virial per candidate.
+    """Query Ops-built cell bins and fuse CSP pair reductions per candidate.
 
-    Requires lower-triangular cell matrices.
+    The Ops batch builder supplies the cell bins; this kernel applies CSP
+    periodic/symmetry ownership and accumulates forces, torques, overlaps, and
+    virial. Requires lower-triangular cell matrices.
     """
     atom_i = wp.tid()
     row = atom_i / expanded_atom_count
@@ -575,13 +577,6 @@ def _accumulate_cell_contacts(
                             shift[0] - offset_j[0] + offset_i[0] == 0
                             and shift[1] - offset_j[1] + offset_i[1] == 0
                             and shift[2] - offset_j[2] + offset_i[2] == 0
-                        ):
-                            continue
-                        if (
-                            shift[0] == 0
-                            and shift[1] == 0
-                            and shift[2] == 0
-                            and asu_i >= asu_j
                         ):
                             continue
                     cutoff = contact_distances[asu_i, asu_j]

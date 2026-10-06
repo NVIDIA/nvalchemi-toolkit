@@ -41,7 +41,7 @@ from nvalchemi.csp.packer._contacts import (
 from nvalchemi.csp.packer._state import WorkingState, relax_step
 from nvalchemi.csp.packer.result import PackingResult
 from nvalchemi.csp.symmetry import SpaceGroupPolicy, get_space_group_operations
-from test.csp.fixtures.contact_oracle import contact_observables
+from test.csp.fixtures.contact_oracle import contact_observables, contact_torques
 from test.csp.fixtures.packer_stage2_cpu import SOURCE_REFERENCE
 
 
@@ -140,6 +140,52 @@ def _evaluate_fixed_contacts(state: dict[str, torch.Tensor], operation_count: in
         maps=maps,
         workspace=workspace,
     )
+
+
+def _p1_diatomic_state(
+    *,
+    center_x: float,
+    contact_distance: float,
+    half_bond: float = 1.4,
+    angle_degrees: float = 0.0,
+    reverse_atom_order: bool = False,
+) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
+    """Build one P1 rigid dimer and independent unwrapped Cartesian geometry."""
+    local_positions = torch.tensor(
+        [[-half_bond, 0.0, 0.0], [half_bond, 0.0, 0.0]], dtype=torch.float32
+    )
+    if reverse_atom_order:
+        local_positions = local_positions.flip(0)
+    angle = torch.tensor(angle_degrees * torch.pi / 180.0)
+    rotation = torch.stack(
+        (
+            torch.stack((torch.cos(angle), -torch.sin(angle), torch.tensor(0.0))),
+            torch.stack((torch.sin(angle), torch.cos(angle), torch.tensor(0.0))),
+            torch.tensor([0.0, 0.0, 1.0]),
+        )
+    )
+    arms = local_positions @ rotation.T
+    cell = torch.diag(torch.tensor([4.0, 6.0, 6.0], dtype=torch.float32))
+    center = torch.tensor([center_x, 0.5, 0.5], dtype=torch.float32) @ cell
+    unwrapped_positions = center + arms
+    contact_distances = torch.full((2, 2), contact_distance)
+    contact_distances.fill_diagonal_(contact_distance / 2)
+    state = {
+        "conformer_positions": local_positions,
+        "conformer_ptr": torch.tensor([0, 2], dtype=torch.int32),
+        "conformer_ids": torch.tensor([[0]], dtype=torch.int32),
+        "molecule_atom_ptr": torch.tensor([0, 2], dtype=torch.int32),
+        "centers": torch.tensor([[[center_x, 0.5, 0.5]]], dtype=torch.float32),
+        "rotations": rotation.reshape(1, 1, 3, 3),
+        "cells": cell.unsqueeze(0),
+        "inverse_cells": torch.linalg.inv(cell).unsqueeze(0).contiguous(),
+        "symmetry_table": torch.tensor(
+            [[1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]], dtype=torch.float32
+        ),
+        "selected_ops": torch.tensor([[0]], dtype=torch.int32),
+        "contact_distances": contact_distances,
+    }
+    return state, unwrapped_positions, arms
 
 
 def _expected_tensor(value: object) -> torch.Tensor:
@@ -277,6 +323,255 @@ def test_cpu_skew_cell_contacts_match_complete_periodic_oracle() -> None:
     assert actual.total_overlap.item() == pytest.approx(expected_total, abs=1e-6)
     assert actual.max_overlap.item() == pytest.approx(expected_max, abs=5e-7)
     torch.testing.assert_close(actual.forces.sum(dim=1), torch.zeros((1, 3)))
+
+
+@pytest.mark.parametrize(
+    ("center_x", "reverse_atom_order"),
+    [(0.1, False), (0.5, False), (0.1, True), (0.9, False), (0.9, True)],
+)
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda:0",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="requires cuda:0"
+            ),
+        ),
+    ],
+    ids=["cpu", "cuda0"],
+)
+def test_cpu_p1_intramolecular_periodic_contact_matches_unwrapped_oracle(
+    center_x: float, reverse_atom_order: bool, device: str
+) -> None:
+    state, unwrapped_positions, arms = _p1_diatomic_state(
+        center_x=center_x,
+        contact_distance=2.0,
+        reverse_atom_order=reverse_atom_order,
+    )
+    if center_x < 0.5:
+        assert unwrapped_positions[:, 0].min() < 0.0
+    elif center_x > 0.5:
+        assert unwrapped_positions[:, 0].max() > 4.0
+
+    state = _to_device(state, device)
+    actual = _evaluate_fixed_contacts(state, operation_count=1)
+    atom_molecules = torch.zeros(2, dtype=torch.int64)
+    asu_atom_ids = torch.arange(2, dtype=torch.int64)
+    count, expected_forces, expected_virial, total, maximum = contact_observables(
+        unwrapped_positions,
+        state["cells"][0],
+        atom_molecules,
+        state["contact_distances"],
+        expanded_atom_count=2,
+        asu_atom_ids=asu_atom_ids,
+    )
+    expected_torques = contact_torques(
+        unwrapped_positions,
+        state["cells"][0],
+        atom_molecules,
+        state["contact_distances"],
+        arms,
+        asu_atom_ids=asu_atom_ids,
+    )
+
+    assert count == 1
+    assert total == pytest.approx(0.8, abs=3e-7)
+    assert maximum == pytest.approx(0.8, abs=3e-7)
+    assert expected_virial[0, 0].item() == pytest.approx(0.48, abs=3e-7)
+    torch.testing.assert_close(
+        actual.forces[0].cpu().double(), expected_forces, atol=1e-6, rtol=0
+    )
+    torch.testing.assert_close(
+        actual.torques[0].cpu().double(), expected_torques, atol=1e-6, rtol=0
+    )
+    torch.testing.assert_close(
+        actual.virial[0].cpu().double(), expected_virial, atol=1e-6, rtol=0
+    )
+    assert actual.total_overlap.item() == pytest.approx(total, abs=1e-6)
+    assert actual.max_overlap.item() == pytest.approx(maximum, abs=1e-6)
+
+
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda:0",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="requires cuda:0"
+            ),
+        ),
+    ],
+    ids=["cpu", "cuda0"],
+)
+def test_p1_short_boundary_crossing_molecule_excludes_only_intramolecular_pair(
+    device: str,
+) -> None:
+    state, unwrapped_positions, arms = _p1_diatomic_state(
+        center_x=0.05,
+        contact_distance=2.0,
+        half_bond=0.4,
+    )
+    assert unwrapped_positions[0, 0] < 0.0
+    state = _to_device(state, device)
+    actual = _evaluate_fixed_contacts(state, operation_count=1)
+    atom_molecules = torch.zeros(2, dtype=torch.int64)
+    asu_atom_ids = torch.arange(2, dtype=torch.int64)
+    count, expected_forces, expected_virial, total, maximum = contact_observables(
+        unwrapped_positions,
+        state["cells"][0],
+        atom_molecules,
+        state["contact_distances"],
+        expanded_atom_count=2,
+        asu_atom_ids=asu_atom_ids,
+    )
+    expected_torques = contact_torques(
+        unwrapped_positions,
+        state["cells"][0],
+        atom_molecules,
+        state["contact_distances"],
+        arms,
+        asu_atom_ids=asu_atom_ids,
+    )
+
+    assert count == 0
+    torch.testing.assert_close(
+        actual.forces[0].cpu().double(), expected_forces, atol=0, rtol=0
+    )
+    torch.testing.assert_close(
+        actual.torques[0].cpu().double(), expected_torques, atol=0, rtol=0
+    )
+    torch.testing.assert_close(
+        actual.virial[0].cpu().double(), expected_virial, atol=0, rtol=0
+    )
+    assert total == maximum == 0.0
+    assert actual.total_overlap.item() == actual.max_overlap.item() == 0.0
+
+
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda:0",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="requires cuda:0"
+            ),
+        ),
+    ],
+    ids=["cpu", "cuda0"],
+)
+def test_p1_tilted_intramolecular_periodic_contact_matches_torque_oracle(
+    device: str,
+) -> None:
+    state, unwrapped_positions, arms = _p1_diatomic_state(
+        center_x=0.9,
+        contact_distance=2.3,
+        angle_degrees=25.0,
+    )
+    state = _to_device(state, device)
+    actual = _evaluate_fixed_contacts(state, operation_count=1)
+    atom_molecules = torch.zeros(2, dtype=torch.int64)
+    asu_atom_ids = torch.arange(2, dtype=torch.int64)
+    count, expected_forces, expected_virial, total, maximum = contact_observables(
+        unwrapped_positions,
+        state["cells"][0],
+        atom_molecules,
+        state["contact_distances"],
+        expanded_atom_count=2,
+        asu_atom_ids=asu_atom_ids,
+    )
+    expected_torques = contact_torques(
+        unwrapped_positions,
+        state["cells"][0],
+        atom_molecules,
+        state["contact_distances"],
+        arms,
+        asu_atom_ids=asu_atom_ids,
+    )
+
+    assert count == 1
+    assert expected_torques.abs().max().item() > 0.1
+    torch.testing.assert_close(
+        actual.forces[0].cpu().double(), expected_forces, atol=2e-6, rtol=0
+    )
+    torch.testing.assert_close(
+        actual.torques[0].cpu().double(), expected_torques, atol=2e-6, rtol=0
+    )
+    torch.testing.assert_close(
+        actual.virial[0].cpu().double(), expected_virial, atol=2e-6, rtol=0
+    )
+    assert actual.total_overlap.item() == pytest.approx(total, abs=2e-6)
+    assert actual.max_overlap.item() == pytest.approx(maximum, abs=2e-6)
+
+
+@pytest.mark.parametrize("center_x", [0.5, 0.9])
+def test_public_cpu_p1_boundary_contact_exhausts_budget(
+    center_x: float, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inputs = MolecularPackingInput(
+        conformer_positions=torch.tensor(
+            [[-1.4, 0.0, 0.0], [1.4, 0.0, 0.0]], dtype=torch.float32
+        ),
+        conformer_ptr=torch.tensor([0, 2], dtype=torch.int32),
+        molecule_conformer_ptr=torch.tensor([0, 1], dtype=torch.int32),
+        molecule_atom_ptr=torch.tensor([0, 2], dtype=torch.int32),
+        atomic_numbers=torch.tensor([6, 6], dtype=torch.int64),
+        contact_distances=torch.full((2, 2), 2.0, dtype=torch.float32),
+        component_index=torch.tensor([0], dtype=torch.int32),
+        component_charge=torch.zeros(1, dtype=torch.int32),
+        formula_unit_volume=144.0,
+    )
+    original_initialize = WorkingState.initialize
+
+    def initialize_fixed_p1_cell(self: WorkingState, **kwargs: object) -> None:
+        original_initialize(self, **kwargs)
+        rows = kwargs["rows"].to(dtype=torch.int64)
+        fixed_cell = torch.diag(
+            torch.tensor([4.0, 6.0, 6.0], dtype=torch.float32, device=self.cells.device)
+        )
+        self.cells[rows] = fixed_cell
+        self.inverse_cells[rows] = torch.linalg.inv(fixed_cell)
+        self.reference_volumes[rows] = 144.0
+        self.centers[rows] = torch.tensor(
+            [center_x, 0.5, 0.5], dtype=torch.float32, device=self.centers.device
+        )
+        self.rotations[rows] = torch.eye(
+            3, dtype=torch.float32, device=self.rotations.device
+        )
+
+    monkeypatch.setattr(WorkingState, "initialize", initialize_fixed_p1_cell)
+    packer = OverlapReliefPacker(
+        OverlapReliefConfig(
+            z=1,
+            z_prime=1,
+            batch_size=1,
+            max_candidates=1,
+            max_steps_per_candidate=1,
+            convergence_check_interval=1,
+            step_scale=0.0,
+            cell_step_scale=0.0,
+            overlap_tolerance=0.05,
+            cell_volume_range=(144.0, 144.0),
+            space_groups=SpaceGroupPolicy.fixed(1),
+        ),
+        device="cpu",
+    )
+    result = packer.pack(
+        inputs,
+        num_samples=1,
+        rng=torch.Generator().manual_seed(211),
+    )
+
+    assert len(result) == 0
+    assert result.generated_count == 1
+    assert not result.complete
+    assert result.stop_reason is PackingStopReason.CANDIDATE_BUDGET_EXHAUSTED
+    assert result.reports[0].generated_count == 1
+    assert result.reports[0].accepted_count == 0
+    assert result.reports[0].stop_reason == "candidate_budget_exhausted"
 
 
 @pytest.mark.parametrize(
