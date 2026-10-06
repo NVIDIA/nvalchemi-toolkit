@@ -128,6 +128,43 @@ def test_contact_matrix_applies_symmetric_hydrogen_bond_rule() -> None:
     assert contacts[1, 1].item() == pytest.approx(2.40)
 
 
+@pytest.mark.parametrize(
+    ("smiles", "expected_contact"),
+    [("c1cc[nH]c1", 2.86), ("n1ccccc1", 2.11)],
+    ids=["pyrrole", "pyridine"],
+)
+def test_contact_matrix_nitrogen_water_rule_is_invariant_to_explicit_hydrogens(
+    smiles: str, expected_contact: float
+) -> None:
+    aromatic_molecule = _mol(smiles)
+    explicit_hydrogen_molecule = Chem.AddHs(aromatic_molecule)
+    water = Chem.AddHs(_mol("O"))
+    observed_contacts = []
+
+    for molecule in (aromatic_molecule, explicit_hydrogen_molecule):
+        nitrogen_index = next(
+            atom.GetIdx() for atom in molecule.GetAtoms() if atom.GetAtomicNum() == 7
+        )
+        water_hydrogen_index = next(
+            atom.GetIdx() for atom in water.GetAtoms() if atom.GetAtomicNum() == 1
+        )
+        matrix_hydrogen_index = molecule.GetNumAtoms() + water_hydrogen_index
+        contacts = build_contact_distance_matrix([molecule, water])
+        nitrogen_water_contact = contacts[nitrogen_index, matrix_hydrogen_index]
+
+        assert nitrogen_water_contact.item() == pytest.approx(
+            expected_contact, abs=1e-6
+        )
+        assert contacts[matrix_hydrogen_index, nitrogen_index].item() == pytest.approx(
+            expected_contact, abs=1e-6
+        )
+        observed_contacts.append(nitrogen_water_contact)
+
+    torch.testing.assert_close(
+        observed_contacts[0], observed_contacts[1], atol=1e-6, rtol=0
+    )
+
+
 def test_contact_matrix_warns_when_periodic_table_radius_is_used() -> None:
     with pytest.warns(RuntimeWarning, match="Na"):
         contacts = build_contact_distance_matrix([_mol("[Na+]")])

@@ -115,7 +115,7 @@ def _acceptor(atom: Atom) -> float:
     if (
         number == 7
         and charge <= 0
-        and not (atom.GetIsAromatic() and atom.GetTotalNumHs() > 0)
+        and not (atom.GetIsAromatic() and atom.GetTotalNumHs(includeNeighbors=True) > 0)
         and not _amide_like_nitrogen(atom)
         and not _nitro_nitrogen(atom)
     ):
