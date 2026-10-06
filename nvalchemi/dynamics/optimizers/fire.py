@@ -19,8 +19,8 @@ FIRE (Fast Inertial Relaxation Engine) drives atomic positions toward a
 local energy minimum using a modified molecular dynamics trajectory with
 adaptive timestep and velocity-mixing.
 
-.. deprecated::
-    Both optimizers in this module are deprecated.  Use
+.. warning::
+    Deprecated.  Both optimizers in this module are deprecated.  Use
     :class:`~nvalchemi.dynamics.optimizers.FIRE2` /
     :class:`~nvalchemi.dynamics.optimizers.FIRE2VariableCell` or
     :class:`~nvalchemi.dynamics.optimizers.LBFGS` /
@@ -90,8 +90,8 @@ class FIRE(BaseDynamics):
     Drives atomic coordinates to a local energy minimum using the Fast
     Inertial Relaxation Engine algorithm (Bitzek et al., 2006).
 
-    .. deprecated::
-        Use :class:`~nvalchemi.dynamics.optimizers.FIRE2` or
+    .. warning::
+        Deprecated.  Use :class:`~nvalchemi.dynamics.optimizers.FIRE2` or
         :class:`~nvalchemi.dynamics.optimizers.LBFGS` instead.
         Constructing this optimizer emits a :class:`DeprecationWarning`.
 
@@ -317,8 +317,8 @@ class FIREVariableCell(BaseDynamics):
     simulation cell.  Cell forces are derived from the model's stress
     tensor via ``stress_to_cell_force``.
 
-    .. deprecated::
-        Use :class:`~nvalchemi.dynamics.optimizers.FIRE2VariableCell` or
+    .. warning::
+        Deprecated.  Use :class:`~nvalchemi.dynamics.optimizers.FIRE2VariableCell` or
         :class:`~nvalchemi.dynamics.optimizers.LBFGSVariableCell` instead.
         Constructing this optimizer emits a :class:`DeprecationWarning`.
 

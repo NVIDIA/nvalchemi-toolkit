@@ -212,8 +212,8 @@ is clamped to ``[dt_min, dt_max]`` (fs). ``FIREVariableCell`` extends the same
 mixing to the cell degrees of freedom using NPH-style cell propagation at zero
 target pressure.
 
-.. deprecated::
-   ``FIRE`` and ``FIREVariableCell`` are deprecated. Use ``FIRE2`` /
+.. warning::
+   Deprecated. ``FIRE`` and ``FIREVariableCell`` are deprecated. Use ``FIRE2`` /
    ``FIRE2VariableCell`` or ``LBFGS`` / ``LBFGSVariableCell`` instead.
 
 FIRE2 (Shuang et al., 2020) improves the restart conditions and the mixing
