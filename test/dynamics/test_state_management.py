@@ -34,6 +34,11 @@ from nvalchemi.dynamics.base import BaseDynamics
 
 from .conftest import _make_atomic_data, _make_batch, _make_model, _MockSampler
 
+# FIRE is deprecated in favour of FIRE2; these tests still exercise it.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:FIRE(VariableCell)? is deprecated:DeprecationWarning"
+)
+
 
 class _TestState:
     """Minimal iterable state container matching BaseDynamics' state contract."""

@@ -17,7 +17,7 @@ Monitoring a Distributed Pipeline: Per-Rank Logging and Profiling
 =================================================================
 
 Building on :doc:`01_distributed_pipeline`, this example adds
-comprehensive observability to the FIRE → NVTLangevin topology:
+comprehensive observability to the FIRE2 → NVTLangevin topology:
 
 * :class:`~nvalchemi.dynamics.hooks.LoggingHook` on each rank, writing
   per-graph scalars (energy, fmax, temperature) to rank-specific CSV files.
@@ -50,7 +50,7 @@ from loguru import logger
 
 from nvalchemi.data import AtomicData
 from nvalchemi.dynamics import (
-    FIRE,
+    FIRE2,
     ConvergenceHook,
     DistributedPipeline,
     NVTLangevin,
@@ -181,11 +181,11 @@ def make_fire(
     logging_hook: LoggingHook,
     profiler_hook: StageTimingHook,
     **kwargs,
-) -> FIRE:
-    """Create a FIRE optimiser stage with logging and profiling."""
-    return FIRE(
+) -> FIRE2:
+    """Create a FIRE2 optimiser stage with logging and profiling."""
+    return FIRE2(
         model=model,
-        dt=1.0,
+        dt=0.05,
         n_steps=50,
         hooks=[logging_hook, profiler_hook],
         convergence_hook=ConvergenceHook(
@@ -249,7 +249,7 @@ def make_langevin(
 
 
 def main() -> None:
-    """Launch two monitored FIRE -> Langevin pipelines on 4 GPUs."""
+    """Launch two monitored FIRE2 -> Langevin pipelines on 4 GPUs."""
     model = DemoModelWrapper(DemoModel())
 
     # Dataset (only used by ranks 0 and 2)
@@ -429,7 +429,7 @@ def _print_post_run_summary(num_ranks: int) -> None:
     )
     print("-" * 60)
 
-    role_map = {0: "FIRE", 1: "Langevin", 2: "FIRE", 3: "Langevin"}
+    role_map = {0: "FIRE2", 1: "Langevin", 2: "FIRE2", 3: "Langevin"}
     log_prefix = {0: "fire", 1: "langevin", 2: "fire", 3: "langevin"}
 
     for r in range(num_ranks):

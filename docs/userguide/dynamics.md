@@ -128,7 +128,7 @@ from nvalchemi.dynamics import FIRE2, ConvergenceHook
 
 with FIRE2(
     model=model,
-    dt=0.1,
+    dt=0.05,
     n_steps=500,
     convergence_hook=ConvergenceHook.from_fmax(0.05),
 ) as opt:
@@ -148,10 +148,10 @@ MD at increasing temperatures, then relax again. The
 with the `+` operator:
 
 ```python
-from nvalchemi.dynamics import FIRE, NVTLangevin, ConvergenceHook
+from nvalchemi.dynamics import FIRE2, NVTLangevin, ConvergenceHook
 
-relax = FIRE(
-    model=model, dt=0.1, n_steps=200, convergence_hook=ConvergenceHook.from_fmax(0.05)
+relax = FIRE2(
+    model=model, dt=0.05, n_steps=200, convergence_hook=ConvergenceHook.from_fmax(0.05)
 )
 md = NVTLangevin(model=model, dt=1.0, temperature=300.0, friction=0.01, n_steps=5000)
 
@@ -226,13 +226,13 @@ dictionary keyed by global rank and handed to
 {py:class}`~nvalchemi.dynamics.base.DistributedPipeline`:
 
 ```python
-from nvalchemi.dynamics import FIRE, NVTLangevin, DistributedPipeline
+from nvalchemi.dynamics import FIRE2, NVTLangevin, DistributedPipeline
 from nvalchemi.dynamics.base import BufferConfig
 
 buffer_cfg = BufferConfig(num_systems=4, num_nodes=50, num_edges=0)
 
 stages = {
-    0: FIRE(model=model, buffer_config=buffer_cfg, ...),        # upstream — relaxation
+    0: FIRE2(model=model, buffer_config=buffer_cfg, ...),        # upstream — relaxation
     1: NVTLangevin(model=model, buffer_config=buffer_cfg, ...),  # downstream — MD
 }
 
@@ -250,10 +250,10 @@ on each stage:
 ```python
 stages = {
     # Sub-pipeline A: rank 0 → rank 1
-    0: FIRE(model=model, buffer_config=buffer_cfg, prior_rank=None, next_rank=1, ...),
+    0: FIRE2(model=model, buffer_config=buffer_cfg, prior_rank=None, next_rank=1, ...),
     1: NVTLangevin(model=model, buffer_config=buffer_cfg, prior_rank=0, next_rank=None, ...),
     # Sub-pipeline B: rank 2 → rank 3
-    2: FIRE(model=model, buffer_config=buffer_cfg, prior_rank=None, next_rank=3, ...),
+    2: FIRE2(model=model, buffer_config=buffer_cfg, prior_rank=None, next_rank=3, ...),
     3: NVTLangevin(model=model, buffer_config=buffer_cfg, prior_rank=2, next_rank=None, ...),
 }
 ```
@@ -410,7 +410,7 @@ dynamics_mep
 dynamics_sinks
 ```
 
-- [Optimization and Integrators](dynamics_simulations) --- FIRE, NVE, NVT, NPT and
+- [Optimization and Integrators](dynamics_simulations) --- FIRE2, NVE, NVT, NPT and
   their configuration.
 - [Reaction Paths and NEB](dynamics_mep_guide) --- batched nudged elastic band,
   using either the high-level `NEB` strategy or hooks attached directly to an
