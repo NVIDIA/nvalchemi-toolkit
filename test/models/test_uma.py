@@ -53,12 +53,16 @@ from fairchem.core.datasets.atomic_data import AtomicData as FCAtomicData  # noq
 from nvalchemi.data import AtomicData, Batch  # noqa: E402
 from nvalchemi.dynamics.hooks._utils import kinetic_energy_per_graph  # noqa: E402
 from nvalchemi.dynamics.integrators.nve import NVE  # noqa: E402
+from nvalchemi.models import uma as uma_module  # noqa: E402
 from nvalchemi.models.base import NeighborListFormat  # noqa: E402
+from nvalchemi.models.pipeline import PipelineGroup, PipelineModelWrapper  # noqa: E402
 from nvalchemi.models.uma import (  # noqa: E402
     _UMA_TASKS,
     UMAWrapper,
+    _complete_cell,
     _distributed_edgewise_gather,
     _distributed_partition_graph,
+    _fold_into_cell,
 )
 
 _CKPT = os.environ.get("NVALCHEMI_UMA_CKPT", "uma-s-1p1")
@@ -373,6 +377,286 @@ class TestAdaptInput:
         """Without atom_categories, the adapter fills tags with zeros."""
         fc = mock_omol.adapt_input(_make_propane())
         assert fc.tags.tolist() == [0] * 11
+
+
+class TestCompleteCell:
+    """``_complete_cell`` — the zero-vector completion ``adapt_input`` applies."""
+
+    @pytest.mark.parametrize(
+        "cell",
+        [
+            torch.diag(torch.tensor([3.0, 4.0, 0.0])),  # 2D
+            torch.tensor([[0.0] * 3, [1.0, 2.0, 0.5], [0.0] * 3]),  # 1D, tilted
+            torch.diag(torch.tensor([0.0, 0.0, 7.0])),  # 1D along z
+            torch.zeros(3, 3),  # molecule
+        ],
+    )
+    def test_matches_ase_up_to_orientation(self, cell):
+        """Same kept vectors, orthonormal right-handed fill-ins, like ASE."""
+        from ase.geometry import complete_cell
+
+        out = _complete_cell(cell[None])[0]
+        ref = torch.tensor(complete_cell(cell.numpy()), dtype=cell.dtype)
+        kept = cell.any(dim=-1)
+        torch.testing.assert_close(out[kept], cell[kept])
+        # The added vectors span the same subspace as ASE's (orthogonal
+        # complement of the kept ones) and are unit length.
+        added = out[~kept]
+        torch.testing.assert_close(added.norm(dim=-1), torch.ones(len(added)))
+        proj = added @ ref[~kept].T
+        torch.testing.assert_close(
+            proj @ proj.T, torch.eye(len(added)), atol=1e-6, rtol=0
+        )
+        assert torch.linalg.det(out) > 0
+
+    def test_full_cell_unchanged_and_batched(self):
+        cells = torch.stack(
+            [TestFoldIntoCell._CELL, torch.diag(torch.tensor([3.0, 4.0, 0.0]))]
+        )
+        out = _complete_cell(cells)
+        torch.testing.assert_close(out[0], cells[0])
+        torch.testing.assert_close(out[1], torch.diag(torch.tensor([3.0, 4.0, 1.0])))
+
+
+class TestFoldIntoCell:
+    """``_fold_into_cell`` — the lattice fold ``adapt_input`` applies."""
+
+    _CELL = torch.tensor([[4.0, 0.0, 0.0], [1.0, 5.0, 0.0], [0.5, 0.5, 6.0]])
+
+    @staticmethod
+    def _frac(pos: torch.Tensor, cell: torch.Tensor) -> torch.Tensor:
+        return pos @ torch.linalg.inv(cell)
+
+    @staticmethod
+    def _fold1(pos: torch.Tensor, cell: torch.Tensor, pbc=(True, True, True)):
+        """Fold a single-system *pos* with a ``[3, 3]`` cell."""
+        return _fold_into_cell(
+            pos,
+            cell[None],
+            torch.tensor([pbc]),
+            torch.zeros(pos.shape[0], dtype=torch.long),
+        )
+
+    def test_triclinic_all_periodic_lands_in_unit_cell(self):
+        frac_in = torch.tensor([[0.2, 0.3, 0.4], [1.2, -0.7, 2.4], [-3.1, 2.5, -1.9]])
+        pos = frac_in @ self._CELL
+        out = self._fold1(pos, self._CELL)
+        frac_out = self._frac(out, self._CELL)
+        assert (frac_out >= -1e-6).all() and (frac_out < 1.0).all()
+        # Only whole-lattice-vector translations.
+        delta = self._frac(pos - out, self._CELL)
+        torch.testing.assert_close(delta, delta.round(), atol=1e-5, rtol=0)
+        torch.testing.assert_close(out[0], pos[0])
+
+    def test_face_maps_to_zero(self):
+        cell = torch.eye(3) * 5.0
+        pos = torch.tensor([[5.0, 0.0, 10.0]])
+        torch.testing.assert_close(self._fold1(pos, cell), torch.zeros(1, 3))
+
+    def test_non_periodic_direction_untouched(self):
+        pos = torch.tensor([[7.5, -2.5, 23.0]])
+        out = self._fold1(pos, torch.eye(3) * 5.0, pbc=(True, True, False))
+        torch.testing.assert_close(out, torch.tensor([[2.5, 2.5, 23.0]]))
+
+    def test_no_periodic_direction_is_identity(self):
+        pos = torch.tensor([[17.0, -9.0, 3.0]])
+        out = self._fold1(pos, torch.eye(3) * 5.0, pbc=(False, False, False))
+        torch.testing.assert_close(out, pos)
+
+    def test_singular_cell_is_identity(self):
+        pos = torch.tensor([[17.0, -9.0, 3.0]])
+        torch.testing.assert_close(self._fold1(pos, torch.zeros(3, 3)), pos)
+
+    def test_batched_per_system_cells_and_pbc(self):
+        """Each atom folds with its own system's cell/pbc; (B,1,...) shapes OK."""
+        cells = torch.stack([torch.eye(3) * 4.0, torch.eye(3) * 10.0])[:, None]
+        pbc = torch.tensor([[True, True, True], [False, True, True]])[:, None]
+        pos = torch.tensor([[9.0, -1.0, 4.0], [13.0, 13.0, -1.0]])
+        out = _fold_into_cell(pos, cells, pbc, torch.tensor([0, 1]))
+        expected = torch.tensor([[1.0, 3.0, 0.0], [13.0, 3.0, 9.0]])
+        torch.testing.assert_close(out, expected)
+
+    @pytest.mark.parametrize(
+        ("cell", "pbc", "pos", "expected"),
+        [
+            # 2D slab, zero c: folds in-plane, z untouched.
+            (
+                torch.diag(torch.tensor([3.0, 4.0, 0.0])),
+                (True, True, False),
+                [[7.0, -5.0, 13.0]],
+                [[1.0, 3.0, 13.0]],
+            ),
+            # 1D wire along z, zero a and b: folds z only.
+            (
+                torch.diag(torch.tensor([0.0, 0.0, 7.0])),
+                (False, False, True),
+                [[1.0, -2.0, -15.0]],
+                [[1.0, -2.0, 6.0]],
+            ),
+            # 1D wire along a tilted a: folds along a, keeps the orthogonal part.
+            (
+                torch.tensor([[2.0, 2.0, 0.0], [0.0] * 3, [0.0] * 3]),
+                (True, False, False),
+                [[5.5, 7.0, 3.0]],
+                [[-0.5, 1.0, 3.0]],
+            ),
+        ],
+    )
+    def test_adapt_input_folds_low_dimensional_cells(
+        self, mock_omat, cell, pbc, pos, expected
+    ):
+        """Zero lattice vectors are completed, so 1D/2D systems fold along periodic axes."""
+        data = AtomicData(
+            positions=torch.tensor(pos),
+            atomic_numbers=torch.tensor([29]),
+            cell=cell[None],
+            pbc=torch.tensor([pbc]),
+        )
+        fc = mock_omat.adapt_input(data)
+        torch.testing.assert_close(fc.pos, torch.tensor(expected))
+        assert torch.linalg.det(fc.cell).abs().item() > 0
+
+    def test_gradient_passes_through_unchanged(self):
+        pos = torch.tensor([[9.0, -1.0, 4.0]], requires_grad=True)
+        out = self._fold1(pos, torch.eye(3) * 4.0)
+        (out * torch.tensor([[1.0, 2.0, 3.0]])).sum().backward()
+        torch.testing.assert_close(pos.grad, torch.tensor([[1.0, 2.0, 3.0]]))
+
+
+class TestAdaptInputWrapping:
+    """``adapt_input`` folds periodic positions for fairchem, never in place."""
+
+    @staticmethod
+    def _unwrapped(pbc: list[bool]) -> AtomicData:
+        a = 5.0
+        return AtomicData(
+            positions=torch.tensor([[1.0, 1.0, 1.0], [11.5, -3.0, 16.0]]),
+            atomic_numbers=torch.tensor([29, 29], dtype=torch.long),
+            cell=(torch.eye(3) * a).unsqueeze(0),
+            pbc=torch.tensor([pbc]),
+        )
+
+    def test_folds_periodic_positions(self, mock_omat):
+        fc = mock_omat.adapt_input(self._unwrapped([True, True, True]))
+        expected = torch.tensor([[1.0, 1.0, 1.0], [1.5, 2.0, 1.0]])
+        torch.testing.assert_close(fc.pos, expected)
+
+    def test_mixed_pbc_leaves_vacuum_axis(self, mock_omat):
+        fc = mock_omat.adapt_input(self._unwrapped([True, True, False]))
+        expected = torch.tensor([[1.0, 1.0, 1.0], [1.5, 2.0, 16.0]])
+        torch.testing.assert_close(fc.pos, expected)
+
+    def test_data_positions_unchanged(self, mock_omat, mock_pu):
+        batch = Batch.from_data_list([self._unwrapped([True, True, True])])
+        before = batch.positions.clone()
+        mock_omat(batch)
+        torch.testing.assert_close(batch.positions, before, atol=0, rtol=0)
+        assert not torch.equal(mock_pu.last_data.pos, before)
+
+    def test_gradient_reaches_data_positions(self, mock_omat):
+        batch = Batch.from_data_list([self._unwrapped([True, True, True])])
+        batch.positions.requires_grad_(True)
+        fc = mock_omat.adapt_input(batch)
+        assert fc.pos.requires_grad
+        fc.pos.sum().backward()
+        torch.testing.assert_close(batch.positions.grad, torch.ones(2, 3))
+
+    def test_pipeline_autograd_stress_ignores_lattice_shifts(self, mock_omat):
+        """An autograd pipeline strains positions and cell before ``adapt_input``.
+
+        Folded atoms must move with the strained lattice, or every atom shifted
+        by a lattice vector corrupts the stress. The mock energy depends only on
+        the folded coordinates, so shifted and pre-wrapped inputs must agree.
+        """
+        cell = TestFoldIntoCell._CELL[None]
+        wrapped = torch.tensor([[0.5, 1.0, 1.5], [3.0, 4.0, 5.0], [1.0, 0.5, 0.2]])
+        images = torch.tensor([[0.0, 0.0, 0.0], [2.0, -1.0, 0.0], [-1.0, 3.0, -2.0]])
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[mock_omat], use_autograd=True)]
+        )
+
+        def evaluate(pos: torch.Tensor) -> dict[str, torch.Tensor]:
+            data = AtomicData(
+                positions=pos,
+                atomic_numbers=torch.full((3,), 26),
+                cell=cell,
+                pbc=torch.tensor([[True, True, True]]),
+            )
+            out = pipe(Batch.from_data_list([data]))
+            return {k: out[k].detach() for k in ("energy", "forces", "stress")}
+
+        ref = evaluate(wrapped)
+        assert ref["stress"].abs().max() > 1e-2
+        shifted = evaluate(wrapped + images @ cell[0])
+        for key in ref:
+            torch.testing.assert_close(shifted[key], ref[key])
+
+
+def _fairchem_graph(wrapper: UMAWrapper, data: AtomicData, version: int) -> dict:
+    """Graph fairchem builds from ``adapt_input``'s output (no checkpoint needed)."""
+    from fairchem.core.graph.compute import generate_graph
+
+    fc = wrapper.adapt_input(Batch.from_data_list([data]))
+    return generate_graph(
+        fc,
+        cutoff=wrapper._cutoff,
+        max_neighbors=1000,
+        enforce_max_neighbors_strictly=False,
+        radius_pbc_version=version,
+        pbc=fc.pbc,
+    )
+
+
+def _assert_same_graph(ours: dict, ref: dict) -> None:
+    """Same edges with the same edge vectors, independent of edge order."""
+
+    def canonical(graph: dict) -> torch.Tensor:
+        vec = graph["edge_distance_vec"].to(torch.float64)
+        edges = torch.cat([graph["edge_index"].T.to(torch.float64), vec], dim=1)
+        order = np.lexsort(edges.round(decimals=4).numpy().T[::-1])
+        return edges[torch.from_numpy(order)]
+
+    torch.testing.assert_close(canonical(ours), canonical(ref), atol=1e-4, rtol=0)
+
+
+@pytest.mark.parametrize("version", [1, 2], ids=["radius_pbc_v1", "radius_pbc_v2"])
+class TestFairchemGraphInputs:
+    """The graph fairchem builds from adapted inputs, without a checkpoint."""
+
+    def test_unwrapped_atoms_get_the_wrapped_graph(
+        self, mock_omat, monkeypatch, version
+    ):
+        ref_data = _rattled_fe_333()
+        far = _shift_atoms(ref_data, {0: (2, 0, 0), 1: (0, -2, 1)})
+        ref = _fairchem_graph(mock_omat, ref_data, version)
+        _assert_same_graph(_fairchem_graph(mock_omat, far, version), ref)
+
+        # Without the fold, the builder's image scan misses pairs of far atoms.
+        monkeypatch.setattr(uma_module, "_fold_into_cell", lambda pos, *_: pos)
+        broken = _fairchem_graph(mock_omat, far, version)
+        assert broken["edge_index"].shape[1] < ref["edge_index"].shape[1]
+
+    @pytest.mark.parametrize(
+        ("pbc", "shifts"),
+        [
+            ((True, True, False), {0: (2, 0, 0), 7: (-1, 3, 0), 20: (0, -2, 0)}),
+            ((False, False, True), {0: (0, 0, 2), 9: (0, 0, -3)}),
+        ],
+        ids=["2d_slab", "1d_wire"],
+    )
+    def test_zero_vacuum_vectors_get_the_vacuum_padded_graph(
+        self, mock_omat, monkeypatch, version, pbc, shifts
+    ):
+        ref_data = _vacuum_padded(pbc, seed=11)
+        ref = _fairchem_graph(mock_omat, ref_data, version)
+        zero = _zero_vacuum_vectors(ref_data)
+        for data in (zero, _shift_atoms(zero, shifts)):
+            _assert_same_graph(_fairchem_graph(mock_omat, data, version), ref)
+
+        # Without completion, the builder divides by the zero cell volume.
+        monkeypatch.setattr(uma_module, "_complete_cell", lambda cell: cell)
+        with pytest.raises(RuntimeError):
+            _fairchem_graph(mock_omat, zero, version)
 
 
 class TestAdaptOutput:
@@ -898,6 +1182,154 @@ class TestChargedInputs:
         assert np.isclose(ours, ref, atol=1e-4, rtol=1e-5), (
             f"charged energy mismatch: ours={ours:.6f} ref={ref:.6f}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Lattice-vector invariance — unwrapped MD positions (no WrapPeriodicHook)
+# ---------------------------------------------------------------------------
+
+
+def _rattled_fe_333(seed: int = 7) -> AtomicData:
+    """Rattled bcc Fe 3x3x3 (54 atoms, 8.61 A cell): fairchem scans +-1 image."""
+    atoms = bulk("Fe", "bcc", a=2.87, cubic=True) * (3, 3, 3)
+    atoms.rattle(stdev=0.05, seed=seed)
+    atoms.wrap()
+    return _atomicdata_from_ase(atoms)
+
+
+def _shift_atoms(
+    data: AtomicData, shifts: dict[int, tuple[int, int, int]]
+) -> AtomicData:
+    """Copy of *data* with atom ``i`` translated by ``shifts[i]`` lattice vectors."""
+    pos = data.positions.clone()
+    cell = data.cell.reshape(3, 3)
+    for i, n in shifts.items():
+        pos[i] += torch.tensor(n, dtype=pos.dtype) @ cell
+    return AtomicData(
+        positions=pos, atomic_numbers=data.atomic_numbers, cell=data.cell, pbc=data.pbc
+    )
+
+
+def _evaluate(wrapper: UMAWrapper, data: AtomicData) -> dict[str, torch.Tensor]:
+    batch = Batch.from_data_list([data]).to(_DEVICE)
+    out = wrapper(batch)
+    return {k: out[k].detach().cpu() for k in ("energy", "forces", "stress")}
+
+
+def _assert_same_outputs(ours: dict, ref: dict) -> None:
+    torch.testing.assert_close(ours["energy"], ref["energy"], atol=1e-4, rtol=1e-6)
+    torch.testing.assert_close(ours["forces"], ref["forces"], atol=1e-4, rtol=1e-4)
+    torch.testing.assert_close(ours["stress"], ref["stress"], atol=1e-5, rtol=1e-4)
+
+
+class TestUnwrappedPositions:
+    """Energy/forces/stress are invariant to per-atom lattice translations."""
+
+    _SHIFTS = {
+        0: (1, 0, 0),
+        5: (-1, 0, 0),
+        11: (0, 2, 0),
+        17: (0, 0, -2),
+        23: (3, -3, 0),
+        29: (-3, 1, 3),
+        41: (2, -1, -3),
+    }
+
+    def test_forces_and_stress_active(self, wrapper_omat):
+        active = set(wrapper_omat.model_config.active_outputs)
+        assert {"energy", "forces", "stress"} <= active
+
+    def test_lattice_vector_invariance(self, wrapper_omat):
+        ref_data = _rattled_fe_333()
+        ref = _evaluate(wrapper_omat, ref_data)
+        assert ref["forces"].abs().max() > 1e-2  # rattled: non-trivial forces
+        ours = _evaluate(wrapper_omat, _shift_atoms(ref_data, self._SHIFTS))
+        _assert_same_outputs(ours, ref)
+
+    def test_far_atom_regression(self, wrapper_omat, monkeypatch):
+        """An atom two cells out lost its neighbours before the fold; now matches."""
+        ref_data = _rattled_fe_333()
+        far = _shift_atoms(ref_data, {0: (2, 0, 0), 1: (0, -2, 1)})
+        ref = _evaluate(wrapper_omat, ref_data)
+        _assert_same_outputs(_evaluate(wrapper_omat, far), ref)
+
+        # Without the fold, fairchem's +-1 image scan misses pairs.
+        monkeypatch.setattr(uma_module, "_fold_into_cell", lambda pos, *_: pos)
+        broken = _evaluate(wrapper_omat, far)
+        assert (broken["energy"] - ref["energy"]).abs().max() > 1e-2
+
+    def test_mixed_pbc_slab_matches_wrapped(self, wrapper_omat):
+        """pbc=(T, T, F): in-plane translations are folded, z is not touched."""
+        atoms = bulk("Fe", "bcc", a=2.87, cubic=True) * (3, 3, 3)
+        atoms.rattle(stdev=0.05, seed=3)
+        atoms.center(vacuum=8.0, axis=2)
+        atoms.pbc = (True, True, False)
+        atoms.wrap()
+        ref_data = _atomicdata_from_ase(atoms)
+        ref = _evaluate(wrapper_omat, ref_data)
+        shifted = _shift_atoms(ref_data, {0: (2, 0, 0), 7: (-1, 3, 0)})
+        _assert_same_outputs(_evaluate(wrapper_omat, shifted), ref)
+
+
+def _vacuum_padded(pbc: tuple[bool, bool, bool], seed: int) -> AtomicData:
+    """Rattled bcc Fe with vacuum along every non-periodic axis (non-singular cell)."""
+    repeats = tuple(3 if periodic else 2 for periodic in pbc)
+    atoms = bulk("Fe", "bcc", a=2.87, cubic=True) * repeats
+    atoms.rattle(stdev=0.05, seed=seed)
+    for axis, periodic in enumerate(pbc):
+        if not periodic:
+            atoms.center(vacuum=8.0, axis=axis)
+    atoms.pbc = pbc
+    atoms.wrap()
+    return _atomicdata_from_ase(atoms)
+
+
+def _zero_vacuum_vectors(data: AtomicData) -> AtomicData:
+    """Copy of *data* whose non-periodic lattice vectors are zero (singular cell)."""
+    cell = data.cell.clone()
+    cell[0, ~data.pbc.reshape(3)] = 0.0
+    return AtomicData(
+        positions=data.positions.clone(),
+        atomic_numbers=data.atomic_numbers,
+        cell=cell,
+        pbc=data.pbc,
+    )
+
+
+class TestLowDimensionalCells:
+    """1D/2D cells with zero lattice vectors match the vacuum-padded cell.
+
+    Non-periodic directions get no images, so a zero vector and an explicit
+    vacuum vector describe the same system. Without completing the zero
+    vectors, fairchem's graph builder sees a zero cell volume. Stress is
+    normalised by that volume, so only energy and forces are compared.
+    """
+
+    @pytest.mark.parametrize(
+        ("pbc", "shifts"),
+        [
+            ((True, True, False), {0: (2, 0, 0), 7: (-1, 3, 0), 20: (0, -2, 0)}),
+            ((False, False, True), {0: (0, 0, 2), 9: (0, 0, -3)}),
+        ],
+        ids=["2d_slab", "1d_wire"],
+    )
+    def test_zero_vacuum_vectors_match_vacuum_padded_cell(
+        self, wrapper_omat, pbc, shifts
+    ):
+        ref_data = _vacuum_padded(pbc, seed=11)
+        ref = _evaluate(wrapper_omat, ref_data)
+        assert ref["forces"].abs().max() > 1e-2  # rattled: non-trivial forces
+
+        zero = _zero_vacuum_vectors(ref_data)
+        for data in (zero, _shift_atoms(zero, shifts)):
+            ours = _evaluate(wrapper_omat, data)
+            assert torch.isfinite(ours["energy"]).all()
+            torch.testing.assert_close(
+                ours["energy"], ref["energy"], atol=1e-4, rtol=1e-6
+            )
+            torch.testing.assert_close(
+                ours["forces"], ref["forces"], atol=1e-4, rtol=1e-4
+            )
 
 
 # ---------------------------------------------------------------------------

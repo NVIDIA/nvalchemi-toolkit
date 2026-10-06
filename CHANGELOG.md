@@ -527,6 +527,25 @@
   remains unchanged.
 - `AlignCellHook` no longer fails under `FusedStage` when positions require
   grad, and compiles with `fullgraph=True`.
+- **`UMAWrapper` folds positions into the periodic cell before every
+  evaluation.** It passed raw positions to fairchem, whose periodic graph
+  builder scans only image offsets of +-ceil(cutoff x inverse plane spacing)
+  around the positions it is given and so relies on wrapped input (fairchem's
+  own `AtomicData.from_ase` wraps first). NPT does not fold coordinates back, so
+  in long MD runs without `WrapPeriodicHook` atoms that drifted about a cell
+  length apart in unwrapped coordinates lost their minimum-image pair: UMA
+  silently dropped those interactions and atoms could collapse onto each other
+  (seen in Au-Pt hybrid MC-MD NPT runs at 1200-1400 K, where every collapsed
+  pair needed an image offset beyond +-1). `adapt_input` now shifts each atom by
+  whole lattice vectors along its system's periodic directions, on a copy handed
+  to fairchem only: `data.positions` keeps its continuous coordinates,
+  non-periodic (vacuum) directions are left alone, and gradients pass through
+  unchanged. The shift follows a strained cell, so autograd stress (e.g. in a
+  `PipelineGroup` with `use_autograd=True`) is unaffected. Energies, forces
+  and stress are unchanged for correctly wrapped inputs. Zero lattice vectors
+  (1D and 2D systems, molecules) are first completed with orthonormal unit
+  vectors, as fairchem's own `from_ase` does, so such systems fold along their
+  periodic axes and fairchem gets a non-zero cell volume.
 - **Dynamics hook lifecycle** — fused-level hooks now fire at the
   `BEFORE_PRE_UPDATE`, `AFTER_PRE_UPDATE`, `BEFORE_POST_UPDATE`, and
   `AFTER_POST_UPDATE` boundaries, and sub-stage `BEFORE_COMPUTE` hooks now

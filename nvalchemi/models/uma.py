@@ -131,6 +131,97 @@ _UMA_TASKS: frozenset[str] = frozenset(get_args(UMATask))
 _PBC_TASKS: frozenset[str] = frozenset({"omat", "oc20", "odac", "omc"})
 
 
+def _complete_cell(cell: torch.Tensor) -> torch.Tensor:
+    """Replace zero lattice vectors by unit vectors orthogonal to the others.
+
+    Batched, sync-free counterpart of ``ase.geometry.complete_cell`` (what
+    fairchem's ``AtomicData.from_ase`` feeds its graph builder via
+    ``get_cell(complete=True)``): a 2D slab with a zero out-of-plane vector gets
+    the unit normal, a 1D wire with one vector ``a`` gets two unit vectors
+    spanning the plane orthogonal to ``a``, and an all-zero cell becomes the
+    identity. The completed cell is right-handed wherever vectors were added
+    and is returned unchanged for systems with no zero vector.
+
+    Parameters
+    ----------
+    cell : torch.Tensor
+        Row-vector lattice ``[B, 3, 3]``.
+
+    Returns
+    -------
+    torch.Tensor
+        Completed lattice ``[B, 3, 3]``.
+    """
+
+    def unit(v: torch.Tensor) -> torch.Tensor:
+        return v / v.norm(dim=-1, keepdim=True).clamp_min(torch.finfo(v.dtype).tiny)
+
+    def cyclic_normals(c: torch.Tensor) -> torch.Tensor:
+        # Row i is unit(c[i+1] x c[i+2]), i.e. right-handed with the other two.
+        return unit(torch.linalg.cross(c.roll(-1, dims=1), c.roll(-2, dims=1)))
+
+    missing = ~cell.any(dim=-1, keepdim=True)  # [B, 3, 1]
+    n_missing = missing.sum(dim=1, keepdim=True)  # [B, 1, 1]
+    eye = torch.eye(3, dtype=cell.dtype, device=cell.device).expand_as(cell)
+    cell = torch.where(n_missing == 3, eye, cell)
+    # 1D: put a unit vector orthogonal to the lone vector ``a`` in the first
+    # empty slot (crossing ``a`` with its least-aligned axis), leaving one gap.
+    a = cell.sum(dim=1)
+    axis = torch.nn.functional.one_hot(a.abs().argmin(dim=-1), 3).to(cell.dtype)
+    first_gap = missing & (missing.cumsum(dim=1) == 1) & (n_missing == 2)
+    cell = torch.where(first_gap, unit(torch.linalg.cross(a, axis))[:, None], cell)
+    # 1D (second gap) and 2D: the unit normal of the other two vectors.
+    return torch.where(~cell.any(dim=-1, keepdim=True), cyclic_normals(cell), cell)
+
+
+def _fold_into_cell(
+    pos: torch.Tensor,
+    cell: torch.Tensor,
+    pbc: torch.Tensor,
+    batch_idx: torch.Tensor,
+) -> torch.Tensor:
+    """Return *pos* translated by whole lattice vectors into its periodic cell.
+
+    Each atom is moved by the integer lattice shift that brings its fractional
+    coordinate into ``[0, 1)`` along every periodic direction of its system
+    (a coordinate of exactly 1.0 maps to 0.0); non-periodic directions are left
+    untouched. Only the integer image counts are detached; the shift is applied
+    through *cell*, so a strained cell (autograd stress) moves folded atoms
+    with the lattice. Gradients through *pos* pass unchanged and *pos* itself
+    is not modified.
+    Batched, sync-free and free of data-dependent control flow, so it traces
+    under ``torch.compile``. Systems whose cell is singular (e.g. a zero
+    placeholder cell) get no shift.
+
+    Parameters
+    ----------
+    pos : torch.Tensor
+        Cartesian positions ``[N, 3]``.
+    cell : torch.Tensor
+        Row-vector lattice ``[B, 3, 3]`` (``[B, 1, 3, 3]`` is accepted).
+    pbc : torch.Tensor
+        Per-system periodic flags ``[B, 3]`` (``[B, 1, 3]`` is accepted).
+    batch_idx : torch.Tensor
+        System index of every atom ``[N]``.
+
+    Returns
+    -------
+    torch.Tensor
+        Folded positions ``[N, 3]`` in ``pos.dtype``.
+    """
+    cell = cell.reshape(-1, 3, 3).to(pos.dtype)
+    pbc = pbc.reshape(-1, 3).to(torch.bool)
+    with torch.no_grad():
+        # inv_ex never raises (no host sync); a singular cell yields non-finite
+        # entries, which the ``isfinite`` mask below turns into a zero shift.
+        inv_cell, _ = torch.linalg.inv_ex(cell)
+        frac = torch.einsum("ni,nij->nj", pos.detach(), inv_cell[batch_idx])
+        n_images = torch.floor(frac)
+        keep = pbc[batch_idx] & torch.isfinite(n_images).all(dim=-1, keepdim=True)
+        n_images = torch.where(keep, n_images, torch.zeros_like(n_images))
+    return pos - torch.einsum("ni,nij->nj", n_images, cell[batch_idx])
+
+
 # Fixed-shape caps for compiled MD. fairchem's compiled graph needs static
 # shapes, but per-rank atom/edge counts drift across an MD trajectory, forcing
 # repeated recompiles. We pad inputs to fixed per-rank capacities: the atom dim
@@ -1371,7 +1462,12 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         ``data.positions.device``, preserving GPU residency and autograd.
         ``edge_index`` is left empty ``(2, 0)`` so fairchem's ``MLIPPredictUnit``
         rebuilds the graph internally, matching the default ``FAIRChemCalculator``
-        path (``r_edges=False``), so outputs are equivalent. Charge/spin default
+        path (``r_edges=False``), so outputs are equivalent. As in
+        ``FAIRChemCalculator``, zero lattice vectors are completed with unit
+        vectors (so 1D and 2D systems have a valid cell) and positions are
+        folded into the cell along periodic directions; ``data.positions`` is
+        not modified.
+        Charge/spin default
         per the ASE-calculator convention (per-system LongTensors; spin defaults
         to the closed-shell singlet for OMol, 0 for periodic tasks) unless the
         caller provides them on the batch.
@@ -1418,6 +1514,9 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             cell = torch.zeros(n_systems, 3, 3, dtype=target_dtype, device=device)
         else:
             cell = cell.to(target_dtype)
+        # Zero lattice vectors (1D/2D, molecules) make the cell singular; complete
+        # them as fairchem's ``from_ase`` does.
+        cell = _complete_cell(cell.reshape(n_systems, 3, 3))
 
         pbc = getattr(data, "pbc", None)
         if pbc is None:
@@ -1426,6 +1525,11 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             )
         else:
             pbc = pbc.to(torch.bool)
+
+        # fairchem's graph builder scans only nearby images, so it needs wrapped
+        # positions; MD keeps them continuous. Fold a copy; ``data`` is untouched.
+        if getattr(data, "cell", None) is not None:
+            pos = _fold_into_cell(pos, cell, pbc, batch_idx)
 
         # charge/spin: the typed AtomicData fields are float (B, 1); fairchem
         # wants per-system long (B,), so flatten + cast (also handles raw (B,)).
