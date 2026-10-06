@@ -171,6 +171,8 @@ class _PreparedGeneration:
     num_samples: int
     rng: torch.Generator | None
     kwargs: dict[str, Any]
+
+
 _SerializableOptionalDevice: TypeAlias = _wrap_custom_type(torch.device) | None
 """Field annotation for ``device`` on spec-serializable models.
 
