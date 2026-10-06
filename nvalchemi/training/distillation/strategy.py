@@ -580,7 +580,7 @@ def _rank_local_propagator_seed(dynamics: BaseDynamics, offset: int) -> Iterator
     the same kicks to their different structures, and identical kicks to
     replicas of one geometry. :meth:`~nvalchemi.dynamics.BaseDynamics.seed_offset`
     moves every ``random_seed`` in the composition, because a
-    ``FIRE(...) + NVTLangevin(...)`` root exposes no seed of its own. The
+    ``FIRE2(...) + NVTLangevin(...)`` root exposes no seed of its own. The
     seeds are integers, so the negated offset on exit restores them exactly.
 
     Parameters

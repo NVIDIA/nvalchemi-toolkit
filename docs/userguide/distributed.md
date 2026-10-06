@@ -412,7 +412,11 @@ these, there is nothing to do — wrap in `DomainParallel` and run:
 | Nosé–Hoover NVT | Global KE + DOF reduced by the coordinator | — |
 | `NPT` | Global KE + DOF + pressure; replicated barostat + cell | `06_mace_npt_distributed.py` |
 | `NPH` | Global KE + pressure; replicated cell | — |
-| `FIRE` / `FIRE2` | Global `v·f`, `v·v`, `f·f` dot-products | `07_fire_nvt_dd.py` |
+| `FIRE` (deprecated) | Global `v·f`, `v·v`, `f·f` dot-products | `07_fire_nvt_dd.py` |
+
+`FIRE` is deprecated, and it is the one deprecated compatibility exception here:
+`FIRE2` is not supported under `DomainParallel` yet, so use `FIRE` for
+domain-decomposed relaxations until it is.
 
 You can also run **two-dimensional parallelism** — a pipeline of stages,
 each stage itself domain-decomposed — by feeding `DomainParallel` stages

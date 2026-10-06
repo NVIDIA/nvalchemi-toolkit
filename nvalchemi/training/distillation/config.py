@@ -777,7 +777,7 @@ class OnPolicyConfig(OnPolicySettings):
     for a pre-flight check or a restart bundle.
 
     The propagator can be any :class:`~nvalchemi.dynamics.base.BaseDynamics`.
-    A relaxation optimizer such as :class:`~nvalchemi.dynamics.optimizers.FIRE`
+    A relaxation optimizer such as :class:`~nvalchemi.dynamics.optimizers.FIRE2`
     drives the loop exactly as a thermostat does. The initial structures must
     carry every field the propagator updates in place through
     ``__provides_keys__``. For every shipped propagator these include
@@ -883,7 +883,7 @@ class OnPolicyConfig(OnPolicySettings):
     place:
 
     >>> config = OnPolicyConfig(  # doctest: +SKIP
-    ...     dynamics=FIRE(student, dt=0.1),
+    ...     dynamics=FIRE2(student, dt=0.05),
     ...     teacher_scorer=InProcessTeacherScorer(teacher, ["energy", "forces"]),
     ...     initial_structures=InitialStructures(dataset, recycle=True),
     ...     fmax=0.05,

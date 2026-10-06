@@ -293,7 +293,10 @@ kinetic energy, temperature, degrees of freedom, FIRE dot-products (`v·f`,
 
 For the shipped ensembles this is automatic: Nosé–Hoover, `NPT`, `NPH`, and
 `FIRE` declare their global quantities as intent and `DomainParallel`'s
-coordinator reduces them — **prefer reusing them.** For a genuinely custom global
+coordinator reduces them — **prefer reusing them.** `FIRE` is deprecated; it
+is the only relaxation optimizer that works under `DomainParallel`, because
+`FIRE2` does not declare its reductions yet, so use `FIRE` there until `FIRE2`
+gains support. For a genuinely custom global
 scalar, compute it in a `HookScope.GLOBAL` hook, which sees the full gathered
 system on every rank:
 
