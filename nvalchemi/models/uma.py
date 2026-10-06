@@ -31,7 +31,7 @@ Usage
 
     from nvalchemi.models.uma import UMAWrapper
 
-    # OMol periodic potential
+    # OMol potential
     mol_wrapper = UMAWrapper.from_checkpoint(
         "uma-s-1p1", task_name="omol", device="cuda"
     )
@@ -51,8 +51,8 @@ Notes
   Spin multiplicity (``spin`` on the batch) defaults to 1 for OMol and
   0 for all other tasks.
 * ``active_outputs`` defaults to ``{"energy", "forces", "stress"}`` for
-  every task. Stress has shape ``[B, 3, 3]`` in FairChem's configured base
-  precision.
+  every task. Cell-less OMol inputs omit stress; otherwise stress has shape
+  ``[B, 3, 3]`` in FairChem's configured base precision.
 
 ``torch.compile``
 -----------------
@@ -899,8 +899,9 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         checkpoint loading.
     task_name : str
         UMA task: one of ``_UMA_TASKS``. Determines which per-task head
-        in the multi-task model is used. All tasks use periodic defaults and
-        expose stress; OMol defaults to neutral charge and singlet spin.
+        in the multi-task model is used. OMol accepts cell-less molecular
+        inputs and defaults to neutral charge and singlet spin; with a supplied
+        cell, omitted PBC defaults to periodic for OMol.
     train : bool
         ``False`` (default) freezes all weights for inference (lossless for
         autograd forces); ``True`` keeps fairchem's trainable/frozen split
@@ -951,7 +952,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             required_inputs=frozenset(),
             optional_inputs=frozenset({"cell", "charge", "spin", "tags"}),
             supports_pbc=True,
-            needs_pbc=True,
+            needs_pbc=task_name != "omol",
             neighbor_config=NeighborConfig(
                 cutoff=self._cutoff,
                 format=NeighborListFormat.COO,
@@ -1379,10 +1380,12 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         ``data.positions.device``, preserving GPU residency and autograd.
         ``edge_index`` is left empty ``(2, 0)`` so fairchem's ``MLIPPredictUnit``
         rebuilds the graph internally, matching the default ``FAIRChemCalculator``
-        path (``r_edges=False``), so outputs are equivalent. Missing PBC defaults
-        to periodic for every task. Charge/spin default per the ASE-calculator
-        convention (per-system LongTensors; OMol spin defaults to the closed-shell
-        singlet, while other tasks default to 0) unless provided on the batch.
+        path (``r_edges=False``). For OMol, missing cell and PBC mean a
+        nonperiodic molecule; when a cell is supplied without PBC, PBC defaults
+        to periodic. Other tasks default missing PBC to periodic. Charge/spin
+        default per the ASE-calculator convention (per-system LongTensors; OMol
+        spin defaults to the closed-shell singlet, while other tasks default to
+        0) unless provided on the batch.
 
         Parameters
         ----------
@@ -1422,6 +1425,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
 
         # Batch already shapes cell/pbc as (B, 3, 3) / (B, 3) — just cast.
         cell = getattr(data, "cell", None)
+        has_cell = cell is not None
         if cell is None:
             cell = torch.zeros(n_systems, 3, 3, dtype=target_dtype, device=device)
         else:
@@ -1429,7 +1433,10 @@ class UMAWrapper(nn.Module, BaseModelMixin):
 
         pbc = getattr(data, "pbc", None)
         if pbc is None:
-            pbc = torch.full((n_systems, 3), True, dtype=torch.bool, device=device)
+            pbc_default = self.task_name != "omol" or has_cell
+            pbc = torch.full(
+                (n_systems, 3), pbc_default, dtype=torch.bool, device=device
+            )
         else:
             pbc = pbc.to(torch.bool)
 
@@ -1497,7 +1504,9 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             fairchem's prediction dict: ``"energy"`` (per-system), ``"forces"``
             (per-atom ``[N, 3]``), and optionally ``"stress"`` (per-system).
         data : AtomicData | Batch | None, optional
-            The input system the outputs were computed for. Unused here.
+            The original input system. Cell-less OMol inputs omit stress. If
+            ``data`` is omitted, raw stress follows the usual shape and dtype
+            handling.
 
         Returns
         -------
@@ -1521,7 +1530,12 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             out["energy"] = energy
         if "forces" in active:
             out["forces"] = raw["forces"]
-        if "stress" in active and "stress" in raw:
+        cellless_omol = (
+            self.task_name == "omol"
+            and data is not None
+            and getattr(data, "cell", None) is None
+        )
+        if "stress" in active and "stress" in raw and not cellless_omol:
             stress = raw["stress"]
             if stress.dim() == 2 and stress.shape[-1] == 9:
                 # fairchem sometimes flattens stress; reshape to (n, 3, 3).

@@ -48,7 +48,7 @@ pytest.importorskip(
 )
 
 from ase import Atoms  # noqa: E402
-from ase.build import bulk  # noqa: E402
+from ase.build import bulk, molecule  # noqa: E402
 from fairchem.core.datasets.atomic_data import AtomicData as FCAtomicData  # noqa: E402
 
 from nvalchemi.data import AtomicData, Batch  # noqa: E402
@@ -285,7 +285,7 @@ class TestModelConfig:
         assert config.outputs >= {"energy", "forces", "stress"}
         assert config.active_outputs >= {"energy", "forces", "stress"}
         assert config.autograd_outputs >= {"forces", "stress"}
-        assert config.needs_pbc is True
+        assert config.needs_pbc is False
         assert config.required_inputs == frozenset()
         assert config.optional_inputs == frozenset({"cell", "charge", "spin", "tags"})
 
@@ -294,7 +294,7 @@ class TestModelConfig:
         assert active >= {"energy", "forces", "stress"}
 
     def test_needs_pbc_by_task(self, mock_omol, mock_omat):
-        assert mock_omol.model_config.needs_pbc is True
+        assert mock_omol.model_config.needs_pbc is False
         assert mock_omat.model_config.needs_pbc is True
 
     def test_supports_pbc_always(self, mock_omol, mock_omat):
@@ -316,22 +316,39 @@ class TestModelConfig:
 
 
 class TestAdaptInput:
-    def test_omol_missing_pbc_defaults_to_periodic(self, mock_omol):
-        batch = Batch.from_data_list([_make_propane()])
-        fc = mock_omol.adapt_input(batch)
+    def test_omol_missing_cell_and_pbc_defaults_to_molecule(self, mock_omol):
+        data = AtomicData.from_atoms(molecule("H2O"))
+        assert data.cell is None
+        assert data.pbc is None
+
+        fc = mock_omol.adapt_input(data)
 
         assert isinstance(fc, FCAtomicData)
-        assert fc.pos.shape == (11, 3)
-        assert fc.atomic_numbers.shape == (11,)
-        assert fc.natoms.tolist() == [11]
+        assert fc.pos.shape == (3, 3)
+        assert fc.atomic_numbers.shape == (3,)
+        assert fc.natoms.tolist() == [3]
         assert fc.cell.shape == (1, 3, 3)
         assert fc.pbc.shape == (1, 3)
-        assert fc.pbc.all().item() is True  # missing PBC follows needs_pbc
+        assert torch.count_nonzero(fc.cell).item() == 0
+        assert fc.pbc.any().item() is False
         assert fc.edge_index.shape == (2, 0)
         assert fc.nedges.tolist() == [0]
         assert fc.charge.tolist() == [0]  # default for omol
         assert fc.spin.tolist() == [1]  # OMol default multiplicity = singlet
         assert fc.dataset == ["omol"]
+
+    def test_omol_cell_without_pbc_defaults_to_periodic(self, mock_omol):
+        cell = (torch.eye(3, dtype=torch.float32) * 3.615).unsqueeze(0)
+        data = AtomicData(
+            positions=torch.zeros(1, 3),
+            atomic_numbers=torch.tensor([29]),
+            cell=cell,
+        )
+
+        fc = mock_omol.adapt_input(data)
+
+        torch.testing.assert_close(fc.cell, cell)
+        assert fc.pbc.all().item() is True
 
     def test_omol_explicit_cell_and_pbc_are_preserved(self, mock_omol):
         cell = (torch.eye(3, dtype=torch.float32) * 4.0).unsqueeze(0)
@@ -488,6 +505,18 @@ class TestAdaptOutput:
 
         assert "stress" not in out
 
+    def test_omol_adapt_output_without_data_keeps_stress(self, mock_omol):
+        raw = {
+            "energy": torch.tensor([1.5]),
+            "forces": torch.zeros(1, 3),
+            "stress": torch.full((1, 9), 0.25, dtype=torch.float64),
+        }
+
+        out = mock_omol.adapt_output(raw)
+
+        assert out["stress"].shape == (1, 3, 3)
+        assert out["stress"].dtype == torch.float32
+
     def test_stress_flat_reshape(self, mock_omat):
         """fairchem sometimes returns stress flattened to (B, 9)."""
         raw = {
@@ -519,6 +548,38 @@ class TestForward:
         out = mock_omol(batch)
         assert out["energy"].shape == (2, 1)
         assert out["forces"].shape == (22, 3)
+
+    def test_cellless_then_periodic_omol_forward_without_config_mutation(self, mock_pu):
+        def predict(data, undo_element_references=True):
+            return {
+                "energy": torch.ones(data.num_graphs, dtype=data.pos.dtype),
+                "forces": torch.zeros_like(data.pos),
+                "stress": torch.ones(data.num_graphs, 9, dtype=torch.float64),
+            }
+
+        mock_pu.predict = Mock(side_effect=predict)
+        wrapper = UMAWrapper(mock_pu, task_name="omol")
+        active_outputs = set(wrapper.model_config.active_outputs)
+        outputs = wrapper.model_config.outputs
+
+        molecular = AtomicData.from_atoms(molecule("H2O"))
+        molecular_out = wrapper(molecular)
+        assert "stress" not in molecular_out
+        assert torch.isfinite(molecular_out["energy"]).all()
+        assert torch.isfinite(molecular_out["forces"]).all()
+        assert wrapper.model_config.active_outputs == active_outputs
+
+        cell = (torch.eye(3, dtype=torch.float32) * 3.615).unsqueeze(0)
+        periodic = AtomicData(
+            positions=torch.zeros(1, 3),
+            atomic_numbers=torch.tensor([29]),
+            cell=cell,
+        )
+        periodic_out = wrapper(periodic)
+        assert periodic_out["stress"].shape == (1, 3, 3)
+        assert periodic_out["stress"].dtype == torch.float32
+        assert wrapper.model_config.active_outputs == active_outputs
+        assert wrapper.model_config.outputs == outputs
 
     @pytest.mark.parametrize("graph_padding", [False, True])
     def test_compile_shape_policy_tracks_graph_padding(self, mock_pu, graph_padding):
