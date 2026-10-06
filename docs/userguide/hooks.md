@@ -50,12 +50,12 @@ assert isinstance(MyHook(), Hook)  # True --- structural subtyping
 Hooks are attached at construction time via the `hooks` parameter:
 
 ```python
-from nvalchemi.dynamics import FIRE, ConvergenceHook
+from nvalchemi.dynamics import FIRE2, ConvergenceHook
 from nvalchemi.dynamics.hooks import LoggingHook
 
-opt = FIRE(
+opt = FIRE2(
     model=model,
-    dt=0.1,
+    dt=0.05,
     n_steps=500,
     hooks=[
         ConvergenceHook.from_fmax(0.05),
@@ -505,7 +505,7 @@ produced by others and must be registered after them. A typical production
 setup combines convergence, logging, and trajectory recording:
 
 ```python
-from nvalchemi.dynamics import FIRE, ConvergenceHook
+from nvalchemi.dynamics import FIRE2, ConvergenceHook
 from nvalchemi.dynamics.hooks import (
     ConvergedSnapshotHook,
     LoggingHook,
@@ -513,9 +513,9 @@ from nvalchemi.dynamics.hooks import (
 )
 from nvalchemi.dynamics.sinks import ZarrData
 
-with FIRE(
+with FIRE2(
     model=model,
-    dt=0.1,
+    dt=0.05,
     n_steps=500,
     hooks=[
         ConvergenceHook.from_fmax(0.05),

@@ -4,6 +4,11 @@
 
 ### Added
 
+- Add `nvalchemi.csp` modules for molecular crystal-structure prediction
+  applications, including random rigid-molecule packing, atom-bounded radial
+  matching, and greedy de-duplication for `Batch` and loader-backed pools,
+  with caller-defined priority, confirmation before discarding, an optional
+  conservative pre-screen, and self- and cross-pool match iteration.
 - Enhanced sampling (`nvalchemi.enhanced_sampling`). `EnhancedSampling` is a
   `DynamicsStrategy` that adds bias, replica-exchange and epoch-commit hooks to
   the engine it builds. A bias is an ordinary additive potential — a
@@ -526,6 +531,9 @@
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain
   nonperiodic and return energy and forces without stress.
+- Keep lazy batch-pointer initialization outside `torch.compile` to prevent
+  `Tensor.item()` warnings in compiled neighbor-list hooks. Metadata validation
+  remains unchanged.
 - `AlignCellHook` no longer fails under `FusedStage` when positions require
   grad, and compiles with `fullgraph=True`.
 - **Dynamics hook lifecycle** — fused-level hooks now fire at the
@@ -549,6 +557,10 @@
 - `FusedStage.register_fused_hook()`. Use the inherited `register_hook()`
   method instead; hooks on a `FusedStage` already observe the complete fused
   batch.
+
+- `FIRE` and `FIREVariableCell` geometry optimizers. Use `FIRE2` /
+  `FIRE2VariableCell` or `LBFGS` / `LBFGSVariableCell` instead. They still
+  work and now emit a `DeprecationWarning` on construction.
 
 ## 0.2.0 — 2026-08-07
 

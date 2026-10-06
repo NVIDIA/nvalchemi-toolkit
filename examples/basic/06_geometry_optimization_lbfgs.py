@@ -44,7 +44,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 # %%
 # Model and systems
 # -----------------
-# Lennard-Jones argon, as in the FIRE example.  Three clusters of different
+# Lennard-Jones argon, as in the FIRE2 example.  Three clusters of different
 # sizes are batched together; ragged batches need no special handling.
 
 model = LennardJonesModelWrapper(epsilon=0.0104, sigma=3.40, cutoff=8.5).to(device)

@@ -55,6 +55,10 @@ For install options, refer to the install guide below.
 - {doc}`Bring Your Own Model: Authoring a Spec <distributed_byo>`
 - {doc}`Architecture & design (deep dive) <distributed_design>`
 
+## Applications
+
+- {doc}`Crystal structure prediction <csp>`
+
 ## Advanced Usage
 
 - [Distributed Training](distributed_training)
@@ -100,6 +104,14 @@ distributed
 distributed_shardtensor
 distributed_byo
 distributed_design
+```
+
+```{toctree}
+:caption: Applications
+:maxdepth: 1
+:hidden:
+
+csp
 ```
 
 ```{toctree}

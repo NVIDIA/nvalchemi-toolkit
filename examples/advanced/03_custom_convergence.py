@@ -33,7 +33,7 @@ Key concepts demonstrated
 * Multi-criteria convergence combining force norm **and** a second criterion.
 * ``custom_op`` — a callable that receives the raw tensor and returns a ``[B]``
   bool mask, used here to implement an energy-change criterion.
-* Combining force-norm and energy-change criteria in a FIRE optimisation.
+* Combining force-norm and energy-change criteria in a FIRE2 optimisation.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ import logging
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics import FIRE
+from nvalchemi.dynamics import FIRE2
 from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage
 from nvalchemi.hooks import DynamicsContext
 from nvalchemi.models.lj import LennardJonesModelWrapper
@@ -188,13 +188,13 @@ print("Custom hook:", custom_hook)
 # Practical example: dual force + energy-change convergence
 # ----------------------------------------------------------
 # Combine a force-norm criterion with the energy-change criterion so that
-# FIRE stops only when the optimizer has truly converged — both forces are
+# FIRE2 stops only when the optimizer has truly converged — both forces are
 # small AND the energy is stable.
 #
 # The energy-change guard prevents early exit when the optimizer happens to
 # take a near-zero force step during a large momentum phase.
 
-print("\n=== FIRE with dual force+energy-change convergence ===")
+print("\n=== FIRE2 with dual force+energy-change convergence ===")
 
 # Reset the shared closure state for a clean run.
 prev_energy.clear()
@@ -222,9 +222,9 @@ dual_custom_hook = ConvergenceHook(
     ]
 )
 
-fire = FIRE(
+fire = FIRE2(
     model=model,
-    dt=0.5,
+    dt=0.05,
     n_steps=500,
     convergence_hook=dual_custom_hook,
 )
@@ -259,7 +259,7 @@ class _LogHook:
 
 fire.register_hook(_LogHook())
 batch = fire.run(batch)
-print(f"\nCompleted {fire.step_count} FIRE steps (dual convergence).")
+print(f"\nCompleted {fire.step_count} FIRE2 steps (dual convergence).")
 
 final_energy = batch.energy.squeeze(-1)
 for i in range(batch.num_graphs):

@@ -26,13 +26,16 @@ Lambdas, closures, and ``functools.partial`` are rejected.
 from __future__ import annotations
 
 import functools
+import inspect
 import json
+import sys
 
 import pytest
 import torch
 from pydantic import ValidationError
 from pydantic_core import PydanticSerializationError
 
+from nvalchemi._serialization import capture_callable_spec
 from nvalchemi.data import Batch
 from nvalchemi.gen.generator import AtomisticGenerator
 from nvalchemi.gen.pipeline import GenerationPipeline
@@ -72,6 +75,44 @@ def make_passthrough_stage():
         return batch
 
     return stage
+
+
+class _CallablePathFactory:
+    """Class and static methods accepted by the import-path serializer."""
+
+    @staticmethod
+    def static_callable(value: int = 0) -> int:
+        """Return the supplied value."""
+        return value
+
+    @classmethod
+    def class_callable(cls, value: int = 0) -> tuple[type, int]:
+        """Return the owning class and supplied value."""
+        return cls, value
+
+
+class _DerivedCallablePathFactory(_CallablePathFactory):
+    """Subclass whose inherited classmethod must retain the derived owner."""
+
+
+class _AliasedCallablePathFactory:
+    """Classmethod alias whose attribute name differs from the function name."""
+
+    @classmethod
+    def original_callable(cls, value: int = 0) -> tuple[type, int]:
+        """Return the owning class and supplied value."""
+        return cls, value
+
+    aliased_callable = original_callable
+    del original_callable
+
+
+class _InstanceCallable:
+    """Owner for a method that cannot be reconstructed from its import path."""
+
+    def generate(self, value: int = 0) -> int:
+        """Return the supplied value."""
+        return value
 
 
 class ScaleSampleHook:
@@ -219,6 +260,37 @@ class TestAtomisticGeneratorDirectSerialization:
         assert rebuilt.required_inputs == frozenset()
         assert rebuilt.outputs == frozenset({"positions", "atomic_numbers"})
         assert rebuilt(make_batch(num_graphs=2)).num_graphs == 2
+
+    def test_instance_bound_generator_method_requires_explicit_spec(self) -> None:
+        """An instance method cannot silently lose its bound owner."""
+        target = _InstanceCallable().generate
+        with pytest.raises(PydanticSerializationError, match="instance-bound method"):
+            self._generator(generator_func=target).model_dump_json()
+
+    @pytest.mark.parametrize(
+        "target",
+        [
+            _CallablePathFactory.static_callable,
+            _CallablePathFactory.class_callable,
+            _DerivedCallablePathFactory.class_callable,
+            _AliasedCallablePathFactory.aliased_callable,
+            len,
+            sys.getsizeof,
+        ],
+    )
+    def test_importable_class_static_and_module_callables_still_round_trip(
+        self, target
+    ) -> None:
+        """Static/class methods and module-owned builtins keep valid paths."""
+        spec = capture_callable_spec(target, field_name="callable")
+        restored = spec.build()
+
+        if inspect.ismethod(target):
+            assert restored.__func__ is target.__func__
+            assert restored.__self__ is target.__self__
+            assert restored(17) == target(17)
+        else:
+            assert restored is target
 
 
 class TestGenerationPipelineDirectSerialization:

@@ -1918,6 +1918,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
                 self.segment_lengths,
             )
 
+    @torch.compiler.disable
     def _lazy_init_batch_ptr(self) -> None:
         if self._batch_ptr is None:
             self.segment_lengths, self._batch_ptr = _checked_segment_metadata(

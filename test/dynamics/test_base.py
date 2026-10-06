@@ -43,6 +43,11 @@ from nvalchemi.hooks import DynamicsContext, Hook
 from nvalchemi.models.base import BaseModelMixin
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
+# FIRE is deprecated in favour of FIRE2; these tests still exercise it.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:FIRE(VariableCell)? is deprecated:DeprecationWarning"
+)
+
 # -----------------------------------------------------------------------------
 # Helper Functions
 # -----------------------------------------------------------------------------
@@ -2315,3 +2320,14 @@ class TestSamplesEquilibrium:
         """An instance reports its class's declaration."""
         dynamics = DemoDynamics(DemoModelWrapper(DemoModel()), n_steps=1)
         assert dynamics.samples_equilibrium is True
+
+    @pytest.mark.parametrize(
+        ("optimizer_cls", "replacement"),
+        [(FIRE, "FIRE2"), (FIREVariableCell, "FIRE2VariableCell")],
+    )
+    def test_the_fire_optimizers_warn_that_they_are_deprecated(
+        self, optimizer_cls: type[BaseDynamics], replacement: str
+    ) -> None:
+        """Constructing a FIRE optimizer points the user at its replacement."""
+        with pytest.warns(DeprecationWarning, match=replacement):
+            optimizer_cls(DemoModelWrapper(DemoModel()), dt=0.1)

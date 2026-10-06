@@ -20,7 +20,7 @@ import importlib
 import inspect
 from collections.abc import Callable, Mapping
 from functools import lru_cache
-from types import NoneType, UnionType
+from types import ModuleType, NoneType, UnionType
 from typing import Annotated, Any, Self, Union, get_args, get_origin
 
 import torch
@@ -204,6 +204,55 @@ def capture_callable_spec(fn: Callable[..., Any], *, field_name: str) -> "BaseSp
 
 def _callable_path_of(target: Callable[..., Any]) -> str:
     """Return the canonical dotted path (``module.QualName``) for ``target``."""
+    owner = getattr(target, "__self__", None)
+    if owner is not None and not isinstance(owner, (type, ModuleType)):
+        raise TypeError(
+            f"{target!r} is an instance-bound method and cannot be captured by "
+            "import path alone. Wrap it in a callable object with a to_spec() "
+            "method that returns a BaseSpec."
+        )
+    function = getattr(target, "__func__", None)
+    if isinstance(owner, type) and function is not None:
+        try:
+            owner_path = _cls_path_of(owner)
+            if _import_cls(owner_path) is not owner:
+                raise TypeError("the imported owner is a different class")
+        except (AttributeError, ImportError, TypeError) as error:
+            raise TypeError(
+                f"{target!r} has a class-bound owner that is not importable by "
+                "dotted path. Wrap it in a callable object with a to_spec() "
+                "method that returns a BaseSpec."
+            ) from error
+
+        candidate_names = [getattr(target, "__name__", None)]
+        candidate_names.extend(
+            name
+            for base in owner.__mro__
+            for name, descriptor in vars(base).items()
+            if isinstance(descriptor, classmethod) and descriptor.__func__ is function
+        )
+        seen: set[str] = set()
+        for name in candidate_names:
+            if not isinstance(name, str) or name in seen:
+                continue
+            seen.add(name)
+            if getattr(owner, name, None) is None:
+                continue
+            try:
+                imported = _import_callable(f"{owner_path}.{name}")
+            except (AttributeError, ImportError, TypeError):
+                continue
+            if (
+                getattr(imported, "__self__", None) is owner
+                and getattr(imported, "__func__", None) is function
+            ):
+                return f"{owner_path}.{name}"
+        raise TypeError(
+            f"{target!r} has no importable class attribute on {owner_path!r} "
+            "that preserves its classmethod binding. Wrap it in a callable "
+            "object with a to_spec() method that returns a BaseSpec."
+        )
+
     module = getattr(target, "__module__", None)
     qualname = getattr(target, "__qualname__", None)
     if not module or not qualname or "<locals>" in qualname or "<lambda>" in qualname:

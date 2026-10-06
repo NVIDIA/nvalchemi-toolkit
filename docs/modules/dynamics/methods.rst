@@ -212,10 +212,67 @@ is clamped to ``[dt_min, dt_max]`` (fs). ``FIREVariableCell`` extends the same
 mixing to the cell degrees of freedom using NPH-style cell propagation at zero
 target pressure.
 
+.. warning::
+   Deprecated. ``FIRE`` and ``FIREVariableCell`` are deprecated. Use ``FIRE2`` /
+   ``FIRE2VariableCell`` or ``LBFGS`` / ``LBFGSVariableCell`` instead.
+
 FIRE2 (Shuang et al., 2020) improves the restart conditions and the mixing
 rule; it uses a distinct set of hyperparameters (``delaystep``, ``dtgrow``,
 ``dtshrink``, ``alpha0``, ...) and places the whole step before the force
 evaluation.
+
+.. rubric:: Migrating from FIRE to FIRE2
+
+Replace ``FIRE`` with ``FIRE2`` (and ``FIREVariableCell`` with
+``FIRE2VariableCell``); ``model``, ``dt``, ``n_steps``, ``hooks`` and
+``convergence_hook`` keep the same meaning. The remaining hyperparameters are
+renamed and have different defaults, so do not carry old values over unchanged:
+
+.. list-table::
+   :header-rows: 1
+
+   * - ``FIRE``
+     - ``FIRE2``
+     - Notes
+   * - ``dt_max`` (default ``10 * dt``)
+     - ``tmax`` (default 0.08)
+     - Absolute, not relative to ``dt``.
+   * - ``dt_min`` (default ``0.02 * dt``)
+     - ``tmin`` (default 0.005)
+     - Absolute, not relative to ``dt``.
+   * - ``maxstep`` (0.2)
+     - ``maxstep`` (0.1)
+     - Same name, smaller default.
+   * - ``n_min`` (5)
+     - ``delaystep`` (60)
+     - Steps of downhill motion before the timestep may grow.
+   * - ``f_inc`` (1.1)
+     - ``dtgrow`` (1.05)
+     - Timestep growth factor.
+   * - ``f_dec`` (0.5)
+     - ``dtshrink`` (0.75)
+     - Timestep shrink factor.
+   * - ``alpha_start`` (0.1)
+     - ``alpha0`` (0.09)
+     - Initial mixing parameter.
+   * - ``f_alpha`` (0.99)
+     - ``alphashrink`` (0.985)
+     - Mixing parameter decrease factor.
+   * - ``uphill``
+     - none
+     - Not supported.
+
+Behavioural differences to be aware of:
+
+* ``FIRE2`` clamps the timestep to ``[tmin, tmax]``, so an initial ``dt`` above
+  ``tmax`` is reduced after the first adaptation. ``dt=0.05`` works with the
+  defaults; if you used a larger ``dt`` with ``FIRE``, either lower it or raise
+  ``tmax`` explicitly.
+* Convergence typically takes a different number of steps, and ``n_steps``
+  budgets tuned for ``FIRE`` may need adjusting.
+* ``FIRE2VariableCell`` additionally accepts ``cell_force_scale``.
+* ``FIRE2`` is not yet supported under ``DomainParallel``; keep using ``FIRE``
+  there (it still works, and emits the deprecation warning).
 
 .. dropdown:: Underlying ``nvalchemiops`` kernels
 

@@ -27,6 +27,8 @@ from __future__ import annotations
 import ast
 import pathlib
 
+import pytest
+
 TEST_ROOT = pathlib.Path(__file__).parent
 # This module names the idioms it forbids, so it excludes itself.
 _SELF = pathlib.Path(__file__).resolve()
@@ -35,7 +37,9 @@ _HARNESS_SEEDS = {"init_nccl", "nccl_worker"}
 
 
 def _is_multigpu_marker(node: ast.expr) -> bool:
-    """``True`` for a ``@pytest.mark.multigpu`` decorator."""
+    """``True`` for a bare or parameterized ``pytest.mark.multigpu`` decorator."""
+    if isinstance(node, ast.Call):
+        node = node.func
     return isinstance(node, ast.Attribute) and node.attr == "multigpu"
 
 
@@ -154,3 +158,180 @@ def test_no_hand_rolled_device_count_gates() -> None:
         "Use @pytest.mark.multigpu instead of a hand-rolled "
         "torch.cuda.device_count() skip gate in:\n  " + "\n  ".join(offenders)
     )
+
+
+def test_multigpu_marker_audit_recognizes_parameterized_form() -> None:
+    """The audit recognizes the GPU-count option without matching other calls."""
+    bare = ast.parse("@pytest.mark.multigpu\ndef test_bare(): pass").body[0]
+    parameterized = ast.parse(
+        "@pytest.mark.multigpu(min_gpus=4)\ndef test_four(): pass"
+    ).body[0]
+    other = ast.parse("@pytest.mark.slow(reason='slow')\ndef test_other(): pass").body[
+        0
+    ]
+
+    assert _is_multigpu_marker(bare.decorator_list[0])
+    assert _is_multigpu_marker(parameterized.decorator_list[0])
+    assert not _is_multigpu_marker(other.decorator_list[0])
+
+
+def _multigpu_item(request, min_gpus="default", *, name=None):
+    """Create a real pytest item carrying the public marker metadata."""
+    item = pytest.Function.from_parent(
+        request.node.parent,
+        name=name or f"synthetic_multigpu_{request.node.name}",
+        callobj=lambda: None,
+    )
+    marker = (
+        pytest.mark.multigpu
+        if min_gpus == "default"
+        else pytest.mark.multigpu(min_gpus=min_gpus)
+    )
+    item.add_marker(marker)
+    return item
+
+
+@pytest.mark.parametrize(
+    ("available_gpus", "min_gpus", "force", "expected_reason"),
+    [
+        (0, "default", False, "requires >=2 CUDA GPUs (mark: multigpu)"),
+        (1, "default", False, "requires >=2 CUDA GPUs (mark: multigpu)"),
+        (2, "default", False, None),
+        (4, "default", False, None),
+        (
+            0,
+            4,
+            False,
+            "requires >=4 CUDA GPUs (mark: multigpu(min_gpus=4))",
+        ),
+        (
+            1,
+            4,
+            False,
+            "requires >=4 CUDA GPUs (mark: multigpu(min_gpus=4))",
+        ),
+        (
+            2,
+            4,
+            False,
+            "requires >=4 CUDA GPUs (mark: multigpu(min_gpus=4))",
+        ),
+        (4, 4, False, None),
+        (0, 4, True, None),
+    ],
+    ids=[
+        "default-no-cuda",
+        "default-one-gpu",
+        "default-two-gpus",
+        "default-four-gpus",
+        "four-required-no-cuda",
+        "four-required-one-gpu",
+        "four-required-two-gpus",
+        "four-required-four-gpus",
+        "force-four-required-no-cuda",
+    ],
+)
+def test_multigpu_collection_hook_uses_marker_minimum(
+    request, monkeypatch, available_gpus, min_gpus, force, expected_reason
+) -> None:
+    """The collection hook gates each marker by its requested GPU count."""
+    import torch
+
+    monkeypatch.delenv("NVALCHEMI_FORCE_MULTIGPU", raising=False)
+    if force:
+        monkeypatch.setenv("NVALCHEMI_FORCE_MULTIGPU", "1")
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: available_gpus > 0)
+    device_count_calls = 0
+
+    def device_count() -> int:
+        nonlocal device_count_calls
+        device_count_calls += 1
+        return available_gpus
+
+    monkeypatch.setattr(torch.cuda, "device_count", device_count)
+    item = _multigpu_item(request, min_gpus)
+    request.config.hook.pytest_collection_modifyitems(
+        session=request.session, config=request.config, items=[item]
+    )
+
+    skip = item.get_closest_marker("skip")
+    if expected_reason is None:
+        assert skip is None
+    else:
+        assert skip is not None
+        assert skip.kwargs["reason"] == expected_reason
+    assert device_count_calls == (1 if available_gpus else 0)
+
+
+@pytest.mark.parametrize("available_gpus", [2, 4])
+def test_multigpu_collection_hook_applies_each_items_minimum_once(
+    request, monkeypatch, available_gpus
+) -> None:
+    """One collection can mix default and four-GPU marker requirements."""
+    import torch
+
+    monkeypatch.delenv("NVALCHEMI_FORCE_MULTIGPU", raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    device_count_calls = 0
+
+    def device_count() -> int:
+        nonlocal device_count_calls
+        device_count_calls += 1
+        return available_gpus
+
+    monkeypatch.setattr(torch.cuda, "device_count", device_count)
+    default_item = _multigpu_item(request, name="synthetic_default_multigpu")
+    four_gpu_item = _multigpu_item(request, 4, name="synthetic_four_gpu_multigpu")
+    request.config.hook.pytest_collection_modifyitems(
+        session=request.session,
+        config=request.config,
+        items=[default_item, four_gpu_item],
+    )
+
+    assert default_item.get_closest_marker("skip") is None
+    four_gpu_skip = four_gpu_item.get_closest_marker("skip")
+    if available_gpus == 2:
+        assert four_gpu_skip is not None
+        assert (
+            four_gpu_skip.kwargs["reason"]
+            == "requires >=4 CUDA GPUs (mark: multigpu(min_gpus=4))"
+        )
+    else:
+        assert four_gpu_skip is None
+    assert device_count_calls == 1
+
+
+@pytest.mark.parametrize(
+    "min_gpus",
+    [
+        pytest.param(True, id="true-is-not-an-integer-count"),
+        pytest.param(False, id="false-is-not-an-integer-count"),
+        pytest.param(1, id="below-minimum"),
+        pytest.param(0, id="zero"),
+        pytest.param(-1, id="negative"),
+        pytest.param(1.5, id="float"),
+        pytest.param("4", id="string"),
+        pytest.param(None, id="none"),
+    ],
+)
+def test_multigpu_collection_hook_rejects_invalid_minimum(
+    request, monkeypatch, min_gpus
+) -> None:
+    """Invalid marker metadata fails collection, even with the force override."""
+    import torch
+
+    monkeypatch.setenv("NVALCHEMI_FORCE_MULTIGPU", "1")
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(
+        torch.cuda,
+        "device_count",
+        lambda: pytest.fail("device count is unavailable without CUDA"),
+    )
+    item = _multigpu_item(request, min_gpus)
+
+    with pytest.raises(
+        pytest.UsageError, match="multigpu min_gpus must be an integer >= 2"
+    ):
+        request.config.hook.pytest_collection_modifyitems(
+            session=request.session, config=request.config, items=[item]
+        )

@@ -82,6 +82,11 @@ from test.training.distillation.conftest import (
     _RecordingLossHook,
 )
 
+# FIRE is deprecated in favour of FIRE2; these tests still exercise it.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:FIRE(VariableCell)? is deprecated:DeprecationWarning"
+)
+
 _STUDENT_WIDTH = 4
 """Embedding width of every student built here, narrower than the teacher's."""
 

@@ -19,6 +19,13 @@ FIRE (Fast Inertial Relaxation Engine) drives atomic positions toward a
 local energy minimum using a modified molecular dynamics trajectory with
 adaptive timestep and velocity-mixing.
 
+.. warning::
+    Deprecated.  Both optimizers in this module are deprecated.  Use
+    :class:`~nvalchemi.dynamics.optimizers.FIRE2` /
+    :class:`~nvalchemi.dynamics.optimizers.FIRE2VariableCell` or
+    :class:`~nvalchemi.dynamics.optimizers.LBFGS` /
+    :class:`~nvalchemi.dynamics.optimizers.LBFGSVariableCell` instead.
+
 * ``FIRE``            — fixed-cell coordinate optimizer.
 * ``FIREVariableCell`` — variable-cell optimizer using NPH-like cell
   propagation at zero target pressure combined with FIRE velocity
@@ -44,6 +51,7 @@ The step is split around the force (and stress) evaluation:
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import torch
@@ -81,6 +89,11 @@ class FIRE(BaseDynamics):
 
     Drives atomic coordinates to a local energy minimum using the Fast
     Inertial Relaxation Engine algorithm (Bitzek et al., 2006).
+
+    .. warning::
+        Deprecated.  Use :class:`~nvalchemi.dynamics.optimizers.FIRE2` or
+        :class:`~nvalchemi.dynamics.optimizers.LBFGS` instead.
+        Constructing this optimizer emits a :class:`DeprecationWarning`.
 
     Parameters
     ----------
@@ -152,6 +165,11 @@ class FIRE(BaseDynamics):
         convergence_hook: ConvergenceHook | dict | None = None,
         **kwargs: Any,
     ) -> None:
+        warnings.warn(
+            "FIRE is deprecated; use FIRE2 or LBFGS instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().__init__(
             model=model,
             n_steps=n_steps,
@@ -299,6 +317,11 @@ class FIREVariableCell(BaseDynamics):
     simulation cell.  Cell forces are derived from the model's stress
     tensor via ``stress_to_cell_force``.
 
+    .. warning::
+        Deprecated.  Use :class:`~nvalchemi.dynamics.optimizers.FIRE2VariableCell` or
+        :class:`~nvalchemi.dynamics.optimizers.LBFGSVariableCell` instead.
+        Constructing this optimizer emits a :class:`DeprecationWarning`.
+
     Integration order (symmetric around force/stress evaluation):
 
     * ``pre_update``:  v half-kick → r full-step → cell full-step.
@@ -372,6 +395,12 @@ class FIREVariableCell(BaseDynamics):
         convergence_hook: ConvergenceHook | dict | None = None,
         **kwargs: Any,
     ) -> None:
+        warnings.warn(
+            "FIREVariableCell is deprecated; use FIRE2VariableCell or "
+            "LBFGSVariableCell instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().__init__(
             model=model,
             n_steps=n_steps,

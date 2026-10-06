@@ -4,7 +4,7 @@ description: >-
   How to configure and run dynamics simulations, compose multi-stage pipelines
   (FusedStage, DistributedPipeline), use inflight batching, and manage data
   sinks. Use when writing any simulation script — molecular dynamics
-  (NVE/NVT), structure relaxation or geometry optimization (e.g. FIRE),
+  (NVE/NVT), structure relaxation or geometry optimization (e.g. FIRE2),
   equation-of-state or adsorption scans — or orchestrating many structures
   through a batched GPU pipeline.
 ---

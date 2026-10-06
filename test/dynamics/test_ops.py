@@ -28,6 +28,11 @@ from __future__ import annotations
 import pytest
 import torch
 
+# FIRE is deprecated in favour of FIRE2; these tests still exercise it.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:FIRE(VariableCell)? is deprecated:DeprecationWarning"
+)
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

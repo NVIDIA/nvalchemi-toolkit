@@ -14,7 +14,7 @@ Tiers
 .. rubric:: Basic
 
 Introduces :class:`~nvalchemi.data.AtomicData`,
-:class:`~nvalchemi.data.Batch`, the FIRE geometry optimizer, NVE and NVT
+:class:`~nvalchemi.data.Batch`, the FIRE2 geometry optimizer, NVE and NVT
 integrators, and the built-in hooks (NeighborListHook, WrapPeriodicHook,
 LoggingHook).  Suitable for users coming from ASE.
 

@@ -126,7 +126,7 @@ A typical dynamics setup combines multiple hooks and sinks to capture different
 aspects of the simulation:
 
 ```python
-from nvalchemi.dynamics import FIRE, ConvergenceHook
+from nvalchemi.dynamics import FIRE2, ConvergenceHook
 from nvalchemi.dynamics.hooks import (
     ConvergedSnapshotHook,
     LoggingHook,
@@ -134,9 +134,9 @@ from nvalchemi.dynamics.hooks import (
 )
 from nvalchemi.dynamics.sinks import GPUBuffer, ZarrData
 
-with FIRE(
+with FIRE2(
     model=model,
-    dt=0.1,
+    dt=0.05,
     n_steps=500,
     hooks=[
         # Stop when converged

@@ -508,7 +508,7 @@ nothing fills one in for an aperiodic structure.
 
 You do not need to supply the keys listed in `__needs_keys__`: `forces` for
 every integrator and optimizer, plus `stress` for NPT, NPH, and the
-variable-cell FIRE and L-BFGS optimizers. The propagator computes them with one
+variable-cell FIRE2 and L-BFGS optimizers. The propagator computes them with one
 `compute`
 before its first step. `OnPolicySettings.probe` gates that construction-time
 forward, and the criterion probe a relaxation lifecycle runs on the same row;
@@ -698,11 +698,11 @@ turn on the *convergence lifecycle*, which tracks convergence and *graduates*
 converged structures, retiring them from the batch:
 
 ```python
-from nvalchemi.dynamics import FIRE
+from nvalchemi.dynamics import FIRE2
 from nvalchemi.training.distillation import InitialStructures
 
 on_policy = OnPolicyConfig(
-    dynamics=FIRE(student, dt=0.1),
+    dynamics=FIRE2(student, dt=0.05),
     teacher_scorer=scorer,
     initial_structures=InitialStructures(initial_dataset, recycle=True),
     fmax=0.05,

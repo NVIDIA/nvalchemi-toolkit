@@ -18,14 +18,14 @@ Multi-Stage Dynamics Pipelines with FusedStage
 
 This example demonstrates how to compose multiple dynamics stages into a
 single GPU-resident pipeline using :class:`~nvalchemi.dynamics.FusedStage`.
-A typical MD workflow chains geometry relaxation (FIRE) into equilibration
+A typical MD workflow chains geometry relaxation (FIRE2) into equilibration
 (NVT) and then production sampling (NVE).  Running all three stages on a
 shared batch avoids repeated CPU–GPU data transfers between stages.
 
 Topics covered:
 
-* **Part 1** — Standalone FIRE relaxation as a baseline.
-* **Part 2** — Three-stage ``FIRE → NVT → NVE`` pipeline with
+* **Part 1** — Standalone FIRE2 relaxation as a baseline.
+* **Part 2** — Three-stage ``FIRE2 → NVT → NVE`` pipeline with
   :class:`~nvalchemi.dynamics.hooks.LoggingHook` writing CSV output for each
   stage and a custom ``StageTransitionLogger`` firing on convergence.
 * **Part 3** — Inflight batching (Mode 2): :class:`~nvalchemi.dynamics.SizeAwareSampler`
@@ -47,7 +47,7 @@ from collections import defaultdict
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics import FIRE, NVE, NVTLangevin, SizeAwareSampler
+from nvalchemi.dynamics import FIRE2, NVE, NVTLangevin, SizeAwareSampler
 from nvalchemi.dynamics.base import ConvergenceHook, DynamicsStage, FusedStage
 from nvalchemi.dynamics.hooks import LoggingHook
 from nvalchemi.dynamics.sinks import HostMemory
@@ -108,7 +108,7 @@ def _make_system(n_atoms: int, seed: int) -> AtomicData:
 
 
 # ---------------------------------------------------------------------------
-# Custom hook: log every convergence event (FIRE → NVT transition)
+# Custom hook: log every convergence event (FIRE2 → NVT transition)
 # ---------------------------------------------------------------------------
 
 
@@ -159,7 +159,7 @@ class StageTransitionLogger:
 
 
 # %%
-# Part 1 — Standalone FIRE relaxation
+# Part 1 — Standalone FIRE2 relaxation
 # -------------------------------------
 # The simplest use case: relax a batch of three structures until the maximum
 # force component falls below ``FIRE_FMAX_THRESHOLD``.  The ``run()`` method
@@ -168,9 +168,9 @@ class StageTransitionLogger:
 data_list_single = [_make_system(n, seed) for n, seed in [(4, 1), (5, 2), (6, 3)]]
 batch_single = Batch.from_data_list(data_list_single)
 
-fire_standalone = FIRE(
+fire_standalone = FIRE2(
     model=model,
-    dt=0.1,
+    dt=0.05,
     n_steps=150,
     convergence_hook=ConvergenceHook.from_forces(FIRE_FMAX_THRESHOLD),
 )
@@ -182,10 +182,10 @@ logging.info(
 )
 
 # %%
-# Part 2 — Three-stage FIRE + NVT + NVE FusedStage
+# Part 2 — Three-stage FIRE2 + NVT + NVE FusedStage
 # --------------------------------------------------
 # The ``+`` operator on two dynamics objects returns a :class:`FusedStage`
-# that migrates each system from stage 0 (FIRE) to stage 1 (NVT) when its
+# that migrates each system from stage 0 (FIRE2) to stage 1 (NVT) when its
 # convergence criterion fires, then to stage 2 (NVE) after ``n_steps``.
 # Systems that finish all stages are removed from the batch.
 #
@@ -194,13 +194,13 @@ logging.info(
 # each sub-stage to get separate logs.
 
 fire_logger = LoggingHook(backend="csv", log_path="fire_log.csv", frequency=10)
-fire_transition_logger = StageTransitionLogger(label="FIRE->NVT", frequency=1)
+fire_transition_logger = StageTransitionLogger(label="FIRE2->NVT", frequency=1)
 
 equil_logger = LoggingHook(backend="csv", log_path="nvt_log.csv", frequency=5)
 
-fire_stage = FIRE(
+fire_stage = FIRE2(
     model=model,
-    dt=0.1,
+    dt=0.05,
     convergence_hook=ConvergenceHook.from_forces(FIRE_FMAX_THRESHOLD),
     hooks=[fire_logger, fire_transition_logger],
 )
@@ -215,7 +215,7 @@ equil_stage = NVTLangevin(
 )
 prod_stage = NVE(model=model, dt=0.5, n_steps=PROD_STEPS_PER_SYSTEM)
 
-# Compose: FIRE -> NVT -> NVE.  ``n_steps=500`` is the total step budget for
+# Compose: FIRE2 -> NVT -> NVE.  ``n_steps=500`` is the total step budget for
 # the fused run; systems migrate automatically between stages as they converge
 # or exhaust their per-stage step allocation.
 fused = fire_stage + equil_stage + prod_stage
@@ -231,7 +231,7 @@ with fire_logger, equil_logger:
     batch_fused = fused.run(batch_fused, n_steps=500)
 
 logging.info(
-    "Part 2 done: FIRE->NVT->NVE pipeline completed, %d systems remain",
+    "Part 2 done: FIRE2->NVT->NVE pipeline completed, %d systems remain",
     batch_fused.num_graphs if batch_fused is not None else 0,
 )
 
@@ -301,9 +301,9 @@ sampler = SizeAwareSampler(dataset, max_atoms=16, max_edges=None, max_batch_size
 
 trajectory_sink = HostMemory(capacity=20)
 
-stage0_inflight = FIRE(
+stage0_inflight = FIRE2(
     model=model,
-    dt=0.1,
+    dt=0.05,
     convergence_hook=ConvergenceHook.from_forces(threshold=10.0),
 )
 stage1_inflight = NVTLangevin(
@@ -392,9 +392,9 @@ class StatusSnapshotHook:
 snapshot_data = [_make_system(5, 20), _make_system(5, 21)]
 snapshot_batch = Batch.from_data_list(snapshot_data)
 
-fire_inspect = FIRE(
+fire_inspect = FIRE2(
     model=model,
-    dt=0.1,
+    dt=0.05,
     n_steps=30,
     convergence_hook=ConvergenceHook.from_forces(FIRE_FMAX_THRESHOLD),
 )

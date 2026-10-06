@@ -15,7 +15,7 @@
 """Structural tests for the generative API.
 
 Covers the abstract :class:`~nvalchemi.gen.generator.AtomisticGenerator`
-with its fixed (optional condition →) generate core and
+with its fixed (optional condition ->) generate core and
 :class:`~nvalchemi.gen.stages.GenerationStage` hooks: the function-owns-model
 contract, the optional condition step (resolution order, stage firing
 policy, pass-through without a provider), the defaults chain (driver
@@ -40,7 +40,7 @@ from tensordict import TensorDict
 from torch import nn
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.gen.generator import AtomisticGenerator
+from nvalchemi.gen.generator import AtomisticGenerator, _PreparedGeneration
 from nvalchemi.gen.stages import GenerationStage
 from nvalchemi.models.gen import DemoGANModel
 from test.gen.conftest import (
@@ -269,17 +269,93 @@ class TestDefaultsChain:
         """The ``device`` field wins over the function's ``device`` attribute."""
         func = DeviceAwareGenerate("meta")
         gen = AtomisticGenerator(generator_func=func, device="cpu")
-        assert gen._infer_device() == torch.device("cpu")
+        assert gen.device == torch.device("cpu")
 
     def test_device_function_attribute_used(self) -> None:
-        """Without a ``device`` field, the function's ``device`` attribute resolves."""
+        """Without a ``device`` field, the function's device binds at construction."""
         gen = AtomisticGenerator(generator_func=DeviceAwareGenerate("cpu"))
-        assert gen._infer_device() == torch.device("cpu")
+        assert gen.device == torch.device("cpu")
 
     def test_device_unresolved_without_sources(self) -> None:
-        """No ``device`` field and no function attribute resolves to ``None``."""
+        """No declared device leaves the generator unmanaged."""
         gen = AtomisticGenerator(generator_func=batch_generate)
-        assert gen._infer_device() is None
+        assert gen.device is None
+
+    def test_function_device_binds_once_and_stays_fixed(self, monkeypatch) -> None:
+        """Inherited bare CUDA pins to the current GPU for this instance."""
+        current_index = 1
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
+
+        def current_device() -> int:
+            return current_index
+
+        monkeypatch.setattr(torch.cuda, "current_device", current_device)
+        func = DeviceAwareGenerate("cuda")
+        gen = AtomisticGenerator(generator_func=func)
+        current_index = 0
+        func.device = "cpu"
+
+        assert gen.device == torch.device("cuda:1")
+
+    def test_explicit_device_does_not_read_unavailable_function_device(
+        self, monkeypatch
+    ) -> None:
+        """An explicit device bypasses the function's CUDA declaration."""
+        monkeypatch.setattr(
+            torch.cuda,
+            "is_available",
+            lambda: pytest.fail("the explicit CPU device does not query CUDA"),
+        )
+
+        gen = AtomisticGenerator(
+            generator_func=DeviceAwareGenerate("cuda"), device="cpu"
+        )
+
+        assert gen.device == torch.device("cpu")
+
+    def test_non_device_function_attribute_is_ignored(self) -> None:
+        """A function attribute of another type leaves placement unmanaged."""
+        func = DeviceAwareGenerate("cpu")
+        func.device = 42
+
+        gen = AtomisticGenerator(generator_func=func)
+
+        assert gen.device is None
+
+    def test_invalid_inherited_device_rejected_at_construction(self) -> None:
+        """An invalid declared device fails during generator construction."""
+
+        def generate(inputs=None, **kwargs):
+            return batch_generate(inputs, **kwargs)
+
+        generate.device = "not-a-device"
+        with pytest.raises(ValueError, match="Invalid device string"):
+            AtomisticGenerator(generator_func=generate)
+
+    def test_unavailable_inherited_cuda_rejected_at_construction(
+        self, monkeypatch
+    ) -> None:
+        """An unavailable inherited CUDA device fails during construction."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+        monkeypatch.setattr(
+            torch.cuda,
+            "current_device",
+            lambda: pytest.fail("current device must not be queried when unavailable"),
+        )
+
+        with pytest.raises(ValueError, match=r"torch.cuda.is_available\(\) is False"):
+            AtomisticGenerator(generator_func=DeviceAwareGenerate("cuda"))
+
+    def test_out_of_range_inherited_cuda_rejected_at_construction(
+        self, monkeypatch
+    ) -> None:
+        """An out-of-range inherited CUDA index fails during construction."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
+
+        with pytest.raises(ValueError, match="out of range: 2 CUDA device"):
+            AtomisticGenerator(generator_func=DeviceAwareGenerate("cuda:2"))
 
 
 class TestDeviceValidation:
@@ -303,6 +379,38 @@ class TestDeviceValidation:
         """A non-string, non-torch.device ``device`` raises at construction."""
         with pytest.raises(ValidationError, match="string or torch.device"):
             AtomisticGenerator(generator_func=batch_generate, device=42)
+
+    def test_explicit_bare_cuda_is_pinned_to_current_gpu(self, monkeypatch) -> None:
+        """An explicit bare CUDA device binds to the selected GPU at construction."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "current_device", lambda: 1)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
+
+        gen = AtomisticGenerator(generator_func=batch_generate, device="cuda")
+
+        assert gen.device == torch.device("cuda:1")
+
+    def test_explicit_cuda_index_is_preserved(self, monkeypatch) -> None:
+        """An explicit CUDA index is not replaced with the current GPU."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
+        monkeypatch.setattr(
+            torch.cuda,
+            "current_device",
+            lambda: pytest.fail("an explicit CUDA index must be retained"),
+        )
+
+        gen = AtomisticGenerator(generator_func=batch_generate, device="cuda:0")
+
+        assert gen.device == torch.device("cuda:0")
+
+    def test_cuda_index_range_uses_mocked_device_count(self, monkeypatch) -> None:
+        """An explicit CUDA index is checked against the available device count."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 2)
+
+        with pytest.raises(ValidationError, match="out of range: 2 CUDA device"):
+            AtomisticGenerator(generator_func=batch_generate, device="cuda:2")
 
     @pytest.mark.skipif(torch.cuda.is_available(), reason="Requires a CUDA-less host.")
     def test_cuda_unavailable_raises(self) -> None:
@@ -349,8 +457,10 @@ class _OffDeviceRawGenerate:
 class TestDeviceResidency:
     """The device-residency check on returned ``Batch`` outputs."""
 
-    def test_residency_check_fires_on_mismatch(self) -> None:
+    def test_residency_check_fires_on_mismatch(self, monkeypatch) -> None:
         """A function returning a ``Batch`` on the wrong device raises."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
         gen = AtomisticGenerator(generator_func=_OffDeviceGenerate())
         with pytest.raises(ValueError, match="lives on device"):
             gen()
@@ -362,9 +472,11 @@ class TestDeviceResidency:
         assert out.num_graphs == 2
         assert out["positions"].device.type == "cpu"
 
-    def test_residency_check_skipped_for_non_batch(self) -> None:
+    def test_residency_check_skipped_for_non_batch(self, monkeypatch) -> None:
         """A non-``Batch`` output skips the residency check, even with a
         device pinned via the function's attribute."""
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
         gen = AtomisticGenerator(generator_func=_OffDeviceRawGenerate())
         out = gen()
         assert out["x1"].device.type == "cpu"
@@ -372,6 +484,8 @@ class TestDeviceResidency:
     def test_residency_check_skipped_under_compile(self, monkeypatch) -> None:
         """The check is skipped while ``torch.compiler.is_compiling()`` is true."""
         monkeypatch.setattr(torch.compiler, "is_compiling", lambda: True)
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
         gen = AtomisticGenerator(generator_func=_OffDeviceGenerate())
         assert gen().num_graphs == 1
 
@@ -1017,7 +1131,7 @@ class TestCompile:
 
 
 class TestSession:
-    """``with gen:`` — stream, session RNG, and hook lifecycle."""
+    """``with gen:`` -- stream, session RNG, and hook lifecycle."""
 
     def _generator(self, **kwargs) -> AtomisticGenerator:
         """Build a trivial generator with session-related kwargs.
@@ -1131,7 +1245,7 @@ class TestSession:
         assert log == ["enter", "exit"]
 
     def test_session_rng_reproducible_and_advancing(self, device: str) -> None:
-        """Same seed → identical sessions; draws advance within a session."""
+        """Same seed -> identical sessions; draws advance within a session."""
         gen_a = self._generator(seed=11, device=device)
         gen_b = self._generator(seed=11, device=device)
         with gen_a:
@@ -1324,13 +1438,13 @@ class TestReviewPins:
         out = gen()
         assert out.num_graphs == 0
 
-    def test_zero_graph_batch_exempt_from_residency_check(self) -> None:
+    def test_zero_graph_batch_exempt_from_residency_check(self, monkeypatch) -> None:
         """The residency exemption: a CPU zero-graph batch under a CUDA pin passes."""
-        if torch.cuda.is_available():
-            pytest.skip("the exemption needs no CUDA device to be host-checkable")
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
 
         class _Pinned:
-            device = torch.device("cuda:0")  # attribute-declared, no host check
+            device = torch.device("cuda:0")
 
             def __call__(self, inputs=None, **kw):
                 return Batch.empty(num_systems=0, num_nodes=0, num_edges=0)
@@ -1358,3 +1472,127 @@ class TestReviewPins:
 
         gen = AtomisticGenerator(generator_func=batch_generate, hooks=[_Hook()])
         assert gen.hooks[0].stage is GenerationStage.AFTER_GENERATE
+
+
+class TestPreparationSeam:
+    """The preparation seam preserves call order and closes failed calls."""
+
+    def test_finish_runs_after_conditioning_and_before_generation(self) -> None:
+        order: list[str] = []
+        seen: dict[str, object] = {}
+        explicit_rng = torch.Generator().manual_seed(23)
+
+        class _Hook:
+            frequency = 1
+
+            def __init__(self, stage: GenerationStage) -> None:
+                self.stage = stage
+
+            def __call__(self, ctx, stage) -> None:
+                del ctx, stage
+                order.append(self.stage.name)
+
+        def _condition(inputs, *, num_samples: int, rng: torch.Generator | None):
+            order.append("condition")
+            seen["condition"] = (num_samples, rng)
+            return inputs
+
+        def _generate(inputs, *, num_samples: int, rng, marker: str):
+            del inputs
+            order.append("generate")
+            seen["generate"] = (num_samples, rng, marker)
+            return TensorDict(
+                {"x1": torch.zeros(num_samples, 1)}, batch_size=[num_samples]
+            )
+
+        class _Generator(AtomisticGenerator):
+            def _finish_preparation(
+                self,
+                prepared: _PreparedGeneration | None,
+                error: Exception | None,
+            ) -> _PreparedGeneration:
+                order.append("finish")
+                return super()._finish_preparation(prepared, error)
+
+        gen = _Generator(
+            generator_func=_generate,
+            condition_func=_condition,
+            hooks=[
+                _Hook(GenerationStage.BEFORE_CONDITION),
+                _Hook(GenerationStage.AFTER_CONDITION),
+            ],
+        )
+        out = gen.sample(
+            make_batch(num_graphs=1),
+            num_samples=3,
+            rng=explicit_rng,
+            marker="forwarded",
+        )
+
+        assert order == [
+            "BEFORE_CONDITION",
+            "condition",
+            "AFTER_CONDITION",
+            "finish",
+            "generate",
+        ]
+        assert seen["condition"] == (3, explicit_rng)
+        assert seen["generate"] == (3, explicit_rng, "forwarded")
+        assert out.batch_size == torch.Size([3])
+        assert gen.step_count == 1
+
+    def test_finish_receives_preparation_error_and_call_is_cleaned_up(self) -> None:
+        condition_error = RuntimeError("condition failed")
+        observed: list[tuple[_PreparedGeneration | None, Exception | None]] = []
+
+        class _Generator(AtomisticGenerator):
+            def _finish_preparation(
+                self,
+                prepared: _PreparedGeneration | None,
+                error: Exception | None,
+            ) -> _PreparedGeneration:
+                observed.append((prepared, error))
+                return super()._finish_preparation(prepared, error)
+
+        def _condition(inputs, *, num_samples: int, rng):
+            raise condition_error
+
+        def _generate(inputs=None, **kwargs):
+            pytest.fail("generation must not run after preparation fails")
+
+        gen = _Generator(generator_func=_generate, condition_func=_condition)
+        with pytest.raises(RuntimeError, match="condition failed") as exc_info:
+            gen()
+
+        assert exc_info.value is condition_error
+        assert observed == [(None, condition_error)]
+        assert gen._ctx is None
+        assert gen.step_count == 1
+
+    def test_context_construction_failure_does_not_advance_step(self, monkeypatch):
+        context_error = RuntimeError("context construction failed")
+        observed: list[tuple[_PreparedGeneration | None, Exception | None]] = []
+
+        class _Generator(AtomisticGenerator):
+            def _finish_preparation(
+                self,
+                prepared: _PreparedGeneration | None,
+                error: Exception | None,
+            ) -> _PreparedGeneration:
+                observed.append((prepared, error))
+                return super()._finish_preparation(prepared, error)
+
+        def _fail_context(**kwargs):
+            raise context_error
+
+        monkeypatch.setattr("nvalchemi.gen.generator.GenerationContext", _fail_context)
+        gen = _Generator(generator_func=batch_generate)
+        with pytest.raises(
+            RuntimeError, match="context construction failed"
+        ) as exc_info:
+            gen()
+
+        assert exc_info.value is context_error
+        assert observed == [(None, context_error)]
+        assert gen._ctx is None
+        assert gen.step_count == 0
