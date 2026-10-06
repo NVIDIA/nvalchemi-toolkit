@@ -22,25 +22,30 @@ from typing import Any
 
 import torch
 import torch.distributed as dist
+import torch.multiprocessing as mp
 from _gloo_harness import run_gloo
 
 
 def _all_reduce_worker(
-    rank: int, world_size: int, queue: Any, group_value: int
+    rank: int, world_size: int, queue: Any, group_value: int, barrier: Any
 ) -> None:
     assert dist.get_world_size() == world_size
+    barrier.wait(timeout=30.0)
     value = torch.tensor([group_value + rank], dtype=torch.int64)
     dist.all_reduce(value)
     queue.put((rank, int(value.item())))
 
 
 def test_concurrent_gloo_groups_keep_collectives_separate() -> None:
+    ctx = mp.get_context("spawn")
+    barrier = ctx.Barrier(4)
     with ThreadPoolExecutor(max_workers=2) as executor:
+        # Hold all four ranks until both Gloo groups are initialized.
         group_a = executor.submit(
-            run_gloo, world_size=2, fn=_all_reduce_worker, args=(100,)
+            run_gloo, world_size=2, fn=_all_reduce_worker, args=(100, barrier)
         )
         group_b = executor.submit(
-            run_gloo, world_size=2, fn=_all_reduce_worker, args=(1000,)
+            run_gloo, world_size=2, fn=_all_reduce_worker, args=(1000, barrier)
         )
         results_a = group_a.result()
         results_b = group_b.result()

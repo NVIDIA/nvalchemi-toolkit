@@ -49,6 +49,7 @@ shim in each worker — no per-test setup needed.
 from __future__ import annotations
 
 import os
+import tempfile
 from typing import Any, Callable
 
 import torch.distributed as dist
@@ -98,18 +99,16 @@ def _worker(
     fn: Callable[..., None],
     queue: Any,
     args: tuple,
-    port: str,
+    store_path: str,
 ) -> None:
     """Worker entry point called by ``mp.spawn``. Initialises the gloo
     process group, applies the all_to_all patch, and invokes the user
     function with ``(rank, world_size, queue, *args)``.
     """
-    os.environ["MASTER_ADDR"] = "127.0.0.1"
-    os.environ["MASTER_PORT"] = port
     os.environ["RANK"] = str(rank)
     os.environ["WORLD_SIZE"] = str(world_size)
 
-    store = dist.TCPStore("127.0.0.1", int(port), is_master=False)
+    store = dist.FileStore(store_path, world_size)
     dist.init_process_group(
         backend="gloo", store=store, rank=rank, world_size=world_size
     )
@@ -126,7 +125,6 @@ def run_gloo(
     fn: Callable[..., None],
     args: tuple = (),
     timeout_sec: float = 60.0,
-    port: str | None = None,
 ) -> list[Any]:
     """Spawn ``world_size`` Gloo workers, run ``fn`` on each, collect
     queue payloads, return them in arrival order.
@@ -143,38 +141,40 @@ def run_gloo(
     ctx = mp.get_context("spawn")
     queue = ctx.Queue()
     procs = []
-    server_store = dist.TCPStore(
-        "127.0.0.1", int(port) if port else 0, is_master=True, wait_for_workers=False
-    )
-    # Keep the parent-owned rendezvous listener alive through worker cleanup.
-    port = str(server_store.port)
-    for rank in range(world_size):
-        p = ctx.Process(target=_worker, args=(rank, world_size, fn, queue, args, port))
-        p.start()
-        procs.append(p)
-
     results: list[Any] = []
     deadline_per_proc = timeout_sec
-    try:
-        for p in procs:
-            p.join(timeout=deadline_per_proc)
-            if p.is_alive():
-                p.terminate()
-                raise TimeoutError(
-                    f"gloo worker pid={p.pid} did not finish within "
-                    f"{deadline_per_proc:.1f}s"
+    with tempfile.TemporaryDirectory(prefix="nvalchemi-gloo-") as store_dir:
+        store_path = os.path.join(store_dir, "rendezvous")
+        try:
+            for rank in range(world_size):
+                p = ctx.Process(
+                    target=_worker,
+                    args=(rank, world_size, fn, queue, args, store_path),
                 )
-            if p.exitcode not in (0, None):
-                raise RuntimeError(
-                    f"gloo worker pid={p.pid} exited with code {p.exitcode}"
-                )
-        # Drain the queue. Each worker may have put 0..N items; we
-        # collect everything available within a small grace period.
-        while not queue.empty():
-            results.append(queue.get_nowait())
-    finally:
-        for p in procs:
-            if p.is_alive():
-                p.terminate()
+                p.start()
+                procs.append(p)
+
+            for p in procs:
+                p.join(timeout=deadline_per_proc)
+                if p.is_alive():
+                    p.terminate()
+                    raise TimeoutError(
+                        f"gloo worker pid={p.pid} did not finish within "
+                        f"{deadline_per_proc:.1f}s"
+                    )
+                if p.exitcode not in (0, None):
+                    raise RuntimeError(
+                        f"gloo worker pid={p.pid} exited with code {p.exitcode}"
+                    )
+            # Drain the queue. Each worker may have put 0..N items; we
+            # collect everything available within a small grace period.
+            while not queue.empty():
+                results.append(queue.get_nowait())
+        finally:
+            for p in procs:
+                if p.is_alive():
+                    p.terminate()
+            for p in procs:
+                p.join()
 
     return results
