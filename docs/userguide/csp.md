@@ -637,16 +637,23 @@ stage raise; compiled scientific internals inside a packer remain possible.
 
 ### Save a generation recipe
 
-Local CSP generators and pipelines can be saved as JSON construction recipes. The
-recipe includes the packer's configuration and device, generator options, output
+Local CSP generators can be saved as JSON construction recipes. The recipe
+includes the packer's configuration and device, generator options, output
 declaration, and supported hooks and callbacks. Loading reconstructs the packer
-and CSP generator rather than importing an unbound generation method.
+and CSP generator.
+
+A pipeline can be saved only when every stage supports serialization. Save the
+CSP generator separately here, then construct the dynamics stage after loading:
 
 ```python
-from nvalchemi.gen import GenerationPipeline
+from nvalchemi.csp import CSPGenerator
 
-recipe = pipeline.model_dump_json()
-restored_pipeline = GenerationPipeline.model_validate_json(recipe)
+recipe_generator = CSPGenerator(packer, num_samples=4, seed=79)
+recipe = recipe_generator.model_dump_json()
+restored_generator = CSPGenerator.model_validate_json(recipe)
+
+with restored_generator | FIRE2(model=demo_model, dt=0.05, n_steps=1) as restored_pipeline:
+    relaxed = restored_pipeline(packing_input)
 ```
 
 A restored recipe starts a fresh generation session. It preserves the configured
