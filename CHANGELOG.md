@@ -522,6 +522,9 @@
 
 ### Fixed
 
+- Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
+  convert stress to the configured base precision, and preserve dynamic
+  compilation when graph padding is inactive.
 - `AlignCellHook` no longer fails under `FusedStage` when positions require
   grad, and compiles with `fullgraph=True`.
 - **Dynamics hook lifecycle** — fused-level hooks now fire at the

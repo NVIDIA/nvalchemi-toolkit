@@ -31,7 +31,7 @@ Usage
 
     from nvalchemi.models.uma import UMAWrapper
 
-    # OMol molecular potential
+    # OMol periodic potential
     mol_wrapper = UMAWrapper.from_checkpoint(
         "uma-s-1p1", task_name="omol", device="cuda"
     )
@@ -44,13 +44,15 @@ Usage
 Notes
 -----
 * Energy is the primitive differentiable output; forces and (for
-  periodic tasks) stress are derived via autograd.
+  all UMA tasks) stress are derived via autograd. OMol stress is requested
+  automatically when its checkpoint is loaded.
 * OMol requires a total-charge field; the wrapper reads ``charge`` off
   the input ``AtomicData`` / ``Batch`` and defaults to 0 if absent.
   Spin multiplicity (``spin`` on the batch) defaults to 1 for OMol and
-  0 for periodic tasks.
-* ``active_outputs`` is task-aware: ``{"energy", "forces"}`` for
-  molecular tasks, ``{"energy", "forces", "stress"}`` for periodic.
+  0 for all other tasks.
+* ``active_outputs`` defaults to ``{"energy", "forces", "stress"}`` for
+  every task. Stress has shape ``[B, 3, 3]`` in FairChem's configured base
+  precision.
 
 ``torch.compile``
 -----------------
@@ -90,6 +92,7 @@ through :meth:`from_checkpoint`'s ``inference_settings`` argument:
 from __future__ import annotations
 
 import contextlib
+import copy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, get_args
 
@@ -126,9 +129,6 @@ __all__ = ["UMATask", "UMAWrapper"]
 # names; the membership set is derived from it.
 UMATask = Literal["omol", "omat", "oc20", "odac", "omc"]
 _UMA_TASKS: frozenset[str] = frozenset(get_args(UMATask))
-
-# Tasks that declare PBC (stress supported). ``omol`` is molecular — no stress.
-_PBC_TASKS: frozenset[str] = frozenset({"omat", "oc20", "odac", "omc"})
 
 
 # Fixed-shape caps for compiled MD. fairchem's compiled graph needs static
@@ -888,18 +888,19 @@ class UMAWrapper(nn.Module, BaseModelMixin):
     Wraps a :class:`fairchem.core.units.mlip_unit.MLIPPredictUnit` — the
     level at which energy / forces / stress are computed by fairchem
     (the raw backbone only produces node embeddings). Task is fixed at
-    construction; ``active_outputs`` reflects what that task supports.
+    construction; ``active_outputs`` selects which declared outputs are returned.
 
     Parameters
     ----------
     predict_unit : fairchem.core.units.mlip_unit.MLIPPredictUnit
-        Pre-loaded UMA prediction unit. Use :meth:`from_checkpoint` for
-        the typical construction path that resolves a registered
-        checkpoint name and downloads via HuggingFace Hub.
+        Pre-loaded UMA prediction unit configured to produce energy, forces,
+        and stress for ``task_name``. The wrapper uses its prediction tasks as
+        supplied. Use :meth:`from_checkpoint` to configure OMol stress during
+        checkpoint loading.
     task_name : str
         UMA task: one of ``_UMA_TASKS``. Determines which per-task head
-        in the multi-task model is used and which inputs (charge, spin)
-        must be populated.
+        in the multi-task model is used. All tasks use periodic defaults and
+        expose stress; OMol defaults to neutral charge and singlet spin.
     train : bool
         ``False`` (default) freezes all weights for inference (lossless for
         autograd forces); ``True`` keeps fairchem's trainable/frozen split
@@ -908,7 +909,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
     Attributes
     ----------
     model_config : ModelConfig
-        Task-dependent outputs + autograd + neighbor config.
+        Output, autograd, and neighbor configuration.
     task_name : str
         The UMA task this wrapper is pinned to.
     """
@@ -937,35 +938,26 @@ class UMAWrapper(nn.Module, BaseModelMixin):
 
         self.predict_unit = predict_unit
         self.task_name = task_name
-        self._is_pbc_task = task_name in _PBC_TASKS
         self._cutoff = self._extract_cutoff()
 
-        # Task-dependent output set. Energy + forces are universal;
-        # stress only makes sense for periodic tasks.
-        outputs: set[str] = {"energy", "forces"}
-        autograd_outputs: set[str] = {"forces"}
-        active_outputs: set[str] = {"energy", "forces"}
-        if self._is_pbc_task:
-            outputs.add("stress")
-            autograd_outputs.add("stress")
-            active_outputs.add("stress")
+        outputs = frozenset({"energy", "forces", "stress"})
 
         self.model_config = ModelConfig(
-            outputs=frozenset(outputs),
-            autograd_outputs=frozenset(autograd_outputs),
+            outputs=outputs,
+            autograd_outputs=frozenset({"forces", "stress"}),
             autograd_inputs=frozenset({"positions"}),
-            # All optional (not required for OMol) to keep one config shape
-            # across tasks — the adapter fills charge/spin defaults.
+            # Keep one config shape across tasks; the adapter fills charge and
+            # spin defaults, and the input adapter supplies missing cells/PBC.
             required_inputs=frozenset(),
             optional_inputs=frozenset({"cell", "charge", "spin", "tags"}),
             supports_pbc=True,
-            needs_pbc=self._is_pbc_task,
+            needs_pbc=True,
             neighbor_config=NeighborConfig(
                 cutoff=self._cutoff,
                 format=NeighborListFormat.COO,
                 half_list=False,
             ),
-            active_outputs=active_outputs,
+            active_outputs=set(outputs),
         )
 
         # Inference (train=False): freeze all weights — conservative forces
@@ -1008,9 +1000,8 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             or a local file path.
         task_name : str
             One of ``omol``, ``omat``, ``oc20``, ``odac``, ``omc``.
-            Defaults to ``omol`` (molecular chemistry) — the most
-            common entry point; override explicitly for crystals /
-            catalysis.
+            Defaults to ``omol`` (OMol25); override explicitly for OMat
+            crystals, catalysis, direct air capture, or molecular crystals.
         device : str | torch.device
             Target device for inference. Defaults to ``"cpu"``.
         inference_settings : InferenceSettings | str
@@ -1020,6 +1011,8 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             instance. ``torch.compile`` is reached through this argument
             — see the module docstring's *torch.compile* section.
             Defaults to ``"default"``.
+            For ``task_name="omol"``, a copied settings object adds ``"omol"``
+            to ``predict_untrained_stress`` before loading the checkpoint.
         overrides : dict | None
             Optional overrides forwarded to fairchem's inference-settings
             builder.
@@ -1047,6 +1040,21 @@ class UMAWrapper(nn.Module, BaseModelMixin):
 
         from fairchem.core.calculate import pretrained_mlip  # noqa: PLC0415
         from fairchem.core.units.mlip_unit import load_predict_unit  # noqa: PLC0415
+
+        if task_name == "omol":
+            from fairchem.core.units.mlip_unit.api.inference import (  # noqa: PLC0415
+                guess_inference_settings,
+            )
+
+            settings = (
+                guess_inference_settings(inference_settings)
+                if isinstance(inference_settings, str)
+                else inference_settings
+            )
+            inference_settings = copy.copy(settings)
+            inference_settings.predict_untrained_stress = set(
+                inference_settings.predict_untrained_stress
+            ) | {"omol"}
 
         if isinstance(device, torch.device):
             device = device.type
@@ -1371,10 +1379,10 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         ``data.positions.device``, preserving GPU residency and autograd.
         ``edge_index`` is left empty ``(2, 0)`` so fairchem's ``MLIPPredictUnit``
         rebuilds the graph internally, matching the default ``FAIRChemCalculator``
-        path (``r_edges=False``), so outputs are equivalent. Charge/spin default
-        per the ASE-calculator convention (per-system LongTensors; spin defaults
-        to the closed-shell singlet for OMol, 0 for periodic tasks) unless the
-        caller provides them on the batch.
+        path (``r_edges=False``), so outputs are equivalent. Missing PBC defaults
+        to periodic for every task. Charge/spin default per the ASE-calculator
+        convention (per-system LongTensors; OMol spin defaults to the closed-shell
+        singlet, while other tasks default to 0) unless provided on the batch.
 
         Parameters
         ----------
@@ -1421,9 +1429,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
 
         pbc = getattr(data, "pbc", None)
         if pbc is None:
-            pbc = torch.full(
-                (n_systems, 3), self._is_pbc_task, dtype=torch.bool, device=device
-            )
+            pbc = torch.full((n_systems, 3), True, dtype=torch.bool, device=device)
         else:
             pbc = pbc.to(torch.bool)
 
@@ -1437,10 +1443,10 @@ class UMAWrapper(nn.Module, BaseModelMixin):
 
         spin = getattr(data, "spin", None)
         if spin is None:
-            # spin is the multiplicity (only used by the OMol head); default to
-            # the closed-shell singlet (1), matching FAIRChemCalculator. Open-
-            # shell systems must set it explicitly. Periodic heads ignore spin.
-            spin_default = 0 if self._is_pbc_task else 1
+            # spin is the multiplicity (used by the OMol head); default to the
+            # closed-shell singlet (1), matching FAIRChemCalculator. Other task
+            # heads ignore spin and default to 0.
+            spin_default = 1 if self.task_name == "omol" else 0
             spin = torch.full(
                 (n_systems,), spin_default, dtype=torch.long, device=device
             )
@@ -1497,7 +1503,8 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         -------
         ModelOutputs
             The active subset of ``energy`` ``[B, 1]``, ``forces`` ``[N, 3]``, and
-            ``stress`` ``[B, 3, 3]``.
+            ``stress`` ``[B, 3, 3]``. Stress is converted to FairChem's configured
+            base precision.
         """
         out: dict[str, torch.Tensor] = {}
         active = self.model_config.active_outputs
@@ -1519,7 +1526,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             if stress.dim() == 2 and stress.shape[-1] == 9:
                 # fairchem sometimes flattens stress; reshape to (n, 3, 3).
                 stress = stress.reshape(-1, 3, 3)
-            out["stress"] = stress
+            out["stress"] = stress.to(target_dtype)
 
         return out
 
@@ -1535,7 +1542,8 @@ class UMAWrapper(nn.Module, BaseModelMixin):
         compiled domain decomposition pads the fairchem graph to stable per-rank
         shapes (a no-op single-process). The two blocks below handle fairchem's own
         compile requirements: moving the first-call MoLE merge to the requested
-        device, and forcing static shapes.
+        device, and forcing static shapes when graph padding is active. Without
+        graph padding, FairChem retains its dynamic compilation behavior.
 
         Parameters
         ----------
@@ -1548,7 +1556,8 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             ``energy`` (per system) plus ``forces`` / ``stress`` per
             ``model_config.active_outputs``.
         """
-        fc_data = current_dd_context().maybe_pad_graph(self.adapt_input(data, **kwargs))
+        dd_context = current_dd_context()
+        fc_data = dd_context.maybe_pad_graph(self.adapt_input(data, **kwargs))
 
         settings = getattr(self.predict_unit, "inference_settings", None)
         first_call = not getattr(self.predict_unit, "lazy_model_intialized", True)
@@ -1565,7 +1574,7 @@ class UMAWrapper(nn.Module, BaseModelMixin):
             fc_data = fc_data.to(self.predict_unit.device)
         static_cm = (
             force_compile_static()
-            if (first_call and compiling)
+            if first_call and compiling and dd_context.graph_padder is not None
             else contextlib.nullcontext()
         )
         with static_cm:
