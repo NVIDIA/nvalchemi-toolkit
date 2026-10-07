@@ -2858,6 +2858,35 @@ def test_dataset_roundtrip_values(tmp_path: Path) -> None:
         assert torch.allclose(loaded.shifts, original.shifts)
 
 
+def test_dataset_keeps_precision_preserving_energy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A globally exempt float64 energy survives the Zarr write, the Dataset
+    read, and DataLoader collation bit-exactly."""
+    monkeypatch.setattr(AtomicData, "precision_preserving_keys", frozenset({"energy"}))
+    e64 = torch.tensor([[-93873.600167206]], dtype=torch.float64)
+    data_list = [
+        AtomicData(
+            positions=torch.randn(2, 3, dtype=torch.float32),
+            atomic_numbers=torch.ones(2, dtype=torch.long),
+            energy=e64.clone(),
+        )
+        for _ in range(3)
+    ]
+    AtomicDataZarrWriter(tmp_path / "test.zarr").write(Batch.from_data_list(data_list))
+
+    with AtomicDataZarrReader(tmp_path / "test.zarr") as reader:
+        assert reader.schema()["energy"].dtype == torch.float64
+        dataset = Dataset(reader, device="cpu")
+        loaded, _ = dataset[0]
+        assert loaded.positions.dtype == torch.float32
+        assert loaded.energy.dtype == torch.float64
+        assert loaded.energy.item() == e64.item()
+        batch = next(iter(DataLoader(dataset, batch_size=3)))
+        assert batch.energy.dtype == torch.float64
+        assert batch.energy[0].item() == e64.item()
+
+
 class _OrderedReadManyReader:
     """Minimal reader that records read_many calls for DataLoader tests."""
 

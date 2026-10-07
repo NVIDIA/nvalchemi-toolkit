@@ -32,6 +32,17 @@ For stress, virial, and pressure sign conventions, see {ref}`conventions`.
 All tensor fields use PyTorch tensors, so you can move them to GPU with `.to(device)` or
 use the mixin method {py:meth}`nvalchemi.data.data.DataMixin.to` for device/dtype changes.
 
+Floating-point fields are cast to the dtype of `positions` on construction, so a
+`float64` label passed alongside `float32` positions is downcast with a one-time
+{py:class}`UserWarning`. To keep a field at its own precision, name it in the
+`precision_preserving_keys` class attribute, for example
+`AtomicData.precision_preserving_keys = frozenset({"energy"})` so an extensive
+total energy is not quantized to `float32`. The exemption follows the field through
+batching, cloning, selection, device moves, and Zarr storage. Set it on
+{py:class}`nvalchemi.data.AtomicData` itself rather than on a subclass when the data
+flows through a {py:class}`~nvalchemi.data.datapipes.Dataset`, which rebuilds each
+sample as a plain `AtomicData`.
+
 Example:
 
 ```python

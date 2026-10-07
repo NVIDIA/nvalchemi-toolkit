@@ -4571,3 +4571,69 @@ class TestSetTransient:
         batch = self._batch()
         batch.cell = batch.cell * 7.0
         assert batch._storage["cell"][0, 0, 0].item() == pytest.approx(7.0)
+
+
+# -----------------------------------------------------------------------------
+# Precision-preserving fields survive batching
+# -----------------------------------------------------------------------------
+class TestPrecisionPreservingBatch:
+    """A field opted out of the fp-dtype downcast at the AtomicData level keeps
+    its precision through ``Batch.from_data_list`` and device moves.
+
+    ``Batch`` carries whatever dtype the source ``AtomicData`` produced (collation
+    is ``torch.cat``, and the storage layer respects an existing tensor's dtype),
+    so the ``precision_preserving_keys`` exemption is honoured end-to-end.
+    """
+
+    def test_fp64_energy_survives_from_data_list(self, monkeypatch):
+        monkeypatch.setattr(
+            AtomicData, "precision_preserving_keys", frozenset({"energy"})
+        )
+        e64 = torch.tensor([[-93873.600167206]], dtype=torch.float64)
+        data_list = [
+            AtomicData(
+                positions=torch.randn(2, 3, dtype=torch.float32),
+                atomic_numbers=torch.ones(2, dtype=torch.long),
+                energy=e64.clone(),
+            )
+            for _ in range(3)
+        ]
+        batch = Batch.from_data_list(data_list)
+        assert batch.energy.dtype == torch.float64
+        # bit-exact: no fp32 round-trip anywhere in the collation path
+        assert batch.energy[0].item() == e64.item()
+
+    def test_fp64_energy_survives_device_move(self, monkeypatch):
+        monkeypatch.setattr(
+            AtomicData, "precision_preserving_keys", frozenset({"energy"})
+        )
+        e64 = torch.tensor([[-41512.590527111]], dtype=torch.float64)
+        batch = Batch.from_data_list(
+            [
+                AtomicData(
+                    positions=torch.randn(2, 3, dtype=torch.float32),
+                    atomic_numbers=torch.ones(2, dtype=torch.long),
+                    energy=e64.clone(),
+                )
+                for _ in range(2)
+            ]
+        )
+        moved = batch.to("cpu")
+        assert moved.energy.dtype == torch.float64
+        assert moved.energy[0].item() == e64.item()
+
+    def test_default_energy_batches_at_positions_dtype(self):
+        """Without the exemption, energy is downcast at the AtomicData level and
+        the batch faithfully carries that float32 (no schema-driven upcast)."""
+        e64 = torch.tensor([[-93873.600167206]], dtype=torch.float64)
+        with pytest.warns(UserWarning, match="energy"):
+            data_list = [
+                AtomicData(
+                    positions=torch.randn(2, 3, dtype=torch.float32),
+                    atomic_numbers=torch.ones(2, dtype=torch.long),
+                    energy=e64.clone(),
+                )
+                for _ in range(2)
+            ]
+        batch = Batch.from_data_list(data_list)
+        assert batch.energy.dtype == torch.float32

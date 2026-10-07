@@ -84,6 +84,18 @@
   drop_last=, pad=)`, `dataset_device`, and `same_device`; and
   `nvalchemi.data.transforms.make_supercell` with
   `DEFAULT_EXTENSIVE_SYSTEM_KEYS` and `DEFAULT_INTENSIVE_SYSTEM_KEYS`.
+- **Opt-in precision-preserving fields** — `AtomicData.precision_preserving_keys`,
+  a class attribute (empty by default, so behaviour is unchanged) naming the
+  floating-point fields `check_fp_dtype_consistency` leaves at their own dtype
+  instead of casting them to the positions dtype. Set it on `AtomicData` itself
+  (`AtomicData.precision_preserving_keys = frozenset({"energy"})`) or on a
+  subclass to keep a high-precision label, e.g. so an extensive total energy
+  (~1e4–1e5 eV) is not silently quantized by float32. The exemption holds
+  across `add_system_property` and friends, `Batch.from_data_list`, `clone`,
+  `index_select`, `to`, `to_data_list`, `from_raw_dicts`, and the Zarr writer
+  and reader, which store a tensor's own dtype. `Dataset` and `make_supercell`
+  rebuild samples as plain `AtomicData`, so data flowing through them needs the
+  class-level setting rather than a subclass override.
 - **Dynamics** — `DynamicsStage.ON_GRADUATE`, dispatched with
   `ctx.graduated_mask` on the step a system's status reaches `exit_status`
   (`StageTimingHook("all")` excludes it); `nvalchemi.dynamics.hooks.nonfinite_graph_mask`;
@@ -117,6 +129,10 @@
 
 ### Changed
 
+- The `check_fp_dtype_consistency` cast warning fires once per distinct
+  `(field, source dtype, target dtype)` cast per process instead of on every
+  `AtomicData` construction, which flooded logs in training loops. Casting
+  behaviour is unchanged; only the warning frequency is reduced.
 - `TrainingStrategy` compares per-model devices through
   `nvalchemi.data.resolve_device` when CUDA is available, so `[cuda, cuda:0]`
   is one device on the rank whose current device is 0; without a CUDA runtime

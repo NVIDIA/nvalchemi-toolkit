@@ -22,6 +22,8 @@ import pytest
 import torch
 import torch.distributed as dist
 
+from nvalchemi.data import atomic_data
+
 if TYPE_CHECKING:
     from nvalchemi.data.batch import Batch
 
@@ -129,6 +131,17 @@ def _dist_leak_guard():
     if dist.is_available() and dist.is_initialized() and not was_initialized:
         with contextlib.suppress(Exception):
             dist.destroy_process_group()
+
+
+@pytest.fixture(autouse=True)
+def _reset_fp_cast_warned() -> None:
+    """Clear the process-global fp-cast warning cache before each test.
+
+    ``check_fp_dtype_consistency`` dedups its cast warning per ``(field, dtype)``
+    across all constructions, so without this reset warning assertions would
+    depend on test order (an earlier test could consume the only warning for a
+    given field/dtype)."""
+    atomic_data._FP_CAST_WARNED.clear()
 
 
 @pytest.fixture(params=["cpu", "cuda"])
