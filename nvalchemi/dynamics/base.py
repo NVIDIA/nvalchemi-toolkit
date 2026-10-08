@@ -1237,7 +1237,9 @@ class _CommunicationMixin:
             f"All sinks are full. Cannot store {batch.num_graphs} overflow samples."
         )
 
-    def _batch_to_buffer(self, mask: torch.Tensor) -> None:
+    def _batch_to_buffer(
+        self, mask: torch.Tensor, *, num_requested: int | None = None
+    ) -> None:
         """Move graduated samples from the active batch into the send buffer.
 
         Uses ``send_buffer.put`` to copy samples where *mask* is ``True``
@@ -1250,11 +1252,17 @@ class _CommunicationMixin:
         mask : torch.Tensor
             Boolean mask of shape ``(active_batch.num_graphs,)`` where
             ``True`` marks a graduated (converged) sample.
+        num_requested : int, optional
+            Number of selected graphs, if already known. Avoids reading the
+            mask back to the host to count them.
 
         Raises
         ------
         RuntimeError
             If ``active_batch`` or ``send_buffer`` is ``None``.
+        ValueError
+            If the send buffer cannot copy every selected graph. The active
+            batch is left unchanged, and the transfer must not proceed.
         """
         if self.active_batch is None:
             raise RuntimeError("No active batch to extract from.")
@@ -1262,9 +1270,22 @@ class _CommunicationMixin:
             raise RuntimeError("No send buffer to write to.")
 
         previous_batch = self.active_batch
-        remaining_indices = torch.where(~mask)[0]
-        self.send_buffer.put(previous_batch, mask=mask)
-        self.active_batch = previous_batch.trim(copied_mask=mask)
+        if num_requested is None:
+            num_requested = int(mask.sum())
+        n_before = self.send_buffer.num_graphs
+        copied_mask = torch.zeros_like(mask)
+        self.send_buffer.put(previous_batch, mask=mask, copied_mask=copied_mask)
+        # put already updates host-side occupancy. Reuse it for validation.
+        num_copied = self.send_buffer.num_graphs - n_before
+        if num_copied != num_requested:
+            raise ValueError(
+                f"Send buffer copied {num_copied} of "
+                f"{num_requested} requested graphs. Increase BufferConfig "
+                "capacities to hold the largest outgoing batch; "
+                f"buffer_config={self.buffer_config}."
+            )
+        remaining_indices = torch.where(~copied_mask)[0]
+        self.active_batch = previous_batch.trim(copied_mask=copied_mask)
         self._admission_initialized = False
 
         # Graph-indexed metadata and integrator state refer to the old batch
@@ -1445,7 +1466,7 @@ class _CommunicationMixin:
             device=self.device,
         )
         mask[converged_indices] = True
-        self._batch_to_buffer(mask)
+        self._batch_to_buffer(mask, num_requested=converged_indices.numel())
         if self.debug_mode:
             logger.debug(
                 "[rank {}] populated send buffer with {} converged graphs",

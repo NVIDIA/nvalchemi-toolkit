@@ -333,6 +333,11 @@ When the upstream stage has more converged samples than `num_systems` allows in 
 single transfer, the excess stays in the active batch as a no-op until the next
 step --- this is the back-pressure mechanism described below.
 
+Atom and edge capacities must accommodate all graphs selected for a transfer.
+If the buffer cannot copy every selected graph, the pipeline raises `ValueError`
+before removing graphs from the active batch or sending the buffer. Increase the
+relevant `BufferConfig` capacities before rerunning.
+
 ```{important}
 Every pair of communicating stages **must** share an identical
 {py:class}`~nvalchemi.dynamics.base.BufferConfig`.
