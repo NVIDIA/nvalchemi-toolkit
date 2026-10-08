@@ -24,7 +24,7 @@ Tests for BaseDynamics per-system _state batch lifecycle:
 from __future__ import annotations
 
 from collections.abc import Iterator
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -632,7 +632,13 @@ class TestPipelineStateMutation:
         if final_stage:
             dyn._remove_converged_final_stage(converged)
         else:
-            dyn.send_buffer = Mock()
+            dyn.send_buffer = Batch.empty(
+                num_systems=dyn.active_batch.num_graphs,
+                num_nodes=dyn.active_batch.num_nodes,
+                num_edges=dyn.active_batch.num_edges,
+                template=dyn.active_batch,
+                device=dyn.active_batch.device,
+            )
             mask = torch.zeros(4, dtype=torch.bool)
             mask[converged] = True
             dyn._batch_to_buffer(mask)

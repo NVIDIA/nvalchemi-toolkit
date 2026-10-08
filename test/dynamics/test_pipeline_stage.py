@@ -295,103 +295,109 @@ class TestBufferRouting:
 class TestBatchExtraction:
     """Test _batch_to_buffer for moving graduated samples into send buffer."""
 
-    def test_extract_some_samples(self) -> None:
-        """Verify extracting a subset of samples from active batch into send_buffer."""
-        batch = _make_batch(num_graphs=5)
-        stage = _CommunicationMixin(active_batch=batch)
+    @pytest.mark.parametrize("selected", [[1, 3], [0, 1, 2, 3, 4], [2]])
+    def test_extract_selected_samples(self, selected: list[int], device: str) -> None:
+        """Real buffer copies and removes exactly the selected graphs."""
+        batch = _make_batch_with_system(num_graphs=5).to(device)
+        batch["system_id"] = torch.arange(5, device=device).unsqueeze(-1)
+        stage = _CommunicationMixin(active_batch=batch, device_type=device)
+        stage.send_buffer = Batch.empty(
+            num_systems=5,
+            num_nodes=15,
+            num_edges=0,
+            template=batch,
+            device=device,
+        )
         stage._admission_initialized = True
         stage._forces_primed = True
+        mask = torch.zeros(5, dtype=torch.bool, device=device)
+        mask[selected] = True
 
-        # Create a mock send_buffer
-        mock_send_buffer = Mock()
-        stage.send_buffer = mock_send_buffer
+        stage._batch_to_buffer(mask, num_requested=len(selected))
 
-        # Build a boolean mask (indices 1 and 3 are True)
-        mask = torch.zeros(5, dtype=torch.bool)
-        mask[torch.tensor([1, 3])] = True
-
-        # Mock defrag to simulate removal of 2 graphs
-        original_num_graphs = batch.num_graphs
-
-        def mock_defrag(copied_mask: torch.Tensor | None = None) -> Batch:
-            # Simulate that defrag removes the graphs where mask is True
-            remaining = [i for i in range(original_num_graphs) if not mask[i]]
-            stage.active_batch = batch.index_select(remaining)
-            return stage.active_batch
-
-        with patch.object(Batch, "defrag", side_effect=mock_defrag):
-            stage._batch_to_buffer(mask)
-
-        # send_buffer.put was called with the active batch and mask
-        mock_send_buffer.put.assert_called_once()
-        call_args = mock_send_buffer.put.call_args
-        assert call_args[0][0] is batch  # first positional arg is the batch
-        assert torch.equal(call_args[1]["mask"], mask)  # mask keyword arg
-
-        # After defrag, active_batch should have 3 remaining graphs
-        assert stage.active_batch_size == 3
+        assert (
+            stage.send_buffer.system_id[: len(selected)].flatten().tolist() == selected
+        )
+        remaining = sorted(set(range(5)) - set(selected))
+        if remaining:
+            assert stage.active_batch.system_id.flatten().tolist() == remaining
+        else:
+            assert stage.active_batch is None
         assert stage._admission_initialized is False
         # Removal keeps retained graphs' forces valid.
         assert stage._forces_primed is True
 
-    def test_extract_all_samples(self) -> None:
-        """Verify extracting all samples sets active_batch to None."""
-        batch = _make_batch(num_graphs=3)
-        stage = _CommunicationMixin(active_batch=batch)
+    @pytest.mark.parametrize("limit", ["atoms", "edges"])
+    @pytest.mark.parametrize("selected", [[0, 1, 2], [0, 2], [1]])
+    def test_insufficient_capacity_raises_before_trim_or_send(
+        self, limit: str, selected: list[int], device: str
+    ) -> None:
+        """Incomplete copies fail without removing graphs or invalidating state."""
+        data = [
+            AtomicData(
+                positions=torch.full((8, 3), float(i)),
+                atomic_numbers=torch.ones(8, dtype=torch.long),
+                energy=torch.tensor([[float(i)]]),
+                neighbor_list=torch.tensor([[j, (j + 1) % 8] for j in range(8)]),
+                shifts=torch.zeros(8, 3),
+            )
+            for i in range(3)
+        ]
+        batch = Batch.from_data_list(data, device=device)
+        capacity = 10 if len(selected) > 1 else 7
+        cfg = BufferConfig(
+            num_systems=4,
+            num_nodes=capacity if limit == "atoms" else 24,
+            num_edges=capacity if limit == "edges" else 24,
+        )
+        stage = _CommunicationMixin(
+            active_batch=batch,
+            next_rank=1,
+            buffer_config=cfg,
+            device_type=device,
+        )
+        stage._ensure_buffers(batch)
+        stage._admission_initialized = stage._forces_primed = True
+        indices = torch.tensor(selected, device=device)
+        stage._last_converged = indices
+        copied = 1 if len(selected) > 1 else 0
 
-        mock_send_buffer = Mock()
-        stage.send_buffer = mock_send_buffer
+        with patch.object(Batch, "isend") as send:
+            with pytest.raises(
+                ValueError, match=f"copied {copied} of {len(selected)} requested graphs"
+            ) as error:
+                stage._poststep_sync_buffers(indices)
+            send.assert_not_called()
 
-        # All samples are True in mask
-        mask = torch.ones(3, dtype=torch.bool)
+        assert "Increase BufferConfig capacities" in str(error.value)
+        assert f"buffer_config={cfg}" in str(error.value)
+        assert stage.active_batch is batch
+        assert batch.num_graphs == 3
+        assert batch.energy.flatten().tolist() == [0.0, 1.0, 2.0]
+        assert stage.send_buffer.num_graphs == copied
+        assert stage._admission_initialized and stage._forces_primed
+        assert stage._last_converged is indices
 
-        # We need to mock defrag to return self but modify num_graphs to 0
-        # Since Batch.num_graphs checks actual data, we mock the property
-        original_batch = batch
+    def test_full_buffer_raises_without_removing_source(self) -> None:
+        """An occupied buffer must not cause an uncopied graph to be removed."""
+        batch = _make_batch_with_system(num_graphs=1)
+        stage = _CommunicationMixin(active_batch=batch, device_type="cpu")
+        stage.send_buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=3,
+            num_edges=0,
+            template=batch,
+        )
+        mask = torch.ones(1, dtype=torch.bool)
+        stage.send_buffer.put(batch, mask)
+        stage._admission_initialized = stage._forces_primed = True
 
-        def mock_defrag(copied_mask: torch.Tensor | None = None) -> Batch:
-            # Return the same batch but it will be checked for num_graphs == 0
-            # We need to simulate defrag removing all graphs
-            # The simplest way: patch num_graphs on the batch
-            return original_batch
-
-        with (
-            patch.object(Batch, "defrag", side_effect=mock_defrag),
-            patch.object(
-                type(original_batch),
-                "num_graphs",
-                new_callable=lambda: property(lambda s: 0),
-            ),
-        ):
+        with pytest.raises(ValueError, match="copied 0 of 1 requested graphs"):
             stage._batch_to_buffer(mask)
 
-        mock_send_buffer.put.assert_called_once()
-        # After defrag with all True, active_batch should be None
-        assert stage.active_batch is None
-
-    def test_extract_single_sample(self) -> None:
-        """Verify extracting a single sample works correctly."""
-        batch = _make_batch(num_graphs=4)
-        stage = _CommunicationMixin(active_batch=batch)
-
-        mock_send_buffer = Mock()
-        stage.send_buffer = mock_send_buffer
-
-        # Only index 2 is True
-        mask = torch.zeros(4, dtype=torch.bool)
-        mask[2] = True
-        original_num_graphs = batch.num_graphs
-
-        def mock_defrag(copied_mask: torch.Tensor | None = None) -> Batch:
-            remaining = [i for i in range(original_num_graphs) if not mask[i]]
-            stage.active_batch = batch.index_select(remaining)
-            return stage.active_batch
-
-        with patch.object(Batch, "defrag", side_effect=mock_defrag):
-            stage._batch_to_buffer(mask)
-
-        mock_send_buffer.put.assert_called_once()
-        assert stage.active_batch_size == 3
+        assert stage.active_batch is batch
+        assert stage.send_buffer.num_graphs == 1
+        assert stage._admission_initialized and stage._forces_primed
 
     def test_extract_no_active_batch_raises(self) -> None:
         """Verify RuntimeError when no active batch exists."""
@@ -1793,10 +1799,11 @@ class TestPoststepBackPressure:
         converged_indices = torch.tensor([0, 1, 2])
 
         # Patch _batch_to_buffer to simulate the new behavior
-        def selective_extract(mask: torch.Tensor) -> None:
+        def selective_extract(mask: torch.Tensor, *, num_requested: int) -> None:
             """Extract based on boolean mask, simulating defrag."""
             # Due to capacity=1, only index 0 should be True
             assert mask.dtype == torch.bool
+            assert num_requested == 1
             assert mask.sum().item() == 1  # Only first one due to capacity
             assert mask[0].item() is True
             # Simulate defrag: remove the graph where mask is True
