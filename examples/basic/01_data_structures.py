@@ -314,8 +314,7 @@ print(
 src_batch = Batch.from_data_list([_tiny_graph(1.0), _tiny_graph(2.0)])
 mask = torch.tensor([True, False])
 copied_mask = torch.zeros(2, dtype=torch.bool)
-dest_mask = torch.zeros(buffer.system_capacity, dtype=torch.bool)
-buffer.put(src_batch, mask, copied_mask=copied_mask, dest_mask=dest_mask)
+buffer.put(src_batch, mask, copied_mask=copied_mask)
 print(
     f"After put: buffer has {buffer.num_graphs} graphs; copied_mask={copied_mask.tolist()}"
 )

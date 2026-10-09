@@ -588,6 +588,7 @@ class TestUniformLevelStorage:
             device=device,
             validate=False,
         )
+        object.__setattr__(dest, "_num_kept", 0)
         mask = torch.tensor([True, False, True, False], device=device)
         dest.put(src, mask)
         # Rows 0 and 2 copied into dest at first two slots
@@ -621,6 +622,7 @@ class TestUniformLevelStorage:
             device=device,
             validate=False,
         )
+        object.__setattr__(dest, "_num_kept", 0)
         mask = torch.tensor([True, True], device=device)
         copied_mask = torch.zeros(2, dtype=torch.bool, device=device)
         dest.put(src, mask, copied_mask=copied_mask)
@@ -647,6 +649,7 @@ class TestUniformLevelStorage:
             device=device,
             validate=False,
         )
+        object.__setattr__(dest, "_num_kept", 0)
         shape_before = dest._data["a"].shape
         mask = torch.tensor([True, False, True], device=device)
         dest.put(src, mask)
@@ -673,10 +676,10 @@ class TestUniformLevelStorage:
             device=device,
             validate=False,
         )
-        dest_mask = torch.tensor([True, True, False], device=device)  # only 1 empty
+        object.__setattr__(dest, "_num_kept", 2)  # only 1 empty
         mask = torch.tensor([True, True, True], device=device)
         copied_mask = torch.zeros(3, dtype=torch.bool, device=device)
-        dest.put(src, mask, copied_mask=copied_mask, dest_mask=dest_mask)
+        dest.put(src, mask, copied_mask=copied_mask)
         assert copied_mask.sum().item() == 1
         assert copied_mask[0].item() is True
         assert copied_mask[1].item() is False
@@ -702,17 +705,16 @@ class TestUniformLevelStorage:
             validate=False,
         )
         copied = torch.zeros(3, dtype=torch.bool)
-        dest_mask = torch.tensor([True, False, False, False])
+        object.__setattr__(dest, "_num_kept", 1)
 
         dest.put(
             src,
             torch.ones(3, dtype=torch.bool),
             copied_mask=copied,
-            dest_mask=dest_mask,
         )
 
         assert copied.tolist() == [True, True, True]
-        assert dest_mask.tolist() == [True, True, True, True]
+        assert len(dest) == 4
         assert dest["a"].squeeze(1).tolist() == [99.0, 1.0, 2.0, 3.0]
         assert dest["b"].squeeze(1).tolist() == [999.0, 10.0, 20.0, 30.0]
 
@@ -737,6 +739,7 @@ class TestUniformLevelStorage:
             device="cpu",
             validate=False,
         )
+        object.__setattr__(dest, "_num_kept", 0)
         copied = torch.zeros(3, dtype=torch.bool)
 
         dest.put(src, torch.tensor([True, False, True]), copied_mask=copied)
@@ -759,7 +762,6 @@ class TestUniformLevelStorage:
             validate=False,
         )
         copied = torch.zeros(2, dtype=torch.bool)
-        dest_mask = torch.zeros(2, dtype=torch.bool)
 
         with pytest.raises(
             ValueError,
@@ -769,11 +771,9 @@ class TestUniformLevelStorage:
                 src,
                 torch.ones(2, dtype=torch.bool),
                 copied_mask=copied,
-                dest_mask=dest_mask,
             )
 
         assert copied.tolist() == [False, False]
-        assert dest_mask.tolist() == [False, False]
         assert dest["value"].eq(0).all()
 
     def test_compute_put_per_system_fit_mask(self):
@@ -793,9 +793,10 @@ class TestUniformLevelStorage:
             device=device,
             validate=False,
         )
+        object.__setattr__(dest, "_num_kept", 0)
         source_mask = torch.tensor([True, False, True, False], device=device)
         fit_mask = torch.zeros(4, dtype=torch.bool, device=device)
-        dest.compute_put_per_system_fit_mask(src, source_mask, None, fit_mask)
+        dest.compute_put_per_system_fit_mask(src, source_mask, fit_mask)
         # All 2 masked rows fit in 4 empty slots
         assert fit_mask.sum().item() == 2
         assert fit_mask[0].item() is True
@@ -825,10 +826,10 @@ class TestUniformLevelStorage:
             validate=False,
         )
         # Dest has 2 occupied slots (indices 0, 1), so only 1 empty
-        dest_mask = torch.tensor([True, True, False], device=device)
+        object.__setattr__(dest, "_num_kept", 2)
         source_mask = torch.tensor([True, True, True], device=device)
         fit_mask = torch.zeros(3, dtype=torch.bool, device=device)
-        dest.compute_put_per_system_fit_mask(src, source_mask, dest_mask, fit_mask)
+        dest.compute_put_per_system_fit_mask(src, source_mask, fit_mask)
         assert fit_mask.sum().item() == 1
         assert fit_mask[0].item() is True
         assert fit_mask[1].item() is False
@@ -1045,9 +1046,7 @@ class TestSegmentedLevelStorage:
         copied = torch.zeros(1, dtype=torch.bool)
         fit = torch.ones(1, dtype=torch.bool)
 
-        destination.compute_put_per_system_fit_mask(
-            source, torch.tensor([True]), None, fit
-        )
+        destination.compute_put_per_system_fit_mask(source, torch.tensor([True]), fit)
         assert fit.tolist() == [False]
 
         with pytest.raises(OverflowError, match="Segment pointer exceeds"):
@@ -1075,7 +1074,7 @@ class TestSegmentedLevelStorage:
         fit = torch.zeros(3, dtype=torch.bool)
 
         destination.compute_put_per_system_fit_mask(
-            source, torch.ones(3, dtype=torch.bool), None, fit
+            source, torch.ones(3, dtype=torch.bool), fit
         )
 
         assert fit.tolist() == [True, True, False]
@@ -1614,7 +1613,7 @@ class TestSegmentedLevelStorage:
         )
         source_mask = torch.tensor([True, True], device=device)
         fit_mask = torch.zeros(2, dtype=torch.bool, device=device)
-        dest.compute_put_per_system_fit_mask(src, source_mask, None, fit_mask)
+        dest.compute_put_per_system_fit_mask(src, source_mask, fit_mask)
         assert fit_mask.sum().item() == 2
         assert fit_mask[0].item() is True
         assert fit_mask[1].item() is True
@@ -1640,7 +1639,7 @@ class TestSegmentedLevelStorage:
         )
         source_mask = torch.tensor([True])
         fit_mask = torch.ones(1, dtype=torch.bool)
-        destination.compute_put_per_system_fit_mask(source, source_mask, None, fit_mask)
+        destination.compute_put_per_system_fit_mask(source, source_mask, fit_mask)
 
         assert fit_mask.tolist() == [False]
         with pytest.raises(OverflowError, match="Segment pointer exceeds"):
@@ -1669,7 +1668,7 @@ class TestSegmentedLevelStorage:
         )
         source_mask = torch.tensor([True], device=device)
         fit_mask = torch.ones(1, dtype=torch.bool, device=device)
-        dest.compute_put_per_system_fit_mask(src, source_mask, None, fit_mask)
+        dest.compute_put_per_system_fit_mask(src, source_mask, fit_mask)
         assert fit_mask.sum().item() == 0
 
     def test_put_defrag_fixed_tensor_shapes(self):
@@ -1752,7 +1751,7 @@ class TestSegmentedLevelStorage:
         source_mask = torch.tensor([True, False])
         fit_mask = torch.zeros(2, dtype=torch.bool)
 
-        dest.compute_put_per_system_fit_mask(src, source_mask, None, fit_mask)
+        dest.compute_put_per_system_fit_mask(src, source_mask, fit_mask)
         dest.put(src, fit_mask)
 
         assert fit_mask.tolist() == [True, False]
@@ -1783,7 +1782,6 @@ class TestSegmentedLevelStorage:
             payload.compute_put_per_system_fit_mask(
                 fieldless,
                 torch.ones(1, dtype=torch.bool),
-                None,
                 torch.zeros(1, dtype=torch.bool),
             )
 

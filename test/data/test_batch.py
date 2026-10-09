@@ -3539,63 +3539,48 @@ class TestBatchPutDefrag:
             num_edges=0,
             template=first,
         )
-        occupancy = torch.zeros(2, dtype=torch.bool)
         copied = torch.zeros(1, dtype=torch.bool)
 
-        buffer.put(
-            first,
-            torch.tensor([True]),
-            copied_mask=copied,
-            dest_mask=occupancy,
-        )
+        buffer.put(first, torch.tensor([True]), copied_mask=copied)
         assert copied.tolist() == [True]
-        assert occupancy.tolist() == [True, False]
+        assert buffer.num_graphs == 1
 
         copied.zero_()
-        buffer.put(
-            second,
-            torch.tensor([True]),
-            copied_mask=copied,
-            dest_mask=occupancy,
-        )
+        buffer.put(second, torch.tensor([True]), copied_mask=copied)
 
         assert copied.tolist() == [False]
-        assert occupancy.tolist() == [True, False]
         assert buffer.num_graphs == 1
         assert buffer.energy.tolist() == [[11.0], [0.0]]
         assert buffer.level_ptr("samples").tolist() == [0, maximum]
 
-    def test_put_uniform_groups_share_occupancy_snapshot(self):
+    def test_consecutive_puts_keep_system_and_atom_data_aligned(self):
+        """Regression: per-graph levels append at num_graphs, next to their atoms."""
         schema = _custom_uniform_schema()
         data_list = []
-        for energy, metadata in ((10.0, 20.0), (30.0, 40.0)):
-            data = _atomic_data_with_system(2)
-            data.energy = torch.tensor([[energy]])
-            data.metadata_values = torch.tensor([[metadata]])
+        for num_nodes, value in ((2, 1.0), (3, 2.0), (4, 3.0)):
+            data = AtomicData(
+                positions=torch.full((num_nodes, 3), value),
+                atomic_numbers=torch.ones(num_nodes, dtype=torch.long),
+                energy=torch.tensor([[value]]),
+            )
+            data.metadata_values = torch.tensor([[10 * value]])
             data_list.append(data)
-        source = Batch.from_data_list(data_list, attr_map=schema)
-        buffer = Batch.empty(
-            num_systems=3,
-            num_nodes=10,
-            num_edges=0,
-            template=source,
-        )
+        first = Batch.from_data_list(data_list[:1], attr_map=schema)
+        second = Batch.from_data_list(data_list[1:], attr_map=schema)
+        buffer = Batch.empty(num_systems=3, num_nodes=10, num_edges=0, template=first)
+
+        buffer.put(first, torch.ones(1, dtype=torch.bool))
         copied = torch.zeros(2, dtype=torch.bool)
-        dest_mask = torch.tensor([True, False, True])
+        buffer.put(second, torch.ones(2, dtype=torch.bool), copied_mask=copied)
 
-        buffer.put(
-            source,
-            torch.ones(2, dtype=torch.bool),
-            copied_mask=copied,
-            dest_mask=dest_mask,
-        )
-
-        assert copied.tolist() == [True, False]
-        assert dest_mask.tolist() == [True, True, True]
-        assert buffer.energy[1].item() == 10.0
-        assert buffer.metadata_values[1].item() == 20.0
-        assert buffer.energy[0].item() == 0.0
-        assert buffer.energy[2].item() == 0.0
+        assert copied.tolist() == [True, True]
+        assert buffer.num_graphs == 3
+        assert buffer.num_nodes_per_graph.tolist() == [2, 3, 4]
+        for index, value in enumerate((1.0, 2.0, 3.0)):
+            graph = buffer.get_data(index)
+            assert graph.energy.item() == value
+            assert graph.metadata_values.item() == 10 * value
+            assert graph.positions.eq(value).all()
 
     def test_put_and_defrag_preserve_mixed_builtin_buffer_dtypes(self):
         first = _minimal_atomic_data(2)

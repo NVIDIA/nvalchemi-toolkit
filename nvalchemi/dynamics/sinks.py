@@ -303,8 +303,6 @@ class GPUBuffer(DataSink):
         self._buffer: Batch | None = None
         # _copied_mask is allocated fresh on each write (per-write output mask)
         self._copied_mask: torch.Tensor | None = None
-        # Pre-allocated dest_mask tracks which buffer slots are occupied (capacity-sized)
-        self._dest_mask: torch.Tensor | None = None
 
     def _ensure_buffer(self, template: Batch) -> None:
         """Create the internal Batch buffer on first use.
@@ -327,10 +325,6 @@ class GPUBuffer(DataSink):
             template=template,
             device=self._device,
         )
-        # Pre-allocate dest_mask for system-level occupancy tracking
-        self._dest_mask = torch.zeros(
-            self._capacity, dtype=torch.bool, device=self._device
-        )
 
     def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
         """Store atomic data into the buffer.
@@ -343,7 +337,7 @@ class GPUBuffer(DataSink):
         tensor allocation. A batch arriving on another device is moved to the
         buffer's device first, as :class:`HostMemory` moves its items to CPU.
 
-        This method will set values for ``_copied_mask`` and ``_dest_mask``.
+        This method will set the value of ``_copied_mask``.
 
         Parameters
         ----------
@@ -418,12 +412,7 @@ class GPUBuffer(DataSink):
             num_total, dtype=torch.bool, device=self._device
         )
 
-        self._buffer.put(
-            batch,
-            mask,
-            copied_mask=self._copied_mask,
-            dest_mask=self._dest_mask,
-        )
+        self._buffer.put(batch, mask, copied_mask=self._copied_mask)
 
     def read(self) -> Batch:
         """Retrieve stored (non-padding) data as a single Batch.
@@ -476,9 +465,6 @@ class GPUBuffer(DataSink):
         re-allocation on the next :meth:`write` and keeps the buffer
         shape intact for ``isend``/``irecv`` symmetry.
         """
-        # Reset occupancy masks
-        if self._dest_mask is not None:
-            self._dest_mask.zero_()
         if self._buffer is None:
             return
         # Delegate buffer reset to Batch.zero() which properly handles

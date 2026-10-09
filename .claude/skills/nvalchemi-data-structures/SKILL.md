@@ -264,11 +264,10 @@ For high-throughput workflows (e.g. streaming dynamics), use pre-allocated buffe
 # Create buffer
 buffer = Batch.empty(num_systems=40, num_nodes=80, num_edges=80, template=data)
 
-# Copy selected graphs into buffer
+# Copy selected graphs into buffer; each put appends after buffer.num_graphs
 mask = torch.tensor([True, False])           # which src graphs to copy
 copied_mask = torch.zeros(2, dtype=torch.bool)  # updated in-place: which actually fit
-dest_mask = torch.zeros(buffer.system_capacity, dtype=torch.bool)
-buffer.put(src_batch, mask, copied_mask=copied_mask, dest_mask=dest_mask)
+buffer.put(src_batch, mask, copied_mask=copied_mask)
 
 # Remove copied graphs from source (compact in-place)
 src_batch.defrag(copied_mask=copied_mask)
