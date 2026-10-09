@@ -128,8 +128,10 @@ taken when `group_layout` is first accessed. In-place changes such as
 and rebuild the cached layout. A selection that leaves group numbering
 non-dense must be repaired with `batch.set_group_layout(batch.group_idx)` before
 `group_layout` is accessed again. `append()` requires both batches grouped or
-both ungrouped and rebases labels. `put()` rejects a grouped source or
-destination because graph-level buffer masks can split logical groups, while
+both ungrouped and rebases labels. `put()` also requires matching grouping and
+copies complete groups, stopping at the first selected group that does not fit.
+Masks passed to `put()` or `trim()` must select complete groups. This is the
+caller's responsibility and is not validated.
 `append_data()` is rejected on a grouped batch.
 
 ### Indexing and selection
