@@ -49,6 +49,7 @@ from nvalchemi.data.atomic_data import AtomicData
 from nvalchemi.data.data import DataMixin
 from nvalchemi.data.group_layout import (
     GroupLayout,
+    _complete_group_mask,
     _normalize_and_validate_group_idx,
 )
 from nvalchemi.data.level_storage import (
@@ -1742,6 +1743,49 @@ class Batch(DataMixin):
             data_class=self._data_class,
         )
 
+    def index_select_groups(self, idx: Tensor | Sequence[int]) -> Batch:
+        """Select complete groups in order and normalize their local labels.
+
+        Parameters
+        ----------
+        idx : Tensor or sequence of int
+            Group indices, or a boolean mask with one entry per group.
+
+        Returns
+        -------
+        Batch
+            A tightly packed grouped batch, possibly empty.
+        """
+        layout = self.group_layout
+        indices = torch.as_tensor(idx, device=self.device)
+        if indices.dtype == torch.bool:
+            if indices.shape != (layout.num_groups,):
+                raise ValueError("Group mask must have one entry per group")
+            graphs = indices[layout.group_idx]
+            if not torch.any(graphs):
+                return Batch.empty_like(self, device=self.device)
+            result = self.index_select(graphs)
+            result.set_group_layout(result.group_idx)
+            return result
+        indices = indices.long().view(-1)
+        if indices.numel() == 0:
+            return Batch.empty_like(self, device=self.device)
+        if torch.any((indices < 0) | (indices >= layout.num_groups)):
+            raise IndexError("Group index out of range")
+        if torch.unique(indices).numel() != indices.numel():
+            raise ValueError("Group selection cannot repeat a group")
+        graphs = torch.cat(
+            [
+                torch.arange(
+                    layout.group_ptr[i], layout.group_ptr[i + 1], device=self.device
+                )
+                for i in indices.tolist()
+            ]
+        )
+        result = self.index_select(graphs)
+        result.set_group_layout(result.group_idx)
+        return result
+
     def put(
         self,
         src_batch: Batch,
@@ -1759,16 +1803,21 @@ class Batch(DataMixin):
         *copied_mask* is provided, it is updated with the combined copy mask for
         :meth:`defrag`.
 
+        Grouped inputs must select complete groups. Copying stops at the first
+        group that does not fit, and copied group labels are rebased locally.
+
         Parameters
         ----------
         src_batch : Batch
             Source batch. Custom schemas and materialized custom groups must
             match the destination buffer.
         mask : Tensor
-            (num_graphs,) bool, True = consider copying this graph.
+            (num_graphs,) bool, True = consider copying this graph. For grouped
+            batches, select either all or none of the graphs in each group.
         copied_mask : Tensor, optional
             (num_graphs,) bool; if provided, modified in place with the actual
-            copy mask (fit in all levels). If None, stored on *src_batch*.
+            copy mask (fit in all levels). If None, a result tensor is created
+            and stored as ``src_batch._copied_mask``.
         dest_mask : Tensor, optional
             Deprecated and ignored; occupancy is derived from :attr:`num_graphs`.
 
@@ -1779,10 +1828,10 @@ class Batch(DataMixin):
         Raises
         ------
         ValueError
-            If either batch has ``group_idx`` metadata (because graph-level
-            insertion cannot preserve whole groups), or if *src_batch* is on
+            If grouping metadata is incompatible, if *src_batch* is on
             another device than this batch, or if a mask's
-            length does not match ``src_batch.num_graphs``.
+            length does not match ``src_batch.num_graphs``, or if *mask*
+            selects only part of a group.
 
         Warns
         -----
@@ -1795,18 +1844,14 @@ class Batch(DataMixin):
         level, so per-graph and per-atom data stay aligned. Each copied graph's
         ``neighbor_list`` is re-offset to where its atoms land in this batch.
 
+        Grouped transfers use host scalar reads and data-dependent source
+        compaction and are intended to run outside ``torch.compile`` regions.
+
         The copy runs as a Warp kernel over both batches' raw pointers, so a
         source on another device is rejected rather than moved: moving it would
         hide a per-step host-device transfer inside what callers use as an
         in-place buffer write.
         """
-        if "group_idx" in self or "group_idx" in src_batch:
-            raise ValueError(
-                "put does not support grouped batches; group_idx must be absent "
-                "from both source and destination. Use append() to combine "
-                "grouped batches."
-            )
-        self._invalidate_group_layout()
         device = self.device
         if src_batch.device != device:
             raise ValueError(
@@ -1834,35 +1879,80 @@ class Batch(DataMixin):
             copy_mask = torch.zeros(n, device=device, dtype=torch.bool)
             object.__setattr__(src_batch, "_copied_mask", copy_mask)
 
+        self_grouped = "group_idx" in self
+        if self_grouped != ("group_idx" in src_batch):
+            raise ValueError("Source and destination must both be grouped or ungrouped")
         # Keep the historical built-in order for communication layouts, then
         # process custom levels in schema order.
-        legacy_groups = ("system", "atoms", "edges")
-        custom_groups = tuple(
+        builtin_levels = ("system", "atoms", "edges")
+        custom_levels = tuple(
             name
             for name in self._storage.attr_map.level_names
             if name not in _BUILTIN_LEVELS
         )
-        fit_groups: list[tuple[str, Any, Any]] = []
-        for group_name in (*legacy_groups, *custom_groups):
-            dest_group = self._storage.groups.get(group_name)
-            src_group = src_batch._storage.groups.get(group_name)
+        storage_pairs: dict[str, tuple[LevelStorage, LevelStorage]] = {}
+        for level_name in (*builtin_levels, *custom_levels):
+            dest_level = self._storage.groups.get(level_name)
+            source_level = src_batch._storage.groups.get(level_name)
             if (
-                dest_group is not None
-                and src_group is not None
+                dest_level is not None
+                and source_level is not None
                 and not (
-                    isinstance(dest_group, UniformLevelStorage)
-                    and dest_group._data.is_empty()
-                    and src_group._data.is_empty()
+                    isinstance(dest_level, UniformLevelStorage)
+                    and dest_level._data.is_empty()
+                    and source_level._data.is_empty()
                 )
             ):
-                fit_groups.append((group_name, dest_group, src_group))
+                storage_pairs[level_name] = (dest_level, source_level)
+
+        if self_grouped:
+            layout = src_batch.group_layout
+            old_groups = self.group_layout.num_groups
+            n_existing = self.num_graphs
+            selected = _complete_group_mask(layout, mask)
+            # Fit selected groups in src_batch order, stopping at the first that does not fit.
+            group_ends = layout.group_ptr[1:] - 1
+            graph_totals = mask.cumsum(0)[group_ends]
+            accepted = selected & (graph_totals <= self.system_capacity - n_existing)
+            for dest_level, source_level in storage_pairs.values():
+                if dest_level._data.is_empty():
+                    continue
+                if isinstance(dest_level, SegmentedLevelStorage):
+                    used = dest_level.segment_lengths[:n_existing].sum()
+                    total_needed = (source_level.segment_lengths[:n] * mask).cumsum(0)[
+                        group_ends
+                    ]
+                else:
+                    used, total_needed = n_existing, graph_totals
+                accepted &= total_needed <= dest_level._data.shape[0] - used
+            accepted_graph_mask = layout.broadcast(accepted)
+            count = int(accepted_graph_mask.sum())
+            if count:
+                compact = src_batch.index_select_groups(accepted)
+                compact_labels = compact.group_idx + old_groups
+                compact_mask = torch.ones(count, dtype=torch.bool, device=device)
+                copied = torch.zeros_like(compact_mask)
+                # The segmented kernels reserve pointer slots for every source
+                # graph, so pass a tight source rather than a sparse mask.
+                with self.without_keys("group_idx"), compact.without_keys("group_idx"):
+                    self.put(compact, compact_mask, copied_mask=copied)
+                if not copied.all():
+                    raise RuntimeError(
+                        "Whole-group fit disagrees with graph buffer copy"
+                    )
+                self.group_idx[n_existing : n_existing + count] = compact_labels
+                self._invalidate_group_layout()
+            copy_mask.copy_(accepted_graph_mask)
+            if copied_mask is not None and copied_mask is not copy_mask:
+                copied_mask.copy_(copy_mask)
+            return
 
         # The -2 reserves the existing end boundary and the duplicate final end
         # pointer written by _copy_masked_segmented_kernel.
         free_slots = min(
             (
                 group.batch_ptr.numel() - len(group) - 2
-                for _, group, _ in fit_groups
+                for group, _ in storage_pairs.values()
                 if isinstance(group, SegmentedLevelStorage)
             ),
             default=n,
@@ -1877,34 +1967,33 @@ class Batch(DataMixin):
             mask = torch.ones(n, device=device, dtype=torch.bool)
             if n:
                 compact = src_batch.index_select(source_index)
-                fit_groups = [
-                    (name, group, compact._storage.groups[name])
-                    for name, group, _ in fit_groups
-                ]
+                storage_pairs = {
+                    name: (group, compact._storage.groups[name])
+                    for name, (group, _) in storage_pairs.items()
+                }
             else:
-                fit_groups = []
+                storage_pairs = {}
 
         fit_mask = torch.ones(n, device=device, dtype=torch.bool)
 
         # Compute every fit before entering the copy phase so a rejected
-        # custom group cannot leave built-in data partially written.  Each
+        # custom level cannot leave built-in data partially written. Each
         # level derives its free slots from its own fill count, which keeps
         # uniform rows aligned with the segments appended after len(self).
-        for _, group, src_group in fit_groups:
+        for dest_level, source_level in storage_pairs.values():
             level_fit = torch.empty(n, device=device, dtype=torch.bool)
-            group.compute_put_per_system_fit_mask(src_group, mask, level_fit)
+            dest_level.compute_put_per_system_fit_mask(source_level, mask, level_fit)
             fit_mask.logical_and_(level_fit)
         num_dest_graphs = self.num_graphs
-        for _, group, src_group in fit_groups:
+        for group, src_group in storage_pairs.values():
             group.put(src_group, fit_mask, copied_mask=fit_mask)
 
         # Edge index fields hold batch-wide atom indices but are copied as raw
         # values, so move each appended graph's edges by its destination atom
         # start minus its source atom start.
-        levels = {name: (group, src_group) for name, group, src_group in fit_groups}
-        if "atoms" in levels and "edges" in levels:
-            dest_atoms, src_atoms = levels["atoms"]
-            dest_edges, src_edges = levels["edges"]
+        if "atoms" in storage_pairs and "edges" in storage_pairs:
+            dest_atoms, src_atoms = storage_pairs["atoms"]
+            dest_edges, src_edges = storage_pairs["edges"]
             index_keys = _INDEX_KEYS.intersection(src_edges.keys(), dest_edges.keys())
             new_graphs = slice(num_dest_graphs, len(dest_atoms))
             if index_keys and new_graphs.stop > new_graphs.start:
@@ -1949,17 +2038,19 @@ class Batch(DataMixin):
         ----------
         copied_mask : Tensor, optional
             (num_graphs,) bool; if None, uses stored value from last :meth:`put`.
+            For grouped batches, must select complete groups, as guaranteed
+            by the mask produced by :meth:`put`.
 
         Returns
         -------
         Self
             For method chaining.
         """
-        self._invalidate_group_layout()
         if copied_mask is None:
             copied_mask = getattr(self, "_copied_mask", None)
             if copied_mask is None:
                 raise ValueError("defrag requires copied_mask or a prior put")
+        self._invalidate_group_layout()
         self._prevalidate_buffer_defrag()
         # Keep the historical built-in order, then compact each materialized
         # custom level in schema order using the same graph mask.
@@ -1975,6 +2066,12 @@ class Batch(DataMixin):
                 group.defrag(copied_mask=copied_mask)
         if hasattr(self, "_copied_mask"):
             object.__delattr__(self, "_copied_mask")
+        if "group_idx" in self:
+            labels = self.group_idx[: self.num_graphs]
+            normalized = _normalize_and_validate_group_idx(
+                labels, num_graphs=self.num_graphs, device=self.device
+            )
+            labels.copy_(normalized)
         return self
 
     def trim(
@@ -2001,7 +2098,8 @@ class Batch(DataMixin):
         copied_mask : Tensor, optional
             ``(num_graphs,)`` boolean tensor where ``True`` marks graphs
             to remove.  If *None*, uses the ``_copied_mask`` stored by
-            the most recent :meth:`put`.
+            the most recent :meth:`put`. For grouped batches, select complete
+            groups. Partial-group masks raise ``ValueError``.
 
         Returns
         -------
@@ -2014,7 +2112,7 @@ class Batch(DataMixin):
         ------
         ValueError
             If no *copied_mask* is provided and no prior :meth:`put`
-            has stored one.
+            has stored one, or if *copied_mask* selects only part of a group.
 
         See Also
         --------
@@ -2028,6 +2126,9 @@ class Batch(DataMixin):
         if not keep_mask.any():
             return None
         keep_indices = torch.where(keep_mask)[0]
+        if "group_idx" in self:
+            layout = self.group_layout
+            return self.index_select_groups(_complete_group_mask(layout, keep_mask))
         return self.index_select(keep_indices)
 
     def _normalize_index(
@@ -2866,7 +2967,10 @@ class Batch(DataMixin):
         Grouped batches may only be appended to other grouped batches. The
         appended batch's local ``group_idx`` values are rebased after the
         receiver's existing groups. Appending a grouped and an ungrouped batch
-        is rejected before either batch is modified.
+        is rejected before either batch is modified. The derived group layout
+        is rebuilt lazily. Inputs must have dense, zero-based group IDs and
+        keep the graphs of each group contiguous; use
+        :meth:`set_group_layout` to validate grouping metadata before appending.
 
         Parameters
         ----------
@@ -2981,14 +3085,23 @@ class Batch(DataMixin):
 
         combined_group_idx: Tensor | None = None
         if self_grouped:
-            num_groups = self.group_layout.num_groups
-            other.group_layout  # validate before mutating either batch
-            combined_group_idx = torch.cat(
-                [
-                    self.group_idx,
-                    other.group_idx.to(device=self.device) + num_groups,
-                ]
-            )
+            layout = getattr(self, "_group_layout", None)
+            if layout is not None:
+                combined_group_idx = torch.cat(
+                    [
+                        self.group_idx,
+                        other.group_idx.to(self.device) + layout.num_groups,
+                    ]
+                )
+            else:
+                # Rebase labels without building a layout during repeated appends.
+                labels = torch.cat([self.group_idx, other.group_idx.to(self.device)])
+                group_start = torch.ones_like(labels, dtype=torch.bool)
+                group_start[1:] = labels[1:] != labels[:-1]
+                # Keep the incoming group distinct even if the join labels match.
+                if self.num_graphs and other.num_graphs:
+                    group_start[self.num_graphs] = True
+                combined_group_idx = group_start.cumsum(0) - 1
 
         self._invalidate_group_layout()
         atoms = self._atoms_group
@@ -3033,7 +3146,7 @@ class Batch(DataMixin):
                 other_edges._data["neighbor_list"] = saved_ei
 
         if combined_group_idx is not None:
-            self.set_group_layout(combined_group_idx)
+            self.group_idx = combined_group_idx
 
     def append_data(
         self,
