@@ -1770,10 +1770,7 @@ class Batch(DataMixin):
             (num_graphs,) bool; if provided, modified in place with the actual
             copy mask (fit in all levels). If None, stored on *src_batch*.
         dest_mask : Tensor, optional
-            Deprecated; occupancy is derived from :attr:`num_graphs`. If
-            given, it must have length :attr:`system_capacity` and equal
-            ``arange(system_capacity) < num_graphs``; it is updated in place
-            to the new occupancy after the copy.
+            Deprecated and ignored; occupancy is derived from :attr:`num_graphs`.
 
             .. deprecated:: 0.3.0
                 Omit ``dest_mask``; it will be removed in the release after
@@ -1785,13 +1782,12 @@ class Batch(DataMixin):
             If either batch has ``group_idx`` metadata (because graph-level
             insertion cannot preserve whole groups), or if *src_batch* is on
             another device than this batch, or if a mask's
-            length does not match ``src_batch.num_graphs``, or if *dest_mask*
-            does not match the buffer's occupancy.
+            length does not match ``src_batch.num_graphs``.
 
         Warns
         -----
         DeprecationWarning
-            If *dest_mask* is passed.
+            If *dest_mask* is passed. The argument is ignored.
 
         Notes
         -----
@@ -1821,22 +1817,11 @@ class Batch(DataMixin):
             raise ValueError(f"mask shape {mask.shape[0]} != num_graphs {n}")
         if dest_mask is not None:
             warnings.warn(
-                "Batch.put(dest_mask=...) is deprecated; occupancy is derived "
-                "from num_graphs. Omit dest_mask.",
+                "Batch.put(dest_mask=...) is deprecated and ignored; occupancy "
+                "is derived from num_graphs. Omit dest_mask.",
                 DeprecationWarning,
                 stacklevel=2,
             )
-            expected = (
-                torch.arange(self.system_capacity, device=dest_mask.device)
-                < self.num_graphs
-            )
-            if dest_mask.shape != expected.shape or not torch.equal(
-                dest_mask.to(torch.bool), expected
-            ):
-                raise ValueError(
-                    f"dest_mask must equal arange({self.system_capacity}) < "
-                    f"num_graphs ({self.num_graphs})"
-                )
         self._validate_custom_put(src_batch)
         self._prevalidate_buffer_put(src_batch)
         mask = mask.to(device=device, dtype=torch.bool)
@@ -1885,12 +1870,6 @@ class Batch(DataMixin):
 
         for _, group, src_group in fit_groups:
             group.put(src_group, copy_mask, copied_mask=copy_mask)
-
-        if dest_mask is not None:
-            dest_mask.copy_(
-                torch.arange(dest_mask.shape[0], device=dest_mask.device)
-                < self.num_graphs
-            )
 
     def defrag(
         self,
