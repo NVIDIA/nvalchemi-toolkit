@@ -2123,16 +2123,16 @@ class TestBookkeepingKeys:
         self.model = DemoModelWrapper(DemoModel())
 
     def test_a_bare_dynamics_reports_the_base_registry(self) -> None:
-        """The engine's own bookkeeping is status and system_id, plus registrations."""
+        """The base registry includes status, system_id, and pending force priming."""
         dynamics = BaseDynamics(model=self.model)
 
         keys = dynamics.bookkeeping_keys()
 
-        assert {"status", "system_id"} <= keys
+        assert {"status", "system_id", "reprime_pending"} <= keys
         assert keys == frozenset(BaseDynamics._bookkeeping_keys)
 
-    def test_a_fused_stage_adds_its_own_key_and_its_sub_stages_counters(self) -> None:
-        """reprime_pending lives on FusedStage alone; the counters on the base registry."""
+    def test_a_fused_stage_reports_pending_flags_and_sub_stage_counters(self) -> None:
+        """Fused stages share pending force flags and include sub-stage counters."""
         fused = DemoDynamics(self.model, n_steps=1) + DemoDynamics(
             self.model, n_steps=2
         )
@@ -2141,7 +2141,7 @@ class TestBookkeepingKeys:
 
         assert "reprime_pending" in keys
         assert {"n_steps_counter_0", "n_steps_counter_1"} <= keys
-        assert "reprime_pending" not in BaseDynamics._bookkeeping_keys
+        assert "reprime_pending" in BaseDynamics._bookkeeping_keys
 
     def test_a_key_registered_on_a_sub_stage_class_is_reached_from_the_root(
         self,

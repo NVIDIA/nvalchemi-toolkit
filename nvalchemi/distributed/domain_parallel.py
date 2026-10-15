@@ -82,6 +82,9 @@ class DomainParallel(BaseDynamics):
         ``device_type``, ...).
     """
 
+    # Whole systems are repartitioned and primed together across the domain group.
+    _supports_per_graph_priming: bool = False
+
     def __init__(
         self,
         dynamics: BaseDynamics,

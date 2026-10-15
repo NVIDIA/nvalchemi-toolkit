@@ -51,6 +51,14 @@ admission is an event rather than a recurring step stage, it ignores a hook's
 `frequency`; for a multi-stage hook, the frequency still applies at its other
 stages.
 
+After initial force priming, inflight refill in `BaseDynamics` and `FusedStage`
+lets existing graphs continue updating normally. Newly added graphs skip both
+integrator updates for one iteration while the regular model evaluation computes
+their initial forces.
+This avoids an extra whole-batch model evaluation. Newly added graphs begin
+integrator updates on the following step. In `FusedStage`, their stage step
+counters do not advance during the iteration that computes their initial forces.
+
 Each step then proceeds through these stages in order:
 
 1. **BEFORE_STEP** hooks fire.

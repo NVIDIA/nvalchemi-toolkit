@@ -409,6 +409,22 @@ class TestRankResolution:
 
 
 class TestPrimeForces:
+    def test_refill_retains_whole_batch_priming(self) -> None:
+        """Domain decomposition does not use per-graph refill priming."""
+        dp, _ = _make_dp()
+        batch = _make_batch()
+        batch.status = torch.tensor([[dp.exit_status]])
+        dp.sampler = MagicMock()
+        dp.sampler.max_atoms = dp.sampler.max_edges = dp.sampler.max_batch_size = None
+        dp.sampler.request_replacements_budget.return_value = batch.to_data_list()
+        dp._forces_primed = True
+
+        result = dp.refill_check(batch, dp.exit_status)
+
+        assert result is not None
+        assert not dp._forces_primed
+        assert not result.reprime_pending.any()
+
     def test_distributed_step_initializes_admission_before_priming(self) -> None:
         """Initialize admission and safely publish mixed-dtype model outputs."""
         dp, _ = _make_dp()
