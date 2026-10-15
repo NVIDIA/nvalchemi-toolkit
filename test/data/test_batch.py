@@ -3390,6 +3390,93 @@ class TestBatchPutDefrag:
             buffer.positions[: buffer.num_nodes], source.positions[: buffer.num_nodes]
         )
 
+    @pytest.mark.parametrize("grouped", [False, True])
+    def test_put_updates_caller_mask_after_dtype_or_device_conversion(
+        self, grouped: bool, device: str
+    ) -> None:
+        """A converted output mask still reports copied graphs to the caller."""
+        source = Batch.from_data_list([_minimal_atomic_data(2)] * 2).to(device)
+        if grouped:
+            source.set_group_layout(torch.zeros(2, dtype=torch.long, device=device))
+        buffer = Batch.empty(
+            num_systems=2, num_nodes=4, num_edges=0, template=source, device=device
+        )
+        copied = torch.zeros(2, dtype=torch.int32)
+
+        buffer.put(source, torch.ones(2, dtype=torch.int32), copied_mask=copied)
+
+        assert copied.tolist() == [1, 1]
+        assert buffer.num_graphs == 2
+        torch.testing.assert_close(buffer.positions, source.positions)
+
+    @pytest.mark.parametrize(
+        "limiting_level,fieldless_parent",
+        [
+            ("system", False),
+            ("atoms", False),
+            ("edges", False),
+            ("molecules", False),
+            ("pairs", False),
+            ("pairs", True),
+        ],
+    )
+    def test_grouped_put_copies_only_fitting_selected_prefix(
+        self, limiting_level: str, fieldless_parent: bool, device: str
+    ) -> None:
+        """Use remaining capacities, skip unselected costs, and stop at a blocked group."""
+        data = []
+        for nodes, molecules in [(2, 2)] * 2 + [(4, 4)] * 2 + [(3, 3)] * 2 + [(1, 0)]:
+            graph = _custom_buffer_data(
+                nodes, molecules, fieldless_parent=fieldless_parent
+            )
+            graph.neighbor_list = torch.zeros(nodes, 2, dtype=torch.long)
+            data.append(graph)
+        source = Batch.from_data_list(
+            data, attr_map=_custom_buffer_schema(fieldless_parent=fieldless_parent)
+        ).to(device)
+        source.set_group_layout(torch.tensor([0, 0, 1, 1, 2, 2, 3], device=device))
+        capacities = {
+            "system": 10,
+            "atoms": 40,
+            "edges": 40,
+            "molecules": 40,
+            "pairs": 100,
+        }
+        # Two copies of group 0 fit, but adding group 2 exceeds this capacity.
+        capacities[limiting_level] = {"system": 5, "pairs": 17}.get(limiting_level, 9)
+        custom_capacities = {"pairs": capacities["pairs"]}
+        if not fieldless_parent:
+            custom_capacities["molecules"] = capacities["molecules"]
+        buffer = Batch.empty(
+            num_systems=capacities["system"],
+            num_nodes=capacities["atoms"],
+            num_edges=capacities["edges"],
+            level_capacities=custom_capacities,
+            template=source,
+            device=device,
+        )
+        # Prefill the buffer so the next put must account for occupied space.
+        first = source.index_select_groups([0])
+        buffer.put(first, torch.ones(2, dtype=torch.bool, device=device))
+        copied = torch.zeros(7, dtype=torch.bool, device=device)
+        # Select groups 0, 2, and 3; unselected group 1 must consume no capacity.
+        mask = torch.tensor([True, True, False, False, True, True, True], device=device)
+
+        buffer.put(source, mask, copied_mask=copied)
+
+        # Group 2 blocks the prefix: group 3 stays uncopied despite fitting alone.
+        assert copied.tolist() == [True, True, False, False, False, False, False]
+        assert buffer.num_graphs == 4
+        assert buffer.group_layout.num_graphs_per_group.tolist() == [2, 2]
+        torch.testing.assert_close(buffer.positions[:8], first.positions.repeat(2, 1))
+        for index in range(4):
+            actual, expected = buffer.get_data(index), first.get_data(index % 2)
+            torch.testing.assert_close(actual.pair_values, expected.pair_values)
+            if not fieldless_parent:
+                torch.testing.assert_close(
+                    actual.molecule_values, expected.molecule_values
+                )
+
     def test_put_copied_mask_when_same_size_buffer_no_room(self):
         """When buffer and src have same size, fixed storage has no room to append; copied_mask all False."""
         buffer = Batch.from_data_list(

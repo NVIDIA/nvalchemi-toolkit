@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -115,6 +116,127 @@ class TestBatchGroupLayout:
             selected.set_group_layout(selected.group_idx)
 
     @pytest.mark.parametrize(
+        "selection,graphs,group_sizes",
+        [
+            ([1, 0], [2, 3, 4, 0, 1], [3, 2]),
+            ([False, True], [2, 3, 4], [3]),
+            ([], [], []),
+            ([False, False], [], []),
+        ],
+    )
+    def test_index_select_groups_preserves_whole_groups(
+        self, selection, graphs, group_sizes, device: str
+    ) -> None:
+        """Ordered indices and group masks select complete graphs and rebase labels."""
+        batch = _batch().to(device)
+        batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1], device=device))
+
+        selected = batch.index_select_groups(selection)
+
+        assert selected.num_graphs == len(graphs)
+        assert selected.device == batch.device
+        assert selected.group_layout.num_graphs_per_group.tolist() == group_sizes
+        assert batch.group_idx.tolist() == [0, 0, 1, 1, 1]
+        if graphs:
+            expected = batch.index_select(graphs)
+            torch.testing.assert_close(selected.positions, expected.positions)
+            torch.testing.assert_close(selected.batch_ptr, expected.batch_ptr)
+
+    @pytest.mark.parametrize(
+        "selection,error,match",
+        [
+            ([True], ValueError, "one entry per group"),
+            ([0, 0], ValueError, "cannot repeat a group"),
+            ([-1], IndexError, "out of range"),
+            ([2], IndexError, "out of range"),
+        ],
+    )
+    def test_index_select_groups_rejects_invalid_selection(
+        self, selection, error, match
+    ) -> None:
+        """Group selection rejects invalid masks, duplicate groups, and bounds."""
+        batch = _batch()
+        batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1]))
+        with pytest.raises(error, match=match):
+            batch.index_select_groups(selection)
+
+    @pytest.mark.parametrize("operation", ["put", "trim"])
+    def test_partial_group_mask_rejected_before_mutation(
+        self, operation: str, device: str
+    ) -> None:
+        """Buffer copying and removal must not split a logical group."""
+        batch = _batch().to(device)
+        batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1], device=device))
+        layout = batch.group_layout
+        positions = batch.positions.clone()
+        mask = torch.tensor([True, False, False, False, False], device=device)
+        buffer = Batch.empty_like(batch, device=device)
+
+        with pytest.raises(ValueError, match="complete groups"):
+            if operation == "put":
+                buffer.put(batch, mask)
+            else:
+                batch.trim(mask)
+
+        assert buffer.num_graphs == 0
+        assert batch.group_layout is layout
+        assert batch.group_idx.tolist() == [0, 0, 1, 1, 1]
+        torch.testing.assert_close(batch.positions, positions)
+
+    def test_put_copies_only_groups_that_fit(self, device: str) -> None:
+        """put moves whole groups only and records them in the source mask."""
+        # Mimic in-flight batching: ask put to move every graph out of the
+        # source, but size the buffer so only group 0 fits (2 graphs / 3 atoms;
+        # group 1 needs 3 / 6). put stores the copied graphs on the source.
+        source = _batch().to(device)
+        source.set_group_layout(torch.tensor([0, 0, 1, 1, 1], device=device))
+        positions = source.positions.clone()
+        buffer = Batch.empty(
+            num_systems=2, num_nodes=3, num_edges=0, template=source, device=device
+        )
+        buffer.put(source, torch.ones(5, dtype=torch.bool, device=device))
+
+        assert source._copied_mask.tolist() == [True, True, False, False, False]
+        assert buffer.group_layout.num_graphs_per_group.tolist() == [2]
+        torch.testing.assert_close(buffer.positions, positions[:3])
+
+    @pytest.mark.parametrize("operation", ["trim", "defrag"])
+    def test_trim_and_defrag_remove_put_groups(
+        self, operation: str, device: str
+    ) -> None:
+        """Test removing put groups with trim and defrag.
+
+        The remaining old group 1 is relabeled as group 0. ``trim`` returns a
+        new batch; ``defrag`` compacts in place and keeps capacity.
+        """
+        # Same setup as above: put copies only group 0 out of the source.
+        source = _batch().to(device)
+        source.set_group_layout(torch.tensor([0, 0, 1, 1, 1], device=device))
+        positions = source.positions.clone()
+        buffer = Batch.empty(
+            num_systems=2, num_nodes=3, num_edges=0, template=source, device=device
+        )
+        buffer.put(source, torch.ones(5, dtype=torch.bool, device=device))
+        capacity = source.system_capacity
+
+        # With no mask argument, trim/defrag remove the graphs put copied
+        # (group 0), leaving the old group 1.
+        if operation == "trim":
+            remaining = source.trim()
+            assert source.num_graphs == 5
+        else:
+            remaining = source.defrag()
+            assert remaining is source
+            assert source.system_capacity == capacity
+
+        assert remaining.num_graphs == 3
+        assert remaining.group_idx[: remaining.num_graphs].tolist() == [0, 0, 0]
+        assert remaining.group_layout.num_graphs_per_group.tolist() == [3]
+        torch.testing.assert_close(
+            remaining.positions[: remaining.num_nodes], positions[3:]
+        )
+
+    @pytest.mark.parametrize(
         "operation", ["clone", "to", "cpu", "cuda", "index_select"]
     )
     def test_constructed_batches_reset_and_lazily_rebuild_cache(self, operation):
@@ -146,9 +268,9 @@ class TestBatchGroupLayout:
 
     @pytest.mark.parametrize(
         ("grouped_receiver", "grouped_source"),
-        [(True, False), (False, True), (True, True)],
+        [(True, False), (False, True)],
     )
-    def test_put_rejects_grouped_batches_before_mutation(
+    def test_put_rejects_mixed_grouping_before_mutation(
         self,
         grouped_receiver,
         grouped_source,
@@ -164,7 +286,7 @@ class TestBatchGroupLayout:
             source.set_group_layout(torch.tensor([0, 0, 1, 1, 1]))
         copied_mask = torch.zeros(source.num_graphs, dtype=torch.bool)
 
-        with pytest.raises(ValueError, match="does not support grouped batches"):
+        with pytest.raises(ValueError, match="both be grouped or ungrouped"):
             batch.put(
                 source,
                 torch.ones(source.num_graphs, dtype=torch.bool),
@@ -229,6 +351,32 @@ class TestBatchGroupLayout:
         assert batch.group_layout.num_groups == 4
         assert batch.group_layout.num_graphs_per_group.tolist() == [2, 3, 2, 3]
         assert torch.equal(other.group_idx, other_group_idx)
+
+    @pytest.mark.parametrize("cached_receiver", [False, True])
+    def test_repeated_append_rebases_matching_labels_without_building_layout(
+        self, cached_receiver: bool, device: str
+    ) -> None:
+        """Equal join labels stay separate with cached and lazy receiver layouts."""
+        batch = _batch().to(device)
+        batch.set_group_layout(torch.zeros(5, dtype=torch.long, device=device))
+        other = batch.clone()
+        original_positions = other.positions.clone()
+        if not cached_receiver:
+            batch.group_idx = batch.group_idx.clone()
+
+        with patch.object(
+            GroupLayout, "from_batch", side_effect=AssertionError("eager group layout")
+        ):
+            for groups in [2, 3]:
+                batch.append(other)
+                assert getattr(batch, "_group_layout", None) is None
+                assert batch.group_idx.tolist() == [
+                    i for i in range(groups) for _ in range(5)
+                ]
+
+        assert batch.group_layout.num_graphs_per_group.tolist() == [5, 5, 5]
+        assert other.group_idx.tolist() == [0] * 5
+        torch.testing.assert_close(other.positions, original_positions)
 
     @pytest.mark.parametrize("grouped_receiver", [True, False])
     def test_append_rejects_mixed_grouping_before_mutation(self, grouped_receiver):
