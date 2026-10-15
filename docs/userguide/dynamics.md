@@ -494,6 +494,50 @@ can therefore be propagated again without a manual cleanup pass. Any object
 satisfying the {py:class}`~nvalchemi.dynamics.StructureSource` protocol can
 stand in for the sampler; {doc}`/modules/dynamics/api` lists its members.
 
+### Size-aware complete-path sampling
+
+{py:class}`~nvalchemi.dynamics.SizeAwareSampler` supports sampling whole paths
+with `by_group=True`. Each dataset item returns `(batch, metadata)`, where
+`batch` contains exactly one group. Its `get_metadata(index)` returns total
+atom and edge counts for that path. The sampler's metadata prescan does not
+load paths. Image counts are checked when a candidate is loaded.
+
+```python
+from nvalchemi.dynamics.sampler import SizeAwareSampler
+
+sampler = SizeAwareSampler(
+    prepared_paths,
+    by_group=True,
+    max_atoms=20_000,
+    max_edges=100_000,
+    max_batch_size=64,  # images across all paths, including endpoints
+)
+batch = sampler.build_initial_batch()
+replacements = sampler.request_replacements_budget(
+    atom_budget=5_000,
+    edge_budget=25_000,
+    max_count=16,  # total replacement images
+)
+```
+
+Paths stay complete. A candidate that exceeds the remaining atom, edge, or
+image budget stays unconsumed, and the sampler considers other candidates.
+A path exceeding the configured `max_batch_size` cannot fit any batch and
+raises `RuntimeError` when loaded. With `max_batch_size=None`, atom and edge
+budgets alone limit packing.
+
+`group_idx` gives dense local group labels in the assembled batch. `group_id`
+identifies the original dataset item, and `system_id` identifies each image
+uniquely within the sampler. Sampling preserves the dataset's source batches.
+The default `by_group=False` samples individual `AtomicData` graphs.
+
+For grouped replacement, use `request_replacements_budget()`. The singular
+`request_replacement()` and vectorized `request_replacements()` methods support
+individual graphs only.
+
+The resulting batch can be passed to the fixed-batch NEB workflow. Dynamics
+engines currently reject sampler-backed runs with `by_group=True`.
+
 ## What's next
 
 ```{toctree}
