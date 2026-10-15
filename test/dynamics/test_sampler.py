@@ -21,10 +21,12 @@ used in inflight batching for dynamics simulations.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 import torch
 
-from nvalchemi.data import AtomicData
+from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 
 # -----------------------------------------------------------------------------
@@ -1083,3 +1085,131 @@ class TestBudgetReplacement:
         assert sampler.max_atoms == 100
         assert sampler.max_edges == 500
         assert sampler.max_batch_size == 10
+
+
+class MockGroupedDataset:
+    """Cached paths with per-image atom and edge counts for grouped sampling."""
+
+    def __init__(self, sizes: list[tuple[int, int, int]]) -> None:
+        """Build one grouped batch per (images, atoms, edges) entry."""
+        self.paths = []
+        for images, atoms, edges in sizes:
+            graphs = MockDataset([(atoms, edges)] * images)
+            path = Batch.from_data_list([graphs[i][0] for i in range(images)])
+            path.set_group_layout(torch.zeros(images, dtype=torch.long))
+            self.paths.append(path)
+
+    def __len__(self) -> int:
+        """Return the number of complete paths."""
+        return len(self.paths)
+
+    def get_metadata(self, index: int) -> tuple[int, int]:
+        """Return total atom and edge counts without loading the path."""
+        path = self.paths[index]
+        return path.num_nodes, path.num_edges
+
+    def __getitem__(self, index: int) -> tuple[Batch, dict]:
+        """Return a cached path to exercise sampling without dataset mutation."""
+        return self.paths[index], {}
+
+
+class TestGroupedSampling:
+    """Complete paths fit atom, edge, and image budgets without splitting."""
+
+    def test_metadata_prescan_does_not_load_paths(self) -> None:
+        """Image counts are obtained only when a candidate path is loaded."""
+        dataset = MockGroupedDataset([(3, 1, 0), (5, 2, 2)])
+        with patch.object(
+            MockGroupedDataset,
+            "__getitem__",
+            side_effect=AssertionError("unexpected path load"),
+        ):
+            sampler = SizeAwareSampler(dataset, max_atoms=100, by_group=True)
+        assert sampler._sample_meta == [(3, 0), (10, 10)]
+
+    def test_initial_limit_counts_graphs_and_keeps_unfitting_group(self) -> None:
+        """A skipped path remains available and does not consume image IDs."""
+        dataset = MockGroupedDataset([(3, 1, 0), (5, 1, 0), (4, 1, 0)])
+        sampler = SizeAwareSampler(
+            dataset, max_atoms=100, max_batch_size=7, bin_width=100, by_group=True
+        )
+        batch = sampler.build_initial_batch()
+        assert batch.group_layout.num_graphs_per_group.tolist() == [3, 4]
+        assert batch.group_id.view(-1).tolist() == [0] * 3 + [2] * 4
+        assert batch.system_id.view(-1).tolist() == list(range(7))
+        assert batch.status.eq(0).all()
+        assert list(sampler) == [1]
+        next_batch = sampler.build_initial_batch()
+        assert next_batch.group_id.view(-1).tolist() == [1] * 5
+        assert next_batch.system_id.view(-1).tolist() == list(range(7, 12))
+        assert sampler.exhausted
+
+    @pytest.mark.parametrize("max_count", [2, 6, None])
+    def test_replacement_limit_counts_graphs(self, max_count: int | None) -> None:
+        """Replacement budgets count all graphs in the selected complete groups."""
+        dataset = MockGroupedDataset([(7, 1, 0), (3, 1, 0), (4, 1, 0)])
+        sampler = SizeAwareSampler(dataset, max_atoms=100, by_group=True)
+        samples = sampler.request_replacements_budget(max_count=max_count)
+        expected = {2: [], 6: [4], None: [7, 4, 3]}[max_count]
+        assert [sample.num_graphs for sample in samples] == expected
+        assert len(sampler) == 3 - len(expected)
+        if samples:
+            ids = torch.cat([sample.system_id for sample in samples]).view(-1)
+            assert ids.tolist() == list(range(sum(expected)))
+
+    def test_group_exceeding_graph_limit_is_not_consumed(self) -> None:
+        """An impossible graph limit raises before identity stamping or consumption."""
+        dataset = MockGroupedDataset([(3, 1, 0)])
+        sampler = SizeAwareSampler(dataset, max_batch_size=2, by_group=True)
+        with pytest.raises(RuntimeError, match="max_batch_size=2"):
+            sampler.build_initial_batch()
+        assert len(sampler) == 1
+        assert sampler._next_system_id == 0
+        assert "group_id" not in dataset.paths[0]
+
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    def test_sampling_does_not_mutate_cached_paths(self, device: str) -> None:
+        """Stamping identities and modifying a working batch leaves sources intact."""
+        if device == "cuda" and not torch.cuda.is_available():
+            pytest.skip("CUDA unavailable")
+        dataset = MockGroupedDataset([(3, 2, 2), (4, 2, 2)])
+        dataset.paths = [path.to(device) for path in dataset.paths]
+        originals = [path.clone() for path in dataset.paths]
+        sampler = SizeAwareSampler(dataset, max_atoms=100, by_group=True)
+        batch = sampler.build_initial_batch()
+        assert batch.device.type == device
+        assert batch.group_id.device == batch.system_id.device == batch.device
+        assert batch.group_layout.num_graphs_per_group.tolist() == [3, 4]
+        torch.testing.assert_close(
+            batch.neighbor_list,
+            torch.cat(
+                [
+                    originals[0].neighbor_list,
+                    originals[1].neighbor_list + originals[0].num_nodes,
+                ]
+            ),
+        )
+        batch.positions.zero_()
+        for path, original in zip(dataset.paths, originals):
+            torch.testing.assert_close(path.positions, original.positions)
+            torch.testing.assert_close(path.group_idx, original.group_idx)
+            assert "group_id" not in path
+            assert "system_id" not in path
+
+    @pytest.mark.parametrize("invalid", ["atomic_data", "ungrouped", "multiple_groups"])
+    def test_rejects_invalid_grouped_items(self, invalid: str) -> None:
+        """Grouped mode requires a Batch containing exactly one group."""
+        dataset = MockGroupedDataset([(3, 1, 0)])
+        if invalid == "atomic_data":
+            dataset.paths[0] = dataset.paths[0].get_data(0)
+            error, message = TypeError, "Batch objects"
+        elif invalid == "ungrouped":
+            del dataset.paths[0]["group_idx"]
+            error, message = ValueError, "exactly one group"
+        else:
+            dataset.paths[0].set_group_layout(torch.tensor([0, 1, 1]))
+            error, message = ValueError, "exactly one group"
+        sampler = SizeAwareSampler(dataset, max_atoms=100, by_group=True)
+        with pytest.raises(error, match=message):
+            sampler.build_initial_batch()
+        assert len(sampler) == 1
