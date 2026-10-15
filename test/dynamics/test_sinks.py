@@ -92,6 +92,25 @@ def create_single_atom_batch(num_graphs: int = 1, device: str = "cpu") -> Batch:
     return Batch.from_data_list(data_list, device=device)
 
 
+def create_grouped_batch(group_sizes: list[int], device: str = "cpu") -> Batch:
+    """Create a grouped batch with the given number of graphs per group."""
+    batch = create_test_batch(num_graphs=sum(group_sizes), device=device)
+    batch.set_group_layout(
+        torch.repeat_interleave(
+            torch.arange(len(group_sizes), device=device),
+            torch.tensor(group_sizes, device=device),
+        )
+    )
+    return batch
+
+
+def _make_sink(kind: str, tmp_path: Path, capacity: int = 100) -> DataSink:
+    """Create a host or Zarr sink for grouped-write tests."""
+    if kind == "host":
+        return HostMemory(capacity=capacity)
+    return ZarrData(store=tmp_path / "grouped_store", capacity=capacity)
+
+
 # -----------------------------------------------------------------------------
 # Test Classes
 # -----------------------------------------------------------------------------
@@ -742,3 +761,52 @@ class TestZarrData:
         mask = torch.tensor([True, False])  # Wrong length
         with pytest.raises(ValueError, match="mask length"):
             sink.write(batch, mask=mask)
+
+    def test_zero_restarts_group_labels(self, tmp_path: Path) -> None:
+        """Group labels written after zero() start again at zero."""
+        sink = ZarrData(store=tmp_path / "test_store", capacity=100)
+        sink.write(create_grouped_batch([2, 1]))
+        sink.zero()
+        sink.write(create_grouped_batch([1, 2]))
+        assert sink.read().group_idx.tolist() == [0, 1, 1]
+
+
+@pytest.mark.parametrize("kind", ["host", "zarr"])
+class TestGroupedHostAndZarrSinks:
+    """Grouped writes to HostMemory and ZarrData keep groups intact."""
+
+    def test_repeated_writes_keep_groups_distinct(
+        self, kind: str, device: str, tmp_path: Path
+    ) -> None:
+        """Labels from separate writes, including masked ones, never merge."""
+        sink = _make_sink(kind, tmp_path)
+        first = create_grouped_batch([3, 2], device=device)
+        second = create_grouped_batch([2, 1], device=device)
+        sink.write(first)
+        sink.write(second, mask=torch.tensor([True, True, False], device=device))
+
+        assert len(sink) == 7
+        result = sink.read()
+        assert result.group_idx.tolist() == [0, 0, 0, 1, 1, 2, 2]
+        assert result.group_layout.num_groups == 3
+        expected = torch.cat([first.positions, second.positions[:4]]).cpu()
+        assert torch.equal(result.positions.cpu(), expected)
+        # The caller's labels are not offset in place.
+        assert second.group_idx.tolist() == [0, 0, 1]
+
+    def test_partial_group_mask_raises(self, kind: str, tmp_path: Path) -> None:
+        """A mask that splits a group is rejected and nothing is written."""
+        sink = _make_sink(kind, tmp_path)
+        batch = create_grouped_batch([3, 2])
+        with pytest.raises(ValueError, match="complete groups"):
+            sink.write(batch, mask=torch.tensor([True, True, False, False, False]))
+        assert len(sink) == 0
+
+    def test_mixing_grouped_and_ungrouped_writes_raises(
+        self, kind: str, tmp_path: Path
+    ) -> None:
+        """A sink holding grouped data rejects ungrouped writes."""
+        sink = _make_sink(kind, tmp_path)
+        sink.write(create_grouped_batch([2]))
+        with pytest.raises(ValueError, match="mix grouped and ungrouped"):
+            sink.write(create_test_batch(num_graphs=1))
