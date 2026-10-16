@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import importlib
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock, patch
 
@@ -96,6 +97,61 @@ def _selection_hooks(
 
 class TestClimbingImageSelection:
     """Exercise the standalone climbing-image selection hook."""
+
+    @pytest.mark.parametrize("selection", ["fixed", "dynamic"])
+    def test_selection_survives_path_admission(
+        self, device: str, selection: str
+    ) -> None:
+        """Retained and arriving paths keep fixed choices after first selection."""
+        batch = _bands(
+            [0.0, 4.0, 1.0, 0.0, 0.0, 3.0, 2.0, 1.0, 0.0], [0] * 4 + [1] * 5
+        ).to(device)
+        hook, force_hook = _selection_hooks(selection)
+        ctx = DynamicsContext(batch=batch)
+        self._update_selection(hook, force_hook, ctx)
+        assert torch.where(batch.force_mode == CLIMBING_NEB)[0].tolist() == [1, 5]
+
+        current = batch.index_select_groups([1, 0])
+        current.energy.copy_(
+            torch.tensor(
+                [0.0, 1.0, 5.0, 2.0, 0.0, 0.0, 1.0, 6.0, 0.0], device=device
+            ).unsqueeze(-1)
+        )
+        ctx = DynamicsContext(
+            batch=current,
+            previous_graph_indices=torch.tensor(
+                [4, 5, 6, 7, 8, -1, -1, -1, -1], device=device
+            ),
+            active_graph_mask=torch.tensor([True] * 5 + [False] * 4, device=device),
+        )
+        # Match the strategy's admission order: statistics, selection, force.
+        hook.energy_stats_hook(ctx, DynamicsStage.ON_ADMISSION)
+        hook(ctx, DynamicsStage.ON_ADMISSION)
+        force_hook(ctx, DynamicsStage.ON_ADMISSION)
+        self._update_selection(hook, force_hook, ctx, admit=False)
+        resident_climber = 1 if selection == "fixed" else 2
+        climbers = torch.where(current.force_mode == CLIMBING_NEB)[0].tolist()
+        assert climbers == [resident_climber]
+
+        ctx.active_graph_mask.fill_(True)
+        ctx.step_count = 1
+        self._update_selection(hook, force_hook, ctx, admit=False)
+        climbers = torch.where(current.force_mode == CLIMBING_NEB)[0].tolist()
+        assert climbers == [resident_climber, 7]
+
+        # An arrival keeps its fixed choice even if a different image becomes
+        # highest in energy; dynamic selection follows the new maximum.
+        current.energy[6] = 7.0
+        ctx.step_count = 2
+        self._update_selection(hook, force_hook, ctx, admit=False)
+        arriving_climber = 7 if selection == "fixed" else 6
+        climbers = torch.where(current.force_mode == CLIMBING_NEB)[0].tolist()
+        assert climbers == [resident_climber, arriving_climber]
+
+        # A fresh admission resets state even when the batch object is reused.
+        ctx.previous_graph_indices = torch.full_like(ctx.previous_graph_indices, -1)
+        self._update_selection(hook, force_hook, ctx)
+        assert torch.where(current.force_mode == CLIMBING_NEB)[0].tolist() == [2, 6]
 
     def _update_selection(
         self,
@@ -285,6 +341,138 @@ class TestClimbingImageSelection:
 
 class TestNEBForceHook:
     """Test field preparation and the existing tensor-op boundary."""
+
+    def test_preserves_retained_state_and_initializes_arrivals(
+        self, device: str
+    ) -> None:
+        """Runtime payloads and packed springs follow paths with unequal sizes."""
+
+        class AdmissionSpring:
+            refresh = DynamicsStage.ON_ADMISSION
+
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def resolve(self, context: SpringContext) -> torch.Tensor:
+                self.calls += 1
+                return (
+                    torch.arange(
+                        context.num_links,
+                        dtype=context.positions.dtype,
+                        device=context.positions.device,
+                    )
+                    + 100 * self.calls
+                )
+
+        images = [
+            AtomicData(
+                atomic_numbers=torch.ones(atoms, dtype=torch.long),
+                positions=torch.zeros(atoms, 3),
+            )
+            for count, atoms in ((4, 1), (5, 2))
+            for _ in range(count)
+        ]
+        batch = Batch.from_data_list(images).to(device)
+        batch.set_group_layout(torch.tensor([0] * 4 + [1] * 5, device=device))
+        supplied = torch.arange(batch.num_nodes, device=device) % 2 == 0
+        batch.add_key(
+            "neb_fixed_node_mask",
+            list(supplied.split(batch.num_nodes_list)),
+            level="node",
+        )
+        hook = _force_hook(
+            spring=AdmissionSpring(),
+            endpoint_mode="relaxed",
+        )
+        hook(DynamicsContext(batch=batch), DynamicsStage.ON_ADMISSION)
+        batch.force_mode[5] = CLIMBING_NEB
+        batch.physical_forces.fill_(7)
+        batch.forward_link_length.fill_(9)
+
+        current = batch.index_select_groups([1, 0])
+        current.neb_fixed_node_mask[10:] = True
+        current.force_mode[5:] = CLIMBING_NEB
+        ctx = DynamicsContext(
+            batch=current,
+            previous_graph_indices=torch.tensor(
+                [4, 5, 6, 7, 8, -1, -1, -1, -1], device=device
+            ),
+        )
+        hook(ctx, DynamicsStage.ON_ADMISSION)
+
+        assert torch.where(current.force_mode == CLIMBING_NEB)[0].tolist() == [1]
+        assert current.force_mode[[0, 4, 5, 8]].tolist() == [ENDPOINT] * 4
+        assert current.neb_fixed_node_mask.tolist() == [True, False] * 5 + [True] * 4
+        assert torch.all(current.physical_forces[:10] == 7)
+        assert torch.all(current.physical_forces[10:] == 0)
+        assert current.forward_link_length.tolist() == [9.0] * 5 + [0.0] * 4
+        expected_springs = [103.0, 104.0, 105.0, 106.0, 204.0, 205.0, 206.0]
+        assert hook._workspace.spring_constants.tolist() == expected_springs
+
+        # No mapping is a fresh admission, including when reusing this batch.
+        hook(DynamicsContext(batch=current), DynamicsStage.ON_ADMISSION)
+        assert not torch.any(current.force_mode == CLIMBING_NEB)
+        assert not torch.any(current.physical_forces)
+        assert not torch.any(current.forward_link_length)
+        expected_springs = [300.0, 301.0, 302.0, 303.0, 304.0, 305.0, 306.0]
+        assert hook._workspace.spring_constants.tolist() == expected_springs
+
+    @pytest.mark.parametrize("endpoint_mode", ["fixed", "relaxed"])
+    def test_uses_supplied_node_mask_in_place(
+        self, device: str, endpoint_mode: str
+    ) -> None:
+        """The supplied mask is the only fixed-atom field and includes endpoints."""
+        batch = _bands([0.0] * 4, [0] * 4).to(device)
+        supplied = torch.tensor([False, True, False, False], device=device)
+        batch.add_key(
+            "neb_fixed_node_mask",
+            list(supplied.split(batch.num_nodes_list)),
+            level="node",
+        )
+        mask = batch.neb_fixed_node_mask
+        hook = _force_hook(endpoint_mode=endpoint_mode)
+        hook(DynamicsContext(batch=batch), DynamicsStage.ON_ADMISSION)
+        expected = (
+            [True, True, False, True]
+            if endpoint_mode == "fixed"
+            else [False, True, False, False]
+        )
+        assert batch.neb_fixed_node_mask.tolist() == expected
+        assert batch.neb_fixed_node_mask is mask
+        assert hook._workspace.fixed_node_mask is mask
+
+    @pytest.mark.parametrize("invalid", ["dtype", "shape", "level"])
+    def test_rejects_invalid_node_masks(self, invalid: str) -> None:
+        """The mask must be a Boolean atom field with one entry per node."""
+        batch = _bands([0.0] * 3, [0] * 3)
+        values = torch.zeros(
+            (3, 2) if invalid == "shape" else (3,),
+            dtype=torch.float32 if invalid == "dtype" else torch.bool,
+        )
+        batch.add_key(
+            "neb_fixed_node_mask",
+            list(values.split(1)),
+            level="system" if invalid == "level" else "node",
+        )
+        hook = _force_hook()
+        with pytest.raises(ValueError, match="boolean node mask"):
+            hook(DynamicsContext(batch=batch), DynamicsStage.ON_ADMISSION)
+
+    @pytest.mark.parametrize(
+        "workflow",
+        [
+            SimpleNamespace(sampler=object(), has_neighbor=False),
+            SimpleNamespace(sampler=None, has_neighbor=True),
+        ],
+    )
+    def test_streaming_rejects_fixed_atom_indices(self, workflow: object) -> None:
+        """Constraints must follow paths when their positions in the batch change."""
+        hook = _force_hook(fixed_atom_indices={0: [0]})
+        ctx = DynamicsContext(batch=_bands([0.0] * 3, [0] * 3), workflow=workflow)
+        with pytest.raises(
+            ValueError, match="Streaming NEB requires batch.neb_fixed_node_mask"
+        ):
+            hook(ctx, DynamicsStage.ON_ADMISSION)
 
     def test_published_forces_apply_climbing_law(self) -> None:
         """The real NEB operation publishes climbing and regular forces."""
