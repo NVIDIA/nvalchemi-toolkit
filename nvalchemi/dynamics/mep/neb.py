@@ -231,6 +231,12 @@ class NEB(DynamicsStrategy):
             "of that path."
         ),
     )
+    fixed_atom_mask_key: str | None = Field(
+        default=None,
+        strict=True,
+        min_length=1,
+        description="Boolean node field holding atom constraints, instead of fixed_atom_indices.",
+    )
     diagnostics_log_path: Path | None = Field(
         default=None,
         description=(
@@ -475,10 +481,15 @@ class NEB(DynamicsStrategy):
         }
 
     @model_validator(mode="after")
-    def _validate_optimizer(self) -> NEB:
-        """Validate the optimizer class and apply its NEB defaults."""
+    def _validate_configuration(self) -> NEB:
+        """Validate constraints and the optimizer, and apply its NEB defaults."""
         if not issubclass(self.optimizer, BaseDynamics):
             raise TypeError("optimizer must be a BaseDynamics subclass")
+        if self.fixed_atom_mask_key is not None:
+            if not self.fixed_atom_mask_key.strip():
+                raise ValueError("fixed_atom_mask_key must not be empty")
+            if self.fixed_atom_indices is not None:
+                raise ValueError("Use either fixed_atom_mask_key or fixed_atom_indices")
         if self.optimizer is FIRE2:
             for name, value in _NEB_FIRE2_DEFAULTS.items():
                 self.optimizer_kwargs.setdefault(name, value)
@@ -523,9 +534,14 @@ class NEB(DynamicsStrategy):
                 method=self.method,
                 endpoint_mode=self.endpoint_mode,
                 fixed_atom_indices=self.fixed_atom_indices,
+                fixed_atom_mask_key=self.fixed_atom_mask_key,
             )
         )
-        if self.endpoint_mode == "fixed" or self.fixed_atom_indices:
+        if (
+            self.endpoint_mode == "fixed"
+            or self.fixed_atom_indices
+            or self.fixed_atom_mask_key is not None
+        ):
             hooks.append(
                 FreezeAtomsHook(
                     mask_key="neb_fixed_node_mask",

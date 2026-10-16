@@ -435,6 +435,32 @@ class TestNEBConfiguration:
         assert strategy.fixed_atom_indices == {0: (0, 2), 1: (1,)}
         assert hook.fixed_atom_indices == strategy.fixed_atom_indices
 
+    def test_mask_key_round_trip_and_freeze_hook(self) -> None:
+        """A mask key survives recipes and enables constraints on relaxed paths."""
+        strategy = NEB(
+            model=_model(), endpoint_mode="relaxed", fixed_atom_mask_key="fixed_atoms"
+        )
+        spec = json.loads(json.dumps(strategy.to_spec_dict()))
+        restored = NEB.from_spec_dict(spec, model=strategy.model)
+        assert restored.fixed_atom_mask_key == "fixed_atoms"
+        engine = restored.build_engine()
+        assert _force_hook(engine).fixed_atom_mask_key == "fixed_atoms"
+        assert _freeze_hook(engine).mask_key == "neb_fixed_node_mask"
+
+    @pytest.mark.parametrize(
+        "options",
+        [
+            {"fixed_atom_mask_key": 1},
+            {"fixed_atom_mask_key": " "},
+            {"fixed_atom_mask_key": ""},
+            {"fixed_atom_mask_key": "fixed_atoms", "fixed_atom_indices": {}},
+        ],
+    )
+    def test_rejects_invalid_mask_configuration(self, options: dict[str, Any]) -> None:
+        """The mask key is a nonempty string exclusive with path indices."""
+        with pytest.raises(ValueError, match="fixed_atom"):
+            NEB(model=_model(), **options)
+
     def test_builds_mask_aware_freeze_hook_for_constraints(self) -> None:
         """Use the NEB-owned node mask for endpoint and user constraints."""
         engine = NEB(
@@ -815,6 +841,29 @@ class TestNEBConfiguration:
 
 class TestNEBRun:
     """Exercise the public run entry point on grouped path batches."""
+
+    def test_node_mask_holds_positions_with_relaxed_endpoints(
+        self, device: str
+    ) -> None:
+        """The strategy freezes masked atoms while unmasked endpoints move."""
+        batch = _bands(device)
+        batch.positions[:, 1] = 1
+        batch.add_key(
+            "fixed_atoms",
+            list(torch.tensor([False, True, False], device=device).split(1)),
+            level="node",
+        )
+        before = batch.positions.clone()
+        result = NEB(
+            model=_CompilerFriendlyModel().to(device).eval(),
+            endpoint_mode="relaxed",
+            fixed_atom_mask_key="fixed_atoms",
+            fmax=1e-12,
+            n_steps=2,
+            optimizer_kwargs={"device_type": device},
+        ).run(batch)
+        torch.testing.assert_close(result.positions[1], before[1])
+        assert torch.all(result.positions[[0, 2], 1] < before[[0, 2], 1])
 
     @pytest.mark.parametrize(
         "climbing", [None, ClimbingImageConfig(max_regular_steps=1)]
