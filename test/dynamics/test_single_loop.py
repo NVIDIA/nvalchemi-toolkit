@@ -182,6 +182,8 @@ class _RandomSizeAllocationHook:
 
     def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         """Allocate and retain a randomly sized tensor on the batch device."""
+        if stage == DynamicsStage.ON_ADMISSION:
+            assert ctx.previous_graph_indices.tolist() == [-1] * ctx.batch.num_graphs
         size = secrets.randbelow(8) + 1
         self.allocations.append(torch.empty(size, device=ctx.batch.device))
 
@@ -2258,10 +2260,14 @@ class _TrackingHook:
         self.call_step_counts: list[int] = []
         self.converged_masks: list[torch.Tensor | None] = []
         self.active_masks: list[torch.Tensor | None] = []
+        self.contexts: list[DynamicsContext] = []
 
     def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         """Record the call, step count, and context masks."""
         self.call_count += 1
+        self.contexts.append(ctx)
+        if stage != DynamicsStage.ON_ADMISSION:
+            assert ctx.previous_graph_indices is None
         self.call_step_counts.append(ctx.step_count)
         self.converged_masks.append(ctx.converged_mask)
         self.active_masks.append(
@@ -2465,7 +2471,19 @@ class TestFusedStageSubstageHooks:
         batch.status = torch.tensor([0, 1])
 
         fused.run(batch, n_steps=1)
+        fused._record_batch_change(batch, torch.arange(batch.num_graphs))
+        dynamics0._record_batch_change(batch, torch.arange(batch.num_graphs))
         fused.run(batch, n_steps=1)
+
+        for index in range(2):
+            indices = hooks[0].contexts[index].previous_graph_indices
+            assert indices.tolist() == [-1, -1]
+            assert hooks[1].contexts[index].previous_graph_indices is indices
+            assert hooks[2].contexts[index].previous_graph_indices is indices
+        # Status migration changes ownership, not batch membership.
+        batch.status[:] = 1
+        fused.step(batch)
+        assert [hook.call_count for hook in hooks] == [2, 2, 2]
 
         assert hooks[0].call_step_counts == [0, 1]
         assert hooks[0].active_masks[0].tolist() == [True, True]

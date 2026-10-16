@@ -640,6 +640,7 @@ class _CommunicationMixin:
         self.done = done
         self.sampler = sampler
         self.refill_frequency = refill_frequency
+        self._pending_graph_indices: torch.Tensor | None = None
         self._admission_initialized: bool = False
         self._forces_primed: bool = False
         # Host-side mirror of ``reprime_pending.any()`` after refill or admission.
@@ -1072,6 +1073,54 @@ class _CommunicationMixin:
             return sys.maxsize
         return self.send_buffer.system_capacity - self.send_buffer.num_graphs
 
+    def _record_batch_change(
+        self,
+        current: Batch | None,
+        retained_graphs: torch.Tensor,
+    ) -> None:
+        """Record retained graphs followed by arrivals relative to the last dispatch.
+
+        ``retained_graphs`` indexes the immediately previous batch in current
+        order. Group-aware callers must retain whole groups and image order.
+        Removal-only changes can reuse this tensor, so callers must not mutate it.
+        This bookkeeping does not change integrator state or force priming.
+
+        Examples
+        --------
+        If hooks last saw graphs A, B, and C, removing B and appending D and E
+        records the retained graphs first and marks arrivals with ``-1``::
+
+            previous = [A, B, C]
+            current = [A, C, D, E]
+            retained_graphs = [0, 2]
+            graph_indices = [0, 2, -1, -1]
+
+        A further change to ``[C, D, E, F]`` before admission hooks run composes
+        the mapping to ``[2, -1, -1, -1]``, still relative to the last dispatch.
+        """
+        pending_graphs = self._pending_graph_indices
+        observed = self._admission_initialized or pending_graphs is not None
+        self._admission_initialized = False
+        if current is None or current.num_graphs == 0:
+            self._pending_graph_indices = None
+            return
+
+        retained_indices = (
+            pending_graphs[retained_graphs]
+            if pending_graphs is not None
+            else retained_graphs
+        )
+        if observed and retained_indices.numel() == current.num_graphs:
+            self._pending_graph_indices = retained_indices
+            return
+
+        graph_indices = torch.full(
+            (current.num_graphs,), -1, dtype=torch.long, device=current.device
+        )
+        if observed:
+            graph_indices[: retained_indices.numel()] = retained_indices
+        self._pending_graph_indices = graph_indices
+
     def _buffer_to_batch(self, incoming_batch: Batch) -> None:
         """Route received data into the active batch or overflow sinks.
 
@@ -1102,7 +1151,6 @@ class _CommunicationMixin:
         # index_select copies, which matters because callers such as
         # _recv_to_batch zero the incoming buffer right after this call.
         arrivals = incoming_batch.index_select(list(range(n_admitted)))
-        self._admission_initialized = False
         # Reuse upstream outputs only when this stage has not opted into
         # reprime and arrivals carry every output it needs. Otherwise this
         # stage computes them before their first update.
@@ -1136,6 +1184,10 @@ class _CommunicationMixin:
             )
             if not reuse_forces:
                 self._prime_arrivals(n_existing)
+        existing_indices = torch.arange(
+            n_existing, dtype=torch.long, device=self.active_batch.device
+        )
+        self._record_batch_change(self.active_batch, existing_indices)
 
         if n_admitted < n_incoming:
             self._overflow_to_sinks(
@@ -1146,10 +1198,9 @@ class _CommunicationMixin:
         # resident graphs and append freshly initialized state for arrivals.
         sync_state = getattr(self, "_sync_state_to_batch", None)
         if callable(sync_state):
-            existing_indices = torch.arange(
-                n_existing, dtype=torch.long, device=self.active_batch.device
-            )
             sync_state(existing_indices, n_admitted, self.active_batch)
+        if hasattr(self, "_last_converged"):
+            self._last_converged = None
 
     def _on_receive(self, incoming: Batch) -> None:
         """Normalize freshly received samples before they join the active batch.
@@ -1286,7 +1337,7 @@ class _CommunicationMixin:
             )
         remaining_indices = torch.where(~copied_mask)[0]
         self.active_batch = previous_batch.trim(copied_mask=copied_mask)
-        self._admission_initialized = False
+        self._record_batch_change(self.active_batch, remaining_indices)
 
         # Graph-indexed metadata and integrator state refer to the old batch
         # layout. Keep only state for retained graphs and prevent the next hook
@@ -1493,13 +1544,13 @@ class _CommunicationMixin:
             self.active_batch = previous_batch.index_select(remaining)
         else:
             self.active_batch = None
-        self._admission_initialized = False
+        remaining_indices = torch.tensor(
+            remaining, dtype=torch.long, device=previous_batch.device
+        )
+        self._record_batch_change(self.active_batch, remaining_indices)
 
         sync_state = getattr(self, "_sync_state_to_batch", None)
         if callable(sync_state):
-            remaining_indices = torch.tensor(
-                remaining, dtype=torch.long, device=previous_batch.device
-            )
             template = (
                 self.active_batch if self.active_batch is not None else previous_batch
             )
@@ -2012,6 +2063,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         """
         if self._admission_initialized:
             return
+        if self._pending_graph_indices is None:
+            self._pending_graph_indices = torch.full(
+                (batch.num_graphs,), -1, dtype=torch.long, device=batch.device
+            )
         self._call_hooks(
             DynamicsStage.ON_ADMISSION,
             batch,
@@ -2019,6 +2074,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             ignore_frequency=True,
         )
         self._admission_initialized = True
+        self._pending_graph_indices = None
 
     def _build_context(
         self,
@@ -2045,6 +2101,11 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             active_graph_mask=active_graph_mask,
             converged_mask=_mask,
             graduated_mask=graduated_mask,
+            previous_graph_indices=(
+                self._pending_graph_indices
+                if self.current_hook_stage == DynamicsStage.ON_ADMISSION
+                else None
+            ),
             global_rank=self.global_rank,
             workflow=self,
         )
@@ -3308,6 +3369,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             # A run is a fresh admission even when the caller deliberately
             # reuses the same Batch object from an earlier run.
             self._admission_initialized = False
+            self._pending_graph_indices = None
             self._forces_primed = False
             for _ in range(resolved):
                 batch, _converged = self.step(batch)
@@ -3370,7 +3432,6 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         # Batch composition changes here; drop stale converged indices so the
         # next _build_context mask doesn't over-index the resized batch.
         self._last_converged = None
-        self._admission_initialized = False
         remaining_indices = torch.where(~graduated_mask)[0]
         n_remaining = remaining_indices.numel()
         # With no survivors there are no forces to preserve, so treat the
@@ -3458,11 +3519,13 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 self._forces_primed = True
                 self._refill_pending = True
             self._sync_state_to_batch(remaining_indices, len(replacements), result)
+            self._record_batch_change(result, remaining_indices)
             return result
 
         if self.sampler.exhausted:
             self.done = True
         self._sync_state_to_batch(remaining_indices, 0, batch)
+        self._record_batch_change(None, remaining_indices)
         return None
 
     def masked_update(
@@ -4505,6 +4568,10 @@ class FusedStage(BaseDynamics):
         """Prepare fused-level and sub-stage hooks for an admitted batch."""
         if self._admission_initialized:
             return
+        if self._pending_graph_indices is None:
+            self._pending_graph_indices = torch.full(
+                (batch.num_graphs,), -1, dtype=torch.long, device=batch.device
+            )
 
         status = batch.status
         if status.dim() == 2:
@@ -4518,6 +4585,11 @@ class FusedStage(BaseDynamics):
             ignore_frequency=True,
         )
         for status_code, dynamics in self.sub_stages:
+            # Admission must not expose a convergence mask from the old batch layout.
+            # Dropping this reference allocates no tensor; the next convergence
+            # check creates a new mask regardless of whether the old one is retained.
+            dynamics._last_converged = None
+            dynamics._pending_graph_indices = self._pending_graph_indices
             dynamics._call_hooks(
                 DynamicsStage.ON_ADMISSION,
                 batch,
@@ -4525,8 +4597,10 @@ class FusedStage(BaseDynamics):
                 ignore_frequency=True,
             )
             dynamics._admission_initialized = True
+            dynamics._pending_graph_indices = None
 
         self._admission_initialized = True
+        self._pending_graph_indices = None
 
     def _step_impl(self, batch: Batch) -> tuple[Batch, torch.Tensor | None]:
         """Internal step implementation (may be compiled).
@@ -5071,6 +5145,7 @@ class FusedStage(BaseDynamics):
             # A run is a fresh admission even when the caller deliberately
             # reuses the same Batch object from an earlier run.
             self._admission_initialized = False
+            self._pending_graph_indices = None
             for _, dynamics in self.sub_stages:
                 dynamics._admission_initialized = False
             self._forces_primed = False

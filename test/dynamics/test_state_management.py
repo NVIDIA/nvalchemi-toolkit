@@ -24,13 +24,13 @@ Tests for BaseDynamics per-system _state batch lifecycle:
 from __future__ import annotations
 
 from collections.abc import Iterator
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
 
 from nvalchemi.data import Batch
-from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 
 from .conftest import _make_atomic_data, _make_batch, _make_model, _MockSampler
 
@@ -599,7 +599,9 @@ class TestPipelineStateMutation:
         dyn.step(dyn.active_batch)
         assert dyn._state.num_graphs == 2
 
+        dyn._last_converged = torch.tensor([False, True], device=device)
         dyn._buffer_to_batch(_make_batch(2, seed=10).to(device))
+        assert dyn._build_context(dyn.active_batch).converged_mask is None
         assert dyn.active_batch is not None
         assert dyn.active_batch.num_graphs == 4
         assert dyn._state.num_graphs == 4
@@ -615,42 +617,50 @@ class TestPipelineStateMutation:
         assert dyn._state.num_graphs == dyn.active_batch.num_graphs
 
     @pytest.mark.parametrize("final_stage", [False, True], ids=["sender", "final"])
-    def test_partial_removal_is_safe_for_next_step(self, final_stage):
-        """Non-contiguous graduation keeps convergence and FIRE state aligned."""
-        from nvalchemi.dynamics.optimizers.fire import FIRE
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    def test_partial_removal_is_safe_for_next_step(self, final_stage, fused_stage):
+        """Non-contiguous graduation keeps convergence and FIRE2 state aligned."""
+        from nvalchemi.dynamics.optimizers.fire2 import FIRE2
 
-        dyn = FIRE(model=_make_model(), dt=0.1)
-        dyn.active_batch = _make_batch(4)
-        dyn.step(dyn.active_batch)
+        dyn = FIRE2(model=_make_model(), dt=0.1)
+        engine = dyn + BaseDynamics(model=dyn.model) if fused_stage else dyn
+        engine.active_batch = _make_batch(4)
+        engine.step(engine.active_batch)
+        admission_hook = Mock(
+            spec=["stage", "frequency"],
+            stage=DynamicsStage.ON_ADMISSION,
+            frequency=1,
+        )
+        dyn.register_hook(admission_hook)
 
         # Make state-row preservation observable and reproduce the example's
         # partial convergence: old graph indices 0 and 3 leave the batch.
         dyn._state.alpha.copy_(torch.tensor([0.1, 0.2, 0.3, 0.4]))
         converged = torch.tensor([0, 3])
         dyn._last_converged = converged
+        engine._last_converged = converged
 
         if final_stage:
-            dyn._remove_converged_final_stage(converged)
+            engine._remove_converged_final_stage(converged)
         else:
-            dyn.send_buffer = Batch.empty(
-                num_systems=dyn.active_batch.num_graphs,
-                num_nodes=dyn.active_batch.num_nodes,
-                num_edges=dyn.active_batch.num_edges,
-                template=dyn.active_batch,
-                device=dyn.active_batch.device,
+            engine.send_buffer = Batch.empty(
+                num_systems=engine.active_batch.num_graphs,
+                num_nodes=engine.active_batch.num_nodes,
+                num_edges=engine.active_batch.num_edges,
+                template=engine.active_batch,
+                device=engine.active_batch.device,
             )
             mask = torch.zeros(4, dtype=torch.bool)
             mask[converged] = True
-            dyn._batch_to_buffer(mask)
+            engine._batch_to_buffer(mask)
 
-        assert dyn.active_batch is not None
-        assert dyn.active_batch.num_graphs == 2
+        assert engine.active_batch is not None
+        assert engine.active_batch.num_graphs == 2
 
-        # Build the next hook context before inspecting the repaired metadata.
-        # Before the fix this performs mask[[0, 3]] for a two-graph batch,
-        # reproducing the example's out-of-bounds indexing failure.
-        context = dyn._build_context(dyn.active_batch)
-        assert context.converged_mask is None
+        engine._ensure_admission_initialized(engine.active_batch)
+        dispatched = admission_hook.call_args.args[0]
+        assert dispatched.converged_mask is None
+        assert dispatched.previous_graph_indices.tolist() == [1, 2]
 
         assert dyn._last_converged is None
         assert dyn._state.num_graphs == 2
@@ -658,8 +668,8 @@ class TestPipelineStateMutation:
 
         # BEFORE_STEP builds a hook context before doing any integration.  This
         # was the exact next-iteration crash when _last_converged still held 3.
-        dyn.step(dyn.active_batch)
-        assert dyn._state.num_graphs == dyn.active_batch.num_graphs
+        engine.step(engine.active_batch)
+        assert dyn._state.num_graphs == engine.active_batch.num_graphs
 
 
 # ---------------------------------------------------------------------------
@@ -1179,3 +1189,66 @@ class TestPresetStreamSession:
             # current_stream() builds a fresh wrapper per call; compare handles
             assert torch.cuda.current_stream().cuda_stream == shared.cuda_stream
         assert dyn._stream is None
+
+
+class TestAdmissionMappings:
+    """Track each current graph's index in the batch last seen by admission hooks.
+
+    Newly arrived graphs keep index -1 until the hooks see them, even if the
+    batch changes several times before the next admission dispatch.
+    """
+
+    def test_composed_membership_and_empty_reset(self, device):
+        """Retained arrivals stay new, and removal discards all provenance."""
+        dynamics = _StatefulDynamics(model=_make_model())
+        previous = _make_batch(4).to(device)
+        dynamics._ensure_admission_initialized(previous)
+        retained = torch.tensor([0, 2, 3], device=device)
+        current = previous.index_select(retained)
+        dynamics._record_batch_change(current, retained)
+        assert dynamics._pending_graph_indices is retained
+        current.append(_make_batch(1).to(device))
+        dynamics._record_batch_change(
+            current, torch.arange(retained.numel(), device=device)
+        )
+        first = dynamics._pending_graph_indices
+        assert first.tolist() == [0, 2, 3, -1]
+        assert first.dtype == torch.long
+        assert first.device == current.device
+
+        retained = torch.tensor([1, 3], device=device)
+        final = current.index_select(retained)
+        final.append(_make_batch(1).to(device))
+        dynamics._record_batch_change(final, retained)
+        assert dynamics._pending_graph_indices.tolist() == [2, -1, -1]
+        # Pending mappings are never modified in place.
+        assert first.tolist() == [0, 2, 3, -1]
+
+        # None of the last-observed members survive.
+        retained = torch.tensor([1, 2], device=device)
+        arrival_only = final.index_select(retained)
+        before_removal = dynamics._pending_graph_indices
+        dynamics._record_batch_change(arrival_only, retained)
+        assert dynamics._pending_graph_indices.tolist() == [-1, -1]
+        assert before_removal.tolist() == [2, -1, -1]
+        empty_indices = torch.empty(0, dtype=torch.long, device=device)
+        empty = Batch.empty(
+            num_systems=2,
+            num_nodes=arrival_only.num_nodes,
+            num_edges=0,
+            template=arrival_only,
+            device=device,
+        )
+        dynamics._record_batch_change(empty, empty_indices)
+        assert dynamics._pending_graph_indices is None
+        dynamics._record_batch_change(previous, empty_indices)
+        assert dynamics._pending_graph_indices.tolist() == [-1] * 4
+
+    def test_change_before_initial_admission(self, device):
+        """Retained graphs have no hook state before the first dispatch."""
+        dynamics = _StatefulDynamics(model=_make_model())
+        previous = _make_batch(3).to(device)
+        retained = torch.tensor([0, 2], device=device)
+        current = previous.index_select(retained)
+        dynamics._record_batch_change(current, retained)
+        assert dynamics._pending_graph_indices.tolist() == [-1, -1]
