@@ -372,6 +372,12 @@ class TestFusedStageInflight:
             refill_frequency=1,
         )
 
+        admission_hook = Mock(
+            spec=["stage", "frequency"],
+            stage=DynamicsStage.ON_ADMISSION,
+            frequency=1,
+        )
+        fused.register_hook(admission_hook)
         with (
             patch.object(fused, "_prime_forces", wraps=fused._prime_forces) as prime,
             patch.object(fused, "compute", wraps=fused.compute) as compute,
@@ -379,6 +385,10 @@ class TestFusedStageInflight:
             result = fused.run(batch=None)
 
         assert result is None
+        assert admission_hook.call_count == 2
+        for call in admission_hook.call_args_list:
+            assert call.args[0].previous_graph_indices.tolist() == [-1] * 3
+        assert fused._pending_graph_indices is None
         assert prime.call_count == 2  # Initial batch and fully replaced batch.
         assert compute.call_count == 4  # Two primes and two steps.
         replacement_batch = compute.call_args_list[-1].args[0]
@@ -448,6 +458,7 @@ class TestFusedStageInflight:
         result = engine.refill_check(batch, engine.exit_status)
 
         assert result is not None
+        assert engine._pending_graph_indices.tolist() == [0] + [-1] * n_replacements
         assert engine._forces_primed
         assert (
             result.reprime_pending.view(-1).tolist()
@@ -619,6 +630,7 @@ class TestFusedStageInflight:
         batch.status[1] = engine.exit_status
         batch = engine.refill_check(batch, engine.exit_status)
         assert batch.reprime_pending.all()
+        assert engine._pending_graph_indices.tolist() == [1, -1, -1]
         positions_before = batch.positions.clone()
         engine.step(batch)
         torch.testing.assert_close(batch.positions, positions_before)
@@ -1475,6 +1487,8 @@ class TestRefillCheck:
         batch = sampler.build_initial_batch()
         assert sampler.exhausted  # All 3 consumed
 
+        dynamics._ensure_admission_initialized(batch)
+        dynamics._record_batch_change(batch, torch.arange(3))
         # Mark all as graduated
         batch["status"] = torch.tensor([[1], [1], [1]])
 
@@ -1483,6 +1497,7 @@ class TestRefillCheck:
         # No replacements available, no remaining
         assert result is None
         assert dynamics.done is True
+        assert dynamics._pending_graph_indices is None
 
     def test_refill_raises_without_sampler(self) -> None:
         """Should raise RuntimeError when sampler is None.
@@ -1513,10 +1528,13 @@ class TestRefillCheck:
         # All samples at status=0 (not graduated)
         batch["status"] = torch.tensor([[0], [0], [0], [0], [0]])
 
+        dynamics._ensure_admission_initialized(batch)
         result = dynamics.refill_check(batch, exit_status=1)
 
         # Should return same batch unchanged
         assert result is batch
+        assert dynamics._admission_initialized
+        assert dynamics._pending_graph_indices is None
 
     def test_compute_detaches_live_inputs_before_refill(self) -> None:
         """Autograd inputs must be detached after compute() so refill is clean.

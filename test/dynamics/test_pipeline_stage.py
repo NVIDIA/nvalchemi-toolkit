@@ -226,6 +226,7 @@ class TestBufferRouting:
         incoming = _make_batch(num_graphs=3)
         stage._buffer_to_batch(incoming)
         assert stage.active_batch_size == 5
+        assert stage._pending_graph_indices.tolist() == [0, 1, -1, -1, -1]
         assert stage._admission_initialized is False
         assert stage._forces_primed is False
 
@@ -253,10 +254,13 @@ class TestBufferRouting:
             max_batch_size=5,
             sinks=[sink],
         )
+        stage._admission_initialized = True
         incoming = _make_batch(num_graphs=2)
         stage._buffer_to_batch(incoming)
         assert stage.active_batch_size == 5
         assert len(sink) == 2
+        assert stage._admission_initialized
+        assert stage._pending_graph_indices is None
 
     def test_buffer_to_batch_no_active_overflow(self) -> None:
         """Verify incoming > max_batch_size causes overflow when no batch."""
@@ -321,8 +325,10 @@ class TestBatchExtraction:
         remaining = sorted(set(range(5)) - set(selected))
         if remaining:
             assert stage.active_batch.system_id.flatten().tolist() == remaining
+            assert stage._pending_graph_indices.tolist() == remaining
         else:
             assert stage.active_batch is None
+            assert stage._pending_graph_indices is None
         assert stage._admission_initialized is False
         # Removal keeps retained graphs' forces valid.
         assert stage._forces_primed is True
@@ -1856,6 +1862,7 @@ class TestPoststepBackPressure:
 
         # Active batch should have 2 remaining
         assert stage.active_batch_size == 2
+        assert stage._pending_graph_indices.tolist() == [3, 4]
         assert stage._admission_initialized is False
         # Removal keeps retained graphs' forces valid.
         assert stage._forces_primed is True
@@ -2082,6 +2089,7 @@ class TestOverflowDrainBack:
             buffer_config=_DEFAULT_CFG,
         )
 
+        stage._admission_initialized = True
         # Put data in sink
         sink.write(_make_batch(num_graphs=2))
         assert len(sink) == 2
@@ -2096,6 +2104,7 @@ class TestOverflowDrainBack:
 
         # Should have drained: 5 original + 1 from recv + 2 from sink = 8
         assert stage.active_batch_size == 8
+        assert stage._pending_graph_indices.tolist() == [0, 1, 2, 3, 4, -1, -1, -1]
         assert len(sink) == 0
 
     def test_prestep_drains_without_prior_rank(self) -> None:

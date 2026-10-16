@@ -1912,6 +1912,14 @@ class TestHookFrequencyGating:
 
             def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
                 events.append((stage, ctx.step_count))
+                if stage == DynamicsStage.ON_ADMISSION:
+                    assert ctx.previous_graph_indices is not None
+                    assert (
+                        ctx.previous_graph_indices.tolist()
+                        == [-1] * ctx.batch.num_graphs
+                    )
+                else:
+                    assert ctx.previous_graph_indices is None
 
         batch = create_simple_batch()
         batch.velocities = torch.zeros(batch.num_nodes, 3)
@@ -1923,6 +1931,7 @@ class TestHookFrequencyGating:
         )
 
         dynamics.run(batch)
+        dynamics._record_batch_change(batch, torch.arange(batch.num_graphs))
         dynamics.run(batch)
 
         assert events == [
