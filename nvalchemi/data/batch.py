@@ -32,6 +32,7 @@ Performance advantages over the Pydantic-based ``nvalchemi.data.batch.Batch``:
 
 from __future__ import annotations
 
+import warnings
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
@@ -1347,8 +1348,7 @@ class Batch(DataMixin):
 
         Storage tensors are allocated with the given capacities; no graphs are
         stored initially (``num_graphs == 0``). Use :meth:`put` to copy graphs
-        into the buffer; pass ``dest_mask`` of shape ``(num_systems,)`` with
-        ``False`` for empty slots.
+        into the buffer; each put appends after the graphs already stored.
 
         Parameters
         ----------
@@ -1770,9 +1770,11 @@ class Batch(DataMixin):
             (num_graphs,) bool; if provided, modified in place with the actual
             copy mask (fit in all levels). If None, stored on *src_batch*.
         dest_mask : Tensor, optional
-            Shared occupancy mask for uniform levels, with ``True`` denoting an
-            occupied destination slot. Occupied slots must form a dense prefix.
-            If ``None``, all slots are available.
+            Deprecated and ignored; occupancy is derived from :attr:`num_graphs`.
+
+            .. deprecated:: 0.3.0
+                Omit ``dest_mask``; it will be removed in the release after
+                0.3.0.
 
         Raises
         ------
@@ -1782,8 +1784,16 @@ class Batch(DataMixin):
             another device than this batch, or if a mask's
             length does not match ``src_batch.num_graphs``.
 
+        Warns
+        -----
+        DeprecationWarning
+            If *dest_mask* is passed. The argument is ignored.
+
         Notes
         -----
+        Graphs are appended after the first :attr:`num_graphs` slots at every
+        level, so per-graph and per-atom data stay aligned.
+
         The copy runs as a Warp kernel over both batches' raw pointers, so a
         source on another device is rejected rather than moved: moving it would
         hide a per-step host-device transfer inside what callers use as an
@@ -1805,6 +1815,13 @@ class Batch(DataMixin):
         n = src_batch.num_graphs
         if mask.shape[0] != n:
             raise ValueError(f"mask shape {mask.shape[0]} != num_graphs {n}")
+        if dest_mask is not None:
+            warnings.warn(
+                "Batch.put(dest_mask=...) is deprecated and ignored; occupancy "
+                "is derived from num_graphs. Omit dest_mask.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self._validate_custom_put(src_batch)
         self._prevalidate_buffer_put(src_batch)
         mask = mask.to(device=device, dtype=torch.bool)
@@ -1815,16 +1832,6 @@ class Batch(DataMixin):
         else:
             copy_mask = torch.zeros(n, device=device, dtype=torch.bool)
             object.__setattr__(src_batch, "_copied_mask", copy_mask)
-
-        # Uniform groups all represent the same graph slots.  Snapshot the
-        # caller's occupancy before either group mutates it, so each fit and
-        # copy sees the same free slots.  The caller's mask is updated once
-        # after all uniform groups have copied.
-        uniform_dest_mask = (
-            dest_mask.to(device=device, dtype=torch.bool)
-            if dest_mask is not None
-            else None
-        )
 
         fit_mask = torch.ones(n, device=device, dtype=torch.bool)
 
@@ -1852,43 +1859,17 @@ class Batch(DataMixin):
                 fit_groups.append((group_name, dest_group, src_group))
 
         # Compute every fit before entering the copy phase so a rejected
-        # custom group cannot leave built-in data partially written.
+        # custom group cannot leave built-in data partially written.  Each
+        # level derives its free slots from its own fill count, which keeps
+        # uniform rows aligned with the segments appended after len(self).
         for _, group, src_group in fit_groups:
             level_fit = torch.empty(n, device=device, dtype=torch.bool)
-            group_dest_mask = uniform_dest_mask if not group.is_segmented() else None
-            group.compute_put_per_system_fit_mask(
-                src_group, mask, group_dest_mask, level_fit
-            )
+            group.compute_put_per_system_fit_mask(src_group, mask, level_fit)
             fit_mask.logical_and_(level_fit)
         copy_mask.copy_(fit_mask)
 
-        final_uniform_dest_mask: Tensor | None = None
         for _, group, src_group in fit_groups:
-            if group.is_segmented():
-                group.put(src_group, copy_mask, copied_mask=copy_mask)
-            else:
-                group_dest_mask = (
-                    uniform_dest_mask.clone()
-                    if uniform_dest_mask is not None
-                    else torch.zeros(
-                        group._data.shape[0], device=device, dtype=torch.bool
-                    )
-                )
-                group.put(
-                    src_group,
-                    copy_mask,
-                    copied_mask=copy_mask,
-                    dest_mask=group_dest_mask,
-                )
-                if final_uniform_dest_mask is None:
-                    final_uniform_dest_mask = group_dest_mask
-
-        if dest_mask is not None and final_uniform_dest_mask is not None:
-            dest_mask.copy_(
-                final_uniform_dest_mask.to(
-                    device=dest_mask.device, dtype=dest_mask.dtype
-                )
-            )
+            group.put(src_group, copy_mask, copied_mask=copy_mask)
 
     def defrag(
         self,

@@ -1068,6 +1068,19 @@ class _CommunicationMixin:
             )
             sync_state(existing_indices, len(admitted), self.active_batch)
 
+    def _on_receive(self, incoming: Batch) -> None:
+        """Normalize freshly received samples before they join the active batch.
+
+        Called on every non-empty batch received from the prior rank. The
+        default is a no-op; subclasses that carry per-sample bookkeeping
+        (e.g. :class:`FusedStage` status codes) override it.
+
+        Parameters
+        ----------
+        incoming : Batch
+            Batch received from the prior stage. May be modified in place.
+        """
+
     def _recv_to_batch(self, incoming: Batch) -> None:
         """Stage incoming data through the recv buffer into the active batch.
 
@@ -1084,6 +1097,8 @@ class _CommunicationMixin:
         """
         if incoming.num_graphs > 0 and self._recv_template is None:
             self._recv_template = incoming
+        if incoming.num_graphs > 0:
+            self._on_receive(incoming)
         if self.recv_buffer is not None and incoming.num_graphs > 0:
             mask = torch.ones(incoming.num_graphs, dtype=torch.bool, device=self.device)
             self.recv_buffer.put(incoming, mask=mask)
@@ -4216,6 +4231,26 @@ class FusedStage(BaseDynamics):
             if getattr(batch, key, None) is None:
                 batch[key] = default_fn(batch.num_graphs, batch.device)
 
+    def _on_receive(self, incoming: Batch) -> None:
+        """Admit samples from the prior rank at ``entry_status``.
+
+        The sender's ``status`` is its own ``exit_status``, which would
+        read as already graduated here; reset it to ``entry_status`` and
+        clear the per-stage step counters.
+
+        Parameters
+        ----------
+        incoming : Batch
+            Batch received from the prior stage, modified in place.
+        """
+        status = getattr(incoming, "status", None)
+        if status is not None:
+            status.fill_(self.entry_status)
+        for status_code, _ in self.sub_stages:
+            counter = getattr(incoming, f"n_steps_counter_{status_code}", None)
+            if counter is not None:
+                counter.zero_()
+
     def register_hook(self, hook: Hook, stage: Enum | None = None) -> None:
         """Register a hook and warn about sub-stage-only lifecycle stages.
 
@@ -5808,14 +5843,25 @@ class DistributedPipeline:
         dist.init_process_group(**self._dist_kwargs)
         self._dist_initialized = True
 
-    def cleanup(self) -> None:
+    def cleanup(self, *, error: bool = False) -> None:
         """Destroy the ``torch.distributed`` process group.
 
         Only destroys the process group if it was initialized by this
         ``DistributedPipeline`` instance (via :meth:`init_distributed`).  If the
         process group was externally initialized (e.g., by ``torchrun``),
         this method is a no-op.
+
+        Parameters
+        ----------
+        error : bool, optional
+            Set when unwinding an exception. The process group is then left
+            alone: tearing it down blocks while peer ranks are still inside
+            a collective, which would swallow the exception and hang the job.
+            Letting the exception propagate lets the launcher terminate the
+            peers instead. Default ``False``.
         """
+        if error:
+            return
         if self._dist_initialized and dist.is_initialized():
             dist.destroy_process_group()
             self._dist_initialized = False
@@ -5846,7 +5892,9 @@ class DistributedPipeline:
         """Exit the pipeline context manager.
 
         Calls :meth:`cleanup` to destroy the process group if it was
-        initialized by this pipeline.
+        initialized by this pipeline. When the block exits with an
+        exception, the process group is not torn down (see :meth:`cleanup`)
+        and the exception propagates.
 
         Parameters
         ----------
@@ -5857,4 +5905,4 @@ class DistributedPipeline:
         exc_tb : Any
             Exception traceback, if any.
         """
-        self.cleanup()
+        self.cleanup(error=exc_type is not None)
