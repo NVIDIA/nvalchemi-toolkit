@@ -88,77 +88,75 @@ class TestBatchGroupLayout:
         assert layout.reduce_any(graph_mask).tolist() == [True, True]
         assert layout.broadcast(torch.tensor([7, 9])).tolist() == [7, 7, 9, 9, 9]
 
-    def test_index_select_preserves_selected_group_labels(self):
+    def test_index_select_rejects_interleaved_groups(self):
         batch = _batch()
         batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1]))
 
-        selected = batch.index_select([2, 3, 4, 0, 1])
-
-        assert selected.group_idx.tolist() == [1, 1, 1, 0, 0]
-        assert getattr(selected, "_group_layout", None) is None
-        with pytest.raises(ValueError, match="dense, contiguous"):
-            _ = selected.group_layout
-
-        selected.set_group_layout(selected.group_idx)
-
-        assert selected.group_idx.tolist() == [0, 0, 0, 1, 1]
-        assert selected.group_layout.num_graphs_per_group.tolist() == [3, 2]
-        assert batch.group_idx.tolist() == [0, 0, 1, 1, 1]
-
-    def test_set_group_layout_rejects_interleaved_selected_groups(self):
-        batch = _batch()
-        batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1]))
-
-        selected = batch.index_select([0, 2, 1, 3, 4])
-
-        assert selected.group_idx.tolist() == [0, 1, 0, 1, 1]
         with pytest.raises(ValueError, match="same group must be contiguous"):
-            selected.set_group_layout(selected.group_idx)
+            batch.index_select([0, 2, 1, 3, 4])
+        assert batch.group_idx.tolist() == [0, 0, 1, 1, 1]
 
     @pytest.mark.parametrize(
         "selection,graphs,group_sizes",
         [
-            ([1, 0], [2, 3, 4, 0, 1], [3, 2]),
-            ([False, True], [2, 3, 4], [3]),
-            ([], [], []),
-            ([False, False], [], []),
+            ([2, 3, 4, 0, 1], [2, 3, 4, 0, 1], [3, 2]),
+            (torch.tensor([False, False, True, True, True]), [2, 3, 4], [3]),
+            ([-3, -2, -1], [2, 3, 4], [3]),
         ],
     )
-    def test_index_select_groups_preserves_whole_groups(
+    def test_index_select_preserves_whole_groups(
         self, selection, graphs, group_sizes, device: str
     ) -> None:
-        """Ordered indices and group masks select complete graphs and rebase labels."""
+        """Graph indices and masks retain whole groups with normalized labels."""
         batch = _batch().to(device)
         batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1], device=device))
 
-        selected = batch.index_select_groups(selection)
+        original_layout = batch.group_layout
+        selected = batch.index_select(selection)
 
         assert selected.num_graphs == len(graphs)
         assert selected.device == batch.device
         assert selected.group_layout.num_graphs_per_group.tolist() == group_sizes
         assert batch.group_idx.tolist() == [0, 0, 1, 1, 1]
+        assert batch.group_layout is original_layout
         if graphs:
-            expected = batch.index_select(graphs)
-            torch.testing.assert_close(selected.positions, expected.positions)
-            torch.testing.assert_close(selected.batch_ptr, expected.batch_ptr)
+            expected = torch.cat([batch.get_data(i).positions for i in graphs])
+            torch.testing.assert_close(selected.positions, expected)
+            assert selected.num_nodes_list == [batch.num_nodes_list[i] for i in graphs]
+
+    def test_index_select_can_drop_group_labels(self) -> None:
+        """Dropping group_idx leaves the result ungrouped after whole-group selection."""
+        batch = _batch()
+        batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1]))
+        selected = batch.index_select([2, 3, 4], drop=("group_idx",))
+        assert "group_idx" not in selected
+        assert selected.num_graphs == 3
 
     @pytest.mark.parametrize(
         "selection,error,match",
         [
-            ([True], ValueError, "one entry per group"),
-            ([0, 0], ValueError, "cannot repeat a group"),
-            ([-1], IndexError, "out of range"),
-            ([2], IndexError, "out of range"),
+            pytest.param([], IndexError, "Index is empty", id="empty_indices"),
+            pytest.param(
+                torch.zeros(5, dtype=torch.bool),
+                IndexError,
+                "Index is empty",
+                id="empty_mask",
+            ),
+            (torch.tensor([True, True]), ValueError, "one entry per graph"),
+            ([0], ValueError, "complete groups"),
+            ([0, 1, 0, 1], ValueError, "cannot repeat graphs"),
+            ([-6], IndexError, "out of range"),
+            ([5], IndexError, "out of range"),
         ],
     )
-    def test_index_select_groups_rejects_invalid_selection(
+    def test_index_select_rejects_invalid_group_selection(
         self, selection, error, match
     ) -> None:
-        """Group selection rejects invalid masks, duplicate groups, and bounds."""
+        """Grouped selection rejects partial groups, repeated graphs, and bounds."""
         batch = _batch()
         batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1]))
         with pytest.raises(error, match=match):
-            batch.index_select_groups(selection)
+            batch.index_select(selection)
 
     @pytest.mark.parametrize("operation", ["put", "trim"])
     def test_partial_group_mask_rejected_before_mutation(
@@ -236,17 +234,13 @@ class TestBatchGroupLayout:
             remaining.positions[: remaining.num_nodes], positions[3:]
         )
 
-    @pytest.mark.parametrize(
-        "operation", ["clone", "to", "cpu", "cuda", "index_select"]
-    )
+    @pytest.mark.parametrize("operation", ["clone", "to", "cpu", "cuda"])
     def test_constructed_batches_reset_and_lazily_rebuild_cache(self, operation):
         batch = _batch()
         batch.set_group_layout(torch.tensor([0, 0, 1, 1, 1]))
         original_layout = batch.group_layout
 
-        if operation == "index_select":
-            rebuilt_batch = batch.index_select([0, 1, 2, 3])
-        elif operation == "cuda":
+        if operation == "cuda":
             if not torch.cuda.is_available():
                 pytest.skip("CUDA is not available")
             rebuilt_batch = batch.cuda()

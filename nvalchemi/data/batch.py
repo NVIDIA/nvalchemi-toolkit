@@ -1675,7 +1675,9 @@ class Batch(DataMixin):
         """Select a subset of graphs by index.
 
         Operates directly on concatenated tensors via segment selection --
-        no per-graph :class:`AtomicData` reconstruction.
+        no per-graph :class:`AtomicData` reconstruction. Grouped batches require
+        complete groups without repeated graphs. Groups may be reordered but
+        must remain contiguous; their labels are normalized in the result.
 
         Parameters
         ----------
@@ -1691,10 +1693,35 @@ class Batch(DataMixin):
         Returns
         -------
         Batch
+
+        Raises
+        ------
+        ValueError
+            If a grouped selection splits, repeats, or interleaves groups.
+        IndexError
+            If a grouped graph index is out of range, or the selection is empty.
         """
         dropped = frozenset(drop)
         idx_list = self._normalize_index(idx)
+        grouped = "group_idx" in self
+        if (
+            grouped
+            and idx.dtype is torch.bool
+            and idx.shape != (self.num_graphs,)
+        ):
+            raise ValueError("Graph mask must have one entry per graph")
         idx_tensor = torch.tensor(idx_list, dtype=torch.int32, device=self.device)
+        if grouped:
+            if idx_list and (min(idx_list) < 0 or max(idx_list) >= self.num_graphs):
+                raise IndexError("Graph index out of range")
+            if len(set(idx_list)) != len(idx_list):
+                raise ValueError("Grouped selection cannot repeat graphs")
+            selected = torch.zeros(
+                self.num_graphs, dtype=torch.bool, device=self.device
+            )
+            selected[idx_tensor] = True
+            # Reject selections that split a group.
+            _complete_group_mask(self.group_layout, selected)
 
         new_groups: dict[str, UniformLevelStorage | SegmentedLevelStorage] = {}
 
@@ -1736,54 +1763,14 @@ class Batch(DataMixin):
             attr_map=new_schema,
             validate=False,
         )
-        return Batch._construct(
+        result = Batch._construct(
             device=self.device,
             keys={k: v - dropped for k, v in self.keys.items()} if self.keys else None,
             storage=new_storage,
             data_class=self._data_class,
         )
-
-    def index_select_groups(self, idx: Tensor | Sequence[int]) -> Batch:
-        """Select complete groups in order and normalize their local labels.
-
-        Parameters
-        ----------
-        idx : Tensor or sequence of int
-            Group indices, or a boolean mask with one entry per group.
-
-        Returns
-        -------
-        Batch
-            A tightly packed grouped batch, possibly empty.
-        """
-        layout = self.group_layout
-        indices = torch.as_tensor(idx, device=self.device)
-        if indices.dtype == torch.bool:
-            if indices.shape != (layout.num_groups,):
-                raise ValueError("Group mask must have one entry per group")
-            graphs = indices[layout.group_idx]
-            if not torch.any(graphs):
-                return Batch.empty_like(self, device=self.device)
-            result = self.index_select(graphs)
+        if "group_idx" in result:
             result.set_group_layout(result.group_idx)
-            return result
-        indices = indices.long().view(-1)
-        if indices.numel() == 0:
-            return Batch.empty_like(self, device=self.device)
-        if torch.any((indices < 0) | (indices >= layout.num_groups)):
-            raise IndexError("Group index out of range")
-        if torch.unique(indices).numel() != indices.numel():
-            raise ValueError("Group selection cannot repeat a group")
-        graphs = torch.cat(
-            [
-                torch.arange(
-                    layout.group_ptr[i], layout.group_ptr[i + 1], device=self.device
-                )
-                for i in indices.tolist()
-            ]
-        )
-        result = self.index_select(graphs)
-        result.set_group_layout(result.group_idx)
         return result
 
     def put(
@@ -1928,7 +1915,7 @@ class Batch(DataMixin):
             accepted_graph_mask = layout.broadcast(accepted)
             count = int(accepted_graph_mask.sum())
             if count:
-                compact = src_batch.index_select_groups(accepted)
+                compact = src_batch.index_select(accepted_graph_mask)
                 compact_labels = compact.group_idx + old_groups
                 compact_mask = torch.ones(count, dtype=torch.bool, device=device)
                 copied = torch.zeros_like(compact_mask)
@@ -2126,9 +2113,6 @@ class Batch(DataMixin):
         if not keep_mask.any():
             return None
         keep_indices = torch.where(keep_mask)[0]
-        if "group_idx" in self:
-            layout = self.group_layout
-            return self.index_select_groups(_complete_group_mask(layout, keep_mask))
         return self.index_select(keep_indices)
 
     def _normalize_index(

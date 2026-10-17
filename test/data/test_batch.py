@@ -3456,7 +3456,7 @@ class TestBatchPutDefrag:
             device=device,
         )
         # Prefill the buffer so the next put must account for occupied space.
-        first = source.index_select_groups([0])
+        first = source.index_select([0, 1])
         buffer.put(first, torch.ones(2, dtype=torch.bool, device=device))
         copied = torch.zeros(7, dtype=torch.bool, device=device)
         # Select groups 0, 2, and 3; unselected group 1 must consume no capacity.

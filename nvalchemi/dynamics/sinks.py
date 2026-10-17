@@ -546,16 +546,6 @@ def _select_for_write(batch: Batch, mask: torch.Tensor | None) -> Batch | None:
     num_selected = int(mask.sum().item())
     if num_selected == 0:
         return None
-    if "group_idx" in batch:
-        layout = batch.group_layout
-        group_mask = layout.reduce_all(mask)
-        if not torch.equal(group_mask, layout.reduce_any(mask)):
-            raise ValueError("mask must select complete groups")
-        return (
-            batch
-            if num_selected == num_total
-            else batch.index_select_groups(group_mask)
-        )
     if num_selected == num_total:
         return batch
     _ = batch.batch_ptr  # trigger lazy init for SegmentedLevelStorage
