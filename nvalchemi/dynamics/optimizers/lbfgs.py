@@ -379,8 +379,16 @@ class _LBFGSMixin:
         )
 
     def _make_new_state(self, n: int, template_batch: Batch) -> Batch:
+        atoms_per_update = (
+            torch.bincount(
+                template_batch.group_layout.node_to_group,
+                minlength=template_batch.group_layout.num_groups,
+            )
+            if self.by_group
+            else template_batch.num_nodes_per_graph
+        )
         return _build_state(
-            template_batch.num_nodes_per_graph[-n:],
+            atoms_per_update[-n:],
             self.history_size,
             template_batch.positions.dtype,
             template_batch.device,
@@ -420,7 +428,7 @@ class LBFGS(_LBFGSMixin, BaseDynamics):
         curvature history and step scaling across the graphs in that group.
         Requires a valid layout set with ``batch.set_group_layout()``.
         A configured convergence hook must use the same ``by_group`` setting.
-        Grouped sampling and refill are unsupported. Default False.
+        Default False.
         Forwarded through ``**kwargs`` to
         :class:`~nvalchemi.dynamics.base.BaseDynamics`.
     **kwargs

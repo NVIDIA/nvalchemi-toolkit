@@ -111,7 +111,7 @@ class TestClimbingImageSelection:
         self._update_selection(hook, force_hook, ctx)
         assert torch.where(batch.force_mode == CLIMBING_NEB)[0].tolist() == [1, 5]
 
-        current = batch.index_select_groups([1, 0])
+        current = batch.index_select([4, 5, 6, 7, 8, 0, 1, 2, 3])
         current.energy.copy_(
             torch.tensor(
                 [0.0, 1.0, 5.0, 2.0, 0.0, 0.0, 1.0, 6.0, 0.0], device=device
@@ -389,7 +389,7 @@ class TestNEBForceHook:
         batch.physical_forces.fill_(7)
         batch.forward_link_length.fill_(9)
 
-        current = batch.index_select_groups([1, 0])
+        current = batch.index_select([4, 5, 6, 7, 8, 0, 1, 2, 3])
         current.neb_fixed_node_mask[10:] = True
         current.force_mode[5:] = CLIMBING_NEB
         ctx = DynamicsContext(

@@ -356,7 +356,7 @@ class NEBForceHook:
         last_rank: Tensor = layout.num_graphs_per_group[layout.group_idx] - 1
         is_terminal = layout.graph_rank == last_rank
         is_endpoint = (layout.graph_rank == 0) | is_terminal
-        # BaseDynamics._initialize_arrivals zero-fills missing fields before append.
+        # BaseDynamics.refill_check zero-fills missing fields before append.
         # Supplied arrival modes may therefore be stale, so reset arrivals while
         # preserving retained modes.
         force_mode = (

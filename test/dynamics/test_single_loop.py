@@ -836,7 +836,7 @@ class TestFusedStage:
         torch.compiler.reset()
         try:
             model = model_cls()
-            sampler = MagicMock()
+            sampler = MagicMock(by_group=False)
             sampler.max_atoms = sampler.max_edges = sampler.max_batch_size = None
             sampler.request_replacements_budget.return_value = [
                 AtomicData(atomic_numbers=torch.tensor([6]), positions=torch.ones(1, 3))

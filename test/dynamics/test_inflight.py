@@ -1499,6 +1499,24 @@ class TestRefillCheck:
         assert dynamics.done is True
         assert dynamics._pending_graph_indices is None
 
+    def test_refill_raises_when_pending_samples_cannot_fit_empty_batch(
+        self,
+    ) -> None:
+        """An unfillable empty batch raises instead of reporting completion."""
+        dataset = MockDataset([(2, 0)] * 3)
+        sampler = SizeAwareSampler(
+            dataset, max_atoms=20, max_edges=10, max_batch_size=1
+        )
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+        batch = sampler.build_initial_batch()
+        batch["status"] = torch.tensor([[1]])
+        with (
+            patch.object(sampler, "request_replacements_budget", return_value=[]),
+            pytest.raises(ValueError, match="empty active batch"),
+        ):
+            dynamics.refill_check(batch, exit_status=1)
+        assert not dynamics.done
+
     def test_refill_raises_without_sampler(self) -> None:
         """Should raise RuntimeError when sampler is None.
 

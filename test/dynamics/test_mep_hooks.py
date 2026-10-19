@@ -295,7 +295,7 @@ class TestPathDiagnosticsHook:
                 "_candidate_highest_interior_image_idx",
             )
         }
-        current = batch.index_select_groups([1, 0])
+        current = batch.index_select([4, 5, 6, 7, 8, 0, 1, 2, 3])
         ctx = DynamicsContext(
             batch=current,
             previous_graph_indices=torch.tensor(
@@ -336,7 +336,7 @@ class TestPathDiagnosticsHook:
         diagnostics = hook.get_diagnostics()
         force_norms = hook._force_norms
         if change == "paths":
-            current = batch.index_select_groups([1])
+            current = batch.index_select([4, 5, 6, 7, 8])
         elif change == "nodes":
             current = _diagnostic_path(
                 [0.0] * 6, [0] * 3 + [1] * 3, [1.0, 1.0, 0.0] * 2, device=device

@@ -61,8 +61,9 @@ class SizeAwareSampler(Sampler[int]):
         Maximum total edges across all samples in a batch. ``None`` disables
         the edge count constraint.
     max_batch_size : int | None
-        Maximum number of graphs in a batch. ``None`` disables the
-        graph-count constraint, letting ``max_atoms`` (and/or ``max_edges``)
+        Maximum number of dataset items in a batch: graphs by default, or
+        complete groups when ``by_group`` is True. ``None`` disables the
+        count constraint, letting ``max_atoms`` (and/or ``max_edges``)
         alone control batch capacity. At least one of ``max_atoms`` or
         ``max_batch_size`` must be set.
     bin_width : int
@@ -76,7 +77,7 @@ class SizeAwareSampler(Sampler[int]):
     by_group : bool
         Sample complete single-group batches instead of individual graphs. Each
         item returns ``(batch, metadata)`` with exactly one group.
-        ``max_batch_size`` counts graphs across all groups. Default False.
+        ``max_batch_size`` counts groups. Default False.
 
     Raises
     ------
@@ -123,8 +124,9 @@ class SizeAwareSampler(Sampler[int]):
             Maximum total edges across all samples in a batch. ``None`` disables
             the edge count constraint.
         max_batch_size : int | None
-            Maximum number of graphs in a batch. ``None`` disables
-            the graph-count constraint. At least one of ``max_atoms`` or
+            Maximum number of dataset items in a batch: graphs by default, or
+            complete groups when ``by_group`` is True. ``None`` disables the
+            count constraint. At least one of ``max_atoms`` or
             ``max_batch_size`` must be set.
         bin_width : int
             Atom-count bin width for grouping samples. Default 1.
@@ -137,7 +139,7 @@ class SizeAwareSampler(Sampler[int]):
         by_group : bool, optional
             Sample complete single-group batches instead of AtomicData graphs.
             Metadata contains total atom and edge counts across each group.
-            ``max_batch_size`` counts graphs across all groups. Default False.
+            ``max_batch_size`` counts groups. Default False.
 
         Raises
         ------
@@ -274,7 +276,7 @@ class SizeAwareSampler(Sampler[int]):
 
         return max(available_for_data // bytes_per_atom, 1)
 
-    def _load_graph(self, index: int, max_count: int | None = None) -> AtomicData:
+    def _load_graph(self, index: int) -> AtomicData:
         """Load and identify one ordinary graph."""
         data, _ = self._dataset[index]
         data.add_system_property(
@@ -286,19 +288,13 @@ class SizeAwareSampler(Sampler[int]):
         self._next_system_id += 1
         return data
 
-    def _load_group(self, index: int, max_count: int | None = None) -> Batch | None:
-        """Load and identify a complete group if it fits the remaining graph budget."""
+    def _load_group(self, index: int) -> Batch:
+        """Load and identify one complete group."""
         data, _ = self._dataset[index]
         if not isinstance(data, Batch):
             raise TypeError("Grouped dataset items must be Batch objects")
         if "group_idx" not in data or data.group_layout.num_groups != 1:
             raise ValueError("Grouped dataset items must contain exactly one group")
-        if self._max_batch_size is not None and data.num_graphs > self._max_batch_size:
-            raise RuntimeError(
-                f"Sample {index} exceeds max_batch_size={self._max_batch_size}"
-            )
-        if max_count is not None and data.num_graphs > max_count:
-            return None
         # Dataset items may be cached. Identity stamping must not mutate them.
         data = data.clone()
         data.add_key(
@@ -340,7 +336,7 @@ class SizeAwareSampler(Sampler[int]):
         or one complete group of graphs when ``self.by_group`` is True.
 
         In grouped mode, binning and atom/edge budgets use totals across the
-        entire group. ``max_batch_size`` counts graphs across all selected groups.
+        entire group. ``max_batch_size`` counts selected groups.
 
         Returns
         -------
@@ -369,17 +365,16 @@ class SizeAwareSampler(Sampler[int]):
         data_list: list[AtomicData | Batch] = []
         total_atoms = 0
         total_edges = 0
-        total_graphs = 0
 
         # Round-robin across bins for diverse size distribution.
         active_bins = sorted(self._bins.keys())
 
-        while active_bins and total_graphs < effective_max_batch:
+        while active_bins and len(data_list) < effective_max_batch:
             next_round_bins: list[int] = []
             added_this_round = False
 
             for bin_key in active_bins:
-                if total_graphs >= effective_max_batch:
+                if len(data_list) >= effective_max_batch:
                     break
 
                 bin_deque = self._bins[bin_key]
@@ -405,23 +400,10 @@ class SizeAwareSampler(Sampler[int]):
                         and total_edges + num_edges > self._max_edges
                     ):
                         continue
-                    # Atoms/edges fit by metadata; load the sample, which returns
-                    # None if its graph count exceeds the remaining budget.
-                    data = self._load_sample(
-                        idx,
-                        max_count=(
-                            self._max_batch_size - total_graphs
-                            if self._max_batch_size is not None
-                            else None
-                        ),
-                    )
-                    if data is None:
-                        continue
-                    num_graphs = data.num_graphs if self.by_group else 1
-                    data_list.append(data)
+                    # Sample fits — load it.
+                    data_list.append(self._load_sample(idx))
                     total_atoms += num_atoms
                     total_edges += num_edges
-                    total_graphs += num_graphs
                     self._consumed.add(idx)
                     added_this_round = True
                     break
@@ -431,7 +413,7 @@ class SizeAwareSampler(Sampler[int]):
                     next_round_bins.append(bin_key)
 
             # If no sample was added in a full round, budget is saturated.
-            if not added_this_round or total_graphs >= effective_max_batch:
+            if not added_this_round or len(data_list) >= effective_max_batch:
                 break
             active_bins = next_round_bins
 
@@ -459,7 +441,7 @@ class SizeAwareSampler(Sampler[int]):
 
         This method supports individual graphs only. When ``self.by_group``
         is True, use :meth:`request_replacements_budget`, which fits complete
-        groups within atom, edge, and graph budgets.
+        groups within atom, edge, and count budgets.
 
         Parameters
         ----------
@@ -526,9 +508,9 @@ class SizeAwareSampler(Sampler[int]):
         edge_budget : int | None
             Total edges available for replacements.  ``None`` = unconstrained.
         max_count : int | None
-            Maximum total number of replacement graphs. When ``self.by_group``
-            is True, count all graphs in each selected group. Groups are never
-            split. ``None`` disables the graph-count constraint.
+            Maximum number of replacement samples: graphs by default, or
+            complete groups when ``self.by_group`` is True. ``None`` disables
+            the count constraint.
 
         Returns
         -------
@@ -539,11 +521,10 @@ class SizeAwareSampler(Sampler[int]):
         results: list[AtomicData | Batch] = []
         remaining_atoms = atom_budget
         remaining_edges = edge_budget
-        remaining_graphs = max_count
 
         # Iterate bins from largest to smallest for diversity.
         for bin_key in sorted(self._bins.keys(), reverse=True):
-            if remaining_graphs is not None and remaining_graphs <= 0:
+            if max_count is not None and len(results) >= max_count:
                 break
 
             bin_deque = self._bins[bin_key]
@@ -552,7 +533,7 @@ class SizeAwareSampler(Sampler[int]):
                 bin_deque.popleft()
 
             for idx in list(bin_deque):
-                if remaining_graphs is not None and remaining_graphs <= 0:
+                if max_count is not None and len(results) >= max_count:
                     break
                 if idx in self._consumed:
                     continue
@@ -564,19 +545,14 @@ class SizeAwareSampler(Sampler[int]):
                 if remaining_edges is not None and cand_edges > remaining_edges:
                     continue
 
-                # Fits atom/edge budgets — load and consume if the graph budget fits.
-                data = self._load_sample(idx, max_count=remaining_graphs)
-                if data is None:
-                    continue
+                # Fits — load and consume.
+                results.append(self._load_sample(idx))
                 self._consumed.add(idx)
-                results.append(data)
 
                 if remaining_atoms is not None:
                     remaining_atoms -= cand_atoms
                 if remaining_edges is not None:
                     remaining_edges -= cand_edges
-                if remaining_graphs is not None:
-                    remaining_graphs -= data.num_graphs if self.by_group else 1
 
         return results
 
@@ -592,7 +568,7 @@ class SizeAwareSampler(Sampler[int]):
 
     @property
     def max_batch_size(self) -> int | None:
-        """Maximum total graphs per batch (user-specified constraint)."""
+        """Maximum graphs, or groups when ``by_group``, per batch (user-specified constraint)."""
         return self._max_batch_size
 
     @property
@@ -647,7 +623,7 @@ class SizeAwareSampler(Sampler[int]):
 
         This method supports individual graphs only. When ``self.by_group``
         is True, use :meth:`request_replacements_budget`, which fits complete
-        groups within atom, edge, and graph budgets.
+        groups within atom, edge, and count budgets.
 
         Parameters
         ----------
