@@ -1081,7 +1081,7 @@ class _CommunicationMixin:
         """Record retained graphs followed by arrivals relative to the last dispatch.
 
         ``retained_graphs`` indexes the immediately previous batch in current
-        order. Group-aware callers must retain whole groups and image order.
+        order. Group-aware callers must retain whole groups and graph order.
         Removal-only changes can reuse this tensor, so callers must not mutate it.
         This bookkeeping does not change integrator state or force priming.
 
@@ -1951,10 +1951,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         super().__init__(**kwargs)
         self.by_group = by_group
         self.reprime_on_entry = reprime_on_entry
-        if self.by_group and self.sampler is not None:
-            raise NotImplementedError(
-                "Sampling and refill are not implemented for by_group=True."
-            )
+        if self.sampler is not None and self.by_group != getattr(
+            self.sampler, "by_group", False
+        ):
+            raise ValueError("Sampler and dynamics must use the same by_group setting")
         if not isinstance(model, BaseModelMixin):
             raise TypeError(
                 f"Expected a `BaseModelMixin` instance, got {type(model).__name__}."
@@ -2811,6 +2811,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         Called after graduated systems have been removed, with optional
         replacement systems appended. Removes state rows for graduated systems
         and appends fresh default state for the new ones.
+        Systems are groups when ``by_group=True`` and graphs otherwise.
 
         If this dynamics has no ``_state`` (e.g. :class:`DemoDynamics`),
         this method is a no-op.
@@ -2819,7 +2820,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         ----------
         remaining_indices : torch.Tensor
             Integer indices of systems that remain in the new batch, in
-            order.  Used to slice ``self._state`` via ``index_select``.
+            order. Used to slice ``self._state`` via ``index_select``.
         n_new : int
             Number of newly admitted replacement systems appended after
             the remaining ones.  State for these is produced by
@@ -3398,6 +3399,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         integrator updates for one iteration while the model computes their
         initial forces.
 
+        With ``by_group=True``, removal and replacement operate on complete
+        groups, the sampler's ``max_batch_size`` counts groups, and optimizer
+        state is indexed by group.
+
         Parameters
         ----------
         batch : Batch
@@ -3417,6 +3422,9 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         ------
         RuntimeError
             If ``self.sampler`` is ``None``.
+        ValueError
+            If graduation splits a group, or pending samples cannot fit an
+            empty active batch under the sampler's limits.
         """
         if self.sampler is None:
             raise RuntimeError("refill_check requires a sampler to be configured.")
@@ -3428,6 +3436,13 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
 
         if not graduated_mask.any():
             return batch
+
+        if self.by_group:
+            layout = batch.group_layout
+            graduated_groups = layout.reduce_all(graduated_mask)
+            if not torch.equal(layout.broadcast(graduated_groups), graduated_mask):
+                raise ValueError("Grouped refill must graduate complete groups")
+            remaining_units = torch.where(~graduated_groups)[0]
 
         # Batch composition changes here; drop stale converged indices so the
         # next _build_context mask doesn't over-index the resized batch.
@@ -3472,8 +3487,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             if self.sampler.max_edges is not None
             else None
         )
+        # The sampler's count limit is in groups when by_group=True.
+        n_remaining_samples = remaining_units.numel() if self.by_group else n_remaining
         max_new = (
-            self.sampler.max_batch_size - n_remaining
+            self.sampler.max_batch_size - n_remaining_samples
             if self.sampler.max_batch_size is not None
             else None
         )
@@ -3484,7 +3501,11 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         )
 
         if replacements:
-            repl_batch = Batch.from_data_list(replacements, device=batch.device)
+            repl_batch = (
+                self.sampler._assemble_samples(replacements, device=batch.device)
+                if self.by_group
+                else Batch.from_data_list(replacements, device=batch.device)
+            )
             if result is None:
                 result = repl_batch
             else:
@@ -3518,12 +3539,22 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 result.reprime_pending.view(-1)[n_remaining:] = True
                 self._forces_primed = True
                 self._refill_pending = True
-            self._sync_state_to_batch(remaining_indices, len(replacements), result)
+            self._sync_state_to_batch(
+                remaining_units if self.by_group else remaining_indices,
+                len(replacements),
+                result,
+            )
             self._record_batch_change(result, remaining_indices)
             return result
 
         if self.sampler.exhausted:
             self.done = True
+        else:
+            raise ValueError(
+                "No remaining sample fits the empty active batch under the "
+                "sampler's max_batch_size, max_atoms, or max_edges limits."
+            )
+        # Nothing remains in either mode, so this only clears per-system state.
         self._sync_state_to_batch(remaining_indices, 0, batch)
         self._record_batch_change(None, remaining_indices)
         return None
@@ -4434,6 +4465,7 @@ class FusedStage(BaseDynamics):
         This override delegates to every sub-stage so that active-batch
         membership changes keep each sub-stage's ``_state`` aligned with the
         new batch composition.
+        Systems are groups when ``by_group=True`` and graphs otherwise.
 
         Parameters
         ----------
@@ -5364,7 +5396,18 @@ class DistributedPipeline:
             (default) keeps the classic one-rank-per-stage behavior unchanged.
         **dist_kwargs : Any
             Additional keyword arguments for ``torch.distributed.init_process_group``.
+
+        Raises
+        ------
+        NotImplementedError
+            If any stage uses ``by_group=True``. Buffer transfer and removal work
+            graph by graph and would split groups.
         """
+        if any(getattr(stage, "by_group", False) for stage in stages.values()):
+            raise NotImplementedError(
+                "DistributedPipeline does not support by_group=True stages; "
+                "run grouped dynamics on a single device"
+            )
         dist_kwargs.setdefault(
             "backend", "nccl" if dist.is_nccl_available() else "gloo"
         )

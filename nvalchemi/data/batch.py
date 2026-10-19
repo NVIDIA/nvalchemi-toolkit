@@ -1677,7 +1677,9 @@ class Batch(DataMixin):
         Operates directly on concatenated tensors via segment selection --
         no per-graph :class:`AtomicData` reconstruction. Grouped batches require
         complete groups without repeated graphs. Groups may be reordered but
-        must remain contiguous; their labels are normalized in the result.
+        must remain contiguous. Their labels are normalized in the result.
+        Repeated graphs are not allowed in grouped selections because they
+        make ``group_idx`` ambiguous.
 
         Parameters
         ----------
@@ -1706,7 +1708,8 @@ class Batch(DataMixin):
         grouped = "group_idx" in self
         if (
             grouped
-            and idx.dtype is torch.bool
+            and isinstance(idx, Tensor)
+            and idx.dtype == torch.bool
             and idx.shape != (self.num_graphs,)
         ):
             raise ValueError("Graph mask must have one entry per graph")

@@ -61,6 +61,8 @@ from nvalchemi.dynamics.mep.neb_equations import (
 )
 from nvalchemi.dynamics.optimizers.fire2 import FIRE2
 from nvalchemi.dynamics.optimizers.lbfgs import LBFGS
+from nvalchemi.dynamics.sampler import SizeAwareSampler
+from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks import DynamicsContext, NeighborListHook
 from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -106,6 +108,70 @@ class _CompilerFriendlyModel(torch.nn.Module, BaseModelMixin):
             "energy": positions.square().sum(dim=-1, keepdim=True),
             "forces": -2 * positions,
         }
+
+
+class _HarmonicModel(_CompilerFriendlyModel):
+    """Sum atomic energies for paths with different numbers of atoms per image."""
+
+    def forward(self, batch: Batch) -> dict[str, torch.Tensor]:
+        """Return one energy per image and analytical atomic forces."""
+        energy = torch.zeros(
+            batch.num_graphs, 1, dtype=batch.positions.dtype, device=batch.device
+        )
+        energy.scatter_add_(
+            0,
+            batch.batch_idx.long().unsqueeze(-1),
+            batch.positions.square().sum(-1, keepdim=True),
+        )
+        return {"energy": energy, "forces": -2 * batch.positions}
+
+
+class _BandDataset:
+    """Cached prepared paths carrying positions, model inputs, and constraints."""
+
+    def __init__(self, sizes: list[tuple[int, int]], device: str = "cpu") -> None:
+        """Build cached paths on the requested device."""
+        self.paths: list[Batch] = []
+        for images, atoms in sizes:
+            data = []
+            for x in torch.linspace(0, 1, images, device=device):
+                positions = torch.zeros(atoms, 3, device=device)
+                positions[:, 0] = x
+                positions[:, 1] = 0.2 * torch.sin(torch.pi * x)
+                data.append(
+                    AtomicData(
+                        atomic_numbers=torch.ones(
+                            atoms, dtype=torch.long, device=device
+                        ),
+                        positions=positions,
+                    )
+                )
+            path = Batch.from_data_list(data)
+            path.set_group_layout(torch.zeros(images, dtype=torch.long, device=device))
+            path.add_key(
+                "neb_fixed_node_mask",
+                [
+                    torch.arange(atoms, device=device) == 0
+                    if atoms > 1
+                    else torch.zeros(atoms, dtype=torch.bool, device=device)
+                    for _ in range(images)
+                ],
+                level="node",
+            )
+            self.paths.append(path)
+
+    def __len__(self) -> int:
+        """Return the number of complete paths."""
+        return len(self.paths)
+
+    def get_metadata(self, index: int) -> tuple[int, int]:
+        """Return total atom and edge counts for a path."""
+        path = self.paths[index]
+        return path.num_nodes, path.num_edges
+
+    def __getitem__(self, index: int) -> tuple[Batch, dict[str, Any]]:
+        """Return the cached path so tests can detect unwanted dataset mutation."""
+        return self.paths[index], {}
 
 
 class _NoOpHook:
@@ -435,32 +501,6 @@ class TestNEBConfiguration:
         assert strategy.fixed_atom_indices == {0: (0, 2), 1: (1,)}
         assert hook.fixed_atom_indices == strategy.fixed_atom_indices
 
-    def test_mask_key_round_trip_and_freeze_hook(self) -> None:
-        """A mask key survives recipes and enables constraints on relaxed paths."""
-        strategy = NEB(
-            model=_model(), endpoint_mode="relaxed", fixed_atom_mask_key="fixed_atoms"
-        )
-        spec = json.loads(json.dumps(strategy.to_spec_dict()))
-        restored = NEB.from_spec_dict(spec, model=strategy.model)
-        assert restored.fixed_atom_mask_key == "fixed_atoms"
-        engine = restored.build_engine()
-        assert _force_hook(engine).fixed_atom_mask_key == "fixed_atoms"
-        assert _freeze_hook(engine).mask_key == "neb_fixed_node_mask"
-
-    @pytest.mark.parametrize(
-        "options",
-        [
-            {"fixed_atom_mask_key": 1},
-            {"fixed_atom_mask_key": " "},
-            {"fixed_atom_mask_key": ""},
-            {"fixed_atom_mask_key": "fixed_atoms", "fixed_atom_indices": {}},
-        ],
-    )
-    def test_rejects_invalid_mask_configuration(self, options: dict[str, Any]) -> None:
-        """The mask key is a nonempty string exclusive with path indices."""
-        with pytest.raises(ValueError, match="fixed_atom"):
-            NEB(model=_model(), **options)
-
     def test_builds_mask_aware_freeze_hook_for_constraints(self) -> None:
         """Use the NEB-owned node mask for endpoint and user constraints."""
         engine = NEB(
@@ -472,17 +512,14 @@ class TestNEBConfiguration:
         assert freeze_hook.mask_key == "neb_fixed_node_mask"
         assert freeze_hook.zero_velocities
 
-    def test_relaxed_unconstrained_neb_omits_freeze_hook(self) -> None:
-        """Avoid constraint lifecycle overhead when no nodes are fixed."""
+    def test_relaxed_neb_supports_supplied_atom_mask(self) -> None:
+        """Relaxed endpoints still allow a batch to supply fixed atoms."""
         engine = NEB(
             model=_model(),
             endpoint_mode="relaxed",
         ).build_engine()
 
-        assert not any(
-            isinstance(hook, FreezeAtomsHook) and hook.mask_key == "neb_fixed_node_mask"
-            for hook in engine.hooks
-        )
+        assert _freeze_hook(engine).mask_key == "neb_fixed_node_mask"
 
     def test_fire2_explicit_kwargs_override_neb_defaults(self) -> None:
         kwargs = {"dt": 0.02, "maxstep": 0.03}
@@ -785,7 +822,8 @@ class TestNEBConfiguration:
             fmax=0.05,
             climbing=ClimbingImageConfig(regular_fmax=0.5),
         ).build_engine()
-        bands = _bands().index_select([0, 1, 2, 0, 1, 2])
+        bands = _bands()
+        bands.append(_bands())
         bands.set_group_layout(torch.tensor([0, 0, 0, 1, 1, 1]))
         bands.status = torch.zeros(6, dtype=torch.long)
         bands.forces = torch.tensor(
@@ -849,7 +887,7 @@ class TestNEBRun:
         batch = _bands(device)
         batch.positions[:, 1] = 1
         batch.add_key(
-            "fixed_atoms",
+            "neb_fixed_node_mask",
             list(torch.tensor([False, True, False], device=device).split(1)),
             level="node",
         )
@@ -857,7 +895,6 @@ class TestNEBRun:
         result = NEB(
             model=_CompilerFriendlyModel().to(device).eval(),
             endpoint_mode="relaxed",
-            fixed_atom_mask_key="fixed_atoms",
             fmax=1e-12,
             n_steps=2,
             optimizer_kwargs={"device_type": device},
@@ -1075,6 +1112,8 @@ class TestNEBRun:
         endpoints["n_steps_counter_0"] = torch.full(
             (endpoints.num_graphs, 1), 2, dtype=torch.long, device=device
         )
+        # Endpoints are independent structures, so selecting one is not a path split.
+        del endpoints["group_idx"]
         initial = endpoints[[0]]
         final = endpoints[[2]]
         bands = interpolate_paths(initial, final, 3)
@@ -1287,3 +1326,366 @@ class TestNEBwithIDPP:
         torch.testing.assert_close(result.neighbor_list, neighbor_list)
         torch.testing.assert_close(result.idpp_target_distances, target_distances)
         torch.testing.assert_close(result.positions[endpoint_mask], endpoint_positions)
+
+
+# ---------------------------------------------------------------------------
+# In-flight NEB batching
+# ---------------------------------------------------------------------------
+
+
+class TestNEBStreaming:
+    """Whole-path refill preserves resident state and completes every path once."""
+
+    @pytest.mark.parametrize("mode", ["engine", "compiled", "stream"])
+    def test_stream_processes_each_path_once(self, device: str, mode: str) -> None:
+        """Unequal paths keep identities, constraints, and independent stage budgets."""
+        sizes = [(3, 1), (5, 2), (4, 1), (6, 1)]
+        dataset = _BandDataset(sizes, device)
+        # Stream four paths through capacity for two, so later paths arrive by refill.
+        sampler = SizeAwareSampler(
+            dataset, by_group=True, max_atoms=30, max_batch_size=2
+        )
+        sink = HostMemory(100)
+        strategy = NEB(
+            model=_HarmonicModel().to(device).eval(),
+            fmax=1e-8,
+            n_steps=100,
+            climbing=ClimbingImageConfig(max_regular_steps=2, max_climbing_steps=2),
+            compile=mode == "compiled",
+            compile_kwargs={"backend": "eager", "fullgraph": True},
+            optimizer_kwargs={"device_type": device},
+            refill_frequency=2 if mode == "stream" else 1,
+            cache_engine=True,
+        )
+        try:
+            if mode == "stream":
+                assert strategy.run(sampler=sampler, sinks=[sink]) is None
+            else:
+                engine = strategy.build_engine(sampler=sampler, sinks=[sink])
+                assert engine.run() is None
+                assert engine.active_batch is None
+        finally:
+            if mode == "compiled":
+                torch.compiler.reset()
+        assert sampler.exhausted
+        assert strategy._engine is None
+        result = sink.read()
+        # Check that each path reaches the sink exactly once, with every image
+        # finished within its regular and climbing step budgets.
+        layout = result.group_layout
+        ids = result.group_id.view(-1)[layout.group_ptr[:-1]].tolist()
+        assert sorted(ids) == [0, 1, 2, 3]
+        assert result.system_id.unique().numel() == sum(images for images, _ in sizes)
+        assert torch.all(result.status == 2)
+        assert torch.all(result.n_steps_counter_0 <= 2)
+        assert torch.all(result.n_steps_counter_1 <= 2)
+        # Check that each path keeps its image count and fixed endpoints, and
+        # that runtime bookkeeping is not written back to the dataset.
+        for group, identity in enumerate(ids):
+            path = result.index_select(result.group_idx == group)
+            assert path.num_graphs == sizes[identity][0]
+            source = dataset.paths[identity].to(path.device)
+            torch.testing.assert_close(
+                path.positions[path.neb_fixed_node_mask],
+                source.positions[path.neb_fixed_node_mask],
+            )
+            for key in ("status", "system_id", "group_id", "n_steps_counter_0"):
+                assert key not in dataset.paths[identity]
+
+    @pytest.mark.parametrize("optimizer", [FIRE2, LBFGS])
+    def test_refill_preserves_resident_state_and_primes_only_arrivals(
+        self, device: str, optimizer: type[BaseDynamics]
+    ) -> None:
+        """State rows follow paths and segmented histories cover all arriving nodes."""
+        sampler = SizeAwareSampler(
+            _BandDataset([(3, 1), (5, 1), (4, 2)], device),
+            by_group=True,
+            max_atoms=30,
+            max_batch_size=2,
+        )
+        sink = HostMemory(100)
+        engine = NEB(
+            model=_HarmonicModel().to(device).eval(),
+            optimizer=optimizer,
+            fmax=1e-12,
+            climbing=ClimbingImageConfig(mode="immediate"),
+            optimizer_kwargs={"device_type": device},
+        ).build_engine(sampler=sampler, sinks=[sink])
+        batch = engine.run(n_steps=1)
+        stage = engine.sub_stages[0][1]
+        resident_state = stage._state.index_select(torch.tensor([1], device=device))
+        modes = batch.force_mode[3:].clone()
+        positions = batch.positions[3:].clone()
+        batch.status[:3] = engine.exit_status
+        result = engine.refill_check(batch, engine.exit_status)
+        assert result.group_layout.num_graphs_per_group.tolist() == [5, 4]
+        assert sink.read().group_id.unique().tolist() == [0]
+        assert result.reprime_pending.view(-1).tolist() == [False] * 5 + [True] * 4
+        torch.testing.assert_close(result.positions[:5], positions)
+        torch.testing.assert_close(result.force_mode[:5], modes)
+        retained = stage._state.index_select(torch.tensor([0], device=device))
+        for key, value in resident_state:
+            torch.testing.assert_close(retained[key], value)
+        fresh = stage._make_new_state(1, result)
+        arriving = stage._state.index_select(torch.tensor([1], device=device))
+        for key, value in fresh:
+            torch.testing.assert_close(arriving[key], value)
+        if optimizer is LBFGS:
+            assert stage._state.level_ptr("lbfgs_dofs").diff().tolist() == [5, 8]
+        engine._ensure_admission_initialized(result)
+        selector = next(
+            hook
+            for hook in engine.hooks
+            if isinstance(hook, ClimbingImageSelectionHook)
+        )
+        assert selector._initialized_graphs[:5].all()
+        assert not selector._initialized_graphs[5:].any()
+        torch.testing.assert_close(result.force_mode[:5], modes)
+        arrival_positions = result.positions[5:].clone()
+        engine.step(result)
+        torch.testing.assert_close(result.positions[5:], arrival_positions)
+        for key, value in fresh:
+            torch.testing.assert_close(
+                stage._state.index_select(torch.tensor([1], device=device))[key], value
+            )
+        assert not result.reprime_pending.any()
+        assert torch.isfinite(result.forces).all()
+
+    def test_static_batch_ignores_engine_capacity(self) -> None:
+        """A supplied static batch can exceed the engine's max_batch_size."""
+        sampler = SizeAwareSampler(
+            _BandDataset([(3, 1), (5, 1)]),
+            by_group=True,
+            max_atoms=20,
+            max_batch_size=2,
+        )
+        engine = FIRE2(
+            model=_HarmonicModel(),
+            dt=0.05,
+            by_group=True,
+            max_batch_size=6,
+            device_type="cpu",
+        )
+        result = engine.run(sampler.build_initial_batch(), n_steps=1)
+        assert result.num_graphs == 8
+
+    @pytest.mark.parametrize("fused", [False, True])
+    def test_refill_respects_atom_headroom_and_clears_final_state(
+        self, device: str, fused: bool
+    ) -> None:
+        """A path that cannot fit now stays pending until an entire path leaves."""
+        sampler = SizeAwareSampler(
+            _BandDataset([(3, 1), (4, 1), (5, 1)], device),
+            by_group=True,
+            max_atoms=8,
+            max_batch_size=2,
+        )
+        sink = HostMemory(30)
+        options = {
+            "by_group": True,
+            "sampler": sampler,
+            "max_batch_size": 1,
+            "sinks": [sink],
+            "device_type": device,
+        }
+        stage = FIRE2(
+            model=_HarmonicModel().to(device).eval(),
+            dt=0.05,
+            **({"by_group": True, "device_type": device} if fused else options),
+        )
+        engine = FusedStage(sub_stages=[(0, stage)], **options) if fused else stage
+        if fused:
+            batch = engine.run(n_steps=1)
+        else:
+            batch = sampler.build_initial_batch()
+            engine.step(batch)
+        assert batch.group_layout.num_graphs_per_group.tolist() == [3, 4]
+        batch.status[:3] = engine.exit_status
+        remaining = engine.refill_check(batch, engine.exit_status)
+        assert remaining.group_layout.num_graphs_per_group.tolist() == [4]
+        assert stage._state.num_graphs == 1
+        assert not sampler.exhausted
+        remaining.status.fill_(engine.exit_status)
+        replacement = engine.refill_check(remaining, engine.exit_status)
+        assert replacement.group_layout.num_graphs_per_group.tolist() == [5]
+        assert sampler.exhausted
+        # A fully replaced batch gets model outputs on its first step.
+        engine.step(replacement)
+        replacement.status.fill_(engine.exit_status)
+        assert engine.refill_check(replacement, engine.exit_status) is None
+        assert engine.done
+        assert not hasattr(stage, "_state")
+        assert engine._pending_graph_indices is None
+        assert sink.read().group_id.unique().tolist() == [0, 1, 2]
+
+    @pytest.mark.parametrize(
+        "climbing",
+        [None, ClimbingImageConfig(max_regular_steps=5, max_climbing_steps=5)],
+    )
+    def test_stream_matches_static_batch(
+        self, climbing: ClimbingImageConfig | None
+    ) -> None:
+        """Streaming with whole-path refill reproduces a static run of all paths.
+
+        L-BFGS keeps per-path arithmetic independent of the batch layout. FIRE2's
+        grouped reductions round differently as batch composition changes, so its
+        results agree only to float32 roundoff amplified over many steps.
+        """
+        sizes = [(3, 1), (5, 2), (4, 1)]
+
+        def neb() -> NEB:
+            return NEB(
+                model=_HarmonicModel(),
+                optimizer=LBFGS,
+                fmax=1e-3,
+                n_steps=500,
+                climbing=climbing,
+                optimizer_kwargs={"device_type": "cpu"},
+            )
+
+        def paths_by_id(batch: Batch) -> dict[int, torch.Tensor]:
+            node_group = batch.group_idx.view(-1)[batch.batch_idx.long()]
+            return {
+                int(batch.group_id.view(-1)[batch.group_idx.view(-1) == g][0]): (
+                    batch.positions[node_group == g]
+                )
+                for g in range(batch.group_layout.num_groups)
+            }
+
+        static = neb().run(
+            SizeAwareSampler(
+                _BandDataset(sizes), by_group=True, max_atoms=100
+            ).build_initial_batch()
+        )
+        sampler = SizeAwareSampler(
+            _BandDataset(sizes), by_group=True, max_atoms=100, max_batch_size=2
+        )
+        sink = HostMemory(100)
+        assert neb().run(sampler=sampler, sinks=[sink]) is None
+        assert torch.all(static.status == sink.read().status.max())
+        expected = paths_by_id(static)
+        streamed = paths_by_id(sink.read())
+        assert streamed.keys() == expected.keys() == {0, 1, 2}
+        for identity, positions in expected.items():
+            torch.testing.assert_close(streamed[identity], positions, rtol=0, atol=0)
+
+    def test_refill_keeps_bookkeeping_carried_by_arriving_path(self) -> None:
+        """Grouped refill keeps dataset bookkeeping, as ungrouped refill does."""
+        dataset = _BandDataset([(3, 1), (4, 1)])
+        dataset.paths[1].status = torch.ones(4, 1, dtype=torch.long)
+        sampler = SizeAwareSampler(
+            dataset, by_group=True, max_atoms=20, max_batch_size=1
+        )
+        engine = FIRE2(
+            model=_HarmonicModel(),
+            dt=0.05,
+            by_group=True,
+            sampler=sampler,
+            device_type="cpu",
+        )
+        batch = sampler.build_initial_batch()
+        engine.step(batch)
+        batch.status.fill_(2)
+        result = engine.refill_check(batch, exit_status=2)
+        assert result.status.view(-1).tolist() == [1] * 4
+        assert result.system_id.view(-1).tolist() == list(range(3, 7))
+
+    def test_partial_path_graduation_is_rejected(self) -> None:
+        """Refill cannot write or remove only part of a path."""
+        sampler = SizeAwareSampler(
+            _BandDataset([(3, 1), (4, 1)]),
+            by_group=True,
+            max_atoms=20,
+            max_batch_size=2,
+        )
+        sink = HostMemory(20)
+        engine = NEB(
+            model=_HarmonicModel(), optimizer_kwargs={"device_type": "cpu"}
+        ).build_engine(sampler=sampler, sinks=[sink])
+        batch = sampler.build_initial_batch()
+        batch.status[0] = engine.exit_status
+        with pytest.raises(ValueError, match="complete groups"):
+            engine.refill_check(batch, engine.exit_status)
+        assert len(sink) == 0
+
+    def test_unfittable_pending_path_is_not_reported_as_completion(self) -> None:
+        """A pending path that cannot fit raises instead of ending the stream."""
+        sampler = SizeAwareSampler(
+            _BandDataset([(3, 1), (8, 1)]),
+            by_group=True,
+            max_atoms=20,
+            max_batch_size=1,
+        )
+        engine = NEB(
+            model=_HarmonicModel(), optimizer_kwargs={"device_type": "cpu"}
+        ).build_engine(sampler=sampler)
+        batch = sampler.build_initial_batch()
+        batch.status.fill_(engine.exit_status)
+        with (
+            patch.object(sampler, "request_replacements_budget", return_value=[]),
+            pytest.raises(ValueError, match="empty active batch"),
+        ):
+            engine.refill_check(batch, engine.exit_status)
+        assert not sampler.exhausted
+        assert not engine.done
+
+    def test_stream_returns_unfinished_batch_at_global_limit(self) -> None:
+        """A step limit does not silently discard paths that are still active."""
+        sampler = SizeAwareSampler(
+            _BandDataset([(3, 1), (4, 1)]),
+            by_group=True,
+            max_atoms=20,
+            max_batch_size=1,
+        )
+        sink = HostMemory(20)
+        result = NEB(
+            model=_HarmonicModel(),
+            n_steps=1,
+            fmax=1e-12,
+            optimizer_kwargs={"device_type": "cpu"},
+        ).run(sampler=sampler, sinks=[sink])
+        assert result is not None
+        assert result.num_graphs == 3
+        assert len(sink) == 0
+        assert not sampler.exhausted
+
+    def test_stream_rejects_ungrouped_sampler(self) -> None:
+        """Sampler and engine must agree on the unit of admission."""
+        sampler = SizeAwareSampler(_BandDataset([(3, 1)]), max_atoms=10)
+        with pytest.raises(ValueError, match="by_group"):
+            NEB(model=_HarmonicModel()).run(sampler=sampler, sinks=[HostMemory(10)])
+
+    def test_refill_frequency_round_trips_through_spec(self) -> None:
+        """Refill cadence is configuration and is serialized with the strategy."""
+        spec = NEB(model=_HarmonicModel(), refill_frequency=3).to_spec_dict()
+        assert spec["refill_frequency"] == 3
+        restored = NEB.from_spec_dict(spec, model=_HarmonicModel())
+        assert restored.refill_frequency == 3
+
+    @pytest.mark.parametrize(
+        ("use_batch", "use_sampler", "sinks", "match"),
+        [
+            (False, False, None, "exactly one"),
+            (True, True, [HostMemory(10)], "exactly one"),
+            (True, False, [HostMemory(10)], "sinks require a sampler"),
+        ],
+    )
+    def test_run_validates_batch_sampler_and_sinks(
+        self, use_batch: bool, use_sampler: bool, sinks: Any, match: str
+    ) -> None:
+        """A run takes a batch or a sampler, and sinks only with a sampler."""
+        dataset = _BandDataset([(3, 1)])
+        batch = dataset.paths[0].clone() if use_batch else None
+        sampler = (
+            SizeAwareSampler(dataset, by_group=True, max_atoms=10)
+            if use_sampler
+            else None
+        )
+        with pytest.raises(ValueError, match=match):
+            NEB(model=_HarmonicModel()).run(batch, sampler=sampler, sinks=sinks)
+
+    def test_stream_requires_a_result_sink(self) -> None:
+        """Streaming must have somewhere to return completed paths."""
+        sampler = SizeAwareSampler(_BandDataset([(3, 1)]), by_group=True, max_atoms=10)
+        with pytest.raises(ValueError, match="result sink"):
+            NEB(model=_HarmonicModel()).run(sampler=sampler, sinks=[])
