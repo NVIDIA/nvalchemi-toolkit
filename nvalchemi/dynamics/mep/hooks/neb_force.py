@@ -485,7 +485,9 @@ class NEBForceHook:
             set_batch_field(
                 "physical_forces", torch.zeros_like(batch.positions), "node"
             )
-        set_batch_field("neb_fixed_node_mask", fixed_atoms, "node")
+        # A supplied mask was updated in place above.
+        if "neb_fixed_node_mask" not in batch:
+            set_batch_field("neb_fixed_node_mask", fixed_atoms, "node")
         if "forward_link_length" in batch:
             batch.forward_link_length[arriving] = 0
         else:
