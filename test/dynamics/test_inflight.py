@@ -23,7 +23,8 @@ This module tests the full inflight batching workflow including:
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from typing import Any
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
@@ -43,6 +44,7 @@ from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks import DynamicsContext
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
+from ..distributed._gloo_harness import run_gloo
 from .conftest import _MockSampler
 
 # FIRE is deprecated in favour of FIRE2; these tests still exercise it.
@@ -187,6 +189,61 @@ class _IncrementDynamics(BaseDynamics):
         """Increment positions during the post-update phase."""
         with torch.no_grad():
             batch.positions.add_(1.0)
+
+
+def _pipeline_entry_worker(
+    rank: int, world_size: int, queue: Any, reprime_on_entry: bool
+) -> None:
+    """Pass upstream forces through real pipeline buffers and Gloo transport."""
+    model = DemoModelWrapper(DemoModel())
+    config = BufferConfig(num_systems=1, num_nodes=1, num_edges=0)
+    stages = {
+        index: _IncrementDynamics(
+            model=model,
+            buffer_config=config,
+            device_type="cpu",
+            reprime_on_entry=reprime_on_entry,
+        )
+        for index in range(world_size)
+    }
+    pipeline = DistributedPipeline(stages=stages, backend="gloo")
+    pipeline.setup()
+    stage = pipeline.local_stage
+    template = create_batch_with_status(n_graphs=1)
+    template.forces.fill_(99.0)
+    stage._recv_template = Batch.empty_like(template)
+    stage._ensure_buffers(template)
+    if rank == 0:
+        stage.active_batch = template
+        stage._populate_send_buffer(torch.tensor([0]))
+        stage.send_buffer.send(dst=1)
+        return
+
+    seen_batches = []
+    stage.register_hook(
+        Mock(
+            spec=["stage", "frequency"],
+            stage=DynamicsStage.BEFORE_PRE_UPDATE,
+            frequency=1,
+            side_effect=lambda ctx, stage: seen_batches.append(
+                (ctx.batch.forces.clone(), ctx.batch.positions.clone())
+            ),
+        )
+    )
+    with (
+        patch.object(stage, "_prime_forces", wraps=stage._prime_forces) as prime,
+        patch.object(model, "forward", wraps=model.forward) as forward,
+    ):
+        pipeline.step()
+    batch = stage.active_batch
+    queue.put(
+        (
+            prime.call_count,
+            forward.call_count,
+            bool((seen_batches[0][0] == 99.0).all()),
+            torch.allclose(batch.positions, seen_batches[0][1] + 2),
+        )
+    )
 
 
 class _MaskRecordingHook:
@@ -942,6 +999,344 @@ class TestFusedStageInflight:
             device_type="cpu",
         )
         assert fused_without.inflight_mode is False
+
+
+# -----------------------------------------------------------------------------
+# TestPipelinePerGraphPriming
+# -----------------------------------------------------------------------------
+
+
+class TestPipelinePerGraphPriming:
+    """Pipeline membership changes keep per-graph force priming valid."""
+
+    def setup_method(self) -> None:
+        """Set up test fixtures before each test method."""
+        self.model = DemoModelWrapper(DemoModel())
+
+    def _make_stage(
+        self,
+        fused_stage: bool,
+        sampler_batch_size: int = 3,
+        reprime_on_entry: bool = False,
+        **kwargs,
+    ) -> tuple[BaseDynamics, SizeAwareSampler, DistributedPipeline]:
+        """Build a CPU pipeline stage and a sampler of two-atom graphs."""
+        sampler = SizeAwareSampler(
+            MockDataset([(2, 0)] * 8), max_batch_size=sampler_batch_size
+        )
+        config = BufferConfig(num_systems=1, num_nodes=2, num_edges=0)
+        if fused_stage:
+            dynamics = _IncrementDynamics(
+                model=self.model, device_type="cpu", reprime_on_entry=reprime_on_entry
+            )
+            stage = FusedStage(
+                sub_stages=[(0, dynamics)],
+                buffer_config=config,
+                device_type="cpu",
+                **kwargs,
+            )
+        else:
+            stage = _IncrementDynamics(
+                model=self.model,
+                buffer_config=config,
+                device_type="cpu",
+                reprime_on_entry=reprime_on_entry,
+                **kwargs,
+            )
+        upstream = BaseDynamics(
+            model=self.model, buffer_config=config, device_type="cpu"
+        )
+        pipeline = DistributedPipeline(stages={0: upstream, 1: stage})
+        pipeline.setup()
+        return stage, sampler, pipeline
+
+    def _step_counting_calls(
+        self, stage: BaseDynamics, batch: Batch
+    ) -> tuple[int, int]:
+        """Step once and return ``(_prime_forces calls, model forward calls)``."""
+        with (
+            patch.object(stage, "_prime_forces", wraps=stage._prime_forces) as prime,
+            patch.object(self.model, "forward", wraps=self.model.forward) as forward,
+        ):
+            stage.step(batch)
+        return prime.call_count, forward.call_count
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("final_stage", [False, True])
+    def test_removal_keeps_retained_forces(
+        self, fused_stage: bool, final_stage: bool
+    ) -> None:
+        """Sending or retiring graphs needs no whole-batch reprime."""
+        stage, sampler, pipeline = self._make_stage(
+            fused_stage, prior_rank=0, next_rank=None if final_stage else 2
+        )
+        batch = sampler.build_initial_batch()
+        stage.active_batch = batch
+        stage._ensure_buffers(batch)
+        stage.step(batch)
+        # Graph 1 is still waiting for its initial forces from a refill.
+        batch["reprime_pending"] = torch.tensor([[False], [True], [False]])
+        stage._refill_pending = True
+        resident_forces = batch.forces[2:].clone()
+
+        if final_stage:
+            stage._remove_converged_final_stage(torch.tensor([0]))
+        else:
+            stage._populate_send_buffer(torch.tensor([0]))
+
+        result = stage.active_batch
+        assert stage._forces_primed is True
+        assert result.reprime_pending.view(-1).tolist() == [True, False]
+        torch.testing.assert_close(result.forces, resident_forces)
+        positions_before = result.positions.clone()
+        assert self._step_counting_calls(stage, result) == (0, 1)
+        torch.testing.assert_close(result.positions[:2], positions_before[:2])
+        torch.testing.assert_close(result.positions[2:], positions_before[2:] + 2)
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    def test_receive_primes_only_arrivals(self, fused_stage: bool) -> None:
+        """Received graphs skip one update and get forces from the next compute."""
+        stage, sampler, pipeline = self._make_stage(
+            fused_stage, sampler_batch_size=2, prior_rank=0, max_batch_size=4
+        )
+        batch = sampler.build_initial_batch()
+        stage.active_batch = batch
+        stage.step(batch)
+        batch["label"] = torch.tensor([[5], [6]])
+        resident_forces = batch.forces.clone()
+        incoming = sampler.build_initial_batch()
+        # No upstream forces are available, so arrivals need local initialization.
+        stage._buffer_to_batch(incoming)
+
+        result = stage.active_batch
+        assert result.num_graphs == 4
+        assert stage._forces_primed is True
+        assert result.reprime_pending.view(-1).tolist() == [False, False, True, True]
+        assert result.label.view(-1).tolist() == [5, 6, 0, 0]
+        torch.testing.assert_close(result.forces[:4], resident_forces)
+        positions_before = result.positions.clone()
+        assert self._step_counting_calls(stage, result) == (0, 1)
+        torch.testing.assert_close(result.positions[:4], positions_before[:4] + 2)
+        torch.testing.assert_close(result.positions[4:], positions_before[4:])
+        assert not (result.forces[4:] == 99.0).any()
+        assert not result.reprime_pending.any()
+        positions_before = result.positions.clone()
+        stage.step(result)
+        torch.testing.assert_close(result.positions, positions_before + 2)
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("reprime_on_entry", [False, True])
+    @pytest.mark.parametrize("has_residents", [False, True])
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    def test_receive_reprime_policy(
+        self,
+        fused_stage: bool,
+        reprime_on_entry: bool,
+        has_residents: bool,
+        comm_mode: str,
+    ) -> None:
+        """Entry reuses upstream forces or primes arrivals without extra compute."""
+        stage, sampler, pipeline = self._make_stage(
+            fused_stage,
+            sampler_batch_size=2,
+            reprime_on_entry=reprime_on_entry,
+            prior_rank=0,
+            max_batch_size=4,
+            comm_mode=comm_mode,
+        )
+        if has_residents:
+            batch = sampler.build_initial_batch()
+            stage.active_batch = batch
+            stage.step(batch)
+        incoming = initialize_batch_for_dynamics(
+            sampler.build_initial_batch().index_select([0])
+        )
+        incoming.forces.fill_(99.0)
+        stage._ensure_buffers(stage.active_batch if has_residents else incoming)
+        seen_forces = []
+        stage.register_hook(
+            Mock(
+                spec=["stage", "frequency"],
+                stage=DynamicsStage.BEFORE_PRE_UPDATE,
+                frequency=1,
+                side_effect=lambda ctx, stage: seen_forces.append(
+                    ctx.batch.forces.clone()
+                ),
+            )
+        )
+        with patch.object(Batch, "irecv", return_value=Mock(wait=lambda: incoming)):
+            stage._prestep_sync_buffers()
+            stage._complete_pending_recv()
+
+        result = stage.active_batch
+        assert result.num_graphs == (3 if has_residents else 1)
+        positions_before = result.positions.clone()
+        # Only an empty stage needs a whole-batch prime under the opt-in.
+        full_prime = reprime_on_entry and not has_residents
+        assert self._step_counting_calls(stage, result) == (
+            (1, 2) if full_prime else (0, 1)
+        )
+        assert bool((seen_forces[0][-2:] == 99.0).all()) is not full_prime
+        # With primed residents, the arrival skips one update instead.
+        arrival_shift = 0 if reprime_on_entry and has_residents else 2
+        torch.testing.assert_close(result.positions[:-2], positions_before[:-2] + 2)
+        torch.testing.assert_close(
+            result.positions[-2:], positions_before[-2:] + arrival_shift
+        )
+        if fused_stage:
+            assert not result.reprime_pending.any()
+        # The opt-in is admission-driven, not an extra compute on every step.
+        assert self._step_counting_calls(stage, result) == (0, 1)
+
+    @pytest.mark.parametrize("reprime_on_entry", [False, True])
+    def test_reprime_policy_through_gloo_handoff(self, reprime_on_entry: bool) -> None:
+        """Real inter-rank handoff preserves forces and applies the entry policy."""
+        results = run_gloo(
+            world_size=2,
+            fn=_pipeline_entry_worker,
+            args=(reprime_on_entry,),
+        )
+        assert results == [
+            (
+                int(reprime_on_entry),
+                2 if reprime_on_entry else 1,
+                not reprime_on_entry,
+                True,
+            )
+        ]
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("has_residents", [False, True])
+    def test_receive_missing_required_output_initializes_locally(
+        self, fused_stage: bool, has_residents: bool
+    ) -> None:
+        """An upstream force tensor alone cannot replace a required missing output."""
+        stage, sampler, pipeline = self._make_stage(fused_stage, sampler_batch_size=2)
+        stage.__needs_keys__ = {"forces", "energy"}
+        if has_residents:
+            stage.active_batch = sampler.build_initial_batch()
+            stage.step(stage.active_batch)
+        incoming = sampler.build_initial_batch()
+        incoming["forces"] = torch.full((incoming.num_nodes, 3), 99.0)
+        if "energy" in incoming:
+            del incoming["energy"]
+        stage._buffer_to_batch(incoming)
+
+        result = stage.active_batch
+        before = result.positions.clone()
+        assert self._step_counting_calls(stage, result) == (
+            (0, 1) if has_residents else (1, 2)
+        )
+        if has_residents:
+            torch.testing.assert_close(result.positions[-4:], before[-4:])
+        else:
+            torch.testing.assert_close(result.positions, before + 2)
+        assert not (result.forces[-4:] == 99.0).any()
+        assert "energy" in result
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("reprime_on_entry", [False, True])
+    @pytest.mark.parametrize("final_stage", [False, True])
+    def test_removal_does_not_reprime_residents(
+        self, fused_stage: bool, reprime_on_entry: bool, final_stage: bool
+    ) -> None:
+        """Removal keeps residents' forces under either entry policy."""
+        stage, sampler, pipeline = self._make_stage(
+            fused_stage,
+            reprime_on_entry=reprime_on_entry,
+            prior_rank=0,
+            next_rank=None if final_stage else 2,
+        )
+        generation = [0]
+        seen_forces = []
+
+        def admission(ctx: DynamicsContext, stage: DynamicsStage) -> None:
+            """Change the workflow's force configuration on each admission."""
+            generation[0] += 1
+
+        def force_hook(ctx: DynamicsContext, stage: DynamicsStage) -> None:
+            """Apply the configuration selected by the latest admission."""
+            ctx.batch.forces.fill_(float(generation[0]))
+
+        for boundary, callback in (
+            (DynamicsStage.ON_ADMISSION, admission),
+            (DynamicsStage.AFTER_COMPUTE, force_hook),
+            (
+                DynamicsStage.BEFORE_PRE_UPDATE,
+                lambda ctx, stage: seen_forces.append(ctx.batch.forces.clone()),
+            ),
+        ):
+            stage.register_hook(
+                Mock(
+                    spec=["stage", "frequency"],
+                    stage=boundary,
+                    frequency=1,
+                    side_effect=callback,
+                )
+            )
+        batch = sampler.build_initial_batch()
+        stage.active_batch = batch
+        stage.step(batch)
+        stage._ensure_buffers(batch)
+        if final_stage:
+            stage._remove_converged_final_stage(torch.tensor([0]))
+        else:
+            stage._populate_send_buffer(torch.tensor([0]))
+
+        assert self._step_counting_calls(stage, stage.active_batch) == (0, 1)
+        assert generation[0] == 2
+        torch.testing.assert_close(seen_forces[-1], torch.ones_like(seen_forces[-1]))
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    def test_receive_into_unprimed_stage_primes_whole_batch(
+        self, fused_stage: bool
+    ) -> None:
+        """Without primed residents, the next step primes every graph."""
+        stage, sampler, pipeline = self._make_stage(
+            fused_stage, sampler_batch_size=2, prior_rank=0, max_batch_size=4
+        )
+        stage.active_batch = initialize_batch_for_dynamics(
+            sampler.build_initial_batch()
+        )
+        stage._buffer_to_batch(
+            initialize_batch_for_dynamics(sampler.build_initial_batch())
+        )
+
+        assert stage.active_batch.num_graphs == 4
+        assert stage._forces_primed is False
+        assert self._step_counting_calls(stage, stage.active_batch) == (1, 2)
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("reprime_on_entry", [False, True])
+    def test_pipeline_refill_keeps_fields_missing_from_arrivals(
+        self, fused_stage: bool, reprime_on_entry: bool
+    ) -> None:
+        """Refill retains resident fields and honors the pipeline admission policy."""
+        stage, sampler, pipeline = self._make_stage(
+            fused_stage,
+            reprime_on_entry=reprime_on_entry,
+            next_rank=1,
+            sampler=None,
+        )
+        stage.sampler = sampler
+        batch = sampler.build_initial_batch()
+        stage.active_batch = batch
+        stage._ensure_buffers(batch)
+        stage.step(batch)
+        batch["label"] = torch.tensor([[5], [6], [7]])
+        # Graphs 0 and 1 graduate, but the send buffer only holds one.
+        batch.status[:2] = stage.exit_status
+        stage._populate_send_buffer(torch.tensor([0]))
+
+        result = stage.refill_check(stage.active_batch, stage.exit_status)
+
+        assert stage._forces_primed is True
+        assert result.reprime_pending.view(-1).tolist() == [False, True, True]
+        assert result.label.view(-1).tolist() == [7, 0, 0]
+        positions_before = result.positions.clone()
+        assert self._step_counting_calls(stage, result) == (0, 1)
+        torch.testing.assert_close(result.positions[:2], positions_before[:2] + 2)
+        torch.testing.assert_close(result.positions[2:], positions_before[2:])
 
 
 # -----------------------------------------------------------------------------
