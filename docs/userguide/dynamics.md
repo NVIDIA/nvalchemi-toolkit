@@ -278,6 +278,10 @@ Inside a `FusedStage`, the flag works the same way for sub-stage transitions. Se
 it on a sub-stage's dynamics, and graphs whose status changes into that sub-stage
 skip one update while their forces are refreshed.
 
+A `DomainParallel` stage reads the flag from the dynamics it wraps. It holds one
+system at a time, so a received system that needs local forces is primed as a
+whole before its first update.
+
 By default, `setup()` (called automatically by the context manager) sorts stages by
 rank and wires `prior_rank` / `next_rank` between adjacent stages as a simple linear
 chain. For more sophisticated topologies --- such as multiple independent
