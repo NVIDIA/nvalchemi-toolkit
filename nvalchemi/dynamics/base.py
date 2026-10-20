@@ -1668,6 +1668,9 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     by_group : bool
         Whether dynamics update units are graph groups rather than individual
         graphs. Grouped batches must provide a valid group layout.
+    reprime_on_entry : bool
+        Whether graphs entering from another stage get forces from this
+        dynamics before their first update instead of reusing carried forces.
     samples_equilibrium : ClassVar[bool]
         Whether stepping samples an equilibrium ensemble, so that a frame
         along a trajectory is a draw from a distribution rather than a point
@@ -1789,6 +1792,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         n_steps: int | None = None,
         exit_status: int = 1,
         by_group: bool = False,
+        reprime_on_entry: bool = False,
         **kwargs: Any,
     ) -> None:
         """
@@ -1819,13 +1823,24 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         by_group : bool, optional
             Whether graph groups are treated as dynamics update units.
             Requires a valid group layout. Default is False.
+        reprime_on_entry : bool, optional
+            If ``True``, graphs entering this dynamics from another stage get
+            forces from its own model and hooks before their first update,
+            instead of reusing the forces they carry. Applies when this
+            dynamics is a ``DistributedPipeline`` stage receiving from the
+            previous rank, or a ``FusedStage`` sub-stage that graphs enter by
+            status change. Has no effect on a standalone run, where initial
+            and refilled graphs are always primed locally. Default ``False``.
         **kwargs : Any
             Additional keyword arguments forwarded to the next class
             in the MRO (for cooperative multiple inheritance).
         """
         self._validate_n_steps(n_steps)
+        if not isinstance(reprime_on_entry, bool):
+            raise TypeError("reprime_on_entry must be a bool.")
         super().__init__(**kwargs)
         self.by_group = by_group
+        self.reprime_on_entry = reprime_on_entry
         if self.by_group and self.sampler is not None:
             raise NotImplementedError(
                 "Sampling and refill are not implemented for by_group=True."
@@ -3950,7 +3965,11 @@ class FusedStage(BaseDynamics):
       and fused-stage hooks fire last with the full mask.
 
     Initial force priming uses the same nested ordering for
-    ``BEFORE_COMPUTE`` and ``AFTER_COMPUTE``.
+    ``BEFORE_COMPUTE`` and ``AFTER_COMPUTE``. Graphs that change into a
+    sub-stage created with ``reprime_on_entry=True`` skip one update while the
+    shared model compute and that sub-stage's compute hooks refresh their
+    forces. The entry sub-stage's flag also applies to graphs received from a
+    previous pipeline rank.
 
     **Step count semantics:** Each sub-stage's ``step_count`` is incremented
     alongside the ``FusedStage``'s own ``step_count`` after every fused step,
@@ -3972,9 +3991,6 @@ class FusedStage(BaseDynamics):
         ``torch.compile(self.step, **compile_kwargs)``.
     compile_kwargs : dict
         Keyword arguments forwarded to ``torch.compile``.
-    reprime_on_entry : set[int] | None
-        Status codes whose newly entering samples skip one update while the
-        shared model compute and target-stage compute hooks refresh forces.
     **kwargs
         Additional keyword arguments forwarded to ``BaseDynamics``.
 
@@ -3990,8 +4006,6 @@ class FusedStage(BaseDynamics):
         Whether the step method is compiled.
     compile_kwargs : dict
         Arguments passed to ``torch.compile``.
-    reprime_on_entry : frozenset[int]
-        Status codes requiring force reprime before their first update.
     __needs_keys__ : set[str]
         Union of all sub-stage ``__needs_keys__`` sets.  Populated
         automatically during ``__init__``.
@@ -4018,7 +4032,6 @@ class FusedStage(BaseDynamics):
         compile_step: bool = False,
         compile_kwargs: dict[str, Any] | None = None,
         init_fn: Callable[[Batch], None] | None = None,
-        reprime_on_entry: set[int] | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the fused stage.
@@ -4043,20 +4056,22 @@ class FusedStage(BaseDynamics):
             Use this to populate fields that the sampler does not set, such
             as ``velocities`` or ``forces``.  Only called in Mode 2 (inflight
             batching with ``batch=None``).  Default ``None``.
-        reprime_on_entry : set[int] | None, optional
-            Sub-stage status codes that require force reprime on transition.
-            Newly entering samples skip both integrator updates for one fused
-            iteration. They still participate in the shared model compute and
-            target-stage compute hooks, then begin updating on the following
-            iteration. Initial force priming is unchanged. Default ``None``.
         **kwargs : Any
             Additional keyword arguments forwarded to ``BaseDynamics``.
 
         Raises
         ------
+        TypeError
+            If ``reprime_on_entry`` is passed. Set it on the sub-stage
+            dynamics instead.
         ValueError
             If sub-stages have different ``device_type`` or ``by_group`` values.
         """
+        if "reprime_on_entry" in kwargs:
+            raise TypeError(
+                "FusedStage does not accept reprime_on_entry; set "
+                "reprime_on_entry on the sub-stage dynamics instead."
+            )
         first_dynamics = sub_stages[0][1]
         model = first_dynamics.model
 
@@ -4084,23 +4099,11 @@ class FusedStage(BaseDynamics):
         for _, dynamics in sub_stages:
             dynamics._enclosing_hooks = self.hooks
 
-        known_status_codes = {code for code, _ in sub_stages}
-        requested_reprime = set() if reprime_on_entry is None else reprime_on_entry
-        if not isinstance(requested_reprime, set):
-            raise TypeError("reprime_on_entry must be a set of status codes or None.")
-        if any(
-            not isinstance(code, int) or isinstance(code, bool)
-            for code in requested_reprime
-        ):
-            raise TypeError("reprime_on_entry status codes must be integers.")
-        unknown_status_codes = requested_reprime - known_status_codes
-        if unknown_status_codes:
-            unknown = ", ".join(str(code) for code in sorted(unknown_status_codes))
-            raise ValueError(
-                "reprime_on_entry contains unknown sub-stage status code(s): "
-                f"{unknown}."
-            )
-        self.reprime_on_entry = frozenset(requested_reprime)
+        self._reprime_status_codes = frozenset(
+            code for code, dynamics in sub_stages if dynamics.reprime_on_entry
+        )
+        # Pipeline arrivals enter the entry sub-stage, so they follow its flag.
+        self.reprime_on_entry = entry_status in self._reprime_status_codes
 
         self.__needs_keys__ = set().union(
             *(dyn.__needs_keys__ for _, dyn in sub_stages)
@@ -4187,7 +4190,7 @@ class FusedStage(BaseDynamics):
             f"sub_stages=[{stages_repr}], "
             f"entry_status={self.entry_status}, "
             f"exit_status={self.exit_status}, "
-            f"reprime_on_entry={set(self.reprime_on_entry)}, "
+            f"reprime_status_codes={set(self._reprime_status_codes)}, "
             f"compiled={compiled}, "
             f"step_count={self.step_count})"
         )
@@ -4432,7 +4435,7 @@ class FusedStage(BaseDynamics):
         """Mark graphs newly entering a sub-stage requiring force repriming."""
         current_status = batch.status.view(-1)[: batch.num_graphs]
         entered = torch.zeros_like(current_status, dtype=torch.bool)
-        for status_code in self.reprime_on_entry:
+        for status_code in self._reprime_status_codes:
             entered.logical_or_(
                 (previous_status != status_code) & (current_status == status_code)
             )
@@ -5125,7 +5128,6 @@ class FusedStage(BaseDynamics):
             entry_status=self.entry_status,
             compile_step=False,
             compile_kwargs=self.compile_kwargs,
-            reprime_on_entry=set(self.reprime_on_entry),
             by_group=self.by_group,
         )
         # Defer compilation to __enter__ or an explicit .compile() call.

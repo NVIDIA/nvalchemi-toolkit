@@ -123,11 +123,15 @@ the entering graphs are processed correctly by the target-stage
 
 .. code-block:: python
 
-   fused = FusedStage(
-       sub_stages=[(0, optimizer), (1, md)],
-       reprime_on_entry={1},
+   md = NVTLangevin(
+       model=model,
+       ...,
+       hooks=[MaxForceClampHook(max_force=10.0)],
+       reprime_on_entry=True,
    )
+   fused = optimizer + md
 
+Set ``reprime_on_entry=True`` on the target sub-stage's dynamics.
 Graphs entering status ``1`` skip its updates and counters until the next
 shared compute refreshes their outputs. They may then converge or update on
 the following iteration. Existing status ``1`` graphs continue normally.
