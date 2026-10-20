@@ -592,18 +592,19 @@ class HostMemory(DataSink):
             Maximum number of samples to store.
         """
         self._capacity = capacity
-        self._data_list: list[AtomicData] = []
+        self._batches: list[Batch] = []
+        self._num_graphs = 0
         self._device = torch.device("cpu")
 
     def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
         """
         Store a batch of atomic data on CPU.
 
-        Decomposes the batch into individual AtomicData objects,
-        moves them to CPU, and appends to internal storage. For a grouped
-        batch, each graph keeps its ``group_idx`` label, shifted by the
-        number of groups already stored so that groups from different writes
-        stay distinct.
+        Copies the selected graphs to CPU as one batch, without splitting
+        them into individual AtomicData objects. The copy never shares
+        storage with the caller's batch. For a grouped batch, :meth:`read`
+        shifts each write's ``group_idx`` labels after the groups already
+        stored so that groups from different writes stay distinct.
 
         Parameters
         ----------
@@ -627,29 +628,19 @@ class HostMemory(DataSink):
         if selected is None:
             return
 
-        # Stored labels are contiguous, so the last one gives the group count.
-        last_group_label = (
-            getattr(self._data_list[-1], "group_idx", None) if self._data_list else None
-        )
         grouped = "group_idx" in selected
-        if self._data_list and grouped != (last_group_label is not None):
+        if self._batches and grouped != ("group_idx" in self._batches[0]):
             raise ValueError("Cannot mix grouped and ungrouped writes in one sink.")
-        group_offset = int(last_group_label) + 1 if last_group_label is not None else 0
 
-        data_list = selected.to_data_list()
-        if len(self._data_list) + len(data_list) > self._capacity:
+        num_graphs = selected.num_graphs
+        if self._num_graphs + num_graphs > self._capacity:
             raise RuntimeError(
-                f"Buffer is full. Cannot add {len(data_list)} samples "
-                f"to buffer with {len(self._data_list)}/{self._capacity} samples."
+                f"Buffer is full. Cannot add {num_graphs} samples "
+                f"to buffer with {self._num_graphs}/{self._capacity} samples."
             )
-        # Move data to CPU before storing
-        for data in data_list:
-            data = data.to(self._device)
-            if group_offset:
-                # Assign a new tensor rather than adding in place: decomposed
-                # graphs can share storage with the caller's batch.
-                data.group_idx = data.group_idx + group_offset
-            self._data_list.append(data)
+        # Batch.to copies even when the batch is already on CPU.
+        self._batches.append(selected.to(self._device))
+        self._num_graphs += num_graphs
 
     def read(self) -> Batch:
         """
@@ -664,14 +655,40 @@ class HostMemory(DataSink):
         ------
         RuntimeError
             If the buffer is empty.
+        ValueError
+            If a later write lacks a field that the first write stored.
         """
-        if len(self._data_list) == 0:
+        if not self._batches:
             raise RuntimeError("Cannot read from empty buffer.")
-        return Batch.from_data_list(self._data_list, device=self._device)
+        if len(self._batches) > 1:
+            # The first write sets the fields. Check before merging because
+            # Batch.append would zero-fill or drop a missing field.
+            first_keys = self._batches[0].level_keys
+            start = self._batches[0].num_graphs
+            for stored in self._batches[1:]:
+                stored_keys = stored.level_keys
+                for level, keys in first_keys.items():
+                    missing = sorted(keys - stored_keys.get(level, set()))
+                    if missing:
+                        samples = list(range(start, start + stored.num_graphs))
+                        raise ValueError(
+                            f"Field '{missing[0]}' in level '{level}' is missing "
+                            f"from samples {samples}"
+                        )
+                start += stored.num_graphs
+            # Merge into a copy so a failed append leaves the stored writes
+            # intact, and keep the merge so later reads do not repeat it.
+            # Batch.append rebases each write's group labels.
+            merged = self._batches[0].clone()
+            for stored in self._batches[1:]:
+                merged.append(stored)
+            self._batches = [merged]
+        return self._batches[0].clone()
 
     def zero(self) -> None:
         """Clear all stored data and reset the buffer."""
-        self._data_list.clear()
+        self._batches.clear()
+        self._num_graphs = 0
 
     def __len__(self) -> int:
         """
@@ -682,7 +699,7 @@ class HostMemory(DataSink):
         int
             Number of atomic data samples in the buffer.
         """
-        return len(self._data_list)
+        return self._num_graphs
 
     @property
     def capacity(self) -> int:
