@@ -642,7 +642,7 @@ class _CommunicationMixin:
         self.refill_frequency = refill_frequency
         self._admission_initialized: bool = False
         self._forces_primed: bool = False
-        # Host-side mirror of ``reprime_pending.any()``, only set by refill.
+        # Host-side mirror of ``reprime_pending.any()`` after refill or admission.
         self._refill_pending: bool = False
         if not device_type:
             device_type = "cuda" if torch.cuda.is_available() else "cpu"
@@ -1101,23 +1101,41 @@ class _CommunicationMixin:
         n_admitted = min(room, n_incoming)
         # index_select copies, which matters because callers such as
         # _recv_to_batch zero the incoming buffer right after this call.
-        admitted = incoming_batch.index_select(list(range(n_admitted)))
-        if self.active_batch is None:
-            self.active_batch = admitted
+        arrivals = incoming_batch.index_select(list(range(n_admitted)))
+        self._admission_initialized = False
+        # Reuse upstream outputs only when this stage has not opted into
+        # reprime and arrivals carry every output it needs. Otherwise this
+        # stage computes them before their first update.
+        reuse_forces = (
+            not getattr(self, "reprime_on_entry", False)
+            and getattr(self, "_supports_per_graph_priming", False)
+            and all(
+                getattr(self, "_OUTPUT_KEY_TO_BATCH_ATTR", {}).get(key, key) in arrivals
+                for key in getattr(self, "__needs_keys__", set()) | {"forces"}
+            )
+        )
+        if n_existing == 0:
+            self.active_batch = arrivals
+            self._forces_primed = reuse_forces
         else:
             if callable(ensure_bookkeeping):
                 ensure_bookkeeping(self.active_batch)
-            if admitted.device != self.active_batch.device:
-                admitted = admitted.to(self.active_batch.device)
+            if arrivals.device != self.active_batch.device:
+                arrivals = arrivals.to(self.active_batch.device)
+            bookkeeping = getattr(self, "_bookkeeping_keys", {})
+            # Append only fills fields residents carry, so create them first.
+            for key, default_fn in bookkeeping.items():
+                if key not in self.active_batch:
+                    self.active_batch[key] = default_fn(
+                        n_existing, self.active_batch.device
+                    )
             # "fill" keeps resident fields the arrivals lack, such as edges a
             # BufferConfig(num_edges=0) leaves out, and fills the new rows.
             self.active_batch.append(
-                admitted,
-                missing_fields="fill",
-                field_defaults=getattr(self, "_bookkeeping_keys", None),
+                arrivals, missing_fields="fill", field_defaults=bookkeeping
             )
-        self._admission_initialized = False
-        # TODO: Reprime when admission hooks change workflow-specific forces.
+            if not reuse_forces:
+                self._prime_arrivals(n_existing)
 
         if n_admitted < n_incoming:
             self._overflow_to_sinks(
@@ -1145,6 +1163,28 @@ class _CommunicationMixin:
         incoming : Batch
             Batch received from the prior stage. May be modified in place.
         """
+
+    def _prime_arrivals(self, n_existing: int) -> None:
+        """Initialize forces for graphs admitted after the first *n_existing*.
+
+        Arrivals skip one update while the next regular compute gives them
+        forces, and residents keep theirs. Without per-graph priming support
+        or primed residents, the whole batch is primed before the next update.
+
+        Parameters
+        ----------
+        n_existing : int
+            Number of resident graphs ahead of the arrivals.
+        """
+        if (
+            n_existing > 0
+            and getattr(self, "_supports_per_graph_priming", False)
+            and self._forces_primed
+        ):
+            self.active_batch.reprime_pending.view(-1)[n_existing:] = True
+            self._refill_pending = True
+        else:
+            self._forces_primed = False
 
     def _recv_to_batch(self, incoming: Batch) -> None:
         """Stage incoming data through the recv buffer into the active batch.
@@ -1226,7 +1266,6 @@ class _CommunicationMixin:
         self.send_buffer.put(previous_batch, mask=mask)
         self.active_batch = previous_batch.trim(copied_mask=mask)
         self._admission_initialized = False
-        # TODO: Reprime when admission hooks change workflow-specific forces.
 
         # Graph-indexed metadata and integrator state refer to the old batch
         # layout. Keep only state for retained graphs and prevent the next hook
@@ -1434,7 +1473,6 @@ class _CommunicationMixin:
         else:
             self.active_batch = None
         self._admission_initialized = False
-        # TODO: Reprime when admission hooks change workflow-specific forces.
 
         sync_state = getattr(self, "_sync_state_to_batch", None)
         if callable(sync_state):

@@ -227,7 +227,7 @@ class TestBufferRouting:
         stage._buffer_to_batch(incoming)
         assert stage.active_batch_size == 5
         assert stage._admission_initialized is False
-        assert stage._forces_primed is True
+        assert stage._forces_primed is False
 
     def test_buffer_to_batch_overflow_to_sinks(self) -> None:
         """Verify excess samples go to sinks when active batch is full."""
