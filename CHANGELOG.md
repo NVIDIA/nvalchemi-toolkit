@@ -552,6 +552,9 @@
   remains unchanged.
 - `AlignCellHook` no longer fails under `FusedStage` when positions require
   grad, and compiles with `fullgraph=True`.
+- `WrapPeriodicHook` no longer fails under `FusedStage` when positions
+  require grad: `wrap_positions_into_cell` now performs its in-place write
+  under `torch.no_grad()`.
 - **Dynamics hook lifecycle** — fused-level hooks now fire at the
   `BEFORE_PRE_UPDATE`, `AFTER_PRE_UPDATE`, `BEFORE_POST_UPDATE`, and
   `AFTER_POST_UPDATE` boundaries, and sub-stage `BEFORE_COMPUTE` hooks now
