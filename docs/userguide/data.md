@@ -125,13 +125,13 @@ mutates (selection, `zero`, `defrag`, ...). The derived metadata is a snapshot
 taken when `group_layout` is first accessed. In-place changes such as
 `batch.group_idx[3] = 2` cannot be detected; call
 `batch.set_group_layout(batch.group_idx)` afterward to validate the new grouping
-and rebuild the cached layout. A selection that leaves group numbering
-non-dense must be repaired with `batch.set_group_layout(batch.group_idx)` before
-`group_layout` is accessed again. `append()` requires both batches grouped or
-both ungrouped and rebases labels. `put()` also requires matching grouping and
-copies complete groups, stopping at the first selected group that does not fit.
-Masks passed to `put()` or `trim()` must select complete groups. This is the
-caller's responsibility and is not validated.
+and rebuild the cached layout. On a grouped batch, `index_select()` must select
+complete, contiguous groups without repeated graphs, and it rebuilds the
+result's labels and layout. Groups may be reordered. `append()` requires both
+batches grouped or both ungrouped and rebases labels. `put()` also requires
+matching grouping and copies complete groups, stopping at the first selected
+group that does not fit. Masks passed to `put()` or `trim()` must select
+complete groups. Partial-group masks are rejected.
 `append_data()` is rejected on a grouped batch.
 
 ### Indexing and selection

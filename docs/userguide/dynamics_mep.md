@@ -168,12 +168,26 @@ FIRE2 is the default. Its NEB-tuned parameters are applied to
 Other optimizer classes use their own defaults.
 Inspect `neb.optimizer_kwargs` to see the arguments forwarded to the optimizer.
 
-`NEBForceHook` always publishes `neb_fixed_node_mask`, a Boolean node mask
-marking fixed endpoints and any `fixed_atom_indices`. It zeroes the physical
-and effective forces at those nodes. When `endpoint_mode="fixed"` or a nonempty
-`fixed_atom_indices` mapping is provided, `NEB` also appends a
+`NEBForceHook` uses `neb_fixed_node_mask`, a Boolean node mask, creating it if
+absent. It marks fixed endpoints and any `fixed_atom_indices` in that mask and
+zeroes the physical and effective forces at those nodes. `NEB` also appends a
 {py:class}`~nvalchemi.dynamics.hooks.FreezeAtomsHook` to clear velocities and
-restore positions across optimizer stages.
+restore masked positions across optimizer stages, including with relaxed
+endpoints.
+
+To fix atoms directly, add the mask before running:
+
+```python
+fixed = neb_band.atomic_numbers > 1  # one Boolean per node
+per_graph = list(fixed.split(neb_band.num_nodes_list))
+neb_band.add_key("neb_fixed_node_mask", per_graph, level="node")
+neb_band = NEB(model=model).run(neb_band)
+```
+
+The mask must be a Boolean `(num_nodes,)` tensor on the batch's device. The hook
+updates it in place, and retained paths carry it through membership changes.
+With a sampler or pipeline neighbors, path-indexed constraints such as
+`fixed_atom_indices` are rejected. Use a mask carried by each incoming path.
 
 `ClimbingImageConfig.mode="after_regular"` runs regular NEB to
 `regular_fmax` (or `fmax` if unset) before promoting the highest-energy
@@ -195,6 +209,56 @@ training and fine-tuning specs.
 NEB appends `build_hooks()` after its neighbor and path hooks. Subclasses can override
 `build_hooks()` to customize these additional hooks without replacing NEB's
 engine construction.
+
+### Streaming prepared paths
+
+Pass a sampler to `run()` to optimize a dataset of complete paths on one device.
+Each dataset item returns `(path_batch, metadata)` with one group, at least
+three ordered images, and the optimizer's required inputs. Prepare
+interpolation, optional IDPP refinement, and any constraint mask before
+sampling. The dataset also supplies
+`get_metadata(index) -> (total_atoms, total_edges)` per path.
+
+```python
+from nvalchemi.dynamics import HostMemory, SizeAwareSampler
+
+sampler = SizeAwareSampler(
+    prepared_dataset,
+    by_group=True,
+    max_atoms=10_000,
+    max_batch_size=8,  # complete paths per batch
+)
+results = HostMemory(capacity=10_000)  # counts images, not paths
+neb = NEB(model=model, fmax=0.05, n_steps=None)
+remaining = neb.run(sampler=sampler, sinks=[results])
+relaxed_paths = results.read()
+```
+
+As paths graduate, the engine writes complete paths to the sinks and fills the
+freed path, atom, and edge budgets with new paths. Retained paths keep optimizer
+history, constraints, and fixed climbing-image choices. Arriving paths start
+with fresh optimizer state. As with ungrouped sampling, bookkeeping such as
+`status` or stage counters carried by a dataset path is kept, so paths reused
+from an earlier run should carry only positions and model inputs (see the IDPP
+example above). `group_id` identifies each dataset path and `system_id`
+identifies each image. Local group labels are rebased as the working batch and
+result sinks change.
+
+`run()` takes either a batch or a sampler, and `sinks` only with a sampler.
+`refill_frequency` (default 10) sets the steps between refill checks and is
+serialized with the strategy. Each check waits on the GPU, and each refill
+rebuilds the batch, optimizer state, and path hooks. Larger values amortize this
+cost, while a converged path keeps its slot, and its model evaluations, until
+the next check. A streaming run builds a fresh engine even when
+`cache_engine=True`. It returns `None` after every path has graduated. The
+strategy's `n_steps` remains a global step limit. If that limit stops the run,
+the remaining batch is returned and the sampler may still contain unconsumed
+paths. Use climbing stage budgets for per-path limits. A path that cannot fit an
+empty active batch raises an error.
+
+Initial packing and refill both follow the sampler's limits.
+`build_engine(sampler=..., sinks=...)` builds the same streaming engine for
+manual stepping.
 
 ### NEB methods
 
@@ -413,10 +477,9 @@ The NEB path hooks, in the order they must be registered:
 3. **{py:class}`~nvalchemi.dynamics.mep.hooks.NEBForceHook`**: the
    core hook. It computes the local tangent and replaces `batch.forces` with the
    spring + perpendicular-physical-force NEB update, saving the raw model
-   force to `batch.physical_forces`. When `endpoint_mode="fixed"` or
-   `fixed_atom_indices` is set, it populates `neb_fixed_node_mask` (present
-   on every batch) with the constrained atoms and zeroes their forces. The mask
-   alone does not keep their positions fixed during optimizer updates.
+   force to `batch.physical_forces`. It uses `neb_fixed_node_mask` directly,
+   creating it if absent, and marks fixed endpoints in place. The mask alone
+   does not keep positions fixed during optimizer updates.
 4. **{py:class}`~nvalchemi.dynamics.hooks.FreezeAtomsHook`** (optional, needed
    whenever step 3 produces a fixed-atom mask): a general-purpose,
    non-NEB-specific hook (`nvalchemi.dynamics.hooks`) that zeroes forces and
@@ -433,6 +496,15 @@ The NEB path hooks, in the order they must be registered:
    `diagnostics_log_path`: both this hook and `PathDiagnosticsHook` should
    share the same `frequency`/`diagnostics_frequency` so the CSV rows line up
    with the diagnostics they log.
+
+At `ON_ADMISSION`, these hooks use `ctx.previous_graph_indices` to keep
+retained paths' fixed climbing images, admission-time spring constants, and
+constraints. Arriving paths start fresh, and without a mapping the whole batch
+starts fresh. Dynamic climbing selection and springs set to refresh at
+`AFTER_COMPUTE` still update at each evaluation. Diagnostics reset at every
+admission. `PathDiagnosticsHook.get_diagnostics()` returns values cached at
+`AFTER_COMPUTE`, so a path shows NaN or -1 until its first evaluation after
+admission.
 
 The manual single-stage example logs at `AFTER_STEP`. The `NEB` strategy
 logs at `ON_GRADUATE` so scheduled rows see status after stage-budget
