@@ -213,10 +213,29 @@ Per-step hooks run inside the compiled `_step_impl` and must be compatible with
 hooks are not compatible with `fullgraph=True`. Use only torch-compatible per-step
 hooks when an unbroken graph is required.
 
-Use `DynamicsStage.ON_ADMISSION` for one-time validation, shape-dependent tensor
-allocation, and Python-side setup. `FusedStage` dispatches admission before force
-priming and outside compiled `_step_impl`, so this setup does not enter the
-steady-state graph.
+Set a custom hook's `stage` to `DynamicsStage.ON_ADMISSION` for one-time validation,
+shape-dependent tensor allocation, and Python-side setup. In its `__call__` method,
+use `ctx.previous_graph_indices` to preserve per-graph state when batch membership
+changes. `FusedStage` dispatches admission before force priming and outside compiled
+`_step_impl`, so this setup does not enter the steady-state graph.
+```
+
+For `BaseDynamics` and `FusedStage`, `ctx.previous_graph_indices[i]` at
+`ON_ADMISSION` gives current graph `i`'s index at the last admission dispatch,
+or `-1` for an arrival. Intersect `ctx.previous_graph_indices < 0` with
+`ctx.active_graph_mask` to find one stage's arrivals. Several membership changes
+before a dispatch compose back to the last admission. The first admission, each
+new `run()`, and a rebuild after complete removal map every graph to `-1`. Treat
+the tensor as read-only. It is `None` at other hook stages, and fused and
+sub-stage admission hooks share the same tensor.
+
+A hook can carry its own per-graph state across the change:
+
+```python
+indices = ctx.previous_graph_indices
+retained = indices >= 0
+new_state = old_state.new_zeros((ctx.batch.num_graphs, *old_state.shape[1:]))
+new_state[retained] = old_state[indices[retained]]
 ```
 
 ## Distributed pipelines
@@ -500,7 +519,8 @@ stand in for the sampler; {doc}`/modules/dynamics/api` lists its members.
 with `by_group=True`. Each dataset item returns `(batch, metadata)`, where
 `batch` contains exactly one group. Its `get_metadata(index)` returns total
 atom and edge counts for that path. The sampler's metadata prescan does not
-load paths. Image counts are checked when a candidate is loaded.
+load paths, and `max_batch_size` counts paths, so packing never loads a path it
+then rejects.
 
 ```python
 from nvalchemi.dynamics.sampler import SizeAwareSampler
@@ -510,21 +530,19 @@ sampler = SizeAwareSampler(
     by_group=True,
     max_atoms=20_000,
     max_edges=100_000,
-    max_batch_size=64,  # images across all paths, including endpoints
+    max_batch_size=8,  # complete paths
 )
 batch = sampler.build_initial_batch()
 replacements = sampler.request_replacements_budget(
     atom_budget=5_000,
     edge_budget=25_000,
-    max_count=16,  # total replacement images
+    max_count=2,  # replacement paths
 )
 ```
 
-Paths stay complete. A candidate that exceeds the remaining atom, edge, or
-image budget stays unconsumed, and the sampler considers other candidates.
-A path exceeding the configured `max_batch_size` cannot fit any batch and
-raises `RuntimeError` when loaded. With `max_batch_size=None`, atom and edge
-budgets alone limit packing.
+Paths stay complete. A candidate that exceeds the remaining atom or edge budget
+stays unconsumed, and the sampler considers other candidates. With
+`max_batch_size=None`, atom and edge budgets alone limit packing.
 
 `group_idx` gives dense local group labels in the assembled batch. `group_id`
 identifies the original dataset item, and `system_id` identifies each image
@@ -535,8 +553,13 @@ For grouped replacement, use `request_replacements_budget()`. The singular
 `request_replacement()` and vectorized `request_replacements()` methods support
 individual graphs only.
 
-The resulting batch can be passed to the fixed-batch NEB workflow. Dynamics
-engines currently reject sampler-backed runs with `by_group=True`.
+Single-device grouped dynamics supports whole-group refill with a matching
+`by_group=True` sampler. It works like ungrouped refill, with complete groups in
+place of graphs. Refill follows only the sampler's limits, not the engine's own
+`max_batch_size`. Partial-group graduation is rejected, and
+`DistributedPipeline` raises `NotImplementedError` for grouped stages. For
+prepared NEB paths, use `NEB.run(sampler=..., sinks=...)` as shown in
+[Reaction Paths and NEB](dynamics_mep.md#streaming-prepared-paths).
 
 ## What's next
 
