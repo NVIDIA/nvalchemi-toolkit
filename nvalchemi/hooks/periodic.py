@@ -105,11 +105,7 @@ def wrap_positions_into_cell(
     Float[Tensor, "V 3"]
         The same ``positions`` tensor (modified in-place).
     """
-    # The hook may run while the batch's positions still require grad
-    # (e.g. inside a FusedStage step, whose ``requires_grad_ctx`` spans the
-    # whole step, unlike single-stage engines which drop it after compute).
-    # The in-place write must not record autograd: see PR #206 for the same
-    # failure in AlignCellHook.
+    # Positions can still require grad here (FusedStage); see #206.
     with torch.no_grad():
         original = positions.clone()
         wrapped = _wrap_positions(positions, cell, batch_idx)
