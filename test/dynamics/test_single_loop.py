@@ -186,6 +186,21 @@ class _RandomSizeAllocationHook:
         self.allocations.append(torch.empty(size, device=ctx.batch.device))
 
 
+class CompilerFriendlyBatchPtrModel(CompilerFriendlyModel):
+    """Analytical model that uses batch pointers to sum per-system energies."""
+
+    def forward(self, batch: Batch) -> dict[str, torch.Tensor]:
+        """Sum atomic energies between each system's batch pointers."""
+        outputs = super().forward(batch)
+        atomic_energies = outputs["energy"].view(-1)
+        cumulative = torch.cat(
+            (atomic_energies.new_zeros(1), atomic_energies.cumsum(0))
+        )
+        ptr = batch.batch_ptr
+        outputs["energy"] = (cumulative[ptr[1:]] - cumulative[ptr[:-1]]).unsqueeze(-1)
+        return outputs
+
+
 class CompilerFriendlyAutogradModel(CompilerFriendlyModel):
     """Analytical test model declaring positions as an autograd input."""
 
@@ -804,6 +819,46 @@ class TestFusedStage:
 
         fused.step(batch)
         assert fused.step_count == 2
+
+    @pytest.mark.parametrize(
+        "model_cls", [CompilerFriendlyModel, CompilerFriendlyBatchPtrModel]
+    )
+    def test_refill_priming_is_fullgraph_compile_safe(
+        self, model_cls: type[CompilerFriendlyModel]
+    ) -> None:
+        """Compiled refill supports models with lazy batch-pointer access."""
+        torch.compiler.reset()
+        try:
+            model = model_cls()
+            sampler = MagicMock()
+            sampler.max_atoms = sampler.max_edges = sampler.max_batch_size = None
+            sampler.request_replacements_budget.return_value = [
+                AtomicData(atomic_numbers=torch.tensor([6]), positions=torch.ones(1, 3))
+            ]
+            fused = FusedStage(
+                sub_stages=[(0, _CompileNoOpDynamics(model=model, n_steps=10))],
+                sampler=sampler,
+                compile_step=True,
+                compile_kwargs={"backend": "eager", "fullgraph": True},
+                device_type="cpu",
+            )
+            batch = create_batch_with_status(n_graphs=2)
+            fused.step(batch)
+            batch.status[1] = fused.exit_status
+            batch = fused.refill_check(batch, fused.exit_status)
+            assert batch.reprime_pending.view(-1).tolist() == [False, True]
+            with patch.object(
+                fused, "_prime_forces", wraps=fused._prime_forces
+            ) as prime:
+                fused.step(batch)
+            assert prime.call_count == 0
+            assert not batch.reprime_pending.any()
+            assert batch.n_steps_counter_0.view(-1).tolist() == [2, 0]
+            torch.testing.assert_close(batch.forces, -2 * batch.positions)
+            fused.step(batch)
+            assert batch.n_steps_counter_0.view(-1).tolist() == [3, 1]
+        finally:
+            torch.compiler.reset()
 
     def test_reprime_on_entry_is_fullgraph_compile_safe(self) -> None:
         """Compiled fused steps support transition and delayed reprime masks."""

@@ -227,7 +227,7 @@ class TestBufferRouting:
         stage._buffer_to_batch(incoming)
         assert stage.active_batch_size == 5
         assert stage._admission_initialized is False
-        assert stage._forces_primed is False
+        assert stage._forces_primed is True
 
     def test_buffer_to_batch_overflow_to_sinks(self) -> None:
         """Verify excess samples go to sinks when active batch is full."""
@@ -331,7 +331,8 @@ class TestBatchExtraction:
         # After defrag, active_batch should have 3 remaining graphs
         assert stage.active_batch_size == 3
         assert stage._admission_initialized is False
-        assert stage._forces_primed is False
+        # Removal keeps retained graphs' forces valid.
+        assert stage._forces_primed is True
 
     def test_extract_all_samples(self) -> None:
         """Verify extracting all samples sets active_batch to None."""
@@ -1723,7 +1724,8 @@ class TestPoststepBackPressure:
         # Active batch should have 2 remaining
         assert stage.active_batch_size == 2
         assert stage._admission_initialized is False
-        assert stage._forces_primed is False
+        # Removal keeps retained graphs' forces valid.
+        assert stage._forces_primed is True
 
         # send_buffer.isend should NOT be called (final stage has no next_rank)
         mock_send_buffer.isend.assert_not_called()

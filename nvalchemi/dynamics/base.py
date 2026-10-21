@@ -640,6 +640,8 @@ class _CommunicationMixin:
         self.refill_frequency = refill_frequency
         self._admission_initialized: bool = False
         self._forces_primed: bool = False
+        # Host-side mirror of ``reprime_pending.any()``, only set by refill.
+        self._refill_pending: bool = False
         if not device_type:
             device_type = "cuda" if torch.cuda.is_available() else "cpu"
         self.device_type = device_type
@@ -1052,7 +1054,7 @@ class _CommunicationMixin:
             combined = self.active_batch.to_data_list() + admitted
         self.active_batch = Batch.from_data_list(combined, device=incoming_batch.device)
         self._admission_initialized = False
-        self._forces_primed = False
+        # TODO: Reprime when admission hooks change workflow-specific forces.
 
         if overflow:
             self._overflow_to_sinks(
@@ -1067,6 +1069,19 @@ class _CommunicationMixin:
                 n_existing, dtype=torch.long, device=self.active_batch.device
             )
             sync_state(existing_indices, len(admitted), self.active_batch)
+
+    def _on_receive(self, incoming: Batch) -> None:
+        """Normalize freshly received samples before they join the active batch.
+
+        Called on every non-empty batch received from the prior rank. The
+        default is a no-op; subclasses that carry per-sample bookkeeping
+        (e.g. :class:`FusedStage` status codes) override it.
+
+        Parameters
+        ----------
+        incoming : Batch
+            Batch received from the prior stage. May be modified in place.
+        """
 
     def _recv_to_batch(self, incoming: Batch) -> None:
         """Stage incoming data through the recv buffer into the active batch.
@@ -1084,6 +1099,8 @@ class _CommunicationMixin:
         """
         if incoming.num_graphs > 0 and self._recv_template is None:
             self._recv_template = incoming
+        if incoming.num_graphs > 0:
+            self._on_receive(incoming)
         if self.recv_buffer is not None and incoming.num_graphs > 0:
             mask = torch.ones(incoming.num_graphs, dtype=torch.bool, device=self.device)
             self.recv_buffer.put(incoming, mask=mask)
@@ -1146,7 +1163,7 @@ class _CommunicationMixin:
         self.send_buffer.put(previous_batch, mask=mask)
         self.active_batch = previous_batch.trim(copied_mask=mask)
         self._admission_initialized = False
-        self._forces_primed = False
+        # TODO: Reprime when admission hooks change workflow-specific forces.
 
         # Graph-indexed metadata and integrator state refer to the old batch
         # layout. Keep only state for retained graphs and prevent the next hook
@@ -1348,7 +1365,7 @@ class _CommunicationMixin:
         else:
             self.active_batch = None
         self._admission_initialized = False
-        self._forces_primed = False
+        # TODO: Reprime when admission hooks change workflow-specific forces.
 
         sync_state = getattr(self, "_sync_state_to_batch", None)
         if callable(sync_state):
@@ -1654,8 +1671,14 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
     #: correctness promise, not something inferred automatically.
     _post_update_is_noop: bool = False
 
+    # Engines with a separate step implementation can retain whole-batch priming.
+    _supports_per_graph_priming: bool = True
+
     _bookkeeping_keys: dict[str, Callable[[int, torch.device], torch.Tensor]] = {
         "status": lambda n, dev: torch.zeros(n, 1, dtype=torch.long, device=dev),
+        "reprime_pending": lambda n, dev: torch.zeros(
+            n, 1, dtype=torch.bool, device=dev
+        ),
         "system_id": lambda n, dev: torch.full(
             (n, 1), -1, dtype=torch.long, device=dev
         ),
@@ -2067,9 +2090,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         """Return the bookkeeping fields this dynamics and its sub-stages keep on a batch.
 
         Every stage carries its class's registry, grown by
-        :meth:`register_bookkeeping_key`. A :class:`FusedStage` declares a key
-        of its own beside the base registry, and a subclass may register keys
-        on its own class that the base registry never sees, so the union is
+        :meth:`register_bookkeeping_key`. A subclass may register keys on its
+        own class that the base registry never sees, so the union is
         taken over the whole composition. Read it at call time: registration
         happens as stages are built.
 
@@ -2977,33 +2999,55 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             self._prime_forces(batch, active_graph_mask)
             self._forces_primed = True
 
+        # Only the step after a refill needs masked updates; other steps skip
+        # the masking cost even when the batch carries all-False flags.
+        pending = (
+            getattr(batch, "reprime_pending", None) if self._refill_pending else None
+        )
+        update_mask = active_graph_mask
+        if pending is not None:
+            # Snapshot before compute clears the flags: refilled graphs must
+            # skip both update phases of this iteration.
+            update_mask = ~pending.view(-1)[: batch.num_graphs]
+            if active_graph_mask is not None:
+                update_mask = update_mask & active_graph_mask
+
         self._call_hooks(DynamicsStage.BEFORE_STEP, batch, active_graph_mask)
 
         with self._stream_scope(batch.device):
             self._call_hooks(
                 DynamicsStage.BEFORE_PRE_UPDATE,
                 batch,
-                active_graph_mask,
+                update_mask,
             )
-            self.pre_update(batch)
+            if pending is None:
+                self.pre_update(batch)
+            else:
+                self._masked_pre_update(batch, update_mask)
             self._call_hooks(
                 DynamicsStage.AFTER_PRE_UPDATE,
                 batch,
-                active_graph_mask,
+                update_mask,
             )
             self._call_hooks(DynamicsStage.BEFORE_COMPUTE, batch, active_graph_mask)
             self.compute(batch, active_graph_mask)
             self._call_hooks(DynamicsStage.AFTER_COMPUTE, batch, active_graph_mask)
+            if pending is not None:
+                pending.zero_()
+            self._refill_pending = False
             self._call_hooks(
                 DynamicsStage.BEFORE_POST_UPDATE,
                 batch,
-                active_graph_mask,
+                update_mask,
             )
-            self.post_update(batch)
+            if pending is None:
+                self.post_update(batch)
+            else:
+                self._masked_post_update(batch, update_mask)
             self._call_hooks(
                 DynamicsStage.AFTER_POST_UPDATE,
                 batch,
-                active_graph_mask,
+                update_mask,
             )
         if active_graph_mask is not None:
             with torch.no_grad():
@@ -3069,6 +3113,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 batch,
                 active_graph_mask,
             )
+        pending = getattr(batch, "reprime_pending", None)
+        if pending is not None:
+            pending.zero_()
+        self._refill_pending = False
 
     def run(self, batch: Batch, n_steps: int | None = None) -> Batch:
         """
@@ -3140,6 +3188,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         Replacement samples from the sampler are appended via
         :meth:`Batch.append`.  Dynamics-specific bookkeeping fields are
         written into the result batch via the ``_bookkeeping_keys`` registry.
+        After initial force priming, engines supporting per-graph priming let
+        existing graphs continue updating normally. Newly added graphs skip
+        integrator updates for one iteration while the model computes their
+        initial forces.
 
         Parameters
         ----------
@@ -3176,14 +3228,17 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         # next _build_context mask doesn't over-index the resized batch.
         self._last_converged = None
         self._admission_initialized = False
-        self._forces_primed = False
-
         remaining_indices = torch.where(~graduated_mask)[0]
+        n_remaining = remaining_indices.numel()
+        # With no survivors there are no forces to preserve, so treat the
+        # refill as a fresh batch and prime it fully before its first update.
+        use_per_graph_priming = (
+            self._supports_per_graph_priming and self._forces_primed and n_remaining > 0
+        )
+        self._forces_primed = False
 
         if self.sinks and graduated_mask.any():
             self._overflow_to_sinks(batch, mask=graduated_mask)
-
-        n_remaining = remaining_indices.numel()
 
         if remaining_indices.numel() > 0:
             result = batch.index_select(remaining_indices)
@@ -3224,40 +3279,41 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             max_count=max_new,
         )
 
-        if result is not None and replacements:
+        if replacements:
             repl_batch = Batch.from_data_list(replacements, device=batch.device)
-            result.append(repl_batch)
-        elif result is None and replacements:
-            result = Batch.from_data_list(replacements, device=batch.device)
+            if result is None:
+                result = repl_batch
+            else:
+                # Append only fills fields survivors carry, so create them first
+                # and match the registered column-shaped defaults.
+                for key, default_fn in self._bookkeeping_keys.items():
+                    value = getattr(result, key, None)
+                    if value is None:
+                        result[key] = default_fn(result.num_graphs, result.device)
+                    elif value.dim() == 1:
+                        result[key] = value.unsqueeze(-1)
+                result.append(
+                    repl_batch,
+                    missing_fields="fill",
+                    field_defaults=self._bookkeeping_keys,
+                )
 
         if result is not None:
-            n_total = result.num_graphs
-            device = result.device
+            # Fresh batches and survivors without replacements bypass append.
             for key, default_fn in self._bookkeeping_keys.items():
-                new_tensor = default_fn(n_total, device)
-                # Preserve values already carried by appended replacements before
-                # restoring the prefix for systems that stayed active.
-                result_vals = getattr(result, key, None)
-                if result_vals is not None:
-                    result_vals = (
-                        result_vals.unsqueeze(-1)
-                        if result_vals.dim() == 1
-                        else result_vals
-                    )
-                    if result_vals.shape == new_tensor.shape:
-                        new_tensor.copy_(result_vals)
-                    else:
-                        raise RuntimeError(
-                            f"Bookkeeping key '{key}' has shape {result_vals.shape} "
-                            f"after refill, expected {new_tensor.shape}."
-                        )
-                remaining_vals = getattr(batch, key, None)
-                if remaining_vals is not None and n_remaining > 0:
-                    src = remaining_vals[remaining_indices]
-                    src = src.unsqueeze(-1) if src.dim() == 1 else src
-                    new_tensor[:n_remaining] = src
-                result[key] = new_tensor
+                value = getattr(result, key, None)
+                if value is None:
+                    result[key] = default_fn(result.num_graphs, result.device)
+                elif value.dim() == 1:
+                    result[key] = value.unsqueeze(-1)
 
+            if use_per_graph_priming:
+                # Newly added graphs skip updates for one iteration while the
+                # regular model evaluation computes their initial forces.
+                # Preserve existing graphs' pending flags.
+                result.reprime_pending.view(-1)[n_remaining:] = True
+                self._forces_primed = True
+                self._refill_pending = True
             self._sync_state_to_batch(remaining_indices, len(replacements), result)
             return result
 
@@ -3884,13 +3940,6 @@ class FusedStage(BaseDynamics):
     2
     """
 
-    _bookkeeping_keys = {
-        **BaseDynamics._bookkeeping_keys,
-        "reprime_pending": lambda n, dev: torch.zeros(
-            n, 1, dtype=torch.bool, device=dev
-        ),
-    }
-
     def __init__(
         self,
         sub_stages: list[tuple[int, BaseDynamics]],
@@ -4215,6 +4264,26 @@ class FusedStage(BaseDynamics):
         for key, default_fn in self._bookkeeping_keys.items():
             if getattr(batch, key, None) is None:
                 batch[key] = default_fn(batch.num_graphs, batch.device)
+
+    def _on_receive(self, incoming: Batch) -> None:
+        """Admit samples from the prior rank at ``entry_status``.
+
+        The sender's ``status`` is its own ``exit_status``, which would
+        read as already graduated here; reset it to ``entry_status`` and
+        clear the per-stage step counters.
+
+        Parameters
+        ----------
+        incoming : Batch
+            Batch received from the prior stage, modified in place.
+        """
+        status = getattr(incoming, "status", None)
+        if status is not None:
+            status.fill_(self.entry_status)
+        for status_code, _ in self.sub_stages:
+            counter = getattr(incoming, f"n_steps_counter_{status_code}", None)
+            if counter is not None:
+                counter.zero_()
 
     def register_hook(self, hook: Hook, stage: Enum | None = None) -> None:
         """Register a hook and warn about sub-stage-only lifecycle stages.
@@ -4654,6 +4723,8 @@ class FusedStage(BaseDynamics):
         # Lazy state must be created outside the compiled step: in-graph
         # allocations break CUDA-graph replay and fullgraph shape reasoning.
         self._ensure_bookkeeping_fields(batch)
+        # Refill creates a new batch whose lazy pointer cache must be built eagerly.
+        _ = batch.batch_ptr
         for _, dynamics in self.sub_stages:
             dynamics._ensure_state_initialized(batch)
             dynamics._warm_state_levels()
@@ -4910,7 +4981,9 @@ class FusedStage(BaseDynamics):
         graduated graphs and append replacements from the sampler.  When the
         batch composition changes, ``_last_converged`` is cleared on this
         ``FusedStage`` and all its sub-stages so that subsequent hooks do not
-        receive an invalid ``converged_mask``.
+        receive an invalid ``converged_mask``. In an already-primed stage,
+        newly added graphs skip integrator updates for one iteration while the
+        regular model evaluation computes their initial forces.
 
         Parameters
         ----------
@@ -5808,14 +5881,25 @@ class DistributedPipeline:
         dist.init_process_group(**self._dist_kwargs)
         self._dist_initialized = True
 
-    def cleanup(self) -> None:
+    def cleanup(self, *, error: bool = False) -> None:
         """Destroy the ``torch.distributed`` process group.
 
         Only destroys the process group if it was initialized by this
         ``DistributedPipeline`` instance (via :meth:`init_distributed`).  If the
         process group was externally initialized (e.g., by ``torchrun``),
         this method is a no-op.
+
+        Parameters
+        ----------
+        error : bool, optional
+            Set when unwinding an exception. The process group is then left
+            alone: tearing it down blocks while peer ranks are still inside
+            a collective, which would swallow the exception and hang the job.
+            Letting the exception propagate lets the launcher terminate the
+            peers instead. Default ``False``.
         """
+        if error:
+            return
         if self._dist_initialized and dist.is_initialized():
             dist.destroy_process_group()
             self._dist_initialized = False
@@ -5846,7 +5930,9 @@ class DistributedPipeline:
         """Exit the pipeline context manager.
 
         Calls :meth:`cleanup` to destroy the process group if it was
-        initialized by this pipeline.
+        initialized by this pipeline. When the block exits with an
+        exception, the process group is not torn down (see :meth:`cleanup`)
+        and the exception propagates.
 
         Parameters
         ----------
@@ -5857,4 +5943,4 @@ class DistributedPipeline:
         exc_tb : Any
             Exception traceback, if any.
         """
-        self.cleanup()
+        self.cleanup(error=exc_type is not None)

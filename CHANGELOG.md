@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 ### Added
 
@@ -562,6 +562,9 @@
 - **`FusedStage` force priming** — a dynamics instance's own adaptive
   optimizer state (e.g. FIRE's per-graph `dt`/`alpha`/step counters in
   `self._state`) is now preserved across masked `pre_update`/`post_update` calls.
+- `DistributedPipeline` now admits systems received by a `FusedStage` at its
+  `entry_status`, fixing downstream stages that never terminated, and no longer
+  hangs in teardown when a rank raises.
 
 ### Deprecated
 

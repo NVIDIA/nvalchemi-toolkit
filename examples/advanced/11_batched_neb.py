@@ -274,8 +274,7 @@ class AIMNet2rxnWrapper(nn.Module, BaseModelMixin):
         return OrderedDict(energy=energy, forces=output["forces"])
 
 
-# Use the compile path for the model to accelerate the neural-network forward calculations.
-model = AIMNet2rxnWrapper(device, compile_model=True).eval()
+model = AIMNet2rxnWrapper(device).eval()
 
 # %%
 # Run the NEB
