@@ -22,6 +22,7 @@ from __future__ import annotations
 import torch
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.dynamics import NVE
 from nvalchemi.dynamics.base import BaseDynamics, DynamicsStage
 from nvalchemi.hooks import Hook, WrapPeriodicHook
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
@@ -395,3 +396,73 @@ class TestWrapPeriodicHookCompile:
             device=device,
         )
         assert torch.allclose(batch.positions, expected, atol=1e-5)
+
+
+class TestWrapPeriodicHookInFusedStage:
+    """Regression tests for issue #226.
+
+    ``FusedStage.step()`` keeps ``requires_grad`` on ``batch.positions``
+    for the whole step, while single-stage engines drop it before hooks
+    run.  ``WrapPeriodicHook`` mutated positions in place without
+    ``torch.no_grad()`` and raised "a leaf Variable that requires grad is
+    being used in an in-place operation" on the first fused step.
+    """
+
+    @staticmethod
+    def _make_autograd_data(device: str) -> list[AtomicData]:
+        """Two argon graphs whose positions start outside the 5 A cell."""
+        return [
+            AtomicData(
+                positions=torch.rand(8, 3) * 6 - 1,
+                atomic_numbers=torch.full((8,), 18),
+                atomic_masses=torch.full((8,), 39.948),
+                cell=(5 * torch.eye(3)).unsqueeze(0),
+                pbc=torch.ones(1, 3, dtype=torch.bool),
+                forces=torch.zeros(8, 3),
+                energy=torch.zeros(1, 1),
+            )
+            for _ in range(2)
+        ]
+
+    def test_fused_stage_wraps_positions(self, device: str) -> None:
+        """WrapPeriodicHook runs inside a two-stage FusedStage and wraps.
+
+        The hook lives on the second sub-stage, as in the issue's
+        reproducer.  The engine must complete the run without raising,
+        and the final positions must lie inside the unit cell.
+        """
+        model = DemoModelWrapper(DemoModel()).to(device)
+        hook = WrapPeriodicHook(frequency=1, stage=DynamicsStage.AFTER_POST_UPDATE)
+        fused = NVE(model=model, dt=1.0, n_steps=3) + NVE(
+            model=model, dt=1.0, n_steps=5, hooks=[hook]
+        )
+        batch = Batch.from_data_list(self._make_autograd_data(device)).to(device)
+
+        fused.run(batch, n_steps=10)
+
+        # After the run every graph has graduated (status == exit_status)
+        # and the last position-mutating operation was the hook, so the
+        # fractional coordinates must lie in [0, 1) on periodic axes.
+        cell = torch.linalg.inv(batch.cell)
+        frac = torch.einsum("bij,bj->bi", cell[batch.batch_idx], batch.positions)
+        pbc_atoms = batch.pbc[batch.batch_idx]
+        in_cell = ((frac >= -1e-5) & (frac < 1 + 1e-5)) | ~pbc_atoms
+        assert in_cell.all()
+
+    def test_fused_stage_first_step_no_error(self, device: str) -> None:
+        """The first fused step must not raise the leaf-Variable error.
+
+        This isolates the failure mode of the issue: a single step with
+        the hook on a sub-stage used to raise before any wrapping
+        happened.
+        """
+        model = DemoModelWrapper(DemoModel()).to(device)
+        hook = WrapPeriodicHook(frequency=1, stage=DynamicsStage.AFTER_POST_UPDATE)
+        fused = NVE(model=model, dt=1.0, n_steps=3) + NVE(
+            model=model, dt=1.0, n_steps=5, hooks=[hook]
+        )
+        batch = Batch.from_data_list(self._make_autograd_data(device)).to(device)
+
+        fused.run(batch, n_steps=1)
+
+        assert batch.positions.isfinite().all()

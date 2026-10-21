@@ -105,12 +105,14 @@ def wrap_positions_into_cell(
     Float[Tensor, "V 3"]
         The same ``positions`` tensor (modified in-place).
     """
-    original = positions.clone()
-    wrapped = _wrap_positions(positions, cell, batch_idx)
+    # Positions can still require grad here (FusedStage); see #206.
+    with torch.no_grad():
+        original = positions.clone()
+        wrapped = _wrap_positions(positions, cell, batch_idx)
 
-    # Restore non-periodic dimensions
-    per_atom_pbc = pbc[batch_idx]  # (V, 3)
-    positions.copy_(torch.where(per_atom_pbc, wrapped, original))
+        # Restore non-periodic dimensions
+        per_atom_pbc = pbc[batch_idx]  # (V, 3)
+        positions.copy_(torch.where(per_atom_pbc, wrapped, original))
     return positions
 
 
