@@ -1792,7 +1792,8 @@ class Batch(DataMixin):
         Notes
         -----
         Graphs are appended after the first :attr:`num_graphs` slots at every
-        level, so per-graph and per-atom data stay aligned.
+        level, so per-graph and per-atom data stay aligned. Each copied graph's
+        ``neighbor_list`` is re-offset to where its atoms land in this batch.
 
         The copy runs as a Warp kernel over both batches' raw pointers, so a
         source on another device is rejected rather than moved: moving it would
@@ -1893,8 +1894,35 @@ class Batch(DataMixin):
             level_fit = torch.empty(n, device=device, dtype=torch.bool)
             group.compute_put_per_system_fit_mask(src_group, mask, level_fit)
             fit_mask.logical_and_(level_fit)
+        num_dest_graphs = self.num_graphs
         for _, group, src_group in fit_groups:
             group.put(src_group, fit_mask, copied_mask=fit_mask)
+
+        # Edge index fields hold batch-wide atom indices but are copied as raw
+        # values, so move each appended graph's edges by its destination atom
+        # start minus its source atom start.
+        levels = {name: (group, src_group) for name, group, src_group in fit_groups}
+        if "atoms" in levels and "edges" in levels:
+            dest_atoms, src_atoms = levels["atoms"]
+            dest_edges, src_edges = levels["edges"]
+            index_keys = _INDEX_KEYS.intersection(src_edges.keys(), dest_edges.keys())
+            new_graphs = slice(num_dest_graphs, len(dest_atoms))
+            if index_keys and new_graphs.stop > new_graphs.start:
+                shift = (
+                    dest_atoms._batch_ptr[new_graphs]
+                    - src_atoms._batch_ptr[:n][fit_mask]
+                )
+                start, end = dest_edges._batch_ptr[
+                    [new_graphs.start, new_graphs.stop]
+                ].tolist()
+                edge_shift = torch.repeat_interleave(
+                    shift,
+                    dest_edges.segment_lengths[new_graphs],
+                    output_size=end - start,
+                ).unsqueeze(1)
+                for key in index_keys:
+                    rows = dest_edges._data[key][start:end]
+                    rows += edge_shift.to(rows.dtype)
 
         if source_index is None:
             copy_mask.copy_(fit_mask)

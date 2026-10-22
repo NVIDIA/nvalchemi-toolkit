@@ -3311,6 +3311,59 @@ class TestBatchPutDefrag:
                 original.get_data(source_index).positions,
             )
 
+    # num_systems=2 compacts the 3-graph source; num_systems=5 copies it directly.
+    @pytest.mark.parametrize("num_systems", [2, 5])
+    @pytest.mark.parametrize("prefill", [0, 1])
+    @pytest.mark.parametrize("index_dtype", [torch.int32, torch.int64])
+    def test_put_offsets_neighbor_list_to_destination_atoms(
+        self, num_systems: int, prefill: int, index_dtype: torch.dtype, device: str
+    ) -> None:
+        """Copied edges point at the copied graph's atoms, even after a skipped graph."""
+
+        def ring(num_nodes: int) -> AtomicData:
+            atoms = torch.arange(num_nodes, device=device)
+            return AtomicData(
+                positions=torch.randn(num_nodes, 3, device=device),
+                atomic_numbers=torch.ones(num_nodes, dtype=torch.long, device=device),
+                neighbor_list=torch.stack([atoms, atoms.roll(-1)], dim=1).to(
+                    index_dtype
+                ),
+                energy=torch.tensor([[0.0]], device=device),
+            )
+
+        source = Batch.from_data_list([ring(2), ring(3), ring(4)], device=device)
+        original = source.clone()
+        buffer = Batch.empty(
+            num_systems=num_systems,
+            num_nodes=20,
+            num_edges=20,
+            template=source,
+            device=device,
+        )
+        resident = [ring(3) for _ in range(prefill)]
+        if resident:
+            buffer.put(
+                Batch.from_data_list(resident, device=device),
+                torch.ones(prefill, dtype=torch.bool, device=device),
+            )
+        copied = torch.zeros(3, dtype=torch.bool, device=device)
+
+        buffer.put(
+            source, torch.tensor([True, False, True], device=device), copied_mask=copied
+        )
+
+        expected_indices = [0, 2][: num_systems - prefill]
+        assert copied.tolist() == [index in expected_indices for index in range(3)]
+        for dest_index, source_index in enumerate(expected_indices, start=prefill):
+            actual = buffer.get_data(dest_index)
+            expected = original.get_data(source_index)
+            torch.testing.assert_close(actual.neighbor_list, expected.neighbor_list)
+            torch.testing.assert_close(actual.positions, expected.positions)
+        for resident_index, data in enumerate(resident):
+            torch.testing.assert_close(
+                buffer.get_data(resident_index).neighbor_list, data.neighbor_list
+            )
+
     @pytest.mark.parametrize("node_capacity, expected", [(1, 0), (2, 1), (5, 2)])
     def test_put_from_larger_source_respects_atom_capacity(
         self, node_capacity: int, expected: int, device: str
