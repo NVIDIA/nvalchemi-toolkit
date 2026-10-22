@@ -23,9 +23,11 @@ importable.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
+import torch
 from pydantic import BaseModel, ConfigDict, Field
 
 from nvalchemi.dynamics.structure_sampler import (
@@ -39,6 +41,10 @@ from nvalchemi.training._spec_utils import (
     dataset_from_spec_dict,
     dataset_spec_dict,
 )
+
+if TYPE_CHECKING:
+    from nvalchemi.data import AtomicData
+    from nvalchemi.data.datapipes.dataset import BatchDatasetProtocol
 
 __all__ = ["FitPolicy", "InitialStructures", "InitialStructuresSource", "WithinBudget"]
 
@@ -127,7 +133,120 @@ class InitialStructures(OrderedStructureSampler):
     >>> state = structures.initial_batch()  # doctest: +SKIP
     >>> fresh = structures.draw(limit=2, fits=WithinBudget(atoms=64))  # doctest: +SKIP
     >>> rebuilt = InitialStructures.from_spec_dict(structures.to_spec_dict())  # doctest: +SKIP
+
+    A :meth:`draw` with ``on_miss="stop"`` — the backfill under a trajectory
+    lifetime — stops at a row that does not fit the room left, since the room
+    grows back to the declared budget as trajectories retire. A row larger
+    than the declared ``max_atoms`` or ``max_edges`` on its own never fits
+    any room, so it is passed over with a warning instead of holding the
+    position forever; :attr:`oversized_rows` records it.
     """
+
+    def __init__(
+        self,
+        dataset: BatchDatasetProtocol,
+        *,
+        max_atoms: int | None = None,
+        max_edges: int | None = None,
+        max_batch_size: int | None = None,
+        recycle: bool = False,
+    ) -> None:
+        """Open the sampler at the first row of *dataset*, with no row passed over."""
+        super().__init__(
+            dataset,
+            max_atoms=max_atoms,
+            max_edges=max_edges,
+            max_batch_size=max_batch_size,
+            recycle=recycle,
+        )
+        self._oversized_rows: set[int] = set()
+
+    @property
+    def oversized_rows(self) -> frozenset[int]:
+        """Dataset rows a stopping :meth:`draw` passed over as larger than the budget."""
+        return frozenset(self._oversized_rows)
+
+    def draw(
+        self,
+        *,
+        limit: int | None = None,
+        fits: FitPolicy | None = None,
+        on_miss: Literal["stop", "skip"] = "stop",
+    ) -> list[AtomicData]:
+        """Serve the next structures while they pass *fits*, past oversized rows.
+
+        Parameters
+        ----------
+        limit : int | None, optional
+            Maximum number of structures to serve. Default ``None`` (the rest
+            of the shard).
+        fits : FitPolicy | None, optional
+            Policy called with the atom and edge totals the drawn structures
+            would hold with each candidate included. Default ``None`` (every
+            structure fits).
+        on_miss : {"stop", "skip"}, optional
+            How the scan treats a candidate that does not fit, as in
+            :meth:`~nvalchemi.dynamics.OrderedStructureSampler.draw`. Under
+            ``"stop"`` a row larger than the declared budget on its own is
+            passed over and warned about once, and never ends the draw.
+            Default ``"stop"``.
+
+        Returns
+        -------
+        list[AtomicData]
+            Structures in row order, each stamped with its own ``system_id``.
+        """
+        if on_miss == "skip" or (self.max_atoms is None and self.max_edges is None):
+            return super().draw(limit=limit, fits=fits, on_miss=on_miss)
+        drawn: list[AtomicData] = []
+        for index in self._scan_past_oversized(limit=limit, fits=fits):
+            data, _ = self.dataset[index]
+            data.add_system_property(
+                "system_id",
+                torch.tensor([[self._next_system_id]], dtype=torch.long),
+            )
+            self._next_system_id += 1
+            drawn.append(data)
+        return drawn
+
+    def _scan_past_oversized(
+        self, *, limit: int | None, fits: FitPolicy | None
+    ) -> list[int]:
+        """Advance the position like a stopping scan, passing over oversized rows."""
+        budget = WithinBudget(atoms=self.max_atoms, edges=self.max_edges)
+        rows: list[int] = []
+        atoms = edges = 0
+        scanned = 0
+        while scanned < len(self._rows) and (limit is None or len(rows) < limit):
+            if self._next_row >= len(self._rows):
+                if not self.recycle:
+                    break
+                self._next_row = 0
+                self._wraps += 1
+            index = self._rows[self._next_row]
+            scanned += 1
+            num_atoms, num_edges = self.dataset.get_metadata(index)
+            if not budget(num_atoms, num_edges):
+                if index not in self._oversized_rows:
+                    self._oversized_rows.add(index)
+                    warnings.warn(
+                        f"Initial structure at row {index!r} holds {num_atoms!r} "
+                        f"atoms and {num_edges!r} edges, more than max_atoms="
+                        f"{self.max_atoms!r} and max_edges={self.max_edges!r} "
+                        "allow on their own, so no backfill can ever fit it. It "
+                        "is passed over. Widen the budget to propagate it.",
+                        UserWarning,
+                        stacklevel=3,
+                    )
+                self._next_row += 1
+                continue
+            if fits is not None and not fits(atoms + num_atoms, edges + num_edges):
+                break
+            atoms += num_atoms
+            edges += num_edges
+            rows.append(index)
+            self._next_row += 1
+        return rows
 
     def to_spec_dict(self) -> dict[str, Any]:
         """Return the JSON-ready reference by which a recipe names this source.

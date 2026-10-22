@@ -408,8 +408,14 @@ class ReplayBuffer:
         """Frozen ``level.field`` schema every frame must match; empty until filled."""
         return self._schema
 
+    @torch.no_grad()
     def extend(self, frames: Batch) -> None:
         """Admit *frames* into the buffer and evict down to capacity.
+
+        Runs without autograd, so a stored frame is always detached: a frame
+        handed over with ``requires_grad`` set, or still attached to the graph
+        that produced it, never links the resident frames to a graph that a
+        training backward would free.
 
         Parameters
         ----------

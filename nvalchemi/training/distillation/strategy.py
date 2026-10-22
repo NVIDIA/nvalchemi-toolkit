@@ -60,6 +60,7 @@ from nvalchemi.training.distillation.hooks import (
     _run_local_keys,
     _score_and_attach,
     _strip_replay_frame,
+    _TrajectoryAgeHook,
     nonfinite_divergence,
 )
 from nvalchemi.training.distillation.losses.distribution import BoltzmannMatchingLoss
@@ -467,6 +468,7 @@ class _RelaxationLifecycle:
     capture: _ConvergedFrameHook
     structures: InitialStructures
     divergence: _DivergenceHook
+    age: _TrajectoryAgeHook | None = None
 
 
 @contextmanager
@@ -498,12 +500,23 @@ def _relaxation_lifecycle(
     per step, freezes each flagged graph at ``exit_status`` without capturing
     it, and records the verdict. The capture hook and the segment boundary
     read that record and never call the predicate themselves. The segment
-    boundary then retires a diverged graph like a converged one.
+    boundary then retires a diverged graph like a converged one. With
+    ``quarantine_diverged`` the hook also zeroes the flagged graph's
+    velocities and forces and makes its positions finite, so the frozen graph
+    the propagator keeps evaluating stays a finite input to the model.
+
+    A ``max_trajectory_steps`` lifetime installs an age hook after the
+    divergence hook, so a graph is judged for divergence while it still
+    moves. It freezes a graph at ``exit_status`` on the step it reaches the
+    lifetime, so the graph graduates, is captured, retired, and backfilled
+    exactly like a converged one. The lifetime alone is enough to
+    manage a lifecycle: a thermostatted run with no criterion still retires
+    and backfills, with the propagator's own detector left in place.
 
     Parameters
     ----------
     config : OnPolicyConfig
-        Segment-loop configuration, holding the criterion.
+        Segment-loop configuration, holding the criterion or the lifetime.
     state : Batch
         Initial batch, already carrying the bookkeeping
         :meth:`~nvalchemi.training.distillation.InitialStructures.initial_batch`
@@ -527,11 +540,12 @@ def _relaxation_lifecycle(
         off a status no initial structure carries.
     """
     criterion = config.convergence_criterion
-    if criterion is None:
+    if not config.manages_lifecycle:
         yield None
         return
     dynamics = config.dynamics
-    _check_sole_migrator(dynamics, criterion)
+    if criterion is not None:
+        _check_sole_migrator(dynamics, criterion)
     if dynamics.sampler is not None:
         raise ValueError(
             "The relaxation lifecycle owns the refill as well as graduation, "
@@ -543,32 +557,89 @@ def _relaxation_lifecycle(
             "backfills from the same dataset at the segment boundary, and "
             "leave the propagator's sampler unset."
         )
-    _check_structure_status(state, criterion)
-    divergence = _DivergenceHook(config.divergence or nonfinite_divergence)
+    if criterion is not None:
+        _check_structure_status(state, criterion)
+    age = (
+        None
+        if config.max_trajectory_steps is None
+        else _TrajectoryAgeHook(config.max_trajectory_steps)
+    )
+    divergence = _DivergenceHook(
+        config.divergence or nonfinite_divergence,
+        quarantine=config.quarantine_diverged,
+    )
     capture = _ConvergedFrameHook(
         sink=HostMemory(capacity=state.num_graphs),
         divergence=divergence,
         path=label_hook,
     )
     detector = dynamics.convergence_hook
-    # Registered ahead of the labeling hook, so a graph that converges or
-    # diverges on this step graduates before the path route reads its status:
-    # no converged graph is stored twice, and no diverged one at all.
-    dynamics.register_hook(criterion)
-    dynamics.register_hook(divergence)
-    dynamics.register_hook(capture)
-    dynamics.convergence_hook = criterion
+    # Registered ahead of the labeling hook, so a graph that converges, ages
+    # out, or diverges on this step graduates before the path route reads its
+    # status: no converged graph is stored twice, and no diverged one at all.
+    # Divergence runs ahead of the age, so a graph that diverges on the step
+    # its lifetime ends is still judged while moving and quarantined.
+    installed = [
+        hook for hook in (criterion, divergence, age, capture) if hook is not None
+    ]
+    for hook in installed:
+        dynamics.register_hook(hook)
+    if criterion is not None:
+        dynamics.convergence_hook = criterion
     try:
         yield _RelaxationLifecycle(
             capture=capture,
             structures=config.initial_structures,
             divergence=divergence,
+            age=age,
         )
     finally:
         dynamics.convergence_hook = detector
-        dynamics.hooks.remove(criterion)
-        dynamics.hooks.remove(divergence)
-        dynamics.hooks.remove(capture)
+        for hook in installed:
+            dynamics.hooks.remove(hook)
+
+
+def _lifetime_room(
+    structures: InitialStructuresSource, state: Batch, survivors: torch.Tensor
+) -> tuple[int | None, WithinBudget | None]:
+    """Return the draw bounds of a lifetime backfill: the declared budget less the survivors.
+
+    A source that declares no budget was propagated whole, so the room is the
+    number of graphs that retired, as in a criterion-only lifecycle.
+
+    Parameters
+    ----------
+    structures : InitialStructuresSource
+        Source the backfill draws from; its ``max_atoms``, ``max_edges``, and
+        ``max_batch_size`` are read when it declares them.
+    state : Batch
+        Batch the segment ended on.
+    survivors : torch.Tensor
+        Boolean mask of the graphs that stay in the batch.
+
+    Returns
+    -------
+    tuple[int | None, WithinBudget | None]
+        The ``limit`` and ``fits`` arguments of the draw.
+    """
+    max_atoms = getattr(structures, "max_atoms", None)
+    max_edges = getattr(structures, "max_edges", None)
+    max_batch_size = getattr(structures, "max_batch_size", None)
+    if max_atoms is None and max_edges is None and max_batch_size is None:
+        return int((~survivors).sum()), None
+    kept = int(survivors.sum())
+    edges_per_graph = state.num_edges_per_graph
+    return (
+        None if max_batch_size is None else max(max_batch_size - kept, 0),
+        WithinBudget(
+            atoms=None
+            if max_atoms is None
+            else max(max_atoms - int(state.num_nodes_per_graph[survivors].sum()), 0),
+            edges=None
+            if max_edges is None or edges_per_graph.numel() == 0
+            else max(max_edges - int(edges_per_graph[survivors].sum()), 0),
+        ),
+    )
 
 
 @contextmanager
@@ -2036,9 +2107,9 @@ class DistillationStrategy(TrainingStrategy):
                 label_hook = TeacherLabelHook(
                     config.teacher_scorer,
                     frequency=config.label_frequency,
-                    exit_status=None
-                    if config.convergence_criterion is None
-                    else config.dynamics.exit_status,
+                    exit_status=config.dynamics.exit_status
+                    if config.manages_lifecycle
+                    else None,
                 )
                 with _relaxation_lifecycle(config, state, label_hook) as lifecycle:
                     config.dynamics.register_hook(label_hook)
@@ -2607,8 +2678,9 @@ class DistillationStrategy(TrainingStrategy):
     ) -> Batch | None:
         """Graduate the finished structures and backfill fresh ones in their place.
 
-        A trajectory finishes in one of two ways. It converges and the
-        criterion freezes it, or it diverges and the lifecycle freezes it on
+        A trajectory finishes in one of three ways. It converges and the
+        criterion freezes it, it reaches ``max_trajectory_steps`` and the age
+        hook freezes it, or it diverges and the lifecycle freezes it on
         the step the divergence predicate flagged it. This method counts the
         diverged ones from the divergence hook's record and warns about them.
         It then draws initial structures
@@ -2616,7 +2688,16 @@ class DistillationStrategy(TrainingStrategy):
         graduated, within the atoms they held. The draw is also bounded by
         their edges, but only when the source declared ``max_edges``, because
         a dataset's stored edge count is not the neighbor list a propagator
-        rebuilds. The propagator's per-structure state follows the membership
+        rebuilds. A criterion-only lifecycle passes over a row that does not
+        fit, so one oversized structure cannot block every refill behind it.
+        A lifecycle with ``max_trajectory_steps`` draws differently: its room
+        is the source's declared budget less what the survivors hold, since
+        a room measured by the retired graphs alone would shrink with every
+        under-packed draw, and it stops at the first row that does not fit.
+        Every trajectory retires in turn, so the room grows to the full budget
+        and the row is served then, and no row of the source is lost to a
+        scan that would otherwise run through the shard once the room is
+        full. The propagator's per-structure state follows the membership
         change. The run restamps its bookkeeping over the appended rows and
         keeps only the ``system_id`` the source assigned. A structure stored
         with the ``status`` it once graduated on therefore still moves.
@@ -2654,19 +2735,30 @@ class DistillationStrategy(TrainingStrategy):
             )
         structures = lifecycle.structures
         edges_per_graph = state.num_edges_per_graph
-        fresh = structures.draw(
-            limit=int(graduated.sum()),
-            fits=WithinBudget(
+        if lifecycle.age is None:
+            limit: int | None = int(graduated.sum())
+            fits = WithinBudget(
                 atoms=int(state.num_nodes_per_graph[graduated].sum()),
                 edges=int(edges_per_graph[graduated].sum())
                 if getattr(structures, "max_edges", None) is not None
                 and edges_per_graph.numel() > 0
                 else None,
-            ),
-            on_miss="skip",
+            )
+        else:
+            limit, fits = _lifetime_room(structures, state, ~graduated)
+        fresh = structures.draw(
+            limit=limit,
+            fits=fits,
+            # Under a lifetime every trajectory retires, so the room grows to
+            # the full budget in turn and no row needs passing over; skipping
+            # would burn the shard once the room is full. InitialStructures
+            # still passes over a row larger than the whole budget.
+            on_miss="skip" if lifecycle.age is None else "stop",
         )
         lifecycle.divergence.reset()
         survivors = torch.where(~graduated)[0]
+        if lifecycle.age is not None:
+            lifecycle.age.retain(survivors, len(fresh))
         refilled = state.index_select(survivors) if survivors.numel() > 0 else None
         if fresh:
             appended = type(state).from_data_list(fresh, device=state.device)

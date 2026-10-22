@@ -29,7 +29,7 @@ from nvalchemi.data.datapipes.backends.zarr import (
 )
 from nvalchemi.data.datapipes.dataset import Dataset
 from nvalchemi.data.datapipes.in_memory_dataset import InMemoryDataset
-from nvalchemi.dynamics import OrderedStructureSampler, StructureSource
+from nvalchemi.dynamics import OrderedStructureSampler, StructureSource, WithinBudget
 from nvalchemi.training.distillation import (
     InitialStructures,
     InitialStructuresSource,
@@ -69,6 +69,44 @@ class TestInitialStructuresIsTheCoreSampler:
         """An error raised from the core sampler still names the class the user built."""
         with pytest.raises(ValueError, match="InitialStructures max_atoms"):
             InitialStructures(_build_small_dataset(), max_atoms=0)
+
+
+class TestInitialStructuresOversizedRows:
+    """A stopping draw passes over rows no room can fit, and stops at the rest."""
+
+    def test_a_temporary_miss_still_stops(self) -> None:
+        """A row within the budget but over the room ends the draw on that row."""
+        structures = InitialStructures(_make_dataset([2, 5, 2]), max_atoms=6)
+        structures.initial_batch()
+
+        fresh = structures.draw(fits=WithinBudget(atoms=4), on_miss="stop")
+
+        assert fresh == []
+        assert structures.next_row == 1
+        assert structures.oversized_rows == frozenset()
+
+    def test_a_row_over_the_whole_budget_is_skipped_once_with_a_warning(self) -> None:
+        """A row larger than ``max_atoms`` alone is passed over, and warned about once."""
+        structures = InitialStructures(
+            _make_dataset([2, 7, 2]), max_atoms=6, recycle=True
+        )
+        structures.initial_batch()
+
+        with pytest.warns(UserWarning, match="row 1 holds 7 atoms"):
+            fresh = structures.draw(fits=WithinBudget(atoms=6), on_miss="stop")
+
+        assert [data.num_nodes for data in fresh] == [2, 2]
+        assert structures.oversized_rows == frozenset({1})
+
+    def test_a_skipping_draw_is_left_to_the_core_sampler(self) -> None:
+        """``on_miss="skip"`` passes the oversized row over without recording it."""
+        structures = InitialStructures(_make_dataset([2, 7, 2]), max_atoms=6)
+        structures.initial_batch()
+
+        fresh = structures.draw(fits=WithinBudget(atoms=6), on_miss="skip")
+
+        assert [data.num_nodes for data in fresh] == [2]
+        assert structures.oversized_rows == frozenset()
 
 
 class TestInitialStructuresSpec:
