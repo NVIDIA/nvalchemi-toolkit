@@ -543,6 +543,9 @@
 
 ### Fixed
 
+- `Batch.put` now copies selected graphs from sources larger than the buffer's
+  remaining graph capacity and marks the indices of copied source graphs in
+  `copied_mask`.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain
