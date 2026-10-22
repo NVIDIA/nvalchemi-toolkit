@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Per-dynamics `reprime_on_entry` control for fused and distributed pipeline
+  stages, including `DomainParallel`, refreshing arrivals' forces while
+  preserving resident graphs' forces and updates.
+
+### Fixed
+
 ## 0.3.0
 
 ### Added
