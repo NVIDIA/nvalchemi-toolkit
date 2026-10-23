@@ -297,6 +297,7 @@ with :meth:`~nvalchemi.models.mace.MACEWrapper.from_checkpoint` and then let
        device=torch.device("cuda"),
        dtype=torch.float32,
        enable_cueq=True,
+       train=True,
    )
 
    ema = EMAHook(model_key="main", decay=0.999)
@@ -320,7 +321,7 @@ EMA hook in isolation::
    )
 
 The saved model spec calls ``MACEWrapper.from_checkpoint`` again with the
-recorded MACE checkpoint and options, then the strategy loader restores model
+recorded MACE checkpoint and options (including ``train``), then the strategy loader restores model
 weights, optimizer state, counters, and checkpointable hook state such as EMA
 averages.
 

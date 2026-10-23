@@ -536,6 +536,13 @@
 
 ### Breaking Changes
 
+- `MACEWrapper` and `MACEWrapper.from_checkpoint` take a `train` argument
+  (default `False`), matching `UMAWrapper`. By default the weights are now
+  frozen and the wrapper is in eval mode, which is lossless for autograd forces.
+  Training and fine-tuning must pass `train=True`; a frozen wrapper makes
+  `TrainingStrategy` and `FineTuningStrategy` raise "no trainable parameters".
+  `from_checkpoint(compile_model=True)` no longer freezes the weights itself:
+  `train` and `compile_model` are independent.
 - `MACEWrapper` no longer declares or passes through an ordinary `"hessian"`
   model output. Custom MACE modules that relied on the raw upstream value must
   use `hessian_vector_product()`, `prepare_hessian()`, or `compute_hessian()` for
@@ -543,6 +550,16 @@
 
 ### Fixed
 
+- The `DistributedModel` error for a loader-compiled wrapper whose spec has no
+  `CompilePolicy` no longer recommends `compile=True`, which needs the same
+  policy; it now advises building the wrapper without compiling it, or adding a
+  `CompilePolicy`.
+- `DistributedModel(..., compile=True)` on an eagerly loaded `MACEWrapper` no
+  longer compiles weight-gradient work: the weights are frozen by default, so
+  the compiled backward differentiates positions only.
+- Generic model specs record a constructor argument that shares its name with an
+  inherited method (such as `train` on an `nn.Module`) from the private
+  attribute that stores it, instead of the bound method.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain

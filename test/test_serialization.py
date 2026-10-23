@@ -20,8 +20,12 @@ import json
 import math
 
 import pytest
+import torch
 
-from nvalchemi._serialization import MeasurementRecord
+from nvalchemi._serialization import (
+    MeasurementRecord,
+    _extract_init_kwargs_from_attrs,
+)
 from nvalchemi.training.distillation.evaluation import (
     MeasurementRecord as EvaluationMeasurementRecord,
 )
@@ -82,3 +86,29 @@ class TestMeasurementRecord:
         record = _Timing(steps=1)
         with pytest.raises(ValueError, match="frozen"):
             record.steps = 2
+
+
+class _TrainFlagModule(torch.nn.Module):
+    """Module whose ``train`` constructor argument shadows ``nn.Module.train``."""
+
+    def __init__(self, train: bool = False, scale: float = 1.0) -> None:
+        super().__init__()
+        self._train = train
+        self.scale = scale
+
+
+class _UnstoredTrainFlagModule(torch.nn.Module):
+    """Module that accepts ``train`` but stores it nowhere."""
+
+    def __init__(self, train: bool = False) -> None:
+        super().__init__()
+
+
+@pytest.mark.parametrize("flag", [True, False])
+def test_init_kwargs_use_private_attribute_when_name_is_an_inherited_method(flag):
+    kwargs = _extract_init_kwargs_from_attrs(_TrainFlagModule(train=flag, scale=2.0))
+    assert kwargs == {"train": flag, "scale": 2.0}
+
+
+def test_init_kwargs_skip_an_inherited_method_with_no_stored_value():
+    assert _extract_init_kwargs_from_attrs(_UnstoredTrainFlagModule()) == {}

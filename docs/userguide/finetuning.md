@@ -1178,14 +1178,16 @@ hooks.
 
 ### MACE
 
-When loading a MACE checkpoint for fine-tuning, make sure the model is in a
-trainable form before passing it to `FineTuningStrategy`.
+When loading a MACE checkpoint for fine-tuning, pass `train=True` so the
+weights stay trainable.
 {py:meth}`nvalchemi.models.mace.MACEWrapper.from_checkpoint` returns an
-eval-mode wrapper by default; the training strategy switches it to train mode
-during `run`, so that part is handled for you. The one flag to watch is
-`compile_model`: setting it to `True` is inference-only because it freezes
-parameters before `torch.compile`. Always use `compile_model=False` for
-fine-tuning:
+eval-mode wrapper with frozen weights by default (`train=False`), which is what
+inference wants: forces come from autograd with respect to positions, so frozen
+weights lose nothing. With `train=True` the checkpoint's `requires_grad` flags
+are kept and the training strategy switches the wrapper to train mode during
+`run`. Whether the weights are trainable is controlled by `train` alone, not by
+`compile_model`; compiled fine-tuning is not covered here, so keep
+`compile_model=False`:
 
 ```python
 from nvalchemi.models.mace import MACEWrapper
@@ -1193,6 +1195,7 @@ from nvalchemi.models.mace import MACEWrapper
 pretrained_model = MACEWrapper.from_checkpoint(
     "runs/pretrain/checkpoints",
     compile_model=False,
+    train=True,
 )
 
 strategy = FineTuningStrategy(
@@ -1202,8 +1205,8 @@ strategy = FineTuningStrategy(
 )
 ```
 
-If a compiled model is passed, the trainable parameter filter will match
-nothing and the strategy will raise an error before the run begins.
+If a frozen model (`train=False`, the default) is passed, the strategy will raise
+an error before the run begins because the model has no trainable parameters.
 
 ## API reference
 
