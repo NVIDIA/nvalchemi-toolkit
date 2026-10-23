@@ -2006,6 +2006,52 @@ class TestPoststepBackPressure:
 class TestOverflowDrainBack:
     """Test _drain_sinks_to_batch for pulling overflow back into active batch."""
 
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    @pytest.mark.parametrize("max_batch_size", [1, 2])
+    @pytest.mark.parametrize("recv_buffer_exists", [False, True])
+    def test_full_batch_skips_staging_without_changing_admission_order(
+        self, comm_mode: str, max_batch_size: int, recv_buffer_exists: bool
+    ) -> None:
+        """Bypass staging only when full, preserving arrival-first admission."""
+        batch = _make_batch_with_system(num_graphs=5)
+        batch["system_id"] = torch.arange(5).view(-1, 1)
+        pending = HostMemory(capacity=10)
+        pending.write(batch.index_select([1, 2]))
+        incoming = batch.index_select([3, 4])
+        stage = _CommunicationMixin(
+            active_batch=batch.index_select([0]),
+            max_batch_size=max_batch_size,
+            overflow_sinks=[pending],
+            prior_rank=0,
+            next_rank=None,
+            comm_mode=comm_mode,
+            device_type="cpu",
+            buffer_config=BufferConfig(num_systems=2, num_nodes=6, num_edges=0),
+        )
+        if recv_buffer_exists:
+            stage._ensure_buffers(incoming)
+        handle = Mock()
+        handle.wait.return_value = incoming
+
+        with (
+            patch.object(Batch, "irecv", return_value=handle),
+            patch.object(Batch, "put", autospec=True, side_effect=Batch.put) as put,
+        ):
+            stage._prestep_sync_buffers()
+            stage._complete_pending_recv()
+
+        if recv_buffer_exists and max_batch_size == 2:
+            put.assert_called_once()
+        else:
+            put.assert_not_called()
+        assert stage.active_batch.system_id.view(-1).tolist() == (
+            [0, 3] if max_batch_size == 2 else [0]
+        )
+        assert pending.read().system_id.view(-1).tolist() == (
+            [1, 2, 4] if max_batch_size == 2 else [1, 2, 3, 4]
+        )
+        handle.wait.assert_called_once()
+
     def test_drain_pulls_from_sinks_when_room(self) -> None:
         """Verify sink data is pulled into active batch when there's room."""
         # Active batch with 5 graphs, room for 5 more
