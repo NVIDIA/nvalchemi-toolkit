@@ -1276,7 +1276,9 @@ class _CommunicationMixin:
             Batch received from the prior stage (via ``irecv`` / ``wait``).
         """
         if incoming.num_graphs > 0 and self._recv_template is None:
-            self._recv_template = incoming
+            # Keep a separate template so bookkeeping fields later added to
+            # incoming do not change the layout expected by future receives.
+            self._recv_template = Batch.empty_like(incoming)
         if incoming.num_graphs > 0:
             self._on_receive(incoming)
         if (
