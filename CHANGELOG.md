@@ -551,6 +551,9 @@
   from transport. Received graphs are appended to the active batch instead of
   rebuilding it, so resident graphs keep their edges and other fields, and the
   batch stays on its device.
+- Generic model specs record a constructor argument that shares its name with an
+  inherited method (such as `train` on an `nn.Module`) from the private
+  attribute that stores it, instead of the bound method.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain

@@ -291,9 +291,18 @@ def _extract_init_kwargs_from_attrs(instance: Any) -> dict[str, Any]:
         }:
             continue
         try:
-            kwargs[name] = getattr(instance, name)
+            value = getattr(instance, name)
         except AttributeError:
             continue
+        # A constructor argument may share its name with an inherited method
+        # (``nn.Module.train``), which ``getattr`` returns instead of the stored
+        # value; fall back to the private attribute that holds it.
+        if inspect.ismethod(value) and value.__self__ is instance:
+            try:
+                value = getattr(instance, f"_{name}")
+            except AttributeError:
+                continue
+        kwargs[name] = value
     return kwargs
 
 
