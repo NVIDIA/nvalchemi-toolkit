@@ -109,11 +109,15 @@ class TestFusedStageOnReceive:
         stage = _langevin_stage()
         incoming = Batch.from_data_list([_make_system(i) for i in range(2)])
         incoming["status"] = torch.full((2, 1), stage.exit_status, dtype=torch.long)
+        expected_keys = {
+            level: set(keys) for level, keys in incoming.level_keys.items()
+        }
 
         stage._recv_to_batch(incoming)
 
         mask = stage.active_graph_mask(stage.active_batch, stage.exit_status)
         assert mask.all()
+        assert stage._recv_template.level_keys == expected_keys
 
     @pytest.mark.parametrize("n_graphs", [1, 2, 3, 4])
     def test_recv_buffer_initializes_missing_bookkeeping(self, n_graphs: int) -> None:

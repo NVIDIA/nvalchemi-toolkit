@@ -16,6 +16,8 @@
 
 - Distributed pipelines retain and retry graduates that do not fit the send
   buffer, without dropping them during in-flight sampler refills.
+- Pipeline receive templates retain their field layout when stages add
+  bookkeeping fields to incoming batches.
 - `DistributedPipeline` no longer drains finished results back into
   computation. Received samples that do not fit wait in a new
   `overflow_sinks` list, a private `HostMemory` by default.
