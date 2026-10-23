@@ -438,11 +438,8 @@ Three :class:`~nvalchemi.dynamics.DataSink` implementations are
 available:
 
 - :class:`~nvalchemi.dynamics.GPUBuffer`: Pre-allocates on first write.
-  Uses :meth:`Batch.put() <nvalchemi.data.Batch.put>` internally. Has a
-  known performance limitation: ``read()`` falls back to
-  :meth:`to_data_list() <nvalchemi.data.Batch.to_data_list>` instead
-  of :meth:`index_select() <nvalchemi.data.Batch.index_select>` due to
-  Warp int32/int64 dtype incompatibility.
+  Writes with :meth:`Batch.put() <nvalchemi.data.Batch.put>` and reads
+  with :meth:`index_select() <nvalchemi.data.Batch.index_select>`.
 
 - :class:`~nvalchemi.dynamics.HostMemory`: CPU-resident, stores each write
   as a CPU copy of the batch.
