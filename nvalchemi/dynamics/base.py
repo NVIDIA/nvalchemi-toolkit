@@ -1646,9 +1646,12 @@ class _CommunicationMixin:
     ) -> None:
         """Synchronize buffers after a dynamics step.
 
-        If ``converged_indices`` is provided and a next rank exists with
-        available capacity, the converged samples are copied into
-        ``send_buffer`` via :meth:`_populate_send_buffer`.  The send
+        When the stage defines ``exit_status``, graphs already at or beyond
+        that status are included alongside ``converged_indices``. This retries
+        graduates that did not fit the send buffer on an earlier step.
+
+        If a next rank exists with available capacity, graduated samples are
+        copied into ``send_buffer`` via :meth:`_populate_send_buffer`. The send
         buffer is then unconditionally sent to the next rank — even if
         empty (``num_graphs == 0`` after zeroing) — so the downstream
         ``irecv`` always completes without deadlock.
@@ -1668,7 +1671,8 @@ class _CommunicationMixin:
         converged_indices : torch.Tensor | None, optional
             Integer indices of converged samples in the active batch.
             Typically obtained from ``BaseDynamics._check_convergence()``.
-            If ``None``, no samples are graduated.
+            If ``None``, only graphs already at or beyond ``exit_status``
+            are considered.
         """
         if self.next_rank is not None:
             # The send buffer is reused every iteration. A fully asynchronous
@@ -1677,6 +1681,15 @@ class _CommunicationMixin:
                 self._pending_send_handle.wait()
                 self._pending_send_handle = None
             self.send_buffer.zero()
+
+        batch = self.active_batch
+        exit_status = getattr(self, "exit_status", None)
+        status = getattr(batch, "status", None) if batch is not None else None
+        if status is not None and exit_status is not None:
+            graduated = status.view(-1)[: batch.num_graphs] >= exit_status
+            if converged_indices is not None:
+                graduated[converged_indices] = True
+            converged_indices = torch.where(graduated)[0]
 
         has_converged = converged_indices is not None and converged_indices.numel() > 0
 
@@ -3461,7 +3474,9 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             self._close_hooks()
         return batch
 
-    def refill_check(self, batch: Batch, exit_status: int) -> Batch | None:
+    def refill_check(
+        self, batch: Batch, exit_status: int, *, remove_graduated: bool = True
+    ) -> Batch | None:
         """Replace graduated samples via index-select and append.
 
         Graduated graphs (``status >= exit_status``) are written to sinks,
@@ -3484,6 +3499,10 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             The current batch with a ``status`` field.
         exit_status : int
             Status code indicating graduation.
+        remove_graduated : bool, optional
+            Whether to store and remove graduated graphs before refilling.
+            Set to ``False`` after a pipeline send to fill available capacity
+            while retaining graphs that are still waiting to be sent.
 
         Returns
         -------
@@ -3507,9 +3526,14 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         status = batch.status
         if status.dim() == 2:
             status = status.squeeze(-1)
-        graduated_mask = status >= exit_status
+        graduated_mask = (
+            status >= exit_status
+            if remove_graduated
+            else torch.zeros_like(status, dtype=torch.bool)
+        )
 
-        if not graduated_mask.any():
+        has_graduated = bool(graduated_mask.any())
+        if remove_graduated and not has_graduated:
             return batch
 
         if self.by_group:
@@ -3519,25 +3543,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
                 raise ValueError("Grouped refill must graduate complete groups")
             remaining_units = torch.where(~graduated_groups)[0]
 
-        # Batch composition changes here; drop stale converged indices so the
-        # next _build_context mask doesn't over-index the resized batch.
-        self._last_converged = None
         remaining_indices = torch.where(~graduated_mask)[0]
         n_remaining = remaining_indices.numel()
-        # With no survivors there are no forces to preserve, so treat the
-        # refill as a fresh batch and prime it fully before its first update.
-        use_per_graph_priming = (
-            self._supports_per_graph_priming and self._forces_primed and n_remaining > 0
-        )
-        self._forces_primed = False
-
-        if self.sinks and graduated_mask.any():
-            self._write_to_sinks(batch, mask=graduated_mask)
-
-        if remaining_indices.numel() > 0:
-            result = batch.index_select(remaining_indices)
-        else:
-            result = None
 
         # Budget-based replacement: compute total atom/edge headroom
         # from the remaining systems and the sampler's constraints.
@@ -3574,6 +3581,24 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
             edge_budget=edge_budget,
             max_count=max_new,
         )
+
+        if not has_graduated and not replacements:
+            return batch
+
+        # Batch composition changes here; drop stale converged indices so the
+        # next _build_context mask doesn't over-index the resized batch.
+        self._last_converged = None
+        # With no survivors there are no forces to preserve, so treat the
+        # refill as a fresh batch and prime it fully before its first update.
+        use_per_graph_priming = (
+            self._supports_per_graph_priming and self._forces_primed and n_remaining > 0
+        )
+        self._forces_primed = False
+
+        if self.sinks and has_graduated:
+            self._write_to_sinks(batch, mask=graduated_mask)
+
+        result = batch.index_select(remaining_indices) if n_remaining > 0 else None
 
         if replacements:
             repl_batch = (
@@ -4557,14 +4582,18 @@ class FusedStage(BaseDynamics):
     def _ensure_bookkeeping_fields(self, batch: Batch) -> None:
         """Auto-initialize status and registered bookkeeping fields if absent.
 
+        Bookkeeping stays per graph even when updates are grouped. Fields on
+        preallocated buffers cover every allocated graph slot.
+
         Parameters
         ----------
         batch : Batch
             The batch to check and initialize fields on.
         """
+        num_systems = max(batch.num_graphs, batch.system_capacity)
         for key, default_fn in self._bookkeeping_keys.items():
             if getattr(batch, key, None) is None:
-                batch[key] = default_fn(batch.num_graphs, batch.device)
+                batch[key] = default_fn(num_systems, batch.device)
 
     def _on_receive(self, incoming: Batch) -> None:
         """Admit samples from the prior rank at ``entry_status``.
@@ -5287,7 +5316,9 @@ class FusedStage(BaseDynamics):
         finally:
             self._close_hooks()
 
-    def refill_check(self, batch: Batch, exit_status: int) -> Batch | None:
+    def refill_check(
+        self, batch: Batch, exit_status: int, *, remove_graduated: bool = True
+    ) -> Batch | None:
         """Replace graduated samples and clear stale convergence indices.
 
         Delegates to the parent :meth:`BaseDynamics.refill_check` to remove
@@ -5304,6 +5335,9 @@ class FusedStage(BaseDynamics):
             The current batch with a ``status`` field.
         exit_status : int
             Status code indicating graduation.
+        remove_graduated : bool, optional
+            Whether to store and remove graduates, or retain all current graphs
+            and only fill available sampler capacity after a pipeline send.
 
         Returns
         -------
@@ -5311,7 +5345,11 @@ class FusedStage(BaseDynamics):
             A new batch with graduated graphs replaced by fresh samples,
             or ``None`` if no active samples remain.
         """
-        result = super().refill_check(batch, exit_status)
+        result = super().refill_check(
+            batch, exit_status, remove_graduated=remove_graduated
+        )
+        if result is batch:
+            return result
         # Clear stale convergence indices since the batch configuration has changed
         self._last_converged = None
         for _, dynamics in self.sub_stages:
@@ -5902,8 +5940,10 @@ class DistributedPipeline:
 
         **Mode 2 (inflight batching):** When the first stage has
         ``inflight_mode=True`` (i.e., a sampler is configured), it builds
-        the initial batch from the sampler and refills graduated samples
-        instead of receiving from a prior stage.
+        batches from the sampler instead of receiving from a prior stage.
+        After sending, the first stage fills available capacity from the
+        sampler. Graduated samples that do not fit the send buffer stay
+        in the batch until a later send and count toward the refill limits.
 
         When ``self.synchronized`` is ``True``, a global
         ``dist.barrier()`` is issued at the end of each step so that no
@@ -5987,19 +6027,12 @@ class DistributedPipeline:
 
                 stage._poststep_sync_buffers(converged_indices)
 
-                if hasattr(stage, "exit_status"):
-                    exit_status = stage.exit_status
-                else:
-                    exit_status = 1
                 if stage.active_batch is not None:
-                    result = stage.refill_check(stage.active_batch, exit_status)
-                    stage.active_batch = result
-                    if result is None:
-                        if self.debug_mode:
-                            logger.debug(
-                                "[rank {}] sampler exhausted, marking done", rank
-                            )
-                        stage.done = True
+                    # Sending already removed the outgoing graphs. Retain all
+                    # others, including unsent graduates, when filling capacity.
+                    stage.active_batch = stage.refill_check(
+                        stage.active_batch, stage.exit_status, remove_graduated=False
+                    )
                 else:
                     if self.debug_mode:
                         logger.debug(
@@ -6042,6 +6075,11 @@ class DistributedPipeline:
                 )
             if stage.active_batch is not None:
                 stage._ensure_buffers(stage.active_batch)
+            elif stage._recv_template is not None:
+                # An empty middle stage still sends an empty message so the
+                # downstream receive can complete. Allocate its buffers from
+                # the receive template before any samples arrive.
+                stage._ensure_buffers(stage._recv_template)
 
             stage._prestep_sync_buffers()
             stage._complete_pending_recv()

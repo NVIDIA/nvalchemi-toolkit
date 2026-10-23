@@ -388,7 +388,7 @@ samples are continuously replaced from the sampler.
            r0_build  [label="build batch\nfrom sampler"]
            r0_step   [label="run step"]
            r0_send   [label="_poststep_sync_buffers\nsend converged downstream"]
-           r0_refill [label="refill from sampler"]
+           r0_refill [label="refill available capacity\nfrom sampler"]
 
            r0_build -> r0_step -> r0_send -> r0_refill [style=bold]
            r0_refill -> r0_step [label="loop" style=dashed color="#999999"]

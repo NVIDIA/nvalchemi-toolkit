@@ -115,6 +115,33 @@ class TestFusedStageOnReceive:
         mask = stage.active_graph_mask(stage.active_batch, stage.exit_status)
         assert mask.all()
 
+    @pytest.mark.parametrize("n_graphs", [1, 2, 3, 4])
+    def test_recv_buffer_initializes_missing_bookkeeping(self, n_graphs: int) -> None:
+        """Fused fields fit the buffer allocation even on partial receives."""
+        stage = _langevin_stage(
+            prior_rank=0,
+            next_rank=None,
+            buffer_config=BufferConfig(num_systems=4, num_nodes=12, num_edges=0),
+        )
+        incoming = Batch.from_data_list([_make_system(i) for i in range(n_graphs)])
+        incoming["status"] = torch.full(
+            (n_graphs, 1), stage.exit_status, dtype=torch.long
+        )
+        incoming["system_id"] = torch.arange(n_graphs).view(-1, 1)
+        stage._ensure_buffers(Batch.empty_like(incoming))
+
+        stage._recv_to_batch(incoming)
+
+        batch = stage.active_batch
+        assert batch.num_graphs == n_graphs
+        assert (batch.status == stage.entry_status).all()
+        assert not batch.reprime_pending.any()
+        assert (batch.n_steps_counter_0 == 0).all()
+        torch.testing.assert_close(batch.system_id, incoming.system_id)
+        assert stage.recv_buffer.num_graphs == 0
+        assert stage.recv_buffer.reprime_pending.shape == (4, 1)
+        assert stage.recv_buffer.n_steps_counter_0.shape == (4, 1)
+
 
 class TestPipelineExit:
     """``DistributedPipeline.__exit__`` must not block while unwinding an error."""
@@ -164,7 +191,8 @@ def _fused_pipeline_worker(rank: int, world_size: int, queue) -> None:
             d = dataset[idx]
             return d.num_nodes, d.num_edges
 
-    buffer_cfg = BufferConfig(num_systems=_N_SYSTEMS, num_nodes=50, num_edges=0)
+    # Every receive is partial, including when all systems graduate together.
+    buffer_cfg = BufferConfig(num_systems=_N_SYSTEMS + 1, num_nodes=50, num_edges=0)
     optimizer = FIRE2(
         model=DemoModelWrapper(DemoModel()),
         dt=0.05,

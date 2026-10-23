@@ -32,11 +32,13 @@ from torch import distributed as dist
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics.base import (
+    BaseDynamics,
     BufferConfig,
     DistributedPipeline,
     _CommunicationMixin,
 )
 from nvalchemi.dynamics.sinks import HostMemory
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 _DEFAULT_CFG = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
 
@@ -1700,6 +1702,63 @@ class TestRecvToBatch:
 
 class TestPoststepBackPressure:
     """Test that _poststep_sync_buffers respects send buffer capacity (back-pressure)."""
+
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    def test_plain_stage_retries_graduates_without_new_convergence(
+        self, comm_mode: str
+    ) -> None:
+        """Retained graduates leave even when later steps report none."""
+        batch = _make_batch_with_system(num_graphs=4)
+        batch["status"] = torch.tensor([[0], [2], [3], [0]])
+        batch["system_id"] = torch.arange(4).view(-1, 1)
+        retained_positions = batch.positions[9:].clone()
+        stage = BaseDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            active_batch=batch,
+            exit_status=2,
+            prior_rank=None,
+            next_rank=1,
+            buffer_config=BufferConfig(num_systems=1, num_nodes=3, num_edges=0),
+            device_type="cpu",
+            comm_mode=comm_mode,
+        )
+        stage._ensure_buffers(batch)
+
+        with patch.object(Batch, "isend", return_value=Mock()):
+            for expected_id, indices in enumerate(
+                (torch.tensor([0, 1]), None, torch.empty(0, dtype=torch.long))
+            ):
+                stage._poststep_sync_buffers(indices)
+                assert stage.send_buffer.num_graphs == 1
+                assert stage.send_buffer.system_id.view(-1).tolist() == [expected_id]
+
+            stage._poststep_sync_buffers(None)
+
+        assert stage.send_buffer.num_graphs == 0
+        assert stage.active_batch.system_id.view(-1).tolist() == [3]
+        torch.testing.assert_close(stage.active_batch.positions, retained_positions)
+
+    def test_plain_final_stage_combines_reported_and_retained_graduates(self) -> None:
+        """The final stage stores both reported and status-marked graduates once."""
+        batch = _make_batch_with_system(num_graphs=3)
+        batch["status"] = torch.tensor([[0], [2], [0]])
+        batch["system_id"] = torch.arange(3).view(-1, 1)
+        sink = HostMemory(capacity=3)
+        stage = BaseDynamics(
+            model=DemoModelWrapper(DemoModel()),
+            active_batch=batch,
+            exit_status=2,
+            prior_rank=None,
+            next_rank=None,
+            sinks=[sink],
+            device_type="cpu",
+        )
+
+        stage._poststep_sync_buffers(torch.tensor([2]))
+        stage._poststep_sync_buffers(None)
+
+        assert sink.read().system_id.view(-1).tolist() == [1, 2]
+        assert stage.active_batch.system_id.view(-1).tolist() == [0]
 
     def test_poststep_respects_send_buffer_capacity(self) -> None:
         """Verify only as many converged samples as buffer capacity are extracted.
