@@ -550,6 +550,10 @@
 
 ### Fixed
 
+- The `DistributedModel` error for a loader-compiled wrapper whose spec has no
+  `CompilePolicy` no longer recommends `compile=True`, which needs the same
+  policy; it now advises building the wrapper without compiling it, or adding a
+  `CompilePolicy`.
 - `DistributedModel(..., compile=True)` on an eagerly loaded `MACEWrapper` no
   longer compiles weight-gradient work: the weights are frozen by default, so
   the compiled backward differentiates positions only.
