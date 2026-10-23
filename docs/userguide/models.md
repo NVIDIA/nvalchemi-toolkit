@@ -81,6 +81,7 @@ model = MACEWrapper.from_checkpoint(
     device=torch.device("cuda"),
     dtype=torch.float32,
     enable_cueq=True,
+    train=True,
 )
 
 ema = EMAHook(model_key="main", decay=0.999)
