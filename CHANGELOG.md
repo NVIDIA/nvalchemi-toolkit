@@ -4,6 +4,16 @@
 
 ### Added
 
+- Per-dynamics `reprime_on_entry` control for fused and distributed pipeline
+  stages, including `DomainParallel`, refreshing arrivals' forces while
+  preserving resident graphs' forces and updates.
+
+### Fixed
+
+## 0.3.0
+
+### Added
+
 - Add `nvalchemi.csp` modules for molecular crystal-structure prediction
   applications, including random rigid-molecule packing, atom-bounded radial
   matching, and greedy de-duplication for `Batch` and loader-backed pools,
@@ -543,6 +553,13 @@
 
 ### Fixed
 
+- `Batch.put` now copies selected graphs from sources larger than the buffer's
+  remaining graph capacity and marks the indices of copied source graphs in
+  `copied_mask`.
+- Fix pipeline transfers with `BufferConfig(num_edges=0)` by omitting edges
+  from transport. Received graphs are appended to the active batch instead of
+  rebuilding it, so resident graphs keep their edges and other fields, and the
+  batch stays on its device.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain
@@ -562,6 +579,9 @@
 - **`FusedStage` force priming** — a dynamics instance's own adaptive
   optimizer state (e.g. FIRE's per-graph `dt`/`alpha`/step counters in
   `self._state`) is now preserved across masked `pre_update`/`post_update` calls.
+- `DistributedPipeline` now admits systems received by a `FusedStage` at its
+  `entry_status`, fixing downstream stages that never terminated, and no longer
+  hangs in teardown when a rank raises.
 
 ### Deprecated
 
