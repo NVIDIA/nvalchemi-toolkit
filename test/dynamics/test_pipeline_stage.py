@@ -1105,6 +1105,132 @@ class TestBufferConfigValidation:
 
 
 # ---------------------------------------------------------------------------
+# TestEdgelessBuffers — BufferConfig(num_edges=0) leaves edges untransported
+# ---------------------------------------------------------------------------
+
+
+def _make_batch_with_edges(num_graphs: int = 3, num_atoms: int = 3) -> Batch:
+    """Create a batch whose graphs carry a ring ``neighbor_list``."""
+    atoms = torch.arange(num_atoms)
+    data_list = [
+        AtomicData(
+            atomic_numbers=torch.randint(1, 20, (num_atoms,)),
+            positions=torch.randn(num_atoms, 3),
+            neighbor_list=torch.stack([atoms, atoms.roll(-1)], dim=1),
+        )
+        for _ in range(num_graphs)
+    ]
+    return Batch.from_data_list(data_list)
+
+
+def _level_fields(batch: Batch) -> dict[str, list[str]]:
+    """Return each materialized level's field names."""
+    return {name: sorted(group.keys()) for name, group in batch._storage.groups.items()}
+
+
+class TestEdgelessBuffers:
+    """With num_edges=0, edges never enter buffers or receive templates."""
+
+    _EDGELESS_CFG = BufferConfig(num_systems=10, num_nodes=100, num_edges=0)
+
+    def test_buffers_omit_edges_and_accept_graphs_with_edges(self) -> None:
+        """Buffers leave the edges level out, so graphs with edges still fit."""
+        batch = _make_batch_with_edges(num_graphs=3)
+        stage = _CommunicationMixin(
+            prior_rank=0,
+            next_rank=2,
+            buffer_config=self._EDGELESS_CFG,
+            device_type="cpu",
+        )
+
+        stage._ensure_buffers(batch)
+
+        for buffer in (stage.send_buffer, stage.recv_buffer):
+            assert "edges" not in buffer._storage.groups
+        copied = torch.zeros(3, dtype=torch.bool)
+        stage.send_buffer.put(
+            batch, torch.ones(3, dtype=torch.bool), copied_mask=copied
+        )
+        assert copied.all()
+        assert stage.send_buffer.num_graphs == 3
+        assert "edges" in batch._storage.groups
+
+    def test_buffers_keep_edges_when_capacity_is_set(self) -> None:
+        batch = _make_batch_with_edges(num_graphs=2)
+        stage = _CommunicationMixin(
+            prior_rank=0, buffer_config=_DEFAULT_CFG, device_type="cpu"
+        )
+
+        stage._ensure_buffers(batch)
+
+        assert "neighbor_list" in stage.recv_buffer._storage.groups["edges"]
+
+    @pytest.mark.parametrize("recv_buffer_exists", [False, True])
+    def test_receive_template_matches_sender_buffer(
+        self, recv_buffer_exists: bool
+    ) -> None:
+        """The irecv template has exactly the sender buffer's fields."""
+        batch = _make_batch_with_edges(num_graphs=2)
+        sender = _CommunicationMixin(
+            next_rank=1, buffer_config=self._EDGELESS_CFG, device_type="cpu"
+        )
+        sender._ensure_buffers(batch)
+        receiver = _CommunicationMixin(
+            prior_rank=0,
+            comm_mode="async_recv",
+            buffer_config=self._EDGELESS_CFG,
+            device_type="cpu",
+        )
+        receiver._recv_template = Batch.empty_like(batch)
+        if recv_buffer_exists:
+            # A stepped receiver carries bookkeeping the sender never sends.
+            resident = batch.clone()
+            resident["reprime_pending"] = torch.zeros(2, 1, dtype=torch.bool)
+            receiver._ensure_buffers(resident)
+            assert "reprime_pending" in receiver.recv_buffer
+
+        with patch.object(Batch, "irecv", return_value=Mock()) as mock_irecv:
+            receiver._prestep_sync_buffers()
+
+        template = mock_irecv.call_args.kwargs["template"]
+        assert template is receiver._recv_template
+        assert "edges" not in template._storage.groups
+        # Extra receive fields can hang communication waiting for unsent data.
+        assert _level_fields(template) == _level_fields(sender.send_buffer)
+
+    def test_buffer_to_batch_keeps_resident_fields_arrivals_lack(self) -> None:
+        """Residents keep edges and bookkeeping; arrivals get empty placeholders."""
+        residents = _make_batch_with_edges(num_graphs=2)
+        residents["reprime_pending"] = torch.ones(2, 1, dtype=torch.bool)
+        expected_edges = [residents.get_data(i).neighbor_list for i in range(2)]
+        stage = _CommunicationMixin(active_batch=residents, max_batch_size=4)
+        sink = HostMemory(capacity=10)
+        stage.sinks = [sink]
+
+        stage._buffer_to_batch(_make_batch(num_graphs=3))
+
+        batch = stage.active_batch
+        assert batch.num_graphs == 4
+        assert batch.num_edges_per_graph.tolist() == [3, 3, 0, 0]
+        for index, edges in enumerate(expected_edges):
+            torch.testing.assert_close(batch.get_data(index).neighbor_list, edges)
+        assert batch.reprime_pending.flatten().tolist() == [True, True, False, False]
+        assert len(sink) == 1
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+    def test_buffer_to_batch_keeps_active_batch_on_its_device(self) -> None:
+        """CPU arrivals, e.g. drained from HostMemory, join a CUDA batch on CUDA."""
+        stage = _CommunicationMixin(
+            active_batch=_make_batch(num_graphs=2).to("cuda"), max_batch_size=10
+        )
+
+        stage._buffer_to_batch(_make_batch(num_graphs=2))
+
+        assert stage.active_batch.num_graphs == 4
+        assert stage.active_batch.device.type == "cuda"
+
+
+# ---------------------------------------------------------------------------
 # TestSyncDoneFlags — Distributed Done Flag Synchronization
 # ---------------------------------------------------------------------------
 
