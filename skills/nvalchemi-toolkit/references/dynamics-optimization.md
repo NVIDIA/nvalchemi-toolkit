@@ -244,8 +244,8 @@ batch if none graduate, or `None` once the sampler and active batch are empty.
 
 Use `by_group=True` on both the sampler and engine for whole-group graduation
 and replacement. `max_batch_size` counts groups, and atom/edge limits include
-all graphs in each group. Grouped refill is supported on a single device;
-`DistributedPipeline` rejects grouped stages.
+all graphs in each group. Grouped refill is supported on a single device and
+in a `DistributedPipeline`.
 
 `SizeAwareSampler(field_defaults=...)` fills missing fields before packing.
 Map each name to `(level, default)`, for example

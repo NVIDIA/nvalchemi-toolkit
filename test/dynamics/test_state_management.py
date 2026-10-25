@@ -671,6 +671,55 @@ class TestPipelineStateMutation:
         engine.step(engine.active_batch)
         assert dyn._state.num_graphs == engine.active_batch.num_graphs
 
+    @pytest.mark.parametrize("optimizer", ["fire2", "lbfgs"])
+    def test_grouped_transfers_keep_state_per_group(self, optimizer):
+        """Sends, receives, and final removal keep one state row per group."""
+        from nvalchemi.dynamics.optimizers.fire2 import FIRE2
+        from nvalchemi.dynamics.optimizers.lbfgs import LBFGS
+
+        if optimizer == "fire2":
+            dyn, tag = FIRE2(model=_make_model(), dt=0.1, by_group=True), "alpha"
+        else:
+            dyn, tag = LBFGS(model=_make_model(), by_group=True), "iteration"
+        batch = _make_batch(4)
+        batch.set_group_layout(torch.tensor([0, 0, 1, 1]))
+        dyn.active_batch = batch
+        dyn.step(batch)
+        getattr(dyn._state, tag).view(-1).copy_(torch.tensor([7, 9]))
+
+        def tags() -> list[float]:
+            return getattr(dyn._state, tag).view(-1).tolist()
+
+        # Send the first group. Only the second group's row remains.
+        dyn.send_buffer = Batch.empty(
+            num_systems=4,
+            num_nodes=batch.num_nodes,
+            num_edges=batch.num_edges,
+            template=batch,
+        )
+        dyn._batch_to_buffer(torch.tensor([True, True, False, False]))
+        assert tags() == [9]
+
+        # A three-image group arrives with fresh state appended after it.
+        arriving = _make_batch(3, seed=10)
+        arriving.set_group_layout(torch.zeros(3, dtype=torch.long))
+        dyn._buffer_to_batch(arriving)
+        fresh = getattr(dyn._make_new_state(1, dyn.active_batch), tag).view(-1)
+        assert tags() == [9, fresh.item()]
+        if optimizer == "lbfgs":
+            layout = dyn.active_batch.group_layout
+            dofs = dyn._state._storage.groups["lbfgs_dofs"]
+            torch.testing.assert_close(
+                dofs.segment_lengths.long(),
+                torch.bincount(layout.node_to_group, minlength=2),
+            )
+
+        # The final stage removes the resident group and keeps the arrival.
+        dyn._remove_converged_final_stage(torch.tensor([0, 1]))
+        assert tags() == [fresh.item()]
+        dyn.step(dyn.active_batch)
+        assert dyn._state.num_graphs == 1
+
 
 # ---------------------------------------------------------------------------
 # TestMakeNewState

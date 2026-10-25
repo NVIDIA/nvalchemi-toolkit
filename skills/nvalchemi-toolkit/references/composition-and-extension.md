@@ -214,6 +214,16 @@ rank. Every stage needs a `buffer_config=BufferConfig(...)` (from
 a `FusedStage`. This `|` differs from the generative `gen | stage` pipeline.
 Details: [dynamics.md][doc-dyn], example [01_distributed_pipeline.py][ex-pipe].
 
+When `send_buffer` has limited capacity (via `BufferConfig`):
+
+- Transfers select at most the available graph capacity, keeping complete
+  groups for grouped batches. A group larger than the buffer raises `ValueError`.
+- Every selected graph must fit the graph, atom, and edge capacities;
+  otherwise the transfer raises `ValueError` without removing graphs.
+- Graphs or groups beyond the selected graph-count limit remain in the
+  active batch as no-ops. Their positions and velocities are saved before
+  the integrator and restored after it runs.
+
 | Layer | Attribute | Purpose |
 | --- | --- | --- |
 | **Overflow sinks** | `overflow_sinks`: `DataSink` list (priority-ordered) | Received samples waiting for room; private `HostMemory` by default |
@@ -225,7 +235,8 @@ the active batch, and drains `overflow_sinks` (never `sinks`).
 | Method | Purpose |
 | --- | --- |
 | `_recv_to_batch(incoming)` | Route received data directly into active batch or overflow sinks |
-| `_buffer_to_batch(incoming)` | Append to active batch, overflow to `overflow_sinks` if full |
+| `_buffer_to_batch(incoming)` | Append to active batch, overflow to `overflow_sinks` if full; admits complete groups |
+| `_batch_to_buffer(mask)` | Copy selected graduated samples into send buffer, trim active batch; raise if any do not fit |
 | `_overflow_to_sinks(batch)` | Write pending samples to the first overflow sink with room for all of them |
 | `_write_to_sinks(batch)` | Write finished samples to the first result sink with room for all of them |
 | `_drain_sinks_to_batch()` | Pull from `overflow_sinks` back into active batch when room available |
