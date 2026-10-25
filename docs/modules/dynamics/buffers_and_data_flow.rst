@@ -241,12 +241,15 @@ Back-pressure
 
 When the ``send_buffer`` capacity is limited:
 
-- Only ``min(converged_count, remaining_capacity)`` samples are
-  extracted via ``_populate_send_buffer``.
+- Transfers select at most the available graph capacity, keeping complete
+  groups for grouped batches. Excess graphs or groups wait for a later step.
+- A group larger than the buffer's graph capacity raises ``ValueError``.
+- Every selected graph must fit the graph, atom, and edge capacities.
+  Otherwise, ``ValueError`` is raised before removing graphs or sending.
 - The active batch is replaced by a tight copy (via ``trim()``) that
   excludes the graduated samples.
-- Excess converged samples that did not fit in the send buffer remain
-  in the active batch.
+- Excess converged graphs or groups beyond the selected graph-count limit
+  remain in the active batch.
 - ``step()`` treats them as no-ops: their positions and velocities are
   saved before the integrator and restored after (the ``active_mask``
   logic in :meth:`BaseDynamics.step() <nvalchemi.dynamics.BaseDynamics.step>`).
@@ -274,11 +277,16 @@ several helper methods for routing data between buffers:
   2. Room available: append to the existing active batch.
   3. No room: write to ``overflow_sinks``.
 
+  Grouped data is admitted as complete groups, and ``max_batch_size``
+  counts groups. Groups that do not fit the free room go to
+  ``overflow_sinks``.
+
 - **_batch_to_buffer(mask)**: Copies graduated samples from the active
   batch into the send buffer via :meth:`put()
   <nvalchemi.data.Batch.put>`, then replaces the active batch with a
   tight copy via :meth:`trim() <nvalchemi.data.Batch.trim>` (or sets
-  it to ``None`` if every graph was graduated).
+  it to ``None`` if every graph was graduated). Raises ``ValueError``
+  if any selected graph cannot be copied, leaving the active batch unchanged.
 
 - **_populate_send_buffer(converged_indices)**: Creates a boolean mask
   from converged indices and delegates to ``_batch_to_buffer``.  Does

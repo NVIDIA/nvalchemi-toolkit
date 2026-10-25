@@ -33,7 +33,7 @@ from nvalchemi.dynamics import (
     DynamicsStage,
     FusedStage,
 )
-from nvalchemi.dynamics.base import BaseDynamics
+from nvalchemi.dynamics.base import BaseDynamics, BufferConfig, DistributedPipeline
 from nvalchemi.dynamics.hooks import FreezeAtomsHook, LoggingHook
 from nvalchemi.dynamics.mep import (
     NEB,
@@ -67,6 +67,7 @@ from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks import DynamicsContext, NeighborListHook
 from nvalchemi.models.base import BaseModelMixin, ModelConfig, NeighborConfig
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+from test.distributed._gloo_harness import run_gloo
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1817,3 +1818,59 @@ class TestNEBStreaming:
         sampler = SizeAwareSampler(_BandDataset([(3, 1)]), by_group=True, max_atoms=10)
         with pytest.raises(ValueError, match="result sink"):
             NEB(model=_HarmonicModel()).run(sampler=sampler, sinks=[])
+
+
+def _neb_pipeline_worker(
+    rank: int, world_size: int, queue: Any, comm_mode: str, sizes: list[tuple[int, int]]
+) -> None:
+    """Stream NEB paths between two engines built by ``NEB.build_engine``."""
+    neb = NEB(model=_HarmonicModel(), fmax=1e3, optimizer_kwargs={"device_type": "cpu"})
+    # One atom per image: complete paths fit graph and atom budgets together.
+    config = BufferConfig(num_systems=5, num_nodes=5, num_edges=0)
+    sampler = SizeAwareSampler(
+        _BandDataset(sizes), by_group=True, max_atoms=12, max_batch_size=3
+    )
+    results = HostMemory(100)
+    stages = {
+        0: neb.build_engine(sampler=sampler),
+        1: neb.build_engine(sinks=[results]),
+    }
+    for stage in stages.values():
+        stage.buffer_config = config
+        stage.max_batch_size = 2  # paths
+        stage.comm_mode = comm_mode
+    DistributedPipeline(stages=stages, backend="gloo").run()
+    if rank == 1:
+        stored = results.read()
+        layout = stored.group_layout
+        queue.put(
+            [
+                (
+                    int(stored.group_id.view(-1)[start]),
+                    stored.system_id.view(-1)[start:end].tolist(),
+                )
+                for start, end in zip(
+                    layout.group_ptr[:-1].tolist(), layout.group_ptr[1:].tolist()
+                )
+            ]
+        )
+
+
+class TestNEBDistributedPipeline:
+    """Engines from ``NEB.build_engine`` can form a two-rank pipeline."""
+
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    def test_paths_finish_once_and_stay_complete(self, comm_mode: str) -> None:
+        """Every path is stored once downstream, whole and in image order."""
+        sizes = [(3, 1), (4, 1), (3, 1), (5, 1), (3, 1)]
+        results = run_gloo(
+            world_size=2, fn=_neb_pipeline_worker, args=(comm_mode, sizes)
+        )
+        assert len(results) == 1
+        paths = results[0]
+        assert sorted(path for path, _ in paths) == list(range(len(sizes)))
+        for path, system_ids in paths:
+            assert len(system_ids) == sizes[path][0]
+            assert system_ids == list(
+                range(system_ids[0], system_ids[0] + len(system_ids))
+            )

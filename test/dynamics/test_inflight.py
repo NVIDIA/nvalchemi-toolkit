@@ -393,6 +393,98 @@ def _unsent_graduates_pipeline_worker(
         queue.put(sorted(stored_ids.long().tolist()))
 
 
+class _GroupDataset:
+    """Groups of one-atom graphs, one complete group per dataset item."""
+
+    def __init__(self, group_sizes: list[int]) -> None:
+        self.group_sizes = group_sizes
+
+    def __len__(self) -> int:
+        """Return the number of groups."""
+        return len(self.group_sizes)
+
+    def get_metadata(self, index: int) -> tuple[int, int]:
+        """Return the group's total atom and edge counts."""
+        return self.group_sizes[index], 0
+
+    def __getitem__(self, index: int) -> tuple[Batch, dict]:
+        """Return one group as a grouped batch."""
+        group = Batch.from_data_list(
+            [
+                AtomicData(
+                    atomic_numbers=torch.tensor([6], dtype=torch.long),
+                    positions=torch.zeros(1, 3),
+                )
+                for _ in range(self.group_sizes[index])
+            ]
+        )
+        group.set_group_layout(torch.zeros(group.num_graphs, dtype=torch.long))
+        return group, {}
+
+
+class _ConvergeAllGroupsDynamics(_IncrementDynamics):
+    """Graduate every group after each step and record which ones converged."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(by_group=True, **kwargs)
+        self.converged_groups: list[int] = []
+
+    def _check_convergence(self, batch: Batch) -> torch.Tensor:
+        """Mark all graphs converged, which keeps every group complete."""
+        layout = batch.group_layout
+        first_graphs = layout.group_ptr[:-1].long()
+        self.converged_groups.extend(batch.group_id.view(-1)[first_graphs].tolist())
+        return torch.arange(batch.num_graphs, device=batch.device)
+
+
+def _grouped_pipeline_worker(
+    rank: int, world_size: int, queue: Any, comm_mode: str, group_sizes: list[int]
+) -> None:
+    """Stream complete groups over several messages into a limited final stage."""
+    model = DemoModelWrapper(DemoModel())
+    # One atom per graph: graph-limited selections also fit the atom budget.
+    config = BufferConfig(num_systems=4, num_nodes=4, num_edges=0)
+    sampler = SizeAwareSampler(
+        _GroupDataset(group_sizes),
+        max_atoms=6,
+        max_edges=0,
+        max_batch_size=3,
+        by_group=True,
+    )
+    results = HostMemory(capacity=100)
+    stages = {
+        0: _ConvergeAllGroupsDynamics(
+            model=model,
+            buffer_config=config,
+            device_type="cpu",
+            sampler=sampler,
+            comm_mode=comm_mode,
+        ),
+        1: _ConvergeAllGroupsDynamics(
+            model=model,
+            buffer_config=config,
+            device_type="cpu",
+            max_batch_size=2,
+            sinks=[results],
+            comm_mode=comm_mode,
+        ),
+    }
+    DistributedPipeline(stages=stages, backend="gloo").run()
+    if rank == 1:
+        stored = results.read()
+        layout = stored.group_layout
+        groups = [
+            (
+                int(stored.group_id.view(-1)[start]),
+                stored.system_id.view(-1)[start:end].tolist(),
+            )
+            for start, end in zip(
+                layout.group_ptr[:-1].tolist(), layout.group_ptr[1:].tolist()
+            )
+        ]
+        queue.put((groups, stages[1].converged_groups))
+
+
 class _MaskRecordingHook:
     """Record active masks at the post-compute boundary."""
 
@@ -2265,3 +2357,27 @@ class TestFusedStageUnsentGraduatesThroughGloo:
             args=(comm_mode, n_samples),
         )
         assert results == [list(range(n_samples))]
+
+
+class TestGroupedPipelineThroughGloo:
+    """Complete groups stream through a real two-rank pipeline."""
+
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    def test_each_group_finishes_once_and_stays_complete(self, comm_mode: str) -> None:
+        """Every group converges once downstream and is stored whole and in order."""
+        group_sizes = [2, 3, 1, 2, 3, 1]
+        results = run_gloo(
+            world_size=2,
+            fn=_grouped_pipeline_worker,
+            args=(comm_mode, group_sizes),
+        )
+        assert len(results) == 1
+        groups, converged_groups = results[0]
+        assert sorted(converged_groups) == list(range(len(group_sizes)))
+        assert sorted(group for group, _ in groups) == list(range(len(group_sizes)))
+        for group, system_ids in groups:
+            assert len(system_ids) == group_sizes[group]
+            assert system_ids == sorted(system_ids)
+            assert system_ids == list(
+                range(system_ids[0], system_ids[0] + len(system_ids))
+            )

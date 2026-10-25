@@ -316,6 +316,14 @@ batch from the sampler and replaces graduated samples automatically:
 The second rank receives graduated samples via ``irecv`` and
 accumulates them in its ``active_batch``.
 
+The sampler's ``max_batch_size`` limits the first stage's batch. Each
+downstream stage's own ``max_batch_size`` limits how many received samples it
+admits. Both count graphs, or complete groups with ``by_group=True``.
+Transfers limit the selected graph count to the send-buffer capacity, keeping
+complete groups when grouped. Excess groups wait for a later step. A group that
+exceeds the graph capacity raises ``ValueError``. Atom and edge capacities must
+accommodate every selected graph, otherwise the transfer also raises.
+
 
 Data sinks for the final stage
 -------------------------------
