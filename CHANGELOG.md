@@ -7,8 +7,15 @@
 - Per-dynamics `reprime_on_entry` control for fused and distributed pipeline
   stages, including `DomainParallel`, refreshing arrivals' forces while
   preserving resident graphs' forces and updates.
+- Single-device in-flight NEB batching via `NEB.run(sampler=..., sinks=...)`
+  with `SizeAwareSampler(by_group=True)`. The updated
+  `examples/advanced/11_batched_neb.py` demonstrates path refilling and
+  compares energy barriers with the static run.
 
 ### Fixed
+
+- `Batch.append()` discards unused buffer rows in either input, preserving
+  atom data and edge offsets while leaving the incoming batch unchanged.
 
 ## 0.3.0
 

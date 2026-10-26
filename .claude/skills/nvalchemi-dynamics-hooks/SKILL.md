@@ -80,6 +80,8 @@ class DynamicsContext(HookContext):
     converged_mask: torch.Tensor | None = None
     active_graph_mask: torch.Tensor | None = None
     graduated_mask: torch.Tensor | None = None   # ON_GRADUATE only
+    # ON_ADMISSION only: initial batch, refill, and pipeline membership changes.
+    previous_graph_indices: torch.Tensor | None = None
 ```
 
 `ctx.active_graph_mask` marks the active graphs, those whose status is below
@@ -128,6 +130,15 @@ outside compiled `_step_impl`, making it suitable for shape-dependent allocation
 and Python setup that per-step hooks cannot safely perform under `fullgraph=True`.
 It ignores the step-based frequency gate; a multi-stage hook's frequency still
 applies at its other stages.
+
+At `ON_ADMISSION`, `BaseDynamics` and `FusedStage` provide the read-only
+`ctx.previous_graph_indices`: each current graph's index at the last admission,
+or `-1` for an arrival, regardless of status. Membership changes compose back
+to that admission; first admissions, new runs, and rebuilds after complete
+removal mark all graphs new. Fused and sub-stage hooks share this full-batch
+mapping. Combine `previous_graph_indices < 0` with `active_graph_mask` to select
+a sub-stage's arrivals. Other hook stages receive `None`. Path hooks can map
+previous paths using this tensor and their cached previous layout.
 
 In `FusedStage`, fused-level hooks wrap sub-stage hooks at every shared boundary:
 fused `BEFORE_*` hooks run before the corresponding sub-stage loop, and fused
