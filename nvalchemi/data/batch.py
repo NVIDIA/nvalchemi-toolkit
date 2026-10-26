@@ -2930,6 +2930,60 @@ class Batch(DataMixin):
                         "supported by buffer kernels"
                     )
 
+    def _without_padding(self) -> Batch:
+        """Return self or occupied-row views suitable for concatenation.
+
+        Occupied rows form a contiguous prefix at every level, so slicing
+        preserves the existing graph and neighbor indices. Using index_select
+        would copy every payload and rebuild those indices before append
+        copies the data again during concatenation.
+        """
+        num_graphs = self.num_graphs
+        # Level row counts tell us where to slice: two graphs with 3 and 4
+        # atoms need system[:2] and atoms[:7].
+        level_row_counts = {}
+        for name, group in self._storage.groups.items():
+            rows = num_graphs
+            if isinstance(group, SegmentedLevelStorage):
+                rows = (
+                    0
+                    if group._data.is_empty()
+                    else int(group.segment_lengths[:num_graphs].sum())
+                )
+            level_row_counts[name] = rows
+        if not any(
+            group._data.shape[0] > level_row_counts[name]
+            or (
+                isinstance(group, SegmentedLevelStorage)
+                and group.segment_lengths.numel() > num_graphs
+            )
+            for name, group in self._storage.groups.items()
+        ):
+            # No unused capacity at any level, so no trimmed views are needed.
+            return self
+
+        schema = self._storage.attr_map.clone()
+        groups = {}
+        # Trim payloads to each level's row count and segment lengths to num_graphs.
+        for name, group in self._storage.groups.items():
+            kwargs = {
+                "data": group._data[: level_row_counts[name]],
+                "device": self.device,
+                "attr_map": schema,
+                "validate": False,
+            }
+            if isinstance(group, SegmentedLevelStorage):
+                kwargs["segment_lengths"] = group.segment_lengths[:num_graphs]
+            groups[name] = type(group)(**kwargs)
+        return self._construct(
+            device=self.device,
+            keys={level: set(names) for level, names in self.keys.items()}
+            if self.keys is not None
+            else None,
+            storage=MultiLevelStorage(groups=groups, attr_map=schema, validate=False),
+            data_class=self._data_class,
+        )
+
     def append(
         self,
         other: Batch,
@@ -2939,6 +2993,10 @@ class Batch(DataMixin):
         | None = None,
     ) -> None:
         """Append another batch (in-place via concatenation).
+
+        Only occupied graph, atom, edge, and custom-level rows are appended.
+        Unused buffer capacity in either input is discarded from the result;
+        *other* is left unchanged. Use :meth:`put` to retain buffer capacity.
 
         If *other* is missing a group that this batch has (e.g. system-level
         data), this batch's tensors in that group are extended with zeros so
@@ -2986,15 +3044,17 @@ class Batch(DataMixin):
         if field_defaults is not None and missing_fields != "fill":
             raise ValueError("field_defaults requires missing_fields='fill'")
         self._validate_custom_append(other)
+        target = self._without_padding()
+        other = other._without_padding()
         if missing_fields == "fill":
             field_defaults = field_defaults or {}
             for key in field_defaults:
-                if self._storage._group_name_from_attr(key) not in (None, "system"):
+                if target._storage._group_name_from_attr(key) not in (None, "system"):
                     raise ValueError(f"Default field '{key}' must be system-level")
             # Fill this batch's fields that *other* lacks; group_idx mismatches
             # are rejected below instead.
             fills = []
-            for level, group in self._storage.groups.items():
+            for level, group in target._storage.groups.items():
                 other_group = other._storage.groups.get(level)
                 for key, ref in group.items():
                     if key == "group_idx" or (
@@ -3034,7 +3094,7 @@ class Batch(DataMixin):
 
         # Verify every segmented pointer that the append will extend before
         # any payload or neighbor-list offset can mutate either batch.
-        for group_name, group in self._storage.groups.items():
+        for group_name, group in target._storage.groups.items():
             other_group = other._storage.groups.get(group_name)
             if not (
                 isinstance(group, SegmentedLevelStorage)
@@ -3062,7 +3122,7 @@ class Batch(DataMixin):
                 group.device,
             )
 
-        self_grouped = "group_idx" in self
+        self_grouped = "group_idx" in target
         other_grouped = "group_idx" in other
         if self_grouped != other_grouped:
             raise ValueError(
@@ -3072,26 +3132,28 @@ class Batch(DataMixin):
 
         combined_group_idx: Tensor | None = None
         if self_grouped:
-            layout = getattr(self, "_group_layout", None)
+            layout = getattr(target, "_group_layout", None)
             if layout is not None:
                 combined_group_idx = torch.cat(
                     [
-                        self.group_idx,
-                        other.group_idx.to(self.device) + layout.num_groups,
+                        target.group_idx,
+                        other.group_idx.to(target.device) + layout.num_groups,
                     ]
                 )
             else:
                 # Rebase labels without building a layout during repeated appends.
-                labels = torch.cat([self.group_idx, other.group_idx.to(self.device)])
+                labels = torch.cat(
+                    [target.group_idx, other.group_idx.to(target.device)]
+                )
                 group_start = torch.ones_like(labels, dtype=torch.bool)
                 group_start[1:] = labels[1:] != labels[:-1]
                 # Keep the incoming group distinct even if the join labels match.
-                if self.num_graphs and other.num_graphs:
-                    group_start[self.num_graphs] = True
+                if target.num_graphs and other.num_graphs:
+                    group_start[target.num_graphs] = True
                 combined_group_idx = group_start.cumsum(0) - 1
 
-        self._invalidate_group_layout()
-        atoms = self._atoms_group
+        target._invalidate_group_layout()
+        atoms = target._atoms_group
         other_atoms = other._atoms_group
         saved_ei = None
         if atoms is not None and other_atoms is not None:
@@ -3103,7 +3165,7 @@ class Batch(DataMixin):
 
         try:
             n_other = other.num_graphs
-            for group_name, group in self._storage.groups.items():
+            for group_name, group in target._storage.groups.items():
                 other_group = other._storage.groups.get(group_name)
                 if other_group is not None:
                     if (
@@ -3133,7 +3195,13 @@ class Batch(DataMixin):
                 other_edges._data["neighbor_list"] = saved_ei
 
         if combined_group_idx is not None:
-            self.group_idx = combined_group_idx
+            target.group_idx = combined_group_idx
+
+        if target is not self:
+            # Commit the compacted receiver only after validation and append succeed.
+            self._storage = target._storage
+            self.keys = target.keys
+            self._invalidate_group_layout()
 
     def append_data(
         self,
