@@ -1960,6 +1960,181 @@ class TestBatchMutation:
         assert b1.num_nodes_list == [2, 3, 4]
         assert b1.num_nodes == 9
 
+    @pytest.mark.parametrize(
+        "padded_left,padded_right", [(True, False), (False, True), (True, True)]
+    )
+    @pytest.mark.parametrize("grouped", [False, True])
+    @pytest.mark.parametrize("missing_fields", ["drop", "fill"])
+    def test_append_ignores_padding_in_either_input(
+        self, device, padded_left, padded_right, grouped, missing_fields
+    ):
+        """Append real rows, rebase edges, and leave the incoming buffer unchanged."""
+        sources = [
+            Batch.from_data_list(
+                [
+                    _atomic_data_with_edges_and_system(2, 2, device),
+                    _atomic_data_with_edges_and_system(3, 4, device),
+                ]
+            )
+            for _ in range(2)
+        ]
+        sources[0].forces = torch.full((5, 3), 7.0, device=device)
+        if grouped:
+            for source in sources:
+                source.set_group_layout(torch.zeros(2, dtype=torch.long, device=device))
+        inputs = []
+        for source, padded in zip(sources, (padded_left, padded_right)):
+            if padded:
+                buffer = Batch.empty(
+                    num_systems=4,
+                    num_nodes=20,
+                    num_edges=24,
+                    template=source,
+                    device=device,
+                )
+                buffer.put(source, torch.ones(2, dtype=torch.bool, device=device))
+                inputs.append(buffer)
+            else:
+                inputs.append(source.clone())
+        left, right = inputs
+        right_before = right.clone()
+        left.append(right, missing_fields=missing_fields)
+
+        assert left.num_graphs == left.system_capacity == 4
+        assert left.num_nodes == 10
+        assert left.num_edges == 12
+        assert left.num_nodes_list == [2, 3, 2, 3]
+        torch.testing.assert_close(
+            left.positions, torch.cat([b.positions for b in sources])
+        )
+        torch.testing.assert_close(
+            left.atomic_numbers, torch.cat([b.atomic_numbers for b in sources])
+        )
+        torch.testing.assert_close(left.energy, torch.cat([b.energy for b in sources]))
+        torch.testing.assert_close(
+            left.neighbor_list,
+            torch.cat([sources[0].neighbor_list, sources[1].neighbor_list + 5]),
+        )
+        if grouped:
+            assert left.group_idx.tolist() == [0, 0, 1, 1]
+        if missing_fields == "fill":
+            torch.testing.assert_close(
+                left.forces,
+                torch.cat([sources[0].forces, torch.zeros(5, 3, device=device)]),
+            )
+        else:
+            assert "forces" not in left
+        assert right.num_graphs == right_before.num_graphs
+        assert right.system_capacity == right_before.system_capacity
+        for name, storage in right._storage.groups.items():
+            for key in storage.keys():
+                torch.testing.assert_close(
+                    storage[key], right_before._storage.groups[name][key]
+                )
+            if storage.is_segmented():
+                torch.testing.assert_close(
+                    storage.segment_lengths,
+                    right_before._storage.groups[name].segment_lengths,
+                )
+
+    @pytest.mark.parametrize("empty_left", [False, True])
+    @pytest.mark.parametrize("grouped", [False, True])
+    def test_append_empty_padded_input(self, device, empty_left, grouped):
+        """Empty allocated buffers contribute no graphs, atoms, or edges."""
+        source = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(2, 2, device)]
+        )
+        if grouped:
+            source.set_group_layout(torch.zeros(1, dtype=torch.long, device=device))
+        empty = Batch.empty(
+            num_systems=4, num_nodes=20, num_edges=24, template=source, device=device
+        )
+        left, right = (empty, source) if empty_left else (source.clone(), empty)
+        left.append(right)
+        assert left.num_graphs == left.system_capacity == 1
+        assert left.num_nodes == left.num_edges == 2
+        torch.testing.assert_close(left.positions, source.positions)
+        torch.testing.assert_close(left.neighbor_list, source.neighbor_list)
+        if empty_left:
+            assert right.num_graphs == 1
+        else:
+            assert right.num_graphs == 0
+            assert right.system_capacity == 4
+
+    @pytest.mark.parametrize("fieldless_parent", [False, True])
+    def test_append_padded_custom_levels(self, device, fieldless_parent):
+        """Custom segmented/product payloads and fieldless lengths stay aligned."""
+        schema = _custom_buffer_schema(fieldless_parent=fieldless_parent)
+        sources = [
+            Batch.from_data_list(
+                [
+                    _custom_buffer_data(
+                        nodes, molecules, fieldless_parent=fieldless_parent
+                    )
+                ],
+                attr_map=schema,
+                device=device,
+            )
+            for nodes, molecules in ((2, 3), (3, 1))
+        ]
+        buffers = []
+        for source in sources:
+            buffer = Batch.empty(
+                num_systems=4,
+                num_nodes=20,
+                num_edges=0,
+                template=source,
+                device=device,
+                level_capacities={"molecules": 10, "pairs": 40},
+            )
+            buffer.put(source, torch.ones(1, dtype=torch.bool, device=device))
+            buffers.append(buffer)
+        left, right = buffers
+        right_values = right.pair_values.clone()
+        left.append(right)
+
+        assert left.num_graphs == 2
+        assert left.num_nodes == 5
+        assert left.level_ptr("molecules").tolist() == [0, 3, 4]
+        assert left.level_ptr("pairs").tolist() == [0, 6, 9]
+        torch.testing.assert_close(
+            left.pair_values, torch.cat([b.pair_values for b in sources])
+        )
+        torch.testing.assert_close(right.pair_values, right_values)
+        assert right.num_graphs == 1
+        assert right.pair_values.shape == (40, 1)
+
+    @pytest.mark.parametrize("invalid", ["group_mode", "default"])
+    def test_append_invalid_input_preserves_padded_receiver(self, invalid):
+        """Failed append must not commit padding removal or change buffer capacity."""
+        source = Batch.from_data_list([_atomic_data_with_system(2)])
+        source.add_key("resident_id", [torch.tensor([[7]])], level="system")
+        if invalid == "group_mode":
+            source.set_group_layout(torch.zeros(1, dtype=torch.long))
+        left = Batch.empty(num_systems=4, num_nodes=20, num_edges=0, template=source)
+        left.put(source, torch.ones(1, dtype=torch.bool))
+        right = Batch.from_data_list([_atomic_data_with_system(3)])
+        storage = left._storage
+        positions = left.positions.clone()
+        kwargs = (
+            {
+                "missing_fields": "fill",
+                "field_defaults": {
+                    "resident_id": lambda n, d: torch.zeros(
+                        2, 1, dtype=torch.long, device=d
+                    )
+                },
+            }
+            if invalid == "default"
+            else {}
+        )
+        with pytest.raises(ValueError):
+            left.append(right, **kwargs)
+        assert left._storage is storage
+        assert left.system_capacity == 4
+        assert left.num_graphs == 1
+        torch.testing.assert_close(left.positions, positions)
+
     @pytest.mark.parametrize("device", ["cpu", "cuda"])
     def test_append_fill_preserves_receiver_fields_without_mutating_other(self, device):
         """Receiver fields are zero-filled for arrivals; arrival-only fields drop."""
