@@ -676,13 +676,8 @@ class HostMemory(DataSink):
                             f"from samples {samples}"
                         )
                 start += stored.num_graphs
-            # Merge into a copy so a failed append leaves the stored writes
-            # intact, and keep the merge so later reads do not repeat it.
-            # Batch.append rebases each write's group labels.
-            merged = self._batches[0].clone()
-            for stored in self._batches[1:]:
-                merged.append(stored)
-            self._batches = [merged]
+            # Concatenate each field once and cache only after merging succeeds.
+            self._batches = [Batch.concatenate(self._batches)]
         return self._batches[0].clone()
 
     def zero(self) -> None:

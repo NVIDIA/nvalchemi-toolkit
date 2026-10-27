@@ -752,6 +752,80 @@ class TestHostMemoryStorage:
             ):
                 sink.read()
 
+    @pytest.mark.parametrize("grouped", [False, True])
+    @pytest.mark.parametrize(
+        "padded_first,padded_second", [(True, False), (False, True), (True, True)]
+    )
+    def test_read_padded_writes(self, device, grouped, padded_first, padded_second):
+        """Whole-buffer writes retain capacity; merging excludes unoccupied rows."""
+        source = (
+            create_grouped_batch([2, 1], device)
+            if grouped
+            else create_test_batch(3, device)
+        )
+        writes = []
+        for padded in (padded_first, padded_second):
+            if padded:
+                batch = Batch.empty(
+                    num_systems=8,
+                    num_nodes=32,
+                    num_edges=0,
+                    template=source,
+                    device=device,
+                )
+                batch.put(source, torch.ones(3, dtype=torch.bool, device=device))
+                writes.append(batch)
+            else:
+                writes.append(source.clone())
+        sink = HostMemory(capacity=6)
+        for batch in writes:
+            sink.write(batch)
+        for stored, original in zip(sink._batches, writes, strict=True):
+            assert stored.system_capacity == original.system_capacity
+        result = sink.read()
+        assert result.num_graphs == 6
+        assert result.num_nodes == 12
+        assert result.positions.shape[0] == 12
+        torch.testing.assert_close(
+            result.positions, torch.cat([source.positions.cpu()] * 2)
+        )
+        if grouped:
+            assert result.system_capacity == 6
+            assert result.group_idx.tolist() == [0, 0, 1, 2, 2, 3]
+        for original in writes:
+            assert original.num_graphs == 3
+
+    def test_read_ignores_fields_only_later_writes_carry(self) -> None:
+        """The first write's fields stay authoritative for extra incoming fields."""
+        first = create_grouped_batch([2, 1])
+        second = create_grouped_batch([1, 2])
+        second.add_key("status", [torch.tensor([1.0])] * 3, level="system")
+        sink = HostMemory(capacity=10)
+        sink.write(first)
+        sink.write(second)
+        result = sink.read()
+        assert "status" not in result
+        assert "status" in second
+        assert result.group_idx.tolist() == [0, 0, 1, 2, 3, 3]
+
+    def test_failed_concatenation_keeps_stored_writes(self) -> None:
+        """A failed bulk merge leaves the original cached writes intact."""
+        sink = HostMemory(capacity=10)
+        first = create_test_batch(1)
+        second = create_test_batch(1)
+        second.positions = torch.ones(second.num_nodes, 4)
+        sink.write(first)
+        sink.write(second)
+        stored = sink._batches.copy()
+        for _ in range(2):
+            with pytest.raises(ValueError, match="incompatible trailing shapes"):
+                sink.read()
+            assert len(sink._batches) == len(stored)
+            assert all(
+                actual is before for actual, before in zip(sink._batches, stored)
+            )
+            torch.testing.assert_close(sink._batches[0].positions, first.positions)
+
     def test_zero_allows_a_different_mode(self) -> None:
         """After zero() the sink accepts ungrouped data and starts empty."""
         sink = HostMemory(capacity=10)

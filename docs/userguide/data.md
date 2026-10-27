@@ -72,6 +72,7 @@ concatenated with node-index offsets so each graph’s edges refer to the correc
 System-level tensors are stacked so that the first dimension is the number of graphs.
 
 - Build a batch: {py:meth}`nvalchemi.data.batch.Batch.from_data_list`\ (data_list).
+- Combine batches: {py:meth}`nvalchemi.data.batch.Batch.concatenate`\ (batches).
 - Access batch size: `num_graphs`, `num_nodes`, `num_edges`, `num_nodes_list`, `num_edges_list`.
 - Recover a single graph: {py:meth}`nvalchemi.data.batch.Batch.get_data`\ (index).
 - Recover all graphs: {py:meth}`nvalchemi.data.batch.Batch.to_data_list`\ ().
