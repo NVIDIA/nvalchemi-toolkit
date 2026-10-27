@@ -870,10 +870,13 @@ class MultipoleEwaldModelWrapper(_BaseMultipoleWrapper):
         """Return ``alpha``, ``k_cutoff`` and, when ops support it, the k-grid topology."""
         alpha, k_cut = self._split(l_max)
         k_cutoff = self.k_cutoff if self.k_cutoff is not None else k_cut
-        kwargs: dict[str, Any] = {"alpha": alpha, "k_cutoff": k_cutoff}
         if self._ops_take_miller:
-            kwargs["miller_indices"] = self._miller_topology(l_max, cell, k_cutoff)
-        return kwargs
+            # Ops reject k_cutoff alongside a retained topology.
+            return {
+                "alpha": alpha,
+                "miller_indices": self._miller_topology(l_max, cell, k_cutoff),
+            }
+        return {"alpha": alpha, "k_cutoff": k_cutoff}
 
     def _energy_op(self, *args: Any, **kwargs: Any) -> torch.Tensor:
         """Call ``multipole_ewald_summation``."""
