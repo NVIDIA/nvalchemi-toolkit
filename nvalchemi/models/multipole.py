@@ -31,13 +31,13 @@ Usage
 
 Notes
 -----
-* Moments are read from ``data.multipole_moments`` in the packed e3nn layout
-  ``(N, (l_max+1)**2)``: ``[q]``, ``[q, mu_y, mu_z, mu_x]``, or that plus five
-  traceless l=2 channels. The trailing width selects ``l_max`` per call; build
-  the field from Cartesian channels with
-  :func:`nvalchemiops.torch.interactions.electrostatics.pack_multipole_moments`.
-  A dipole-only system sends a zero charge column; a quadrupole-only system
-  sends zero dipoles.
+* Moments are read from the per-atom batch fields ``charges`` ``[N]``,
+  ``dipoles`` ``[N, 3]`` (Cartesian x, y, z) and ``quadrupoles`` ``[N, 3, 3]``
+  (symmetric Cartesian). All are optional but at least one is required; the
+  highest channel present sets ``l_max`` (``quadrupoles`` -> 2, ``dipoles`` -> 1,
+  else 0). A missing lower channel is zero, so a dipole-only system sends just
+  ``dipoles``. The l=2 channel is traceless: any isotropic trace of
+  ``quadrupoles`` is discarded.
 * The ops return energies in eV for positions in Å and moments in elementary
   charge units; there is no Coulomb-constant knob.
 * The Ewald split is **derived from** ``cutoff``, ``sigma`` and ``accuracy`` so
@@ -80,7 +80,7 @@ if TYPE_CHECKING:
 
 __all__ = ["MultipoleEwaldModelWrapper", "MultipolePMEModelWrapper"]
 
-_MOMENT_WIDTH_TO_LMAX = {1: 0, 4: 1, 9: 2}
+_MOMENT_CHANNELS = ("charges", "dipoles", "quadrupoles")
 
 # Higher multipoles carry derivative prefactors the monopole tail estimate
 # ignores, so the requested accuracy is tightened per l_max before the split is
@@ -189,7 +189,7 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
     alpha : float or None
         Explicit Ewald splitting parameter, or ``None`` to derive it.
     l_max : int or None
-        Expected multipole order; ``None`` infers it from the moments width.
+        Expected multipole order; ``None`` infers it from the moment channels present.
     neighbor_format : NeighborListFormat
         ``MATRIX`` (fixed-width rows; static shapes, suits ``torch.compile`` and
         domain decomposition) or ``COO`` (sparse, fewer pair slots).
@@ -229,8 +229,8 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
             active_outputs={"energy", "forces"},
             autograd_outputs=frozenset({"forces", "stress"}),
             autograd_inputs=frozenset({"positions"}),
-            required_inputs=frozenset({"multipole_moments"}),
-            optional_inputs=frozenset(),
+            required_inputs=frozenset(),
+            optional_inputs=frozenset(_MOMENT_CHANNELS),
             supports_pbc=True,
             needs_pbc=True,
             neighbor_config=NeighborConfig(
@@ -314,10 +314,10 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
         Returns
         -------
         set[str]
-            ``positions``, ``multipole_moments`` and the neighbor tensors for
-            the configured ``neighbor_format``.
+            ``positions`` and the neighbor tensors for the configured
+            ``neighbor_format``. The moment channels are optional inputs.
         """
-        keys = {"positions", "multipole_moments"}
+        keys = {"positions"}
         if self.neighbor_format == NeighborListFormat.MATRIX:
             keys |= {"neighbor_matrix", "num_neighbors"}
         return keys
@@ -338,26 +338,53 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
     # Input adaptation
     # ------------------------------------------------------------------
 
-    def _check_moments(self, moments: torch.Tensor, n_atoms: int) -> int:
-        """Validate the packed moments and return ``l_max``."""
-        if moments.dim() != 2 or moments.shape[0] != n_atoms:
-            raise ValueError(
-                f"multipole_moments must have shape ({n_atoms}, 1|4|9); "
-                f"got {tuple(moments.shape)}."
+    def _pack_moments(
+        self, data: Batch, dtype: torch.dtype
+    ) -> tuple[torch.Tensor, int]:
+        """Pack the present moment channels into e3nn layout; return ``l_max``.
+
+        Built from the pure-tensor conversion helpers rather than
+        ``pack_multipole_moments``, whose trace check forces a host sync.
+        """
+        from nvalchemiops.torch.interactions.electrostatics._multipole_moments import (  # noqa: PLC0415
+            cartesian_quadrupole_to_e3nn,
+            dipole_cartesian_to_spherical,
+        )
+
+        n_atoms = data.num_nodes
+        q, mu, quad = (getattr(data, key, None) for key in _MOMENT_CHANNELS)
+        if q is None and mu is None and quad is None:
+            raise KeyError(
+                "at least one of 'charges', 'dipoles' or 'quadrupoles' is required "
+                "but none was found in input data."
             )
-        width = moments.shape[1]
-        if width not in _MOMENT_WIDTH_TO_LMAX:
-            raise ValueError(
-                f"multipole_moments has width {width}; expected 1 (q), 4 "
-                "(q, mu_y, mu_z, mu_x) or 9 (adds five l=2 channels)."
-            )
-        l_max = _MOMENT_WIDTH_TO_LMAX[width]
+        for name, value, shape in (
+            ("charges", q, (n_atoms,)),
+            ("dipoles", mu, (n_atoms, 3)),
+            ("quadrupoles", quad, (n_atoms, 3, 3)),
+        ):
+            if value is not None and tuple(value.shape) != shape:
+                raise ValueError(
+                    f"'{name}' must have shape {shape}; got {tuple(value.shape)}."
+                )
+        l_max = 2 if quad is not None else 1 if mu is not None else 0
         if self.l_max is not None and l_max != self.l_max:
             raise ValueError(
-                f"{type(self).__name__} was built with l_max={self.l_max} but "
-                f"multipole_moments has width {width} (l_max={l_max})."
+                f"{type(self).__name__} was built with l_max={self.l_max} but the "
+                f"batch carries channels for l_max={l_max}."
             )
-        return l_max
+        ref = next(v for v in (q, mu, quad) if v is not None)
+        zeros = ref.new_zeros
+        parts = [(q if q is not None else zeros(n_atoms)).unsqueeze(-1)]
+        if l_max >= 1:
+            parts.append(
+                dipole_cartesian_to_spherical(
+                    mu if mu is not None else zeros(n_atoms, 3)
+                )
+            )
+        if l_max == 2:
+            parts.append(cartesian_quadrupole_to_e3nn(quad))
+        return torch.cat([p.to(dtype) for p in parts], dim=-1), l_max
 
     def _csr(
         self, data: Batch, n_atoms: int, device: torch.device
@@ -398,8 +425,8 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
         Parameters
         ----------
         data : Batch
-            Batch with ``positions``, ``multipole_moments``, ``cell`` and
-            neighbor data populated by a
+            Batch with ``positions``, ``cell``, at least one of ``charges`` /
+            ``dipoles`` / ``quadrupoles``, and neighbor data populated by a
             :class:`~nvalchemi.hooks.NeighborListHook`.
         **kwargs
             Unused; accepted for interface compatibility.
@@ -407,17 +434,19 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
         Returns
         -------
         dict[str, Any]
-            ``positions``, ``multipole_moments``, ``cell``, ``batch_idx`` (int32),
-            ``num_graphs`` and ``l_max``.
+            ``positions``, packed ``multipole_moments`` (e3nn layout, in the
+            positions dtype), ``cell``, ``batch_idx`` (int32), ``num_graphs``
+            and ``l_max``.
 
         Raises
         ------
         TypeError
             If *data* is an ``AtomicData`` rather than a ``Batch``.
         KeyError
-            If a required key is missing.
+            If a required key is missing or no moment channel is present.
         ValueError
-            If the moments have an invalid shape or width, or there is no cell.
+            If a moment channel has the wrong shape, ``l_max`` disagrees with the
+            constructor, or there is no cell.
         """
         from nvalchemi.data import Batch  # noqa: PLC0415
 
@@ -435,14 +464,14 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
                 f"{type(self).__name__} requires periodic boundary conditions "
                 "(data.cell must be present)."
             )
-        moments = data.multipole_moments
+        moments, l_max = self._pack_moments(data, data.positions.dtype)
         return {
             "positions": data.positions,
             "multipole_moments": moments,
             "cell": cell,
             "batch_idx": data.batch_idx.to(torch.int32),
             "num_graphs": data.num_graphs,
-            "l_max": self._check_moments(moments, data.num_nodes),
+            "l_max": l_max,
         }
 
     def adapt_output(self, model_output: Any, data: AtomicData | Batch) -> ModelOutputs:
@@ -478,8 +507,9 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
         Parameters
         ----------
         data : Batch
-            Batch with ``positions``, ``multipole_moments`` (``(N, 1|4|9)``),
-            ``cell`` and neighbor data for ``neighbor_format``.
+            Batch with ``positions``, ``cell``, at least one of ``charges``,
+            ``dipoles`` and ``quadrupoles``, and neighbor data for
+            ``neighbor_format``.
 
         Returns
         -------
@@ -511,7 +541,7 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
         idx_j, ptr, shifts = self._csr(data, positions.shape[0], positions.device)
         per_atom = self._energy_op(
             positions,
-            inp["multipole_moments"].to(positions.dtype),
+            inp["multipole_moments"],
             cell,
             idx_j,
             ptr,
@@ -593,7 +623,7 @@ class MultipoleEwaldModelWrapper(_BaseMultipoleWrapper):
     k_cutoff : float or None, optional
         Reciprocal-space cutoff (1/Å). ``None`` derives it from the split.
     l_max : int or None, optional
-        Expected multipole order; ``None`` infers it from the moments width.
+        Expected multipole order; ``None`` infers it from the moment channels present.
     neighbor_format : NeighborListFormat, optional
         ``MATRIX`` (default; fixed-width, static shapes) or ``COO``.
     rtol : float, optional
@@ -651,6 +681,12 @@ class MultipolePMEModelWrapper(_BaseMultipoleWrapper):
     :math:`O(M \log M + N p^3)`, at the cost of a small spline-truncation
     error that does not shrink with the mesh. Prefer it for large systems.
 
+    Compilation: the energy-only forward compiles as a full graph. With a
+    derived mesh, run one eager forward first (compiled calls reuse that mesh and
+    do not track cell changes); with a variable cell pass ``mesh_dimensions``.
+    :class:`MultipoleEwaldModelWrapper` does not compile today because the ops
+    size the k-grid from the cell with data-dependent control flow.
+
     Parameters
     ----------
     cutoff : float
@@ -669,7 +705,7 @@ class MultipolePMEModelWrapper(_BaseMultipoleWrapper):
     spline_order : int, optional
         B-spline order. Defaults to ``5``.
     l_max : int or None, optional
-        Expected multipole order; ``None`` infers it from the moments width.
+        Expected multipole order; ``None`` infers it from the moment channels present.
     neighbor_format : NeighborListFormat, optional
         ``MATRIX`` (default; fixed-width, static shapes) or ``COO``.
     rtol : float, optional
@@ -716,6 +752,15 @@ class MultipolePMEModelWrapper(_BaseMultipoleWrapper):
         """Return mesh dimensions, recomputing only when the cell changed."""
         if self.mesh_dimensions is not None:
             return self.mesh_dimensions
+        if torch.compiler.is_compiling():
+            # The cell-change check and height reduction are data dependent, so
+            # compiled calls reuse the mesh resolved by an earlier eager call.
+            if l_max not in self._cached_mesh:
+                raise RuntimeError(
+                    "mesh_dimensions must be resolved before torch.compile: run "
+                    "one eager forward first, or pass mesh_dimensions explicitly."
+                )
+            return self._cached_mesh[l_max]
         detached = cell.detach()
         if cell_cache_needs_update(
             detached, self._cached_cell, rtol=self.rtol, atol=self.atol

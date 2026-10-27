@@ -247,8 +247,8 @@ class PipelineStep:
         ``{output_key: data_attribute}`` causes the pipeline to write the
         model's ``output_key`` value onto ``data.data_attribute`` before
         downstream models execute.  Downstream models that declare
-        ``data_attribute`` in their ``required_inputs`` will then receive
-        it automatically.
+        ``data_attribute`` in their ``required_inputs`` or ``optional_inputs``
+        will then receive it automatically.
 
     Examples
     --------
@@ -764,7 +764,8 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
 
         for step in all_steps:
             step_dependencies: list[tuple[PipelineStep, str]] = []
-            for input_key in step.model.model_config.required_inputs:
+            cfg = step.model.model_config
+            for input_key in cfg.required_inputs | cfg.optional_inputs:
                 producer = latest_producer.get(input_key)
                 if producer is not None:
                     step_dependencies.append(producer)
@@ -1051,7 +1052,8 @@ class PipelineModelWrapper(nn.Module, BaseModelMixin):
         what this step actually needs — *data* is not polluted with all
         intermediate tensors.
         """
-        needed = step.model.model_config.required_inputs
+        cfg = step.model.model_config
+        needed = cfg.required_inputs | cfg.optional_inputs
         for ctx_step, ctx_out in context.items():
             card = ctx_step.model.model_config
             for out_key in card.outputs:

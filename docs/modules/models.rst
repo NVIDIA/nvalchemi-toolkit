@@ -310,9 +310,10 @@ Multipole electrostatics
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 Ewald electrostatics for charges, dipoles and quadrupoles (GTO-smeared
-multipoles). Moments are read from the packed ``multipole_moments`` batch field
-of shape ``(N, 1|4|9)``, whose width selects the highest order present
-(:math:`l_{max}=0, 1, 2`). The Ewald split is derived from ``cutoff``, ``sigma``
+multipoles). Moments are read from the per-atom batch fields ``charges``
+``(N,)``, ``dipoles`` ``(N, 3)`` and ``quadrupoles`` ``(N, 3, 3)``; all are
+optional (at least one is required) and the highest present sets the order
+(:math:`l_{max}=0, 1, 2`), so a dipole-only system sends just ``dipoles``. The Ewald split is derived from ``cutoff``, ``sigma``
 (the GTO width of whatever produced the moments) and ``accuracy``, so it is
 consistent with the neighbor list and independent of system size. Energies are
 in eV; forces and stress come from autograd. Choose

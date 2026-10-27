@@ -6,10 +6,14 @@
 
 - `MultipoleEwaldModelWrapper` and `MultipolePMEModelWrapper` — multipole
   (charge, dipole, quadrupole) GTO-Ewald electrostatics from
-  `nvalchemi-toolkit-ops`. Moments come from a packed `multipole_moments` batch
-  field; the Ewald split is derived from `cutoff`, `sigma` and `accuracy`;
+  `nvalchemi-toolkit-ops`. Moments come from the per-atom `charges`, `dipoles`
+  and `quadrupoles` batch fields (any subset); the Ewald split is derived from
+  `cutoff`, `sigma` and `accuracy`;
   forces and stress come from autograd; `neighbor_format` accepts `MATRIX` or
   `COO`. Single-GPU only.
+- `AtomicData` / `Batch` gain per-atom `dipoles` `[N, 3]` and `quadrupoles`
+  `[N, 3, 3]` fields. `PipelineModelWrapper` now wires upstream outputs into a
+  consumer's `optional_inputs` as well as its `required_inputs`.
 - Add `nvalchemi.csp` modules for molecular crystal-structure prediction
   applications, including random rigid-molecule packing, atom-bounded radial
   matching, and greedy de-duplication for `Batch` and loader-backed pools,

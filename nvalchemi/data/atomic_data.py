@@ -335,6 +335,18 @@ class AtomicData(BaseModel, DataMixin):
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
+    dipoles: Annotated[
+        t.NodeDipoles | None,
+        Field(description="Per-atom Cartesian dipoles (x, y, z) [n_nodes, 3]"),
+        PlainSerializer(_tensor_serialization, when_used="json"),
+    ] = None
+
+    quadrupoles: Annotated[
+        t.NodeQuadrupoles | None,
+        Field(description="Per-atom symmetric Cartesian quadrupoles [n_nodes, 3, 3]"),
+        PlainSerializer(_tensor_serialization, when_used="json"),
+    ] = None
+
     charge: Annotated[
         t.GraphCharges | None,
         Field(description="Total system charge [1, 1]"),
@@ -428,6 +440,8 @@ class AtomicData(BaseModel, DataMixin):
             "positions",
             "forces",
             "charges",
+            "dipoles",
+            "quadrupoles",
             "node_embeddings",
             "atomic_numbers",
             "node_attrs",

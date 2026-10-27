@@ -52,42 +52,74 @@ CUTOFF = 8.0
 ACCURACY = 1e-5
 
 
+_L_MAX_CHANNELS = {
+    0: ("charges",),
+    1: ("charges", "dipoles"),
+    2: ("charges", "dipoles", "quadrupoles"),
+}
+
+
+def _schema(dtype: torch.dtype) -> LevelSchema:
+    """Schema promoting the geometry and moment fields to ``dtype``."""
+    schema = LevelSchema()
+    for key in ("positions", "cell", "charges", "dipoles", "quadrupoles"):
+        schema.set(key, schema.attr_to_group[key], dtype=str(dtype)[6:])
+    return schema
+
+
 def _make_batch(
     n_graphs: int = 1,
     l_max: int = 1,
     device: str = "cpu",
     dtype: torch.dtype = torch.float64,
     seed: int = 0,
+    channels: tuple[str, ...] | None = None,
 ) -> Batch:
-    """Jittered 3x3x3 lattice systems with neutral random moments."""
+    """Jittered 3x3x3 lattice systems with neutral random moment channels.
+
+    ``channels`` overrides the channel set implied by ``l_max``. All channels are
+    always drawn (in a fixed order) so subsets of one seed share their values.
+    """
+    channels = _L_MAX_CHANNELS[l_max] if channels is None else channels
     gen = torch.Generator().manual_seed(seed)
     grid = torch.stack(
         torch.meshgrid(*(torch.arange(3.0),) * 3, indexing="ij"), dim=-1
     ).reshape(-1, 3)
-    schema = LevelSchema()
-    for key in ("positions", "cell", "multipole_moments"):
-        schema.set(key, schema.attr_to_group.get(key, "atoms"), dtype=str(dtype)[6:])
+    f64 = torch.float64
     data = []
     for _ in range(n_graphs):
         # Draw in float64 so a float32 batch is the same system, cast down.
-        pos = grid * (L / 3) + 0.3 * torch.randn(
-            27, 3, generator=gen, dtype=torch.float64
+        pos = grid * (L / 3) + 0.3 * torch.randn(27, 3, generator=gen, dtype=f64)
+        q = 0.5 * torch.randn(27, generator=gen, dtype=f64)
+        q -= q.mean()
+        mu = 0.5 * torch.randn(27, 3, generator=gen, dtype=f64)
+        a = torch.randn(27, 3, 3, generator=gen, dtype=f64)
+        quad = 0.5 * (a + a.transpose(1, 2))
+        quad -= (quad.diagonal(dim1=1, dim2=2).sum(-1) / 3)[:, None, None] * torch.eye(
+            3, dtype=f64
         )
-        pos = pos.to(dtype)
-        mm = 0.5 * torch.randn(
-            27, (l_max + 1) ** 2, generator=gen, dtype=torch.float64
-        ).to(dtype)
-        mm[:, 0] -= mm[:, 0].mean()
+        fields = {"charges": q, "dipoles": mu, "quadrupoles": quad}
         data.append(
             AtomicData(
-                positions=pos.to(device),
+                positions=pos.to(dtype).to(device),
                 atomic_numbers=torch.ones(27, dtype=torch.long, device=device),
                 cell=(torch.eye(3, dtype=dtype) * L).unsqueeze(0).to(device),
                 pbc=torch.ones(1, 3, dtype=torch.bool, device=device),
-                multipole_moments=mm.to(device),
+                **{k: fields[k].to(dtype).to(device) for k in channels},
             )
         )
-    return Batch.from_data_list(data, attr_map=schema)
+    return Batch.from_data_list(data, attr_map=_schema(dtype))
+
+
+def _packed(batch: Batch) -> torch.Tensor:
+    """Packed e3nn moments for the oracle, via the public ops helper."""
+    from nvalchemiops.torch.interactions.electrostatics import pack_multipole_moments
+
+    return pack_multipole_moments(
+        batch.charges,
+        getattr(batch, "dipoles", None),
+        getattr(batch, "quadrupoles", None),
+    )
 
 
 def _build_nl(batch: Batch, model) -> None:
@@ -183,13 +215,13 @@ class TestConstruction:
     @BOTH
     def test_matrix_format_inputs(self, cls):
         keys = _make(cls).input_data()
-        assert {"positions", "multipole_moments", "neighbor_matrix"} <= keys
-        assert "num_neighbors" in keys
+        assert keys == {"positions", "neighbor_matrix", "num_neighbors"}
 
     @BOTH
     def test_model_config(self, cls):
         cfg = _make(cls).model_config
-        assert cfg.required_inputs == frozenset({"multipole_moments"})
+        assert cfg.required_inputs == frozenset()
+        assert cfg.optional_inputs == {"charges", "dipoles", "quadrupoles"}
         assert cfg.autograd_outputs == frozenset({"forces", "stress"})
         assert cfg.needs_pbc and cfg.supports_pbc
         assert cfg.active_outputs == {"energy", "forces"}
@@ -277,41 +309,84 @@ class TestInputValidation:
             _make(cls).adapt_input(data)
 
     @BOTH
-    @pytest.mark.parametrize("width", [1, 4, 9])
-    def test_valid_widths_set_l_max(self, cls, width):
+    @pytest.mark.parametrize(
+        ("channels", "l_max"),
+        [
+            (("charges",), 0),
+            (("dipoles",), 1),
+            (("quadrupoles",), 2),
+            (("charges", "dipoles"), 1),
+            (("dipoles", "quadrupoles"), 2),
+            (("charges", "dipoles", "quadrupoles"), 2),
+        ],
+    )
+    def test_highest_channel_sets_l_max(self, cls, channels, l_max):
         w = _make(cls, neighbor_format=NeighborListFormat.COO)
-        batch = _make_batch(l_max={1: 0, 4: 1, 9: 2}[width])
+        batch = _make_batch(channels=channels)
         _build_nl(batch, w)
-        assert w.adapt_input(batch)["l_max"] == {1: 0, 4: 1, 9: 2}[width]
+        inp = w.adapt_input(batch)
+        assert inp["l_max"] == l_max
+        assert inp["multipole_moments"].shape == (27, (l_max + 1) ** 2)
 
     @BOTH
-    def test_bad_width_raises(self, cls):
-        w = _make(cls)
-        with pytest.raises(ValueError, match="width 5"):
-            w._check_moments(torch.zeros(27, 5), 27)
+    def test_no_moment_channel_raises(self, cls):
+        w = _make(cls, neighbor_format=NeighborListFormat.COO)
+        batch = _make_batch(channels=())
+        _build_nl(batch, w)
+        with pytest.raises(KeyError, match="at least one of"):
+            w.adapt_input(batch)
 
     @BOTH
-    def test_bad_rank_or_rows_raise(self, cls):
-        w = _make(cls)
-        with pytest.raises(ValueError, match="must have shape"):
-            w._check_moments(torch.zeros(27), 27)
-        with pytest.raises(ValueError, match="must have shape"):
-            w._check_moments(torch.zeros(26, 4), 27)
+    @pytest.mark.parametrize(
+        ("channel", "shape"),
+        [("charges", (27, 1)), ("dipoles", (27, 2)), ("quadrupoles", (27, 3))],
+    )
+    def test_bad_channel_shape_raises(self, cls, channel, shape):
+        w = _make(cls, neighbor_format=NeighborListFormat.COO)
+        batch = _make_batch(channels=(channel,))
+        _build_nl(batch, w)
+        batch._atoms_group[channel] = torch.zeros(*shape, dtype=torch.float64)
+        with pytest.raises(ValueError, match=f"'{channel}' must have shape"):
+            w.adapt_input(batch)
 
     @BOTH
     def test_l_max_mismatch_raises(self, cls):
-        w = _make(cls, l_max=1)
+        w = _make(cls, l_max=1, neighbor_format=NeighborListFormat.COO)
+        batch = _make_batch(l_max=2)
+        _build_nl(batch, w)
         with pytest.raises(ValueError, match="built with l_max=1"):
-            w._check_moments(torch.zeros(27, 9), 27)
+            w.adapt_input(batch)
 
     @BOTH
-    def test_missing_moments_raises(self, cls):
+    def test_packing_matches_public_pack_helper(self, cls):
         w = _make(cls, neighbor_format=NeighborListFormat.COO)
-        batch = _make_batch()
+        batch = _make_batch(l_max=2)
         _build_nl(batch, w)
-        batch._atoms_group._data.pop("multipole_moments", None)
-        with pytest.raises((KeyError, AttributeError)):
-            w.adapt_input(batch)
+        torch.testing.assert_close(
+            w.adapt_input(batch)["multipole_moments"], _packed(batch)
+        )
+
+    @BOTH
+    def test_missing_lower_channels_are_zero(self, cls):
+        w = _make(cls, neighbor_format=NeighborListFormat.COO)
+        full = _make_batch(l_max=2)
+        _build_nl(full, w)
+        ref = w.adapt_input(full)["multipole_moments"]
+        only_quad = _make_batch(channels=("quadrupoles",))
+        _build_nl(only_quad, w)
+        got = w.adapt_input(only_quad)["multipole_moments"]
+        assert (got[:, :4] == 0).all()
+        torch.testing.assert_close(got[:, 4:], ref[:, 4:])
+
+    @BOTH
+    def test_quadrupole_trace_is_discarded(self, cls):
+        w = _make(cls, neighbor_format=NeighborListFormat.COO)
+        batch = _make_batch(l_max=2)
+        _build_nl(batch, w)
+        ref = w.adapt_input(batch)["multipole_moments"]
+        quad = batch.quadrupoles + 0.7 * torch.eye(3, dtype=torch.float64)
+        batch._atoms_group["quadrupoles"] = quad
+        torch.testing.assert_close(w.adapt_input(batch)["multipole_moments"], ref)
 
     @BOTH
     def test_second_order_derivatives_rejected(self, cls):
@@ -397,7 +472,7 @@ def _oracle(batch: Batch, sigma: float = SIGMA) -> torch.Tensor:
         out.append(
             multipole_electrostatic_energy(
                 batch.positions[m],
-                batch.multipole_moments[m],
+                _packed(batch)[m],
                 batch.cell[g],
                 sigma=sigma,
                 k_cutoff=k_cut,
@@ -560,21 +635,171 @@ class TestIntegration:
         torch.testing.assert_close(e32.double(), e64, rtol=5e-3, atol=1e-3)
 
     @BOTH
-    def test_moments_receive_gradient(self, cls, device):
+    def test_dipoles_receive_gradient(self, cls, device):
         w = _make(cls)
         w.model_config.active_outputs = {"energy"}
         batch = _make_batch(l_max=1, device=device)
         _build_nl(batch, w)
-        mm = batch.multipole_moments.clone().requires_grad_(True)
-        batch._atoms_group["multipole_moments"] = mm
+        dip = batch.dipoles.clone().requires_grad_(True)
+        batch._atoms_group["dipoles"] = dip
         w(batch)["energy"].sum().backward()
-        assert mm.grad is not None and torch.isfinite(mm.grad).all()
-        assert mm.grad.abs().sum() > 0
+        assert dip.grad is not None and torch.isfinite(dip.grad).all()
+        assert dip.grad.abs().sum() > 0
+
+    @BOTH
+    @pytest.mark.parametrize("channels", [("dipoles",), ("quadrupoles",)])
+    def test_sparse_channels_equal_zero_filled(self, cls, channels, device):
+        """Sending only dipoles/quadrupoles equals sending explicit zeros.
+
+        Compared at the same ``l_max``: each order derives its own split, so
+        results across orders agree only to the requested accuracy.
+        """
+        w = _make(cls)
+        sparse = _make_batch(channels=channels, device=device)
+        dense = _make_batch(l_max=1 if channels == ("dipoles",) else 2, device=device)
+        dense._atoms_group["charges"] = torch.zeros_like(dense.charges)
+        if "quadrupoles" not in channels and hasattr(dense, "quadrupoles"):
+            dense._atoms_group["quadrupoles"] = torch.zeros_like(dense.quadrupoles)
+        if "dipoles" not in channels:
+            dense._atoms_group["dipoles"] = torch.zeros_like(dense.dipoles)
+        for b in (sparse, dense):
+            _build_nl(b, w)
+        torch.testing.assert_close(
+            w(sparse)["energy"], w(dense)["energy"], rtol=1e-12, atol=1e-12
+        )
+
+
+class TestPipelineComposition:
+    """A moment-producing model feeds the multipole wrapper by key name."""
+
+    @pytest.fixture(autouse=True)
+    def _require_cuda(self):
+        pytest.importorskip("nvalchemiops")
+        if not torch.cuda.is_available():
+            pytest.skip("multipole kernels need CUDA")
+
+    @staticmethod
+    def _source():
+        from collections import OrderedDict
+
+        from torch import nn
+
+        from nvalchemi.models.base import BaseModelMixin, ModelConfig
+
+        class DipoleSource(nn.Module, BaseModelMixin):
+            """Position-dependent dipoles and zero energy."""
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.model_config = ModelConfig(
+                    outputs=frozenset({"energy", "dipoles"}),
+                    active_outputs={"energy", "dipoles"},
+                    autograd_outputs=frozenset(),
+                    needs_pbc=False,
+                )
+
+            @property
+            def embedding_shapes(self):
+                return {}
+
+            def compute_embeddings(self, data, **kwargs):
+                raise NotImplementedError
+
+            def forward(self, data, **kwargs):
+                pos = data.positions
+                return OrderedDict(
+                    energy=pos.new_zeros(data.num_graphs, 1),
+                    dipoles=0.2 * torch.sin(pos),
+                )
+
+        return DipoleSource()
+
+    def test_upstream_dipoles_drive_forces_through_the_chain(self):
+        from nvalchemi.models.pipeline import PipelineGroup, PipelineModelWrapper
+
+        mp = _make(MultipolePMEModelWrapper, mesh_dimensions=(32, 32, 32))
+        pipe = PipelineModelWrapper(
+            groups=[PipelineGroup(steps=[self._source(), mp], use_autograd=True)]
+        )
+        pipe.model_config.active_outputs = {"energy", "forces"}
+        batch = _make_batch(channels=(), device="cuda")
+        _build_nl(batch, mp)
+        out = pipe(batch)
+
+        def energy(b):
+            direct = _make(MultipolePMEModelWrapper, mesh_dimensions=(32, 32, 32))
+            direct.model_config.active_outputs = {"energy"}
+            b = b.clone()
+            b._atoms_group["dipoles"] = 0.2 * torch.sin(b.positions)
+            _build_nl(b, direct)
+            return direct(b)["energy"].sum()
+
+        h = 1e-5
+        for atom, axis in ((0, 0), (7, 1), (20, 2)):
+            e = []
+            for sign in (+1, -1):
+                b = batch.clone()
+                b.positions[atom, axis] += sign * h
+                e.append(energy(b))
+            fd = -(e[0] - e[1]) / (2 * h)
+            torch.testing.assert_close(
+                out["forces"][atom, axis], fd, rtol=1e-5, atol=1e-6
+            )
+
+
+class TestCompile:
+    """Energy-only forward under ``torch.compile`` (the compiled-DD building block)."""
+
+    @pytest.fixture(autouse=True)
+    def _require_cuda(self):
+        pytest.importorskip("nvalchemiops")
+        if not torch.cuda.is_available():
+            pytest.skip("multipole kernels need CUDA")
+        torch._dynamo.reset()
+
+    @staticmethod
+    def _energy_only(**kwargs):
+        w = _make(MultipolePMEModelWrapper, **kwargs)
+        w.model_config.active_outputs = {"energy"}
+        return w
+
+    @pytest.mark.parametrize("l_max", [0, 2])
+    def test_explicit_mesh_matches_eager_fullgraph(self, l_max):
+        w = self._energy_only(mesh_dimensions=(32, 32, 32))
+        batch = _make_batch(n_graphs=2, l_max=l_max, device="cuda")
+        _build_nl(batch, w)
+        ref = w(batch)["energy"]
+        out = torch.compile(w, fullgraph=True)(batch)["energy"]
+        torch.testing.assert_close(out, ref, rtol=1e-12, atol=1e-12)
+
+    def test_warm_derived_mesh_compiles(self):
+        w = self._energy_only()
+        batch = _make_batch(l_max=1, device="cuda")
+        _build_nl(batch, w)
+        ref = w(batch)["energy"]  # eager call resolves the mesh
+        out = torch.compile(w, fullgraph=True)(batch)["energy"]
+        torch.testing.assert_close(out, ref, rtol=1e-12, atol=1e-12)
+
+    def test_cold_derived_mesh_raises_clear_error(self):
+        w = self._energy_only()
+        batch = _make_batch(l_max=1, device="cuda")
+        _build_nl(batch, w)
+        with pytest.raises(Exception, match="mesh_dimensions must be resolved"):
+            torch.compile(w, fullgraph=True)(batch)
+
+    def test_compiled_energy_gives_eager_forces_by_autograd(self):
+        w = self._energy_only(mesh_dimensions=(32, 32, 32))
+        batch = _make_batch(l_max=1, device="cuda")
+        _build_nl(batch, w)
+        w.model_config.active_outputs = {"energy", "forces"}
+        ref = w(batch)["forces"]
+        w.model_config.active_outputs = {"energy"}
+        pos = batch.positions.detach().clone().requires_grad_(True)
+        batch._atoms_group["positions"] = pos
+        energy = torch.compile(w, fullgraph=True)(batch)["energy"].sum()
+        (grad,) = torch.autograd.grad(energy, pos)
+        torch.testing.assert_close(-grad, ref, rtol=1e-9, atol=1e-10)
 
 
 def _schema_for(batch: Batch) -> LevelSchema:
-    schema = LevelSchema()
-    dtype = str(batch.positions.dtype)[6:]
-    for key in ("positions", "cell", "multipole_moments"):
-        schema.set(key, schema.attr_to_group.get(key, "atoms"), dtype=dtype)
-    return schema
+    return _schema(batch.positions.dtype)

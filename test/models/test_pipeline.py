@@ -628,6 +628,54 @@ class TestPipelineDependentAutograd:
         assert out["forces"] is not None
 
 
+class MockOptionalElectrostaticsModel(MockElectrostaticsModel):
+    """Electrostatics mock that declares node_charges as an *optional* input."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.model_config = ModelConfig(
+            outputs=frozenset({"energy"}),
+            optional_inputs=frozenset({"node_charges"}),
+            autograd_outputs=frozenset(),
+            needs_pbc=False,
+            active_outputs={"energy"},
+        )
+
+
+class TestPipelineOptionalInputWiring:
+    """Upstream outputs feed a consumer's optional inputs like required ones."""
+
+    @staticmethod
+    def _pipe(consumer):
+        return PipelineModelWrapper(
+            groups=[
+                PipelineGroup(
+                    steps=[
+                        PipelineStep(
+                            MockChargeEnergyModel(), wire={"charges": "node_charges"}
+                        ),
+                        consumer,
+                    ],
+                    use_autograd=True,
+                ),
+            ]
+        )
+
+    def test_optional_input_is_wired_with_autograd_chain(self, simple_batch):
+        ref = self._pipe(MockElectrostaticsModel())
+        opt = self._pipe(MockOptionalElectrostaticsModel())
+        for pipe in (ref, opt):
+            pipe.model_config.active_outputs = {"energy", "forces"}
+        out_ref = ref(simple_batch)
+        out_opt = opt(simple_batch)
+        assert torch.allclose(out_opt["energy"], out_ref["energy"])
+        assert torch.allclose(out_opt["forces"], out_ref["forces"])
+
+    def test_optional_input_is_not_a_pipeline_requirement(self):
+        opt = self._pipe(MockOptionalElectrostaticsModel())
+        assert "node_charges" not in opt.model_config.required_inputs
+
+
 class TestPipelineFeederAutograd:
     """Case 3: A only predicts charges, B uses them for energy."""
 
