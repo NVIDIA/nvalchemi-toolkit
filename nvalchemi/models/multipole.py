@@ -88,7 +88,9 @@ _MOMENT_CHANNELS = ("charges", "dipoles", "quadrupoles")
 _ACCURACY_MARGIN = {0: 1.0, 1: 10.0, 2: 100.0}
 
 # Mesh points per reciprocal-space extent, relative to the Nyquist minimum.
-_MESH_OVERSAMPLING = 2.5
+# l=2 needs a finer mesh (calibrated at spline order 6: worst error 0.65x the
+# requested accuracy over three box/sigma combinations).
+_MESH_OVERSAMPLING = {0: 2.5, 1: 2.5, 2: 4.0}
 
 
 def _erfcinv(x: float) -> float:
@@ -703,7 +705,9 @@ class MultipolePMEModelWrapper(_BaseMultipoleWrapper):
         FFT mesh ``(nx, ny, nz)``. ``None`` derives it from the reciprocal
         cutoff and the cell; it is recomputed only when the cell changes.
     spline_order : int, optional
-        B-spline order. Defaults to ``5``.
+        B-spline order (ops register 4, 5 and 6). Defaults to ``6``, which
+        meets ``accuracy`` for all ``l_max``; ``5`` is cheaper but misses it at
+        ``l_max=2``.
     l_max : int or None, optional
         Expected multipole order; ``None`` infers it from the moment channels present.
     neighbor_format : NeighborListFormat, optional
@@ -722,7 +726,7 @@ class MultipolePMEModelWrapper(_BaseMultipoleWrapper):
         accuracy: float = 1e-6,
         alpha: float | None = None,
         mesh_dimensions: tuple[int, int, int] | None = None,
-        spline_order: int = 5,
+        spline_order: int = 6,
         l_max: int | None = None,
         neighbor_format: NeighborListFormat = NeighborListFormat.MATRIX,
         rtol: float = 1e-5,
@@ -781,7 +785,7 @@ class MultipolePMEModelWrapper(_BaseMultipoleWrapper):
             ).norm(dim=-1)
             heights = (volume[:, None] / cross).amax(dim=0).tolist()
             self._cached_mesh[l_max] = tuple(
-                _fft_size(math.ceil(_MESH_OVERSAMPLING * k_cut * h / math.pi))
+                _fft_size(math.ceil(_MESH_OVERSAMPLING[l_max] * k_cut * h / math.pi))
                 for h in heights
             )
         return self._cached_mesh[l_max]

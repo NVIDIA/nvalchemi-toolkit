@@ -505,6 +505,19 @@ class TestIntegration:
         torch.testing.assert_close(e, ref, rtol=rtol, atol=0)
 
     @BOTH
+    @pytest.mark.parametrize("l_max", [0, 1, 2])
+    def test_energy_meets_requested_accuracy(self, cls, l_max, device):
+        """The derived split and mesh deliver ``accuracy`` for every ``l_max``."""
+        acc = 1e-6
+        w = cls(CUTOFF, sigma=SIGMA, accuracy=acc)
+        batch = _make_batch(l_max=l_max, device=device)
+        _build_nl(batch, w)
+        e = w(batch)["energy"].view(-1)
+        ref = _oracle(batch)
+        # 2x slack over the calibrated worst case (0.65x accuracy for PME l=2).
+        torch.testing.assert_close(e, ref, rtol=2 * acc, atol=0)
+
+    @BOTH
     def test_atomic_energies_sum_to_energy(self, cls, device):
         w = _make(cls)
         w.model_config.active_outputs = {"energy", "atomic_energies"}
