@@ -30,9 +30,9 @@ The three buffer layers
      - Pre-allocated :meth:`Batch.empty() <nvalchemi.data.Batch.empty>`
      - Zero-copy inter-rank transfer via ``isend`` / ``irecv``
    * - Overflow sinks
-     - :class:`~nvalchemi.dynamics.DataSink` (``GPUBuffer``, ``HostMemory``, ``ZarrData``)
-     - Varies
-     - Staging when active batch is full
+     - ``overflow_sinks``: :class:`~nvalchemi.dynamics.DataSink` (``GPUBuffer``, ``HostMemory``, ``ZarrData``)
+     - Private ``HostMemory`` by default
+     - Received samples waiting for room in the active batch
    * - Active batch
      - ``active_batch`` on :class:`~nvalchemi.dynamics.base._CommunicationMixin`
      - Live :class:`~nvalchemi.data.Batch`
@@ -79,8 +79,12 @@ The three buffer layers
        irecv -> recv [style=bold]
        recv -> batch [label="_recv_to_batch" style=bold]
 
-       sinks [label="Overflow Sinks" style="rounded,dashed" fillcolor=none]
-       send -> sinks [label="final rank:\nwrite to sinks" style=dashed color="#999999"]
+       overflow [label="Overflow Sinks" style="rounded,dashed" fillcolor=none]
+       recv -> overflow [label="excess" style=dashed color="#999999"]
+       overflow -> batch [label="_drain_sinks_to_batch" style=dashed color="#999999"]
+
+       sinks [label="Result Sinks" style="rounded,dashed" fillcolor=none]
+       conv -> sinks [label="final rank:\nwrite results" style=dashed color="#999999"]
    }
 
 Data flows from samplers or upstream ranks into the active batch,
@@ -269,7 +273,7 @@ several helper methods for routing data between buffers:
 
   1. No active batch exists: adopt the incoming data directly.
   2. Room available: append to the existing active batch.
-  3. No room: overflow to sinks.
+  3. No room: write to ``overflow_sinks``.
 
 - **_batch_to_buffer(mask)**: Copies graduated samples from the active
   batch into the send buffer via :meth:`put()
@@ -283,16 +287,21 @@ several helper methods for routing data between buffers:
 
 - **_remove_converged_final_stage(converged_indices)**: On the final
   stage, extracts converged graphs via ``index_select``, removes them
-  from the active batch, and writes them to sinks.
+  from the active batch, and writes them to result sinks via
+  ``_write_to_sinks``.
 
 - **_manage_send_handle(handle)**: Stores the send handle for later
   draining (``fully_async``) or waits on it immediately (other modes).
 
-- **_overflow_to_sinks(batch, mask)**: Writes to the first non-full
-  sink in priority order.
+- **_overflow_to_sinks(batch, mask)**: Writes pending samples to the
+  first overflow sink with room for all of them.
 
-- **_drain_sinks_to_batch()**: Pulls samples from sinks back into the
-  active batch when room is available.
+- **_write_to_sinks(batch, mask)**: Writes finished results to the first
+  result sink with room for all of them.
+
+- **_drain_sinks_to_batch()**: Pulls samples from ``overflow_sinks``
+  back into the active batch when room is available. Result sinks are
+  never read.
 
 Sample lifecycle
 ----------------
