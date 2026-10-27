@@ -32,6 +32,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.data.level_storage import LevelSchema
+from nvalchemi.models import multipole as multipole_module
 from nvalchemi.models.base import NeighborListFormat
 from nvalchemi.models.multipole import (
     MultipoleEwaldModelWrapper,
@@ -39,6 +40,7 @@ from nvalchemi.models.multipole import (
     _derive_split,
     _erfcinv,
     _fft_size,
+    _ops_accept_miller_indices,
 )
 
 BOTH = pytest.mark.parametrize(
@@ -812,6 +814,136 @@ class TestCompile:
         energy = torch.compile(w, fullgraph=True)(batch)["energy"].sum()
         (grad,) = torch.autograd.grad(energy, pos)
         torch.testing.assert_close(-grad, ref, rtol=1e-9, atol=1e-10)
+
+
+class TestCompileModel:
+    """``compile_model``: compiled energy with eager strain and force/stress autograd."""
+
+    OUTPUTS = ("energy", "forces", "stress")
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, monkeypatch):
+        pytest.importorskip("nvalchemiops")
+        if not torch.cuda.is_available():
+            pytest.skip("multipole kernels need CUDA")
+        # A cached artifact from an earlier build must not mask a miscompile.
+        monkeypatch.setattr(torch._inductor.config, "fx_graph_cache", False)
+        monkeypatch.setattr(torch._functorch.config, "enable_autograd_cache", False)
+        torch._dynamo.reset()
+
+    def _pair(self, cls):
+        if cls is MultipoleEwaldModelWrapper and not _ops_accept_miller_indices():
+            pytest.skip("installed nvalchemiops has no miller_indices support")
+        eager, compiled = _make(cls), _make(cls, compile_model=True)
+        for w in (eager, compiled):
+            w.model_config.active_outputs = set(self.OUTPUTS)
+        return eager, compiled
+
+    def _assert_match(self, out, ref):
+        for key in self.OUTPUTS:
+            torch.testing.assert_close(out[key], ref[key], rtol=1e-9, atol=1e-10)
+
+    @BOTH
+    @pytest.mark.parametrize("l_max", [0, 1, 2])
+    def test_energy_forces_stress_match_eager(self, cls, l_max):
+        eager, compiled = self._pair(cls)
+        batch = _make_batch(n_graphs=2, l_max=l_max, device="cuda")
+        _build_nl(batch, eager)
+        ref = eager(batch)
+        for _ in range(2):  # the second call reuses the compiled graph
+            self._assert_match(compiled(batch), ref)
+
+    @BOTH
+    def test_variable_cell_recompiles_and_matches_eager(self, cls):
+        eager, compiled = self._pair(cls)
+        batch = _make_batch(l_max=1, device="cuda")
+        _build_nl(batch, eager)
+        compiled(batch)  # warm the original cell
+        scale = 1.25
+        batch.positions.mul_(scale)
+        batch.cell.mul_(scale)
+        _build_nl(batch, eager)
+        self._assert_match(compiled(batch), eager(batch))
+
+    @BOTH
+    def test_compile_is_off_by_default(self, cls):
+        assert _make(cls)._compiled_energy is None
+
+    def test_ewald_compile_needs_miller_support(self, monkeypatch):
+        monkeypatch.setattr(
+            multipole_module, "_ops_accept_miller_indices", lambda: False
+        )
+        with pytest.raises(RuntimeError, match="miller_indices"):
+            _make(MultipoleEwaldModelWrapper, compile_model=True)
+
+
+class TestTorchCompileModule:
+    """Plain ``torch.compile(model)``: energy compiled, derivatives eager."""
+
+    OUTPUTS = ("energy", "forces", "stress")
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, monkeypatch):
+        pytest.importorskip("nvalchemiops")
+        if not torch.cuda.is_available():
+            pytest.skip("multipole kernels need CUDA")
+        monkeypatch.setattr(torch._inductor.config, "fx_graph_cache", False)
+        monkeypatch.setattr(torch._functorch.config, "enable_autograd_cache", False)
+        torch._dynamo.reset()
+
+    def _pair(self, cls):
+        if cls is MultipoleEwaldModelWrapper and not _ops_accept_miller_indices():
+            pytest.skip("installed nvalchemiops has no miller_indices support")
+        eager, plain = _make(cls), _make(cls)
+        for w in (eager, plain):
+            w.model_config.active_outputs = set(self.OUTPUTS)
+        return eager, torch.compile(plain)
+
+    def _assert_match(self, out, ref):
+        for key in self.OUTPUTS:
+            torch.testing.assert_close(out[key], ref[key], rtol=1e-9, atol=1e-10)
+
+    @BOTH
+    @pytest.mark.parametrize("l_max", [0, 1, 2])
+    def test_matches_eager_without_warmup(self, cls, l_max):
+        # Default training mode and a cold derived mesh / k-grid: no setup needed.
+        eager, compiled = self._pair(cls)
+        batch = _make_batch(n_graphs=2, l_max=l_max, device="cuda")
+        _build_nl(batch, eager)
+        ref = eager(batch)
+        for _ in range(2):
+            self._assert_match(compiled(batch), ref)
+
+    @BOTH
+    def test_cell_change_recompiles_and_matches_eager(self, cls):
+        eager, compiled = self._pair(cls)
+        batch = _make_batch(l_max=1, device="cuda")
+        _build_nl(batch, eager)
+        compiled(batch)
+        batch.positions.mul_(1.25)
+        batch.cell.mul_(1.25)
+        _build_nl(batch, eager)
+        self._assert_match(compiled(batch), eager(batch))
+
+    @BOTH
+    def test_energy_only_stays_one_full_graph(self, cls):
+        if cls is MultipoleEwaldModelWrapper and not _ops_accept_miller_indices():
+            pytest.skip("installed nvalchemiops has no miller_indices support")
+        eager = _make(cls)
+        eager.model_config.active_outputs = {"energy"}
+        batch = _make_batch(l_max=1, device="cuda")
+        _build_nl(batch, eager)
+        ref = eager(batch)["energy"]  # resolves the mesh / k-grid
+        compiled = _make(cls)
+        compiled.model_config.active_outputs = {"energy"}
+        if cls is MultipolePMEModelWrapper:
+            compiled._cached_mesh = dict(eager._cached_mesh)
+            compiled._cached_cell = eager._cached_cell
+        else:
+            compiled._miller = dict(eager._miller)
+            compiled._miller_cell = eager._miller_cell
+        out = torch.compile(compiled, fullgraph=True)(batch)["energy"]
+        torch.testing.assert_close(out, ref, rtol=1e-12, atol=1e-12)
 
 
 def _schema_for(batch: Batch) -> LevelSchema:

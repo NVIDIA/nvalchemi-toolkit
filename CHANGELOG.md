@@ -10,7 +10,9 @@
   and `quadrupoles` batch fields (any subset); the Ewald split is derived from
   `cutoff`, `sigma` and `accuracy`;
   forces and stress come from autograd; `neighbor_format` accepts `MATRIX` or
-  `COO`. Single-GPU only.
+  `COO`. Single-GPU only. `compile_model=True` compiles the energy with
+  `torch.compile` while forces and stress stay on eager autograd; Ewald needs an
+  `nvalchemiops` that accepts `miller_indices`.
 - `AtomicData` / `Batch` gain per-atom `dipoles` `[N, 3]` and `quadrupoles`
   `[N, 3, 3]` fields. `PipelineModelWrapper` now wires upstream outputs into a
   consumer's `optional_inputs` as well as its `required_inputs`.
