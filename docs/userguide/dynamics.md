@@ -384,10 +384,8 @@ digraph buffer_sync {
 
         u_batch [label="active_batch"]
         u_send  [label="send_buffer" fillcolor="#4a3315"]
-        u_sinks [label="sinks\n(overflow)" style=dashed]
 
         u_batch -> u_send [label="converged\nsamples" style=bold]
-        u_batch -> u_sinks [label="excess\n(back-pressure)" style=dotted]
     }
 
     subgraph cluster_downstream {
@@ -398,11 +396,13 @@ digraph buffer_sync {
 
         d_recv  [label="recv_buffer" fillcolor="#4a3315"]
         d_batch [label="active_batch"]
+        d_overflow [label="overflow_sinks\n(pending)" style=dashed]
         d_sinks [label="sinks\n(results)" style=dashed]
 
         d_recv -> d_batch [label="incoming\nsamples" style=bold]
+        d_recv -> d_overflow [label="excess" style=dotted]
+        d_overflow -> d_batch [label="drain when\ncapacity available" style=dotted]
         d_batch -> d_sinks [label="converged\nresults" style=bold]
-        d_sinks -> d_batch [label="drain when\ncapacity available" style=dotted]
     }
 
     u_send -> d_recv [
@@ -422,14 +422,16 @@ A step proceeds as follows:
    the wait is deferred until later in the step; in `sync` mode it blocks
    immediately.
 2. **Complete receive** --- The downstream rank waits on the pending receive,
-   then routes incoming samples into its active batch (or overflow sinks if the
-   batch is full).
+   then routes incoming samples into its active batch. Samples that do not fit
+   wait in `overflow_sinks` and are drained into the batch as room frees up.
+   By default, each receiving stage keeps them in a private host-memory buffer.
 3. **Step** --- Both ranks execute their respective integrator or optimizer on their
    active batches.
 4. **Post-step** --- The upstream rank identifies converged samples, copies them into
    its send buffer (up to `BufferConfig` capacity), and issues an `isend`. An empty
    buffer is always sent to prevent deadlocks. The final stage routes converged
-   samples to its sinks instead.
+   samples to its `sinks` instead. Results are never drained back into the
+   active batch, and stored results do not keep a stage running.
 
 ```{tip}
 **Back-pressure**: when the send buffer is full, excess converged samples remain in

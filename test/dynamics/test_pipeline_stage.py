@@ -231,28 +231,31 @@ class TestBufferRouting:
         assert stage._forces_primed is False
 
     def test_buffer_to_batch_overflow_to_sinks(self) -> None:
-        """Verify excess samples go to sinks when active batch is full."""
+        """Verify excess samples go to overflow sinks when active batch is full."""
         batch = _make_batch(num_graphs=4)
         sink = HostMemory(capacity=50)
+        results = HostMemory(capacity=50)
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=5,
-            sinks=[sink],
+            overflow_sinks=[sink],
+            sinks=[results],
         )
         incoming = _make_batch(num_graphs=3)
         stage._buffer_to_batch(incoming)
         # 4 + 1 fit = 5 in batch, 2 overflow to sink
         assert stage.active_batch_size == 5
         assert len(sink) == 2
+        assert len(results) == 0
 
     def test_buffer_to_batch_no_room_all_to_sinks(self) -> None:
-        """Verify all go to sinks when active batch is completely full."""
+        """Verify all go to overflow sinks when active batch is completely full."""
         batch = _make_batch(num_graphs=5)
         sink = HostMemory(capacity=50)
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=5,
-            sinks=[sink],
+            overflow_sinks=[sink],
         )
         stage._admission_initialized = True
         incoming = _make_batch(num_graphs=2)
@@ -265,29 +268,29 @@ class TestBufferRouting:
     def test_buffer_to_batch_no_active_overflow(self) -> None:
         """Verify incoming > max_batch_size causes overflow when no batch."""
         sink = HostMemory(capacity=50)
-        stage = _CommunicationMixin(max_batch_size=2, sinks=[sink])
+        stage = _CommunicationMixin(max_batch_size=2, overflow_sinks=[sink])
         incoming = _make_batch(num_graphs=5)
         stage._buffer_to_batch(incoming)
         assert stage.active_batch_size == 2
         assert len(sink) == 3
 
     def test_overflow_to_sinks_raises_when_full(self) -> None:
-        """Verify RuntimeError when all sinks are full."""
+        """Verify RuntimeError when all overflow sinks are full."""
         sink = HostMemory(capacity=1)
         # Fill the sink
         sink.write(_make_batch(num_graphs=1))
-        stage = _CommunicationMixin(sinks=[sink])
+        stage = _CommunicationMixin(overflow_sinks=[sink])
         with pytest.raises(RuntimeError, match="All sinks are full"):
             stage._overflow_to_sinks(_make_batch(num_graphs=1))
 
     def test_overflow_to_sinks_uses_first_available(self) -> None:
-        """Verify overflow goes to the first non-full sink."""
-        sink1 = HostMemory(capacity=1)
+        """Skip a partly filled sink without room for the whole write."""
+        sink1 = HostMemory(capacity=10)
         sink2 = HostMemory(capacity=50)
-        # Fill sink1
-        sink1.write(_make_batch(num_graphs=1))
-        stage = _CommunicationMixin(sinks=[sink1, sink2])
+        sink1.write(_make_batch(num_graphs=9))
+        stage = _CommunicationMixin(overflow_sinks=[sink1, sink2])
         stage._overflow_to_sinks(_make_batch(num_graphs=2))
+        assert len(sink1) == 9
         assert len(sink2) == 2
 
 
@@ -1217,7 +1220,7 @@ class TestEdgelessBuffers:
         expected_edges = [residents.get_data(i).neighbor_list for i in range(2)]
         stage = _CommunicationMixin(active_batch=residents, max_batch_size=4)
         sink = HostMemory(capacity=10)
-        stage.sinks = [sink]
+        stage.overflow_sinks = [sink]
 
         stage._buffer_to_batch(_make_batch(num_graphs=3))
 
@@ -1509,7 +1512,7 @@ class TestPrestepZerosSendBuffer:
             comm_mode="sync",
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
             buffer_config=cfg,
         )
 
@@ -1844,17 +1847,17 @@ class TestPoststepBackPressure:
         stage._forces_primed = True
 
         # Note: final stage does NOT use _batch_to_buffer anymore.
-        # It uses inline index_select and _overflow_to_sinks directly.
+        # It uses inline index_select and _write_to_sinks directly.
         # Even if we set a send_buffer (shouldn't be used), it shouldn't matter
         mock_send_buffer = Mock()
         mock_send_buffer.system_capacity = 1  # Would limit to 1 if used
         mock_send_buffer.num_graphs = 0
         stage.send_buffer = mock_send_buffer
 
-        with patch.object(stage, "_overflow_to_sinks") as mock_overflow:
+        with patch.object(stage, "_write_to_sinks") as mock_overflow:
             stage._poststep_sync_buffers(converged_indices=torch.tensor([0, 1, 2]))
 
-            # _overflow_to_sinks should be called with a graduated batch
+            # _write_to_sinks should be called with a graduated batch
             mock_overflow.assert_called_once()
             graduated_batch = mock_overflow.call_args[0][0]
             # All 3 converged indices should be in the graduated batch
@@ -1952,7 +1955,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
         )
 
         # Put 3 graphs into the sink
@@ -1974,7 +1977,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
         )
 
         # Put 5 graphs into the sink
@@ -1996,7 +1999,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink1, sink2],
+            overflow_sinks=[sink1, sink2],
         )
 
         # Both sinks empty
@@ -2016,7 +2019,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink1, sink2],
+            overflow_sinks=[sink1, sink2],
         )
 
         # Put data in both sinks
@@ -2041,7 +2044,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink1, sink2],
+            overflow_sinks=[sink1, sink2],
         )
 
         # Put data in both sinks
@@ -2062,7 +2065,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=None,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
         )
 
         # Put data in sink
@@ -2083,7 +2086,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
             prior_rank=0,
             comm_mode="sync",
             buffer_config=_DEFAULT_CFG,
@@ -2114,7 +2117,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
             prior_rank=None,  # First stage
             comm_mode="sync",
         )
@@ -2136,7 +2139,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
             prior_rank=0,
             comm_mode="async_recv",
             buffer_config=_DEFAULT_CFG,
@@ -2167,7 +2170,7 @@ class TestOverflowDrainBack:
         stage = _CommunicationMixin(
             active_batch=batch,
             max_batch_size=10,
-            sinks=[sink],
+            overflow_sinks=[sink],
             comm_mode="async_recv",
         )
 
@@ -2182,3 +2185,176 @@ class TestOverflowDrainBack:
 
         assert stage.active_batch_size == 7
         assert len(sink) == 0
+
+
+# ---------------------------------------------------------------------------
+# Test Overflow Storage Kept Separate from Result Sinks
+# ---------------------------------------------------------------------------
+
+
+class TestOverflowTransfer:
+    """CPU overflow is selected before arrivals move to the target device."""
+
+    @pytest.mark.parametrize("has_active_batch", [False, True])
+    def test_only_admitted_graphs_move_to_device(
+        self, device: str, has_active_batch: bool
+    ) -> None:
+        """Partial admission and repeated refill never transfer the waiting tail."""
+        sizes = [2, 5, 3, 4, 6]
+        pending = Batch.from_data_list([_make_atomic_data(n) for n in sizes])
+        pending.sample_id = torch.arange(5).view(-1, 1)
+        sink = HostMemory(capacity=10)
+        sink.write(pending)
+        resident = None
+        if has_active_batch:
+            resident = _make_batch(1, num_atoms=2).to(device)
+            resident.sample_id = torch.tensor([[99]], device=device)
+        stage = _CommunicationMixin(
+            active_batch=resident,
+            max_batch_size=3,
+            overflow_sinks=[sink],
+            device_type=device,
+        )
+        transfers = []
+        original_to = Batch.to
+
+        def record_transfer(batch, target, *args, **kwargs):
+            if batch.device.type == "cpu" and torch.device(target).type == "cuda":
+                transfers.append(batch.sample_id.flatten().tolist())
+            return original_to(batch, target, *args, **kwargs)
+
+        admitted = 2 if has_active_batch else 3
+        selected = list(range(admitted))
+        waiting = list(range(admitted, 5))
+        with patch.object(Batch, "to", autospec=True, side_effect=record_transfer):
+            stage._drain_sinks_to_batch()
+
+            assert stage.active_batch.device.type == device
+            assert stage.active_batch.sample_id.flatten().tolist() == (
+                ([99] if has_active_batch else []) + selected
+            )
+            assert stage.active_batch.num_nodes_list == (
+                ([2] if has_active_batch else []) + sizes[:admitted]
+            )
+            assert len(sink) == len(waiting)
+            assert sink.read().device.type == "cpu"
+            assert sink.read().sample_id.flatten().tolist() == waiting
+
+            stage.active_batch = None
+            stage._drain_sinks_to_batch()
+
+        assert stage.active_batch.device.type == device
+        assert stage.active_batch.sample_id.flatten().tolist() == waiting
+        assert len(sink) == 0
+        assert transfers == ([selected, waiting] if device == "cuda" else [])
+
+
+class TestOverflowSinksSeparation:
+    """Pending arrivals use ``overflow_sinks``; finished results use ``sinks``."""
+
+    def test_drain_reads_only_overflow_sinks(self) -> None:
+        """Draining refills the batch from pending storage, never results."""
+        results = HostMemory(capacity=50)
+        pending = HostMemory(capacity=50)
+        results.write(_make_batch(num_graphs=2))
+        pending.write(_make_batch(num_graphs=2))
+        stage = _CommunicationMixin(
+            active_batch=_make_batch(num_graphs=1),
+            max_batch_size=10,
+            sinks=[results],
+            overflow_sinks=[pending],
+        )
+        stage._drain_sinks_to_batch()
+
+        assert stage.active_batch_size == 3
+        assert len(pending) == 0
+        assert len(results) == 2
+
+    def test_default_overflow_drains_back_to_stage_device(self, device) -> None:
+        """Host-side default overflow returns to the active batch's device."""
+        results = HostMemory(capacity=50)
+        stage = _CommunicationMixin(
+            active_batch=_make_batch(num_graphs=2).to(device),
+            max_batch_size=2,
+            device_type=device,
+            sinks=[results],
+        )
+        stage._buffer_to_batch(_make_batch(num_graphs=2).to(device))
+        assert len(results) == 0
+        assert sum(len(sink) for sink in stage.overflow_sinks) == 2
+        assert all(sink not in stage.sinks for sink in stage.overflow_sinks)
+
+        # Every resident graph was sent downstream.
+        stage.active_batch = None
+        stage._drain_sinks_to_batch()
+
+        assert stage.active_batch_size == 2
+        assert stage.active_batch.positions.device.type == device
+        assert sum(len(sink) for sink in stage.overflow_sinks) == 0
+        assert len(results) == 0
+
+    def test_result_write_skips_sink_without_room_for_whole_write(self) -> None:
+        """Result writes also choose a sink that can hold every result."""
+        nearly_full = HostMemory(capacity=10)
+        nearly_full.write(_make_batch(num_graphs=9))
+        spare = HostMemory(capacity=10)
+        stage = _CommunicationMixin(
+            active_batch=_make_batch(num_graphs=3),
+            next_rank=None,
+            sinks=[nearly_full, spare],
+        )
+        stage._remove_converged_final_stage(torch.tensor([0, 1]))
+
+        assert len(nearly_full) == 9
+        assert len(spare) == 2
+
+    def test_downstream_not_done_while_overflow_pending(self) -> None:
+        """A stage with pending overflow keeps running after upstream ends."""
+        pending = HostMemory(capacity=50)
+        pending.write(_make_batch(num_graphs=2))
+        s0 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s1 = _CommunicationMixin(
+            buffer_config=_DEFAULT_CFG,
+            overflow_sinks=[pending],
+        )
+        s0.model = Mock()
+        pipeline = DistributedPipeline(stages={0: s0, 1: s1})
+        with patch.object(pipeline, "_share_templates"):
+            pipeline.setup()
+        pipeline._done_tensor[0] = 1
+
+        with (
+            patch.object(dist, "is_initialized", return_value=True),
+            patch.object(dist, "get_rank", return_value=1),
+            patch.object(s1, "_prestep_sync_buffers"),
+            patch.object(s1, "_complete_pending_recv"),
+            patch.object(s1, "_poststep_sync_buffers"),
+        ):
+            pipeline.step()
+
+        assert s1.active_batch is None
+        assert not s1.done
+
+    def test_downstream_done_with_results_stored(self) -> None:
+        """Stored results do not keep a finished downstream stage running."""
+        results = HostMemory(capacity=50)
+        results.write(_make_batch(num_graphs=2))
+        s0 = _CommunicationMixin(buffer_config=_DEFAULT_CFG)
+        s1 = _CommunicationMixin(buffer_config=_DEFAULT_CFG, sinks=[results])
+        s0.model = Mock()
+        pipeline = DistributedPipeline(stages={0: s0, 1: s1})
+        with patch.object(pipeline, "_share_templates"):
+            pipeline.setup()
+        pipeline._done_tensor[0] = 1
+
+        with (
+            patch.object(dist, "is_initialized", return_value=True),
+            patch.object(dist, "get_rank", return_value=1),
+            patch.object(s1, "_prestep_sync_buffers"),
+            patch.object(s1, "_complete_pending_recv"),
+            patch.object(s1, "_poststep_sync_buffers"),
+        ):
+            pipeline.step()
+
+        assert s1.done
+        assert len(results) == 2

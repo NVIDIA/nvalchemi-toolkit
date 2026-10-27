@@ -73,6 +73,7 @@ from torch import distributed as dist
 from nvalchemi._typing import AtomsLike, ModelOutputs
 from nvalchemi.data import Batch
 from nvalchemi.data.level_storage import SegmentedLevelStorage
+from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks._context import DynamicsContext
 from nvalchemi.hooks._protocol import Hook
 from nvalchemi.hooks._registry import HookRegistryMixin
@@ -470,8 +471,8 @@ class _CommunicationMixin:
     ``BaseDynamics`` inherits from this class, so all dynamics subclasses
     automatically have communication capabilities for pipeline execution.
 
-    This class manages active batch buffers, overflow sinks, and inter-rank
-    communication for distributed pipeline execution.
+    This class manages active batch buffers, result and overflow sinks, and
+    inter-rank communication for distributed pipeline execution.
 
     Parameters
     ----------
@@ -487,7 +488,11 @@ class _CommunicationMixin:
         ``-1`` (unset), with the same auto-assignment semantics as
         ``prior_rank``.
     sinks : list[DataSink] | None
-        Priority-ordered overflow sinks.
+        Priority-ordered sinks for finished results.
+    overflow_sinks : list[DataSink] | None
+        Priority-ordered storage for received samples that do not fit in
+        the active batch yet. ``None`` uses a private unbounded
+        :class:`~nvalchemi.dynamics.sinks.HostMemory`.
     active_batch : Batch | None
         The currently active working batch.
     max_batch_size : int
@@ -519,7 +524,10 @@ class _CommunicationMixin:
         Rank of the next pipeline stage, with the same conventions
         as ``prior_rank``.
     sinks : list[DataSink]
-        Overflow sinks in priority order.
+        Result sinks in priority order. Never read back into computation.
+    overflow_sinks : list[DataSink]
+        Pending-sample storage in priority order, drained back into the
+        active batch when it has room.
     active_batch : Batch | None
         Current working batch.
     max_batch_size : int
@@ -572,6 +580,7 @@ class _CommunicationMixin:
         prior_rank: int | None = -1,
         next_rank: int | None = -1,
         sinks: Sequence[DataSink] | None = None,
+        overflow_sinks: Sequence[DataSink] | None = None,
         active_batch: Batch | None = None,
         max_batch_size: int = 100,
         done: bool = False,
@@ -592,7 +601,12 @@ class _CommunicationMixin:
         next_rank : int | None, optional
             Rank to send graduated samples to (next stage). Default None.
         sinks : Sequence[DataSink] | None, optional
-            Priority-ordered overflow sinks. Default None (empty list).
+            Priority-ordered sinks for finished results. Default None
+            (empty list).
+        overflow_sinks : Sequence[DataSink] | None, optional
+            Priority-ordered storage for received samples that do not fit
+            in the active batch yet. Default None, which uses a private
+            unbounded :class:`~nvalchemi.dynamics.sinks.HostMemory`.
         active_batch : Batch | None, optional
             The currently active working batch. Default None.
         max_batch_size : int, optional
@@ -635,6 +649,13 @@ class _CommunicationMixin:
         self.prior_rank = prior_rank
         self.next_rank = next_rank
         self.sinks: list[DataSink] = list(sinks) if sinks is not None else []
+        # Pending work is drained back into computation, so it must never
+        # share storage with results.
+        self.overflow_sinks: list[DataSink] = (
+            list(overflow_sinks)
+            if overflow_sinks is not None
+            else [HostMemory(capacity=sys.maxsize)]
+        )
         self.active_batch = active_batch
         self.max_batch_size = max_batch_size
         self.done = done
@@ -1126,7 +1147,8 @@ class _CommunicationMixin:
 
         If the active batch has room, samples are appended directly.
         Otherwise, excess samples are written to overflow sinks in
-        priority order.
+        priority order. Arrivals use the active batch's device, or the
+        stage's device when creating the first active batch.
 
         Parameters
         ----------
@@ -1163,6 +1185,8 @@ class _CommunicationMixin:
             )
         )
         if n_existing == 0:
+            if arrivals.device != self.device:
+                arrivals = arrivals.to(self.device)
             self.active_batch = arrivals
             self._forces_primed = reuse_forces
         else:
@@ -1263,30 +1287,81 @@ class _CommunicationMixin:
         else:
             self._buffer_to_batch(incoming)
 
+    @staticmethod
+    def _write_first_fit(
+        sinks: Sequence[DataSink],
+        batch: Batch,
+        mask: torch.Tensor | None,
+        kind: str,
+    ) -> None:
+        """Write samples to the first sink with room for all of them.
+
+        Parameters
+        ----------
+        sinks : Sequence[DataSink]
+            Candidate sinks in priority order.
+        batch : Batch
+            Samples to store.
+        mask : torch.Tensor | None
+            Boolean mask for selective writing. Forwarded to sink.write().
+        kind : str
+            Description of the samples, used in the error message.
+
+        Raises
+        ------
+        RuntimeError
+            If no sink has room for every selected sample.
+        """
+        num_graphs = batch.num_graphs if mask is None else int(mask.sum())
+        if num_graphs == 0:
+            return
+        for sink in sinks:
+            if len(sink) + num_graphs <= sink.capacity:
+                sink.write(batch, mask=mask)
+                return
+        raise RuntimeError(
+            f"All sinks are full. Cannot store {num_graphs} {kind} samples."
+        )
+
     def _overflow_to_sinks(
         self, batch: Batch, mask: torch.Tensor | None = None
     ) -> None:
-        """Write overflow samples to the first sink with available capacity.
+        """Store received samples that do not fit in the active batch.
+
+        Samples go to the first overflow sink with room for all of them and
+        are drained back into the active batch by
+        :meth:`_drain_sinks_to_batch`.
 
         Parameters
         ----------
         batch : Batch
-            Overflow samples to store.
+            Pending samples to store.
         mask : torch.Tensor | None, optional
             Boolean mask for selective writing. Forwarded to sink.write().
 
         Raises
         ------
         RuntimeError
-            If no sink has capacity for the overflow.
+            If no overflow sink has room for every selected sample.
         """
-        for sink in self.sinks:
-            if not sink.is_full:
-                sink.write(batch, mask=mask)
-                return
-        raise RuntimeError(
-            f"All sinks are full. Cannot store {batch.num_graphs} overflow samples."
-        )
+        self._write_first_fit(self.overflow_sinks, batch, mask, "overflow")
+
+    def _write_to_sinks(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
+        """Write finished samples to the first result sink with room for them.
+
+        Parameters
+        ----------
+        batch : Batch
+            Finished samples to store.
+        mask : torch.Tensor | None, optional
+            Boolean mask for selective writing. Forwarded to sink.write().
+
+        Raises
+        ------
+        RuntimeError
+            If no result sink has room for every selected sample.
+        """
+        self._write_first_fit(self.sinks, batch, mask, "result")
 
     def _batch_to_buffer(
         self, mask: torch.Tensor, *, num_requested: int | None = None
@@ -1354,14 +1429,14 @@ class _CommunicationMixin:
     def _drain_sinks_to_batch(self) -> None:
         """Pull samples from overflow sinks into the active batch.
 
-        Iterates through sinks in priority order.  For each non-empty
-        sink, drains its contents and routes them into the active batch
-        via :meth:`_buffer_to_batch`.  Stops early when the active batch
-        has no more room.
+        Iterates through ``overflow_sinks`` in priority order.  For each
+        non-empty sink, drains its contents and routes them into the active
+        batch via :meth:`_buffer_to_batch`.  Stops early when the active
+        batch has no more room.  Result ``sinks`` are never read.
 
         If the drained batch is larger than the remaining room,
         ``_buffer_to_batch`` handles the partial-fit logic (accepts what
-        fits, overflows the rest back to sinks).
+        fits, overflows the rest back to overflow sinks).
 
         Notes
         -----
@@ -1369,7 +1444,7 @@ class _CommunicationMixin:
         data from the prior rank, to backfill any remaining capacity
         with previously overflowed samples.
         """
-        for sink in self.sinks:
+        for sink in self.overflow_sinks:
             if self.room_in_active_batch <= 0:
                 break
             if len(sink) == 0:
@@ -1564,7 +1639,7 @@ class _CommunicationMixin:
                 converged_indices.numel(),
             )
         if self.sinks:
-            self._overflow_to_sinks(graduated)
+            self._write_to_sinks(graduated)
 
     def _poststep_sync_buffers(
         self, converged_indices: torch.Tensor | None = None
@@ -3457,7 +3532,7 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         self._forces_primed = False
 
         if self.sinks and graduated_mask.any():
-            self._overflow_to_sinks(batch, mask=graduated_mask)
+            self._write_to_sinks(batch, mask=graduated_mask)
 
         if remaining_indices.numel() > 0:
             result = batch.index_select(remaining_indices)
@@ -5993,10 +6068,12 @@ class DistributedPipeline:
             stage._poststep_sync_buffers(converged_indices)
 
             # Auto-terminate downstream stages: if the upstream is done
-            # and this stage has no remaining work, mark it as done.
+            # and this stage has no active or pending work, mark it as done.
+            # Stored results do not count as work.
             n_active = (
                 stage.active_batch.num_graphs if stage.active_batch is not None else 0
             )
+            n_pending = sum(len(sink) for sink in stage.overflow_sinks)
             # ``_done_tensor`` is indexed by stage slot (pipeline index in grouped
             # mode, global rank classically); the upstream slot is the prior
             # pipeline index (grouped) or the prior global rank (``prior_rank``).
@@ -6010,7 +6087,7 @@ class DistributedPipeline:
                 and upstream_slot >= 0
                 and bool(self._done_tensor[upstream_slot])
             )
-            if upstream_done and n_active == 0 and not stage.done:
+            if upstream_done and n_active == 0 and n_pending == 0 and not stage.done:
                 if self.debug_mode:
                     logger.debug(
                         "[rank {}] upstream rank {} done and no active work, marking done",
