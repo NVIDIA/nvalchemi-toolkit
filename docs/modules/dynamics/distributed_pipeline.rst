@@ -333,12 +333,22 @@ On the final rank, converged samples are written to
        dt=1.0,
        sinks=[
            HostMemory(capacity=10_000),          # primary: CPU memory
-           ZarrData(store="results.zarr"),        # overflow: disk
+           ZarrData(store="results.zarr"),        # fallback: disk
        ],
    )
 
-Sinks are tried in priority order; the first non-full sink receives
-the data.
+Sinks are tried in priority order, and each write goes to the first sink with
+room for all of it. Results are never read back into computation.
+
+
+Overflow of received samples
+----------------------------
+
+When samples arrive while a stage's active batch is full, the excess waits in
+``overflow_sinks`` and is drained into the batch as room frees up. By default,
+each stage uses its own :class:`~nvalchemi.dynamics.HostMemory`. A downstream
+stage finishes once its upstream stage is done and both its active batch and
+its overflow sinks are empty.
 
 
 Combining ``FusedStage`` and ``DistributedPipeline``
