@@ -78,8 +78,7 @@ from nvalchemi.models.base import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-    from contextlib import AbstractContextManager
+    from collections.abc import Callable, Iterator
 
     from nvalchemi._typing import ModelOutputs
     from nvalchemi.data import AtomicData, Batch
@@ -335,17 +334,26 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
         kwargs = {"fullgraph": True, **(compile_kwargs or {})}
         self._compiled_energy = torch.compile(self._per_atom_energy, **kwargs)
 
-    def _compile_scope(self) -> AbstractContextManager[Any]:
+    @contextlib.contextmanager
+    def _compile_scope(self) -> Iterator[None]:
         """Context for compiled evaluation and the derivative calls that follow.
 
         Donated buffers are disabled because ``forward`` differentiates with
         ``retain_graph=True``, which a donated-buffer backward rejects. AOT
         autograd compiles the backward lazily at the first ``autograd.grad``,
-        so this must cover the derivatives as well as the energy call.
+        so this must cover the derivatives as well as the energy call. Floats
+        are specialized so ``sigma``/``alpha`` stay concrete under
+        ``dynamic=True``; symbolic they break Dynamo's guards on the closed-form
+        constants derived from them.
         """
         if self._compiled_energy is None:
-            return contextlib.nullcontext()
-        return torch._functorch.config.patch(donated_buffer=False)
+            yield
+            return
+        with (
+            torch._functorch.config.patch(donated_buffer=False),
+            torch._dynamo.config.patch(specialize_float=True),
+        ):
+            yield
 
     # ------------------------------------------------------------------
     # BaseModelMixin surface
@@ -968,11 +976,13 @@ class MultipolePMEModelWrapper(_BaseMultipoleWrapper):
         self.spline_order = spline_order
         self._cached_cell: torch.Tensor | None = None
         self._cached_mesh: dict[int, tuple[int, int, int]] = {}
+        self._mesh_floor: dict[int, tuple[int, int, int]] = {}
 
     def invalidate_cache(self) -> None:
         """Force the mesh dimensions to be recomputed on the next call."""
         self._cached_cell = None
         self._cached_mesh = {}
+        self._mesh_floor = {}
 
     def _mesh(self, l_max: int, cell: torch.Tensor) -> tuple[int, int, int]:
         """Return mesh dimensions, recomputing only when the cell changed."""
@@ -1006,10 +1016,18 @@ class MultipolePMEModelWrapper(_BaseMultipoleWrapper):
                 dim=1,
             ).norm(dim=-1)
             heights = (volume[:, None] / cross).amax(dim=0).tolist()
-            self._cached_mesh[l_max] = tuple(
+            mesh = tuple(
                 _fft_size(math.ceil(_MESH_OVERSAMPLING[l_max] * k_cut * h / math.pi))
                 for h in heights
             )
+            if self._compiled_energy is not None:
+                # Mesh sizes are compile-time constants, so each distinct one is a
+                # recompile. Only grow it: a varying cell or batch then settles on
+                # a bounded set of meshes instead of recompiling without limit.
+                floor = self._mesh_floor.get(l_max, (0, 0, 0))
+                mesh = tuple(max(a, b) for a, b in zip(mesh, floor, strict=True))
+                self._mesh_floor[l_max] = mesh
+            self._cached_mesh[l_max] = mesh
         return self._cached_mesh[l_max]
 
     def _reciprocal_kwargs(self, l_max: int, cell: torch.Tensor) -> dict[str, Any]:

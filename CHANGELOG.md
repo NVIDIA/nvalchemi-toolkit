@@ -12,7 +12,11 @@
   forces and stress come from autograd; `neighbor_format` accepts `MATRIX` or
   `COO`. Single-GPU only. `compile_model=True` compiles the energy with
   `torch.compile` while forces and stress stay on eager autograd; Ewald needs an
-  `nvalchemiops` that accepts `miller_indices`.
+  `nvalchemiops` that accepts `miller_indices`. Compiled evaluation supports
+  dynamic shapes (inflight batching); the PME mesh only grows while compiled so
+  a changing cell settles on a bounded set of recompiles. PME needs an
+  `nvalchemiops` with the triclinic k-grid fix to be correct on non-orthogonal
+  cells.
 - `AtomicData` / `Batch` gain per-atom `dipoles` `[N, 3]` and `quadrupoles`
   `[N, 3, 3]` fields. `PipelineModelWrapper` now wires upstream outputs into a
   consumer's `optional_inputs` as well as its `required_inputs`.

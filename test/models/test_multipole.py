@@ -866,6 +866,30 @@ class TestCompileModel:
         self._assert_match(compiled(batch), eager(batch))
 
     @BOTH
+    def test_dynamic_shapes_match_eager(self, cls):
+        # Inflight batching changes the atom and system counts between calls.
+        if cls is MultipoleEwaldModelWrapper and not _ops_accept_miller_indices():
+            pytest.skip("installed nvalchemiops has no miller_indices support")
+        eager = _make(cls)
+        compiled = _make(cls, compile_model=True, compile_kwargs={"dynamic": True})
+        for w in (eager, compiled):
+            w.model_config.active_outputs = set(self.OUTPUTS)
+        for n_graphs in (1, 2, 3):
+            batch = _make_batch(n_graphs=n_graphs, l_max=1, device="cuda")
+            _build_nl(batch, eager)
+            self._assert_match(compiled(batch), eager(batch))
+
+    def test_pme_mesh_only_grows_under_compile(self):
+        cell = _make_batch(l_max=0, device="cuda").cell
+        plain, compiled = (
+            _make(MultipolePMEModelWrapper),
+            _make(MultipolePMEModelWrapper, compile_model=True),
+        )
+        big = compiled._mesh(0, cell * 2.0)
+        assert compiled._mesh(0, cell * 0.5) == big
+        assert plain._mesh(0, cell * 2.0) != plain._mesh(0, cell * 0.5)
+
+    @BOTH
     def test_compile_is_off_by_default(self, cls):
         assert _make(cls)._compiled_energy is None
 
@@ -948,3 +972,42 @@ class TestTorchCompileModule:
 
 def _schema_for(batch: Batch) -> LevelSchema:
     return _schema(batch.positions.dtype)
+
+
+class TestTriclinicCell:
+    """PME and Ewald agree on a sheared cell, where inv(cell) differs from its transpose."""
+
+    @pytest.fixture(autouse=True)
+    def _require_cuda(self):
+        pytest.importorskip("nvalchemiops")
+        if not torch.cuda.is_available():
+            pytest.skip("multipole kernels need CUDA")
+
+    @staticmethod
+    def _sheared(l_max: int, shear: float) -> Batch:
+        batch = _make_batch(l_max=l_max, device="cuda")
+        cell = batch.cell[0].clone()
+        sheared = cell.clone()
+        sheared[1, 0] += shear * L
+        batch.positions.copy_(batch.positions @ torch.linalg.inv(cell) @ sheared)
+        batch.cell.copy_(sheared)
+        return batch
+
+    @pytest.mark.parametrize("l_max", [0, 1])
+    @pytest.mark.parametrize("shear", [0.2, 0.4])
+    def test_pme_matches_ewald(self, l_max, shear):
+        outputs = {"energy", "forces", "stress"}
+        results = {}
+        for cls in (MultipoleEwaldModelWrapper, MultipolePMEModelWrapper):
+            w = _make(cls)
+            w.model_config.active_outputs = outputs
+            batch = self._sheared(l_max, shear)
+            _build_nl(batch, w)
+            results[cls] = w(batch)
+        ewald, pme = (
+            results[MultipoleEwaldModelWrapper],
+            results[MultipolePMEModelWrapper],
+        )
+        torch.testing.assert_close(pme["energy"], ewald["energy"], rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(pme["forces"], ewald["forces"], rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(pme["stress"], ewald["stress"], rtol=1e-3, atol=1e-5)
