@@ -306,6 +306,32 @@ more accurate).
    .. autofunction:: spline_spread
    .. autofunction:: spline_gather_with_force
 
+Multipole electrostatics
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Ewald electrostatics for charges, dipoles and quadrupoles (GTO-smeared
+multipoles). Moments are read from the packed ``multipole_moments`` batch field
+of shape ``(N, 1|4|9)``, whose width selects the highest order present
+(:math:`l_{max}=0, 1, 2`). The Ewald split is derived from ``cutoff``, ``sigma``
+(the GTO width of whatever produced the moments) and ``accuracy``, so it is
+consistent with the neighbor list and independent of system size. Energies are
+in eV; forces and stress come from autograd. Choose
+:class:`~nvalchemi.models.multipole.MultipoleEwaldModelWrapper` (direct
+reciprocal sum) for small and medium systems and
+:class:`~nvalchemi.models.multipole.MultipolePMEModelWrapper` (FFT mesh) for
+large ones. ``neighbor_format`` selects ``MATRIX`` (default, fixed-width) or
+``COO`` neighbor data.
+
+.. currentmodule:: nvalchemi.models.multipole
+
+.. autosummary::
+   :toctree: generated
+   :template: class.rst
+   :nosignatures:
+
+   MultipoleEwaldModelWrapper
+   MultipolePMEModelWrapper
+
 Composition
 -----------
 
