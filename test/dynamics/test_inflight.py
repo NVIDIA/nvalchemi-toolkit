@@ -246,6 +246,70 @@ def _pipeline_entry_worker(
     )
 
 
+class _TaggedDataset(MockDataset):
+    """One-atom samples whose positions encode the sample index."""
+
+    def __getitem__(self, index: int) -> tuple[AtomicData, dict]:
+        """Return a sample at ``100 * index`` so its identity survives steps."""
+        data = AtomicData(
+            atomic_numbers=torch.tensor([6], dtype=torch.long),
+            positions=torch.full((1, 3), 100.0 * index),
+        )
+        return data, {}
+
+
+class _ConvergeAllDynamics(_IncrementDynamics):
+    """Graduate every graph after each step and record which ones converged."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.converged_ids: list[int] = []
+
+    def _check_convergence(self, batch: Batch) -> torch.Tensor:
+        """Mark all graphs converged."""
+        # Samples have one atom each, so atoms and graphs align.
+        ids = torch.div(batch.positions[:, 0], 100, rounding_mode="floor")
+        self.converged_ids.extend(ids.long().tolist())
+        return torch.arange(batch.num_graphs, device=batch.device)
+
+
+def _overflow_pipeline_worker(
+    rank: int, world_size: int, queue: Any, comm_mode: str, n_samples: int
+) -> None:
+    """Stream tagged graphs into a final stage that overflows every step."""
+    model = DemoModelWrapper(DemoModel())
+    config = BufferConfig(num_systems=2, num_nodes=2, num_edges=0)
+    sampler = SizeAwareSampler(
+        _TaggedDataset([(1, 0)] * n_samples),
+        max_atoms=2,
+        max_edges=0,
+        max_batch_size=2,
+    )
+    results = HostMemory(capacity=100)
+    stages = {
+        0: _ConvergeAllDynamics(
+            model=model,
+            buffer_config=config,
+            device_type="cpu",
+            sampler=sampler,
+            comm_mode=comm_mode,
+        ),
+        1: _ConvergeAllDynamics(
+            model=model,
+            buffer_config=config,
+            device_type="cpu",
+            max_batch_size=1,
+            sinks=[results],
+            comm_mode=comm_mode,
+        ),
+    }
+    DistributedPipeline(stages=stages, backend="gloo").run()
+    if rank == 1:
+        stored = results.read()
+        stored_ids = torch.div(stored.positions[:, 0], 100, rounding_mode="floor")
+        queue.put((sorted(stored_ids.long().tolist()), stages[1].converged_ids))
+
+
 class _MaskRecordingHook:
     """Record active masks at the post-compute boundary."""
 
@@ -1948,3 +2012,21 @@ class TestStepConvergenceReturn:
         batch, converged = dynamics.step(batch)
 
         assert converged is None
+
+
+class TestPipelineOverflowThroughGloo:
+    """Overflow and results stay separate across a real two-rank pipeline."""
+
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    def test_each_graph_finishes_once_with_overflow(self, comm_mode: str) -> None:
+        """Every graph converges once on the final stage and is stored once."""
+        n_samples = 6
+        results = run_gloo(
+            world_size=2,
+            fn=_overflow_pipeline_worker,
+            args=(comm_mode, n_samples),
+        )
+        assert len(results) == 1
+        stored_ids, converged_ids = results[0]
+        assert stored_ids == list(range(n_samples))
+        assert sorted(converged_ids) == list(range(n_samples))

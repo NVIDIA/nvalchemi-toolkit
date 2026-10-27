@@ -14,6 +14,9 @@
 
 ### Fixed
 
+- `DistributedPipeline` no longer drains finished results back into
+  computation. Received samples that do not fit wait in a new
+  `overflow_sinks` list, a private `HostMemory` by default.
 - `Batch.append()` and `concatenate()` discard unused buffer rows unless
   `strip_padding=False`. `HostMemory.write()` trims padding before copying to CPU.
 
