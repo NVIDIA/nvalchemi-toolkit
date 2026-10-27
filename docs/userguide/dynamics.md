@@ -51,6 +51,16 @@ admission is an event rather than a recurring step stage, it ignores a hook's
 `frequency`; for a multi-stage hook, the frequency still applies at its other
 stages.
 
+After initial force priming, inflight refill in `BaseDynamics` and `FusedStage`
+lets existing graphs continue updating normally. Newly added graphs skip both
+integrator updates for one iteration while the regular model evaluation computes
+their initial forces.
+This avoids an extra whole-batch model evaluation. Newly added graphs begin
+integrator updates on the following step. In `FusedStage`, their stage step
+counters do not advance during the iteration that computes their initial forces.
+If no graphs remain before a refill, the refilled batch is primed as a fresh
+batch instead.
+
 Each step then proceeds through these stages in order:
 
 1. **BEFORE_STEP** hooks fire.
@@ -203,10 +213,29 @@ Per-step hooks run inside the compiled `_step_impl` and must be compatible with
 hooks are not compatible with `fullgraph=True`. Use only torch-compatible per-step
 hooks when an unbroken graph is required.
 
-Use `DynamicsStage.ON_ADMISSION` for one-time validation, shape-dependent tensor
-allocation, and Python-side setup. `FusedStage` dispatches admission before force
-priming and outside compiled `_step_impl`, so this setup does not enter the
-steady-state graph.
+Set a custom hook's `stage` to `DynamicsStage.ON_ADMISSION` for one-time validation,
+shape-dependent tensor allocation, and Python-side setup. In its `__call__` method,
+use `ctx.previous_graph_indices` to preserve per-graph state when batch membership
+changes. `FusedStage` dispatches admission before force priming and outside compiled
+`_step_impl`, so this setup does not enter the steady-state graph.
+```
+
+For `BaseDynamics` and `FusedStage`, `ctx.previous_graph_indices[i]` at
+`ON_ADMISSION` gives current graph `i`'s index at the last admission dispatch,
+or `-1` for an arrival. Intersect `ctx.previous_graph_indices < 0` with
+`ctx.active_graph_mask` to find one stage's arrivals. Several membership changes
+before a dispatch compose back to the last admission. The first admission, each
+new `run()`, and a rebuild after complete removal map every graph to `-1`. Treat
+the tensor as read-only. It is `None` at other hook stages, and fused and
+sub-stage admission hooks share the same tensor.
+
+A hook can carry its own per-graph state across the change:
+
+```python
+indices = ctx.previous_graph_indices
+retained = indices >= 0
+new_state = old_state.new_zeros((ctx.batch.num_graphs, *old_state.shape[1:]))
+new_state[retained] = old_state[indices[retained]]
 ```
 
 ## Distributed pipelines
@@ -240,6 +269,37 @@ pipeline = DistributedPipeline(stages=stages, backend="nccl")
 with pipeline:
     pipeline.run()
 ```
+
+Dynamics default to `reprime_on_entry=False`: received graphs use the
+upstream stage's forces for their first update when they carry every model output
+the receiving dynamics needs. Graphs missing any of those outputs are primed
+locally, as with `True`: they skip one update while the stage's next model
+evaluation supplies them. This assumes the stages use compatible models and force
+modifications. To refresh forces under the receiving stage's model and hooks
+before updating, opt in explicitly on the receiving stage's dynamics:
+
+```python
+coarse = FIRE2(model=fast_model, buffer_config=buffer_cfg, ...)
+fine = FIRE2(model=accurate_model, buffer_config=buffer_cfg, ..., reprime_on_entry=True)
+pipeline = coarse | fine
+```
+
+With this option, received graphs skip one update while the stage's next regular
+model evaluation gives them forces. Residents keep their forces and keep updating,
+so graphs arriving at different steps add no extra model evaluations. Sending,
+final-stage removal, and sampler refill do not refresh residents' forces.
+
+With either setting, initial sampler batches are primed locally. When received
+graphs need local forces, an empty or unprimed receiving stage primes the whole
+batch instead of skipping their update.
+
+Inside a `FusedStage`, the flag works the same way for sub-stage transitions. Set
+it on a sub-stage's dynamics, and graphs whose status changes into that sub-stage
+skip one update while their forces are refreshed.
+
+A `DomainParallel` stage reads the flag from the dynamics it wraps. It holds one
+system at a time, so a received system that needs local forces is primed as a
+whole before its first update.
 
 By default, `setup()` (called automatically by the context manager) sorts stages by
 rank and wires `prior_rank` / `next_rank` between adjacent stages as a simple linear
@@ -279,7 +339,7 @@ data a single transfer can carry:
 |-------|------------------|
 | `num_systems` | Maximum number of graphs (structures) per transfer. Determines throughput per step --- higher values move more data but consume more GPU memory. |
 | `num_nodes` | Total atom capacity across all graphs in the buffer. Must be large enough for the worst-case combination of systems. For example, transferring up to 4 structures of at most 50 atoms each requires `num_nodes=200`. |
-| `num_edges` | Total edge capacity. Set to **0** when the downstream model recomputes edges via its neighbor list (the common case). Only set a non-zero value if pre-computed edge attributes must be transferred. |
+| `num_edges` | Total edge capacity. Set to **0** when the downstream model recomputes edges via its neighbor list (the common case). Edges are omitted from transport, and arriving graphs have no edges until the neighbor-list hook rebuilds them. Only set a non-zero value if pre-computed edge attributes must be transferred. |
 
 ```python
 from nvalchemi.dynamics.base import BufferConfig
@@ -291,6 +351,11 @@ buffer_cfg = BufferConfig(num_systems=4, num_nodes=200, num_edges=0)
 When the upstream stage has more converged samples than `num_systems` allows in a
 single transfer, the excess stays in the active batch as a no-op until the next
 step --- this is the back-pressure mechanism described below.
+
+Atom and edge capacities must accommodate all graphs selected for a transfer.
+If the buffer cannot copy every selected graph, the pipeline raises `ValueError`
+before removing graphs from the active batch or sending the buffer. Increase the
+relevant `BufferConfig` capacities before rerunning.
 
 ```{important}
 Every pair of communicating stages **must** share an identical
@@ -447,6 +512,54 @@ earlier run, whose exit statuses a propagator would otherwise read as finished,
 can therefore be propagated again without a manual cleanup pass. Any object
 satisfying the {py:class}`~nvalchemi.dynamics.StructureSource` protocol can
 stand in for the sampler; {doc}`/modules/dynamics/api` lists its members.
+
+### Size-aware complete-path sampling
+
+{py:class}`~nvalchemi.dynamics.SizeAwareSampler` supports sampling whole paths
+with `by_group=True`. Each dataset item returns `(batch, metadata)`, where
+`batch` contains exactly one group. Its `get_metadata(index)` returns total
+atom and edge counts for that path. The sampler's metadata prescan does not
+load paths, and `max_batch_size` counts paths, so packing never loads a path it
+then rejects.
+
+```python
+from nvalchemi.dynamics.sampler import SizeAwareSampler
+
+sampler = SizeAwareSampler(
+    prepared_paths,
+    by_group=True,
+    max_atoms=20_000,
+    max_edges=100_000,
+    max_batch_size=8,  # complete paths
+)
+batch = sampler.build_initial_batch()
+replacements = sampler.request_replacements_budget(
+    atom_budget=5_000,
+    edge_budget=25_000,
+    max_count=2,  # replacement paths
+)
+```
+
+Paths stay complete. A candidate that exceeds the remaining atom or edge budget
+stays unconsumed, and the sampler considers other candidates. With
+`max_batch_size=None`, atom and edge budgets alone limit packing.
+
+`group_idx` gives dense local group labels in the assembled batch. `group_id`
+identifies the original dataset item, and `system_id` identifies each image
+uniquely within the sampler. Sampling preserves the dataset's source batches.
+The default `by_group=False` samples individual `AtomicData` graphs.
+
+For grouped replacement, use `request_replacements_budget()`. The singular
+`request_replacement()` and vectorized `request_replacements()` methods support
+individual graphs only.
+
+Single-device grouped dynamics supports whole-group refill with a matching
+`by_group=True` sampler. It works like ungrouped refill, with complete groups in
+place of graphs. Refill follows only the sampler's limits, not the engine's own
+`max_batch_size`. Partial-group graduation is rejected, and
+`DistributedPipeline` raises `NotImplementedError` for grouped stages. For
+prepared NEB paths, use `NEB.run(sampler=..., sinks=...)` as shown in
+[Reaction Paths and NEB](dynamics_mep.md#streaming-prepared-paths).
 
 ## What's next
 

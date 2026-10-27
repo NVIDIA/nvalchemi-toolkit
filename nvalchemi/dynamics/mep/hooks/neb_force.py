@@ -125,6 +125,8 @@ class NEBForceHook:
         keyed path. Keys are zero-based path indices; omitted paths have no
         additional fixed atoms. All three Cartesian components of every selected
         atom are fixed. Atoms in fixed endpoint images are added automatically.
+        For static runs only. Supply ``neb_fixed_node_mask`` on the batch with
+        a sampler or pipeline.
 
     Attributes
     ----------
@@ -137,6 +139,11 @@ class NEBForceHook:
 
     Notes
     -----
+    To fix atoms directly instead of through ``fixed_atom_indices``, supply
+    ``batch.neb_fixed_node_mask``, a Boolean node field of shape ``(num_nodes,)``
+    on the batch device. The hook uses this mask in place and adds fixed endpoints.
+    If absent, it creates the mask.
+
     Component-level constraints, such as fixing only one Cartesian axis, are
     not supported.
 
@@ -297,45 +304,87 @@ class NEBForceHook:
 
     @torch.compiler.disable
     def _prepare_batch(self, ctx: DynamicsContext) -> None:
-        """Validate and initialize private state for a new batch structure.
+        """Prepare NEB state for initial admission and subsequent batch changes.
 
-        This helper is reached only through the ``ON_ADMISSION`` branch of
-        :meth:`__call__` and is typically called once for a batch.
+        Called through the ``ON_ADMISSION`` branch of :meth:`__call__`, including
+        after refill. Use ``ctx.previous_graph_indices`` to identify arrivals and
+        initialize their runtime fields while preserving retained images' force
+        modes, fixed-atom masks, physical forces, and link lengths. Admission-time
+        spring constants are also preserved for retained links.
+
+        Existing batch fields are reused. Private geometry and workspace buffers
+        are rebuilt for the current batch layout.
 
         Parameters
         ----------
         ctx : DynamicsContext
-            Context containing the newly admitted grouped path batch.
+            Context containing the grouped path batch, which may include both
+            retained and arriving images after refill.
 
         Raises
         ------
         ValueError
             If the batch has no valid group layout, or if the paths, fixed atom
-            indices, cells, or PBC flags are incompatible with NEB evaluation.
+            indices/mask, cells, or PBC flags are incompatible with NEB evaluation.
         """
         batch = ctx.batch
         validate_paths(batch)
         layout = batch.group_layout
         dtype = batch.positions.dtype
         device = batch.device
+        if (
+            self.fixed_atom_indices is not None
+            and ctx.workflow is not None
+            and (
+                getattr(ctx.workflow, "sampler", None) is not None
+                or getattr(ctx.workflow, "has_neighbor", False)
+            )
+        ):
+            raise ValueError(
+                "Streaming NEB requires batch.neb_fixed_node_mask "
+                "instead of fixed_atom_indices"
+            )
+        mapping = ctx.previous_graph_indices
+        arriving = (
+            torch.ones(batch.num_graphs, dtype=torch.bool, device=device)
+            if mapping is None
+            else mapping < 0
+        )
+        arriving_nodes = arriving[batch.batch_idx]
 
         # Each path's first and last images use endpoint force handling.
         last_rank: Tensor = layout.num_graphs_per_group[layout.group_idx] - 1
         is_terminal = layout.graph_rank == last_rank
         is_endpoint = (layout.graph_rank == 0) | is_terminal
-        force_mode = torch.full_like(
-            layout.group_idx,
-            REGULAR_NEB,
-            dtype=torch.int32,
+        # BaseDynamics.refill_check zero-fills missing fields before append.
+        # Supplied arrival modes may therefore be stale, so reset arrivals while
+        # preserving retained modes.
+        force_mode = (
+            batch.force_mode
+            if "force_mode" in batch
+            else torch.full_like(layout.group_idx, REGULAR_NEB, dtype=torch.int32)
         )
-        force_mode[is_endpoint] = ENDPOINT
+        force_mode[arriving] = REGULAR_NEB
+        if "force_mode" not in batch:
+            force_mode[is_endpoint] = ENDPOINT
+        else:
+            force_mode[is_endpoint & arriving] = ENDPOINT
 
         # Identify fixed atoms including those in fixed endpoints.
-        fixed_atoms = torch.zeros(
-            batch.num_nodes,
-            dtype=torch.bool,
-            device=device,
-        )
+        if "neb_fixed_node_mask" in batch:
+            fixed_atoms = batch.neb_fixed_node_mask
+            if (
+                fixed_atoms.shape != (batch.num_nodes,)
+                or fixed_atoms.dtype != torch.bool
+                or fixed_atoms.device != device
+                or "neb_fixed_node_mask" not in batch.level_keys.get("atoms", set())
+            ):
+                raise ValueError(
+                    "neb_fixed_node_mask must be a boolean node mask "
+                    "on the batch device"
+                )
+        else:
+            fixed_atoms = torch.zeros(batch.num_nodes, dtype=torch.bool, device=device)
         if self.fixed_atom_indices is not None:
             num_nodes_per_image = batch.num_nodes_per_graph
             for path_index, atom_indices in self.fixed_atom_indices.items():
@@ -355,7 +404,9 @@ class NEBForceHook:
                             f"fixed_atom_indices[{path_index}] must contain valid "
                             f"image-local atom indices; got {atom_index}"
                         )
-                    fixed_atoms[image_starts + atom_index] = True
+                    fixed_atoms[
+                        image_starts[arriving[path_start:path_end]] + atom_index
+                    ] = True
         if self.endpoint_mode == "fixed":
             fixed_atoms[is_endpoint[batch.batch_idx.long()]] = True
 
@@ -393,6 +444,22 @@ class NEBForceHook:
         image_path_idx = layout.group_idx.to(torch.int32).contiguous()
         link_source_image_idx = torch.where(~is_terminal)[0].contiguous()
 
+        # Save retained paths' spring constants so refill does not overwrite them
+        # with newly resolved values.
+        retained_links = None
+        retained_springs = None
+        if (
+            mapping is not None
+            and self._workspace is not None
+            and self.spring.refresh is DynamicsStage.ON_ADMISSION
+        ):
+            old_sources = mapping[link_source_image_idx]
+            retained_links = old_sources >= 0
+            old_sources = old_sources[retained_links]
+            old_paths = self._workspace.image_path_idx[old_sources]
+            # Packed links omit one terminal image for each preceding path.
+            retained_springs = self._workspace.spring_constants[old_sources - old_paths]
+
         # Include fields shared with other hooks on `Batch`.
         def set_batch_field(key: str, value: Tensor, level: str) -> None:
             if key in batch:
@@ -412,17 +479,23 @@ class NEBForceHook:
             batch.add_key(key, values, level=level, overwrite=key in batch)
 
         set_batch_field("force_mode", force_mode, "system")
-        set_batch_field(
-            "physical_forces",
-            torch.zeros_like(batch.positions),
-            "node",
-        )
-        set_batch_field("neb_fixed_node_mask", fixed_atoms, "node")
-        set_batch_field(
-            "forward_link_length",
-            torch.zeros(batch.num_graphs, dtype=dtype, device=device),
-            "system",
-        )
+        if "physical_forces" in batch:
+            batch.physical_forces[arriving_nodes] = 0
+        else:
+            set_batch_field(
+                "physical_forces", torch.zeros_like(batch.positions), "node"
+            )
+        # A supplied mask was updated in place above.
+        if "neb_fixed_node_mask" not in batch:
+            set_batch_field("neb_fixed_node_mask", fixed_atoms, "node")
+        if "forward_link_length" in batch:
+            batch.forward_link_length[arriving] = 0
+        else:
+            set_batch_field(
+                "forward_link_length",
+                torch.zeros(batch.num_graphs, dtype=dtype, device=device),
+                "system",
+            )
 
         # Keep kernel-only masks and buffers private on workspace.
         prepared_mic = prepare_batch_mic(batch, path_cell, path_pbc)
@@ -447,6 +520,8 @@ class NEBForceHook:
         )
 
         self._refresh_spring_constants(ctx, DynamicsStage.ON_ADMISSION)
+        if retained_links is not None:
+            spring_constants[retained_links] = retained_springs
 
     def __call__(self, ctx: DynamicsContext, stage: DynamicsStage) -> None:
         """Prepare NEB state or construct NEB forces.

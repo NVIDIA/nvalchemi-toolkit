@@ -23,7 +23,8 @@ This module tests the full inflight batching workflow including:
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from typing import Any
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
@@ -42,6 +43,9 @@ from nvalchemi.dynamics.sampler import SizeAwareSampler
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks import DynamicsContext
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
+
+from ..distributed._gloo_harness import run_gloo
+from .conftest import _MockSampler
 
 # FIRE is deprecated in favour of FIRE2; these tests still exercise it.
 pytestmark = pytest.mark.filterwarnings(
@@ -187,6 +191,61 @@ class _IncrementDynamics(BaseDynamics):
             batch.positions.add_(1.0)
 
 
+def _pipeline_entry_worker(
+    rank: int, world_size: int, queue: Any, reprime_on_entry: bool
+) -> None:
+    """Pass upstream forces through real pipeline buffers and Gloo transport."""
+    model = DemoModelWrapper(DemoModel())
+    config = BufferConfig(num_systems=1, num_nodes=1, num_edges=0)
+    stages = {
+        index: _IncrementDynamics(
+            model=model,
+            buffer_config=config,
+            device_type="cpu",
+            reprime_on_entry=reprime_on_entry,
+        )
+        for index in range(world_size)
+    }
+    pipeline = DistributedPipeline(stages=stages, backend="gloo")
+    pipeline.setup()
+    stage = pipeline.local_stage
+    template = create_batch_with_status(n_graphs=1)
+    template.forces.fill_(99.0)
+    stage._recv_template = Batch.empty_like(template)
+    stage._ensure_buffers(template)
+    if rank == 0:
+        stage.active_batch = template
+        stage._populate_send_buffer(torch.tensor([0]))
+        stage.send_buffer.send(dst=1)
+        return
+
+    seen_batches = []
+    stage.register_hook(
+        Mock(
+            spec=["stage", "frequency"],
+            stage=DynamicsStage.BEFORE_PRE_UPDATE,
+            frequency=1,
+            side_effect=lambda ctx, stage: seen_batches.append(
+                (ctx.batch.forces.clone(), ctx.batch.positions.clone())
+            ),
+        )
+    )
+    with (
+        patch.object(stage, "_prime_forces", wraps=stage._prime_forces) as prime,
+        patch.object(model, "forward", wraps=model.forward) as forward,
+    ):
+        pipeline.step()
+    batch = stage.active_batch
+    queue.put(
+        (
+            prime.call_count,
+            forward.call_count,
+            bool((seen_batches[0][0] == 99.0).all()),
+            torch.allclose(batch.positions, seen_batches[0][1] + 2),
+        )
+    )
+
+
 class _MaskRecordingHook:
     """Record active masks at the post-compute boundary."""
 
@@ -285,14 +344,18 @@ class TestFusedStageInflight:
         # Remaining 1 + replacements 2 = 3 (all slots preserved)
         assert result.num_graphs == 3
 
-    def test_refill_allocates_and_primes_replacement_outputs(self) -> None:
-        """A fully replaced inflight batch is primed before its first update."""
-        dataset = MockDataset([(2, 0)] * 6)
+    @pytest.mark.parametrize("replacement_atoms", [2, 5])
+    def test_refill_allocates_and_primes_replacement_outputs(
+        self, replacement_atoms: int
+    ) -> None:
+        """Full replacement is primed as a fresh batch, even with new atom counts."""
+        dataset = MockDataset([(2, 0)] * 3 + [(replacement_atoms, 0)] * 3)
         sampler = SizeAwareSampler(
             dataset,
-            max_atoms=6,
+            max_atoms=3 * replacement_atoms,
             max_edges=0,
             max_batch_size=3,
+            bin_width=replacement_atoms + 1,
         )
         dynamics = DemoDynamics(
             model=self.model,
@@ -309,19 +372,31 @@ class TestFusedStageInflight:
             refill_frequency=1,
         )
 
-        with patch.object(
-            fused, "_prime_forces", wraps=fused._prime_forces
-        ) as prime_forces:
+        admission_hook = Mock(
+            spec=["stage", "frequency"],
+            stage=DynamicsStage.ON_ADMISSION,
+            frequency=1,
+        )
+        fused.register_hook(admission_hook)
+        with (
+            patch.object(fused, "_prime_forces", wraps=fused._prime_forces) as prime,
+            patch.object(fused, "compute", wraps=fused.compute) as compute,
+        ):
             result = fused.run(batch=None)
 
         assert result is None
-        assert prime_forces.call_count == 2
-        replacement_batch = prime_forces.call_args_list[1].args[0]
-        assert replacement_batch.forces.shape == (6, 3)
+        assert admission_hook.call_count == 2
+        for call in admission_hook.call_args_list:
+            assert call.args[0].previous_graph_indices.tolist() == [-1] * 3
+        assert fused._pending_graph_indices is None
+        assert prime.call_count == 2  # Initial batch and fully replaced batch.
+        assert compute.call_count == 4  # Two primes and two steps.
+        replacement_batch = compute.call_args_list[-1].args[0]
+        assert replacement_batch.forces.shape == (3 * replacement_atoms, 3)
         assert replacement_batch.energy.shape == (3, 1)
 
-    def test_base_refill_resets_full_batch_force_priming(self) -> None:
-        """BaseDynamics fully primes a reconstructed batch before updating."""
+    def test_base_refill_checks_convergence_after_initial_forces(self) -> None:
+        """Refilled graphs can converge after their initial forces are computed."""
         dataset = MockDataset([(2, 0)] * 3)
         sampler = SizeAwareSampler(dataset, max_atoms=4, max_edges=0, max_batch_size=2)
         hook = _MaskRecordingHook()
@@ -338,9 +413,9 @@ class TestFusedStageInflight:
         result = dynamics.refill_check(batch, exit_status=1)
 
         assert result is not None
-        assert dynamics._forces_primed is False
-        assert getattr(result, "reprime_pending", None) is None
-        assert getattr(result, "forces", None) is None
+        assert dynamics._forces_primed is True
+        assert result.reprime_pending.view(-1).tolist() == [False, True]
+        assert result.forces is not None
         positions_before = result.positions.clone()
 
         with patch.object(
@@ -348,45 +423,263 @@ class TestFusedStageInflight:
         ) as prime_forces:
             result, converged = dynamics.step(result)
 
-        assert prime_forces.call_count == 1
+        assert prime_forces.call_count == 0
         assert converged is not None and converged.tolist() == [0, 1]
-        torch.testing.assert_close(result.positions, positions_before + 2.0)
+        torch.testing.assert_close(result.positions[:2], positions_before[:2] + 2.0)
+        torch.testing.assert_close(result.positions[2:], positions_before[2:])
         assert hook.active_masks[-1].tolist() == [True, True]
 
-    def test_fused_refill_fully_primes_before_update(
-        self,
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("n_replacements", [0, 1, 2])
+    def test_refill_primes_only_new_graphs(
+        self, n_replacements: int, device: str, fused_stage: bool
     ) -> None:
-        """FusedStage fully primes a reconstructed batch before updating."""
-        dataset = MockDataset([(2, 0)] * 3)
-        sampler = SizeAwareSampler(dataset, max_atoms=4, max_edges=0, max_batch_size=2)
+        """Existing graphs update while refilled graphs get their initial forces."""
+        dataset = MockDataset([(2, 0)] * 3 + [(3, 0)] * n_replacements)
+        sampler = SizeAwareSampler(dataset, max_batch_size=3)
         hook = _MaskRecordingHook()
+        update_hook = _MaskRecordingHook()
+        update_hook.stage = DynamicsStage.BEFORE_PRE_UPDATE
         dynamics = _IncrementDynamics(
-            model=self.model,
-            n_steps=10,
-            convergence_hook=ConvergenceHook.from_fmax(1e6),
-            hooks=[hook],
+            model=self.model.to(device), n_steps=10, hooks=[hook, update_hook]
         )
-        fused = FusedStage(sub_stages=[(0, dynamics)], sampler=sampler)
-        batch = initialize_batch_for_dynamics(sampler.build_initial_batch())
-        batch["status"] = torch.tensor([[0], [fused.exit_status]])
-        fused._forces_primed = True
+        engine = (
+            FusedStage(sub_stages=[(0, dynamics)], sampler=sampler)
+            if fused_stage
+            else dynamics
+        )
+        engine.sampler = sampler
+        batch = sampler.build_initial_batch().to(device)
+        engine.step(batch)
+        resident_forces = batch.forces[:2].clone()
+        resident_energy = batch.energy[:1].clone()
+        batch.status[1:] = engine.exit_status
 
-        result = fused.refill_check(batch, fused.exit_status)
+        result = engine.refill_check(batch, engine.exit_status)
 
         assert result is not None
-        assert fused._forces_primed is False
-        assert not result.reprime_pending.any()
+        assert engine._pending_graph_indices.tolist() == [0] + [-1] * n_replacements
+        assert engine._forces_primed
+        assert (
+            result.reprime_pending.view(-1).tolist()
+            == [False] + [True] * n_replacements
+        )
+        torch.testing.assert_close(result.forces[:2], resident_forces)
+        torch.testing.assert_close(result.energy[:1], resident_energy)
         positions_before = result.positions.clone()
-
-        with patch.object(
-            fused, "_prime_forces", wraps=fused._prime_forces
-        ) as prime_forces:
-            result, _ = fused.step(result)
-
-        assert prime_forces.call_count == 1
-        torch.testing.assert_close(result.positions, positions_before + 2.0)
+        with (
+            patch.object(engine, "_prime_forces", wraps=engine._prime_forces) as prime,
+            patch.object(self.model, "forward", wraps=self.model.forward) as forward,
+        ):
+            engine.step(result)
+        assert prime.call_count == 0
+        assert forward.call_count == 1
+        torch.testing.assert_close(result.positions[:2], positions_before[:2] + 2)
+        torch.testing.assert_close(result.positions[2:], positions_before[2:])
+        if fused_stage:
+            assert (
+                result.n_steps_counter_0.view(-1).tolist() == [2] + [0] * n_replacements
+            )
         assert not result.reprime_pending.any()
-        assert hook.active_masks[-1].tolist() == [True, True]
+        assert hook.active_masks[-1].tolist() == [True] * result.num_graphs
+        assert (
+            update_hook.active_masks[-1].tolist() == [True] + [False] * n_replacements
+        )
+        positions_before = result.positions.clone()
+        engine.step(result)
+        torch.testing.assert_close(result.positions, positions_before + 2)
+        if fused_stage:
+            assert (
+                result.n_steps_counter_0.view(-1).tolist() == [3] + [1] * n_replacements
+            )
+
+    def test_refill_frequency_two_keeps_single_forward_per_step(self) -> None:
+        """Steps between refills resume updates without additional priming."""
+        sampler = SizeAwareSampler(MockDataset([(2, 0)] * 3), max_batch_size=2)
+        hook = _MaskRecordingHook()
+        hook.stage = DynamicsStage.BEFORE_PRE_UPDATE
+        dynamics = _IncrementDynamics(model=self.model, n_steps=100, hooks=[hook])
+        fused = FusedStage(
+            sub_stages=[(0, dynamics)],
+            sampler=sampler,
+            refill_frequency=2,
+            device_type="cpu",
+        )
+        batch = sampler.build_initial_batch()
+        batch.status[1] = fused.exit_status
+
+        with (
+            patch.object(fused, "_prime_forces", wraps=fused._prime_forces) as prime,
+            patch.object(fused, "refill_check", wraps=fused.refill_check) as refill,
+            patch.object(self.model, "forward", wraps=self.model.forward) as forward,
+        ):
+            result = fused.run(batch=batch, n_steps=5)
+
+        assert result is not None
+        assert refill.call_count == 2
+        assert prime.call_count == 1
+        assert forward.call_count == fused.step_count + 1 == 6
+        assert result.n_steps_counter_0.view(-1).tolist() == [5, 2]
+        assert [mask.tolist() for mask in hook.active_masks[-3:]] == [
+            [True, False],
+            [True, True],
+            [True, True],
+        ]
+
+    def test_refill_preserves_survivor_edge_field(self) -> None:
+        """Missing replacement edge fields are padded without losing survivor data."""
+        data_list = [
+            AtomicData(
+                atomic_numbers=torch.ones(2, dtype=torch.long),
+                positions=torch.randn(2, 3),
+                neighbor_list=torch.tensor([[0, 1]]),
+            )
+            for _ in range(3)
+        ]
+        for data in data_list[:2]:
+            data.add_edge_property("edge_attr", torch.ones(1, 2))
+        dynamics = _IncrementDynamics(
+            model=self.model, sampler=_MockSampler([data_list[2]]), device_type="cpu"
+        )
+        batch = Batch.from_data_list(data_list[:2])
+        batch["status"] = torch.zeros(2, 1, dtype=torch.long)
+        dynamics.step(batch)
+        batch.status[0] = dynamics.exit_status
+
+        result = dynamics.refill_check(batch, dynamics.exit_status)
+
+        assert result is not None
+        assert "edge_attr" in result
+        torch.testing.assert_close(result.edge_attr[:1], torch.ones(1, 2))
+        torch.testing.assert_close(result.edge_attr[1:], torch.zeros(1, 2))
+        assert result.num_edges == 2
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    def test_refill_replaces_dataset_forces_before_first_update(
+        self, fused_stage: bool
+    ) -> None:
+        """Incoming dataset forces are refreshed before a replacement advances."""
+        replacement = AtomicData(
+            atomic_numbers=torch.ones(2, dtype=torch.long),
+            positions=torch.ones(2, 3),
+            forces=torch.full((2, 3), 1e6),
+        )
+        dynamics = DemoDynamics(
+            model=self.model, n_steps=100, dt=0.1, device_type="cpu"
+        )
+        engine = (
+            FusedStage(sub_stages=[(0, dynamics)], device_type="cpu")
+            if fused_stage
+            else dynamics
+        )
+        engine.sampler = _MockSampler([replacement])
+        batch = Batch.from_data_list(
+            [
+                AtomicData(
+                    atomic_numbers=torch.ones(2, dtype=torch.long),
+                    positions=torch.randn(2, 3),
+                )
+                for _ in range(2)
+            ]
+        )
+        batch["status"] = torch.zeros(2, 1, dtype=torch.long)
+        engine.step(batch)
+        batch.status[0] = engine.exit_status
+        result = engine.refill_check(batch, engine.exit_status)
+        assert result is not None
+        torch.testing.assert_close(result.forces[2:], replacement.forces)
+        positions_before = result.positions[2:].clone()
+        velocities_before = result.velocities[2:].clone()
+
+        with patch.object(engine, "_prime_forces", wraps=engine._prime_forces) as prime:
+            engine.step(result)
+
+        assert prime.call_count == 0
+        torch.testing.assert_close(result.positions[2:], positions_before)
+        torch.testing.assert_close(result.velocities[2:], velocities_before)
+        reference = result.clone()
+        reference.positions.requires_grad_(True)
+        expected_forces = self.model(reference)["forces"].detach()
+        torch.testing.assert_close(result.forces[2:], expected_forces[2:])
+        expected_positions = (
+            positions_before
+            + velocities_before * dynamics.dt
+            + (
+                0.5
+                * result.forces[2:]
+                / result.atomic_masses[2:].unsqueeze(-1)
+                * dynamics.dt**2
+            )
+        )
+        engine.step(result)
+        torch.testing.assert_close(result.positions[2:], expected_positions)
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    def test_refill_preserves_pending_residents(self, fused_stage: bool) -> None:
+        """Repeated refill preserves pending residents as graph indices change."""
+        sampler = SizeAwareSampler(MockDataset([(2, 0)] * 5), max_batch_size=3)
+        dynamics = _IncrementDynamics(model=self.model, n_steps=10)
+        engine = FusedStage(sub_stages=[(0, dynamics)]) if fused_stage else dynamics
+        engine.sampler = sampler
+        batch = sampler.build_initial_batch()
+        engine.step(batch)
+        batch.reprime_pending = torch.tensor([[False], [True], [False]])
+        batch.status[0] = engine.exit_status
+        batch = engine.refill_check(batch, engine.exit_status)
+        assert batch.reprime_pending.view(-1).tolist() == [True, False, True]
+        batch.status[1] = engine.exit_status
+        batch = engine.refill_check(batch, engine.exit_status)
+        assert batch.reprime_pending.all()
+        assert engine._pending_graph_indices.tolist() == [1, -1, -1]
+        positions_before = batch.positions.clone()
+        engine.step(batch)
+        torch.testing.assert_close(batch.positions, positions_before)
+        assert not batch.reprime_pending.any()
+
+    def test_refill_applies_bookkeeping_defaults_to_arrivals(self) -> None:
+        """Arriving graphs get registered bookkeeping defaults, not zero placeholders."""
+
+        class _IdentityDynamics(_IncrementDynamics):
+            """Registers an identity key without changing the shared registry."""
+
+        _IdentityDynamics.register_bookkeeping_key(
+            "walker_id",
+            lambda n, dev: torch.full((n, 1), -1, dtype=torch.long, device=dev),
+        )
+        sampler = SizeAwareSampler(MockDataset([(2, 0)] * 4), max_batch_size=3)
+        dynamics = _IdentityDynamics(model=self.model, n_steps=10, sampler=sampler)
+        batch = sampler.build_initial_batch()
+        batch["walker_id"] = torch.tensor([[5], [6], [7]])
+        dynamics.step(batch)
+        batch.status[0] = dynamics.exit_status
+        result = dynamics.refill_check(batch, dynamics.exit_status)
+        assert result.reprime_pending.view(-1).tolist() == [False, False, True]
+        assert result.walker_id.view(-1).tolist() == [6, 7, -1]
+
+    def test_base_refill_masks_only_the_following_step(self) -> None:
+        """Only the step after a refill pays for masked updates."""
+        sampler = SizeAwareSampler(MockDataset([(2, 0)] * 3), max_batch_size=2)
+        dynamics = _IncrementDynamics(model=self.model, n_steps=10, sampler=sampler)
+        batch = sampler.build_initial_batch()
+        dynamics.step(batch)
+        batch.status[0] = dynamics.exit_status
+        batch = dynamics.refill_check(batch, dynamics.exit_status)
+
+        with (
+            patch.object(
+                dynamics, "_masked_pre_update", wraps=dynamics._masked_pre_update
+            ) as masked_pre,
+            patch.object(
+                dynamics, "_masked_post_update", wraps=dynamics._masked_post_update
+            ) as masked_post,
+        ):
+            dynamics.step(batch)
+            dynamics.step(batch)
+
+        assert masked_pre.call_count == 1
+        assert masked_post.call_count == 1
+        assert "reprime_pending" in batch
+        assert not dynamics._refill_pending
 
     def test_fused_pipeline_full_drain_resets_batch_initialization(self) -> None:
         """A rebuilt FusedStage pipeline batch is admitted and fully primed."""
@@ -721,6 +1014,344 @@ class TestFusedStageInflight:
 
 
 # -----------------------------------------------------------------------------
+# TestPipelinePerGraphPriming
+# -----------------------------------------------------------------------------
+
+
+class TestPipelinePerGraphPriming:
+    """Pipeline membership changes keep per-graph force priming valid."""
+
+    def setup_method(self) -> None:
+        """Set up test fixtures before each test method."""
+        self.model = DemoModelWrapper(DemoModel())
+
+    def _make_stage(
+        self,
+        fused_stage: bool,
+        sampler_batch_size: int = 3,
+        reprime_on_entry: bool = False,
+        **kwargs,
+    ) -> tuple[BaseDynamics, SizeAwareSampler, DistributedPipeline]:
+        """Build a CPU pipeline stage and a sampler of two-atom graphs."""
+        sampler = SizeAwareSampler(
+            MockDataset([(2, 0)] * 8), max_batch_size=sampler_batch_size
+        )
+        config = BufferConfig(num_systems=1, num_nodes=2, num_edges=0)
+        if fused_stage:
+            dynamics = _IncrementDynamics(
+                model=self.model, device_type="cpu", reprime_on_entry=reprime_on_entry
+            )
+            stage = FusedStage(
+                sub_stages=[(0, dynamics)],
+                buffer_config=config,
+                device_type="cpu",
+                **kwargs,
+            )
+        else:
+            stage = _IncrementDynamics(
+                model=self.model,
+                buffer_config=config,
+                device_type="cpu",
+                reprime_on_entry=reprime_on_entry,
+                **kwargs,
+            )
+        upstream = BaseDynamics(
+            model=self.model, buffer_config=config, device_type="cpu"
+        )
+        pipeline = DistributedPipeline(stages={0: upstream, 1: stage})
+        pipeline.setup()
+        return stage, sampler, pipeline
+
+    def _step_counting_calls(
+        self, stage: BaseDynamics, batch: Batch
+    ) -> tuple[int, int]:
+        """Step once and return ``(_prime_forces calls, model forward calls)``."""
+        with (
+            patch.object(stage, "_prime_forces", wraps=stage._prime_forces) as prime,
+            patch.object(self.model, "forward", wraps=self.model.forward) as forward,
+        ):
+            stage.step(batch)
+        return prime.call_count, forward.call_count
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("final_stage", [False, True])
+    def test_removal_keeps_retained_forces(
+        self, fused_stage: bool, final_stage: bool
+    ) -> None:
+        """Sending or retiring graphs needs no whole-batch reprime."""
+        stage, sampler, pipeline = self._make_stage(
+            fused_stage, prior_rank=0, next_rank=None if final_stage else 2
+        )
+        batch = sampler.build_initial_batch()
+        stage.active_batch = batch
+        stage._ensure_buffers(batch)
+        stage.step(batch)
+        # Graph 1 is still waiting for its initial forces from a refill.
+        batch["reprime_pending"] = torch.tensor([[False], [True], [False]])
+        stage._refill_pending = True
+        resident_forces = batch.forces[2:].clone()
+
+        if final_stage:
+            stage._remove_converged_final_stage(torch.tensor([0]))
+        else:
+            stage._populate_send_buffer(torch.tensor([0]))
+
+        result = stage.active_batch
+        assert stage._forces_primed is True
+        assert result.reprime_pending.view(-1).tolist() == [True, False]
+        torch.testing.assert_close(result.forces, resident_forces)
+        positions_before = result.positions.clone()
+        assert self._step_counting_calls(stage, result) == (0, 1)
+        torch.testing.assert_close(result.positions[:2], positions_before[:2])
+        torch.testing.assert_close(result.positions[2:], positions_before[2:] + 2)
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    def test_receive_primes_only_arrivals(self, fused_stage: bool) -> None:
+        """Received graphs skip one update and get forces from the next compute."""
+        stage, sampler, pipeline = self._make_stage(
+            fused_stage, sampler_batch_size=2, prior_rank=0, max_batch_size=4
+        )
+        batch = sampler.build_initial_batch()
+        stage.active_batch = batch
+        stage.step(batch)
+        batch["label"] = torch.tensor([[5], [6]])
+        resident_forces = batch.forces.clone()
+        incoming = sampler.build_initial_batch()
+        # No upstream forces are available, so arrivals need local initialization.
+        stage._buffer_to_batch(incoming)
+
+        result = stage.active_batch
+        assert result.num_graphs == 4
+        assert stage._forces_primed is True
+        assert result.reprime_pending.view(-1).tolist() == [False, False, True, True]
+        assert result.label.view(-1).tolist() == [5, 6, 0, 0]
+        torch.testing.assert_close(result.forces[:4], resident_forces)
+        positions_before = result.positions.clone()
+        assert self._step_counting_calls(stage, result) == (0, 1)
+        torch.testing.assert_close(result.positions[:4], positions_before[:4] + 2)
+        torch.testing.assert_close(result.positions[4:], positions_before[4:])
+        assert not (result.forces[4:] == 99.0).any()
+        assert not result.reprime_pending.any()
+        positions_before = result.positions.clone()
+        stage.step(result)
+        torch.testing.assert_close(result.positions, positions_before + 2)
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("reprime_on_entry", [False, True])
+    @pytest.mark.parametrize("has_residents", [False, True])
+    @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
+    def test_receive_reprime_policy(
+        self,
+        fused_stage: bool,
+        reprime_on_entry: bool,
+        has_residents: bool,
+        comm_mode: str,
+    ) -> None:
+        """Entry reuses upstream forces or primes arrivals without extra compute."""
+        stage, sampler, pipeline = self._make_stage(
+            fused_stage,
+            sampler_batch_size=2,
+            reprime_on_entry=reprime_on_entry,
+            prior_rank=0,
+            max_batch_size=4,
+            comm_mode=comm_mode,
+        )
+        if has_residents:
+            batch = sampler.build_initial_batch()
+            stage.active_batch = batch
+            stage.step(batch)
+        incoming = initialize_batch_for_dynamics(
+            sampler.build_initial_batch().index_select([0])
+        )
+        incoming.forces.fill_(99.0)
+        stage._ensure_buffers(stage.active_batch if has_residents else incoming)
+        seen_forces = []
+        stage.register_hook(
+            Mock(
+                spec=["stage", "frequency"],
+                stage=DynamicsStage.BEFORE_PRE_UPDATE,
+                frequency=1,
+                side_effect=lambda ctx, stage: seen_forces.append(
+                    ctx.batch.forces.clone()
+                ),
+            )
+        )
+        with patch.object(Batch, "irecv", return_value=Mock(wait=lambda: incoming)):
+            stage._prestep_sync_buffers()
+            stage._complete_pending_recv()
+
+        result = stage.active_batch
+        assert result.num_graphs == (3 if has_residents else 1)
+        positions_before = result.positions.clone()
+        # Only an empty stage needs a whole-batch prime under the opt-in.
+        full_prime = reprime_on_entry and not has_residents
+        assert self._step_counting_calls(stage, result) == (
+            (1, 2) if full_prime else (0, 1)
+        )
+        assert bool((seen_forces[0][-2:] == 99.0).all()) is not full_prime
+        # With primed residents, the arrival skips one update instead.
+        arrival_shift = 0 if reprime_on_entry and has_residents else 2
+        torch.testing.assert_close(result.positions[:-2], positions_before[:-2] + 2)
+        torch.testing.assert_close(
+            result.positions[-2:], positions_before[-2:] + arrival_shift
+        )
+        if fused_stage:
+            assert not result.reprime_pending.any()
+        # The opt-in is admission-driven, not an extra compute on every step.
+        assert self._step_counting_calls(stage, result) == (0, 1)
+
+    @pytest.mark.parametrize("reprime_on_entry", [False, True])
+    def test_reprime_policy_through_gloo_handoff(self, reprime_on_entry: bool) -> None:
+        """Real inter-rank handoff preserves forces and applies the entry policy."""
+        results = run_gloo(
+            world_size=2,
+            fn=_pipeline_entry_worker,
+            args=(reprime_on_entry,),
+        )
+        assert results == [
+            (
+                int(reprime_on_entry),
+                2 if reprime_on_entry else 1,
+                not reprime_on_entry,
+                True,
+            )
+        ]
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("has_residents", [False, True])
+    def test_receive_missing_required_output_initializes_locally(
+        self, fused_stage: bool, has_residents: bool
+    ) -> None:
+        """An upstream force tensor alone cannot replace a required missing output."""
+        stage, sampler, pipeline = self._make_stage(fused_stage, sampler_batch_size=2)
+        stage.__needs_keys__ = {"forces", "energy"}
+        if has_residents:
+            stage.active_batch = sampler.build_initial_batch()
+            stage.step(stage.active_batch)
+        incoming = sampler.build_initial_batch()
+        incoming["forces"] = torch.full((incoming.num_nodes, 3), 99.0)
+        if "energy" in incoming:
+            del incoming["energy"]
+        stage._buffer_to_batch(incoming)
+
+        result = stage.active_batch
+        before = result.positions.clone()
+        assert self._step_counting_calls(stage, result) == (
+            (0, 1) if has_residents else (1, 2)
+        )
+        if has_residents:
+            torch.testing.assert_close(result.positions[-4:], before[-4:])
+        else:
+            torch.testing.assert_close(result.positions, before + 2)
+        assert not (result.forces[-4:] == 99.0).any()
+        assert "energy" in result
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("reprime_on_entry", [False, True])
+    @pytest.mark.parametrize("final_stage", [False, True])
+    def test_removal_does_not_reprime_residents(
+        self, fused_stage: bool, reprime_on_entry: bool, final_stage: bool
+    ) -> None:
+        """Removal keeps residents' forces under either entry policy."""
+        stage, sampler, pipeline = self._make_stage(
+            fused_stage,
+            reprime_on_entry=reprime_on_entry,
+            prior_rank=0,
+            next_rank=None if final_stage else 2,
+        )
+        generation = [0]
+        seen_forces = []
+
+        def admission(ctx: DynamicsContext, stage: DynamicsStage) -> None:
+            """Change the workflow's force configuration on each admission."""
+            generation[0] += 1
+
+        def force_hook(ctx: DynamicsContext, stage: DynamicsStage) -> None:
+            """Apply the configuration selected by the latest admission."""
+            ctx.batch.forces.fill_(float(generation[0]))
+
+        for boundary, callback in (
+            (DynamicsStage.ON_ADMISSION, admission),
+            (DynamicsStage.AFTER_COMPUTE, force_hook),
+            (
+                DynamicsStage.BEFORE_PRE_UPDATE,
+                lambda ctx, stage: seen_forces.append(ctx.batch.forces.clone()),
+            ),
+        ):
+            stage.register_hook(
+                Mock(
+                    spec=["stage", "frequency"],
+                    stage=boundary,
+                    frequency=1,
+                    side_effect=callback,
+                )
+            )
+        batch = sampler.build_initial_batch()
+        stage.active_batch = batch
+        stage.step(batch)
+        stage._ensure_buffers(batch)
+        if final_stage:
+            stage._remove_converged_final_stage(torch.tensor([0]))
+        else:
+            stage._populate_send_buffer(torch.tensor([0]))
+
+        assert self._step_counting_calls(stage, stage.active_batch) == (0, 1)
+        assert generation[0] == 2
+        torch.testing.assert_close(seen_forces[-1], torch.ones_like(seen_forces[-1]))
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    def test_receive_into_unprimed_stage_primes_whole_batch(
+        self, fused_stage: bool
+    ) -> None:
+        """Without primed residents, the next step primes every graph."""
+        stage, sampler, pipeline = self._make_stage(
+            fused_stage, sampler_batch_size=2, prior_rank=0, max_batch_size=4
+        )
+        stage.active_batch = initialize_batch_for_dynamics(
+            sampler.build_initial_batch()
+        )
+        stage._buffer_to_batch(
+            initialize_batch_for_dynamics(sampler.build_initial_batch())
+        )
+
+        assert stage.active_batch.num_graphs == 4
+        assert stage._forces_primed is False
+        assert self._step_counting_calls(stage, stage.active_batch) == (1, 2)
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("reprime_on_entry", [False, True])
+    def test_pipeline_refill_keeps_fields_missing_from_arrivals(
+        self, fused_stage: bool, reprime_on_entry: bool
+    ) -> None:
+        """Refill retains resident fields and honors the pipeline admission policy."""
+        stage, sampler, pipeline = self._make_stage(
+            fused_stage,
+            reprime_on_entry=reprime_on_entry,
+            next_rank=1,
+            sampler=None,
+        )
+        stage.sampler = sampler
+        batch = sampler.build_initial_batch()
+        stage.active_batch = batch
+        stage._ensure_buffers(batch)
+        stage.step(batch)
+        batch["label"] = torch.tensor([[5], [6], [7]])
+        # Graphs 0 and 1 graduate, but the send buffer only holds one.
+        batch.status[:2] = stage.exit_status
+        stage._populate_send_buffer(torch.tensor([0]))
+
+        result = stage.refill_check(stage.active_batch, stage.exit_status)
+
+        assert stage._forces_primed is True
+        assert result.reprime_pending.view(-1).tolist() == [False, True, True]
+        assert result.label.view(-1).tolist() == [7, 0, 0]
+        positions_before = result.positions.clone()
+        assert self._step_counting_calls(stage, result) == (0, 1)
+        torch.testing.assert_close(result.positions[:2], positions_before[:2] + 2)
+        torch.testing.assert_close(result.positions[2:], positions_before[2:])
+
+
+# -----------------------------------------------------------------------------
 # TestRefillCheck
 # -----------------------------------------------------------------------------
 
@@ -731,6 +1362,22 @@ class TestRefillCheck:
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
         self.model = DemoModelWrapper(DemoModel())
+
+    @pytest.mark.parametrize("primed", [False, True])
+    def test_refill_preserves_flat_bookkeeping(self, primed: bool) -> None:
+        """Flat resident bookkeeping is normalized before appending defaults."""
+        sampler = SizeAwareSampler(MockDataset([(2, 0)] * 4), max_batch_size=2)
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+        batch = sampler.build_initial_batch()
+        batch["status"] = torch.tensor([0, 1])
+        batch["system_id"] = torch.tensor([17, 18])
+        dynamics._forces_primed = primed
+
+        result = dynamics.refill_check(batch, exit_status=1)
+
+        assert result.status.tolist() == [[0], [0]]
+        assert result.system_id.tolist() == [[17], [2]]
+        assert result.reprime_pending.view(-1).tolist() == [False, primed]
 
     def test_refill_replaces_graduated_with_fresh(self) -> None:
         """Should replace graduated samples in-place and return same batch.
@@ -840,6 +1487,8 @@ class TestRefillCheck:
         batch = sampler.build_initial_batch()
         assert sampler.exhausted  # All 3 consumed
 
+        dynamics._ensure_admission_initialized(batch)
+        dynamics._record_batch_change(batch, torch.arange(3))
         # Mark all as graduated
         batch["status"] = torch.tensor([[1], [1], [1]])
 
@@ -848,6 +1497,25 @@ class TestRefillCheck:
         # No replacements available, no remaining
         assert result is None
         assert dynamics.done is True
+        assert dynamics._pending_graph_indices is None
+
+    def test_refill_raises_when_pending_samples_cannot_fit_empty_batch(
+        self,
+    ) -> None:
+        """An unfillable empty batch raises instead of reporting completion."""
+        dataset = MockDataset([(2, 0)] * 3)
+        sampler = SizeAwareSampler(
+            dataset, max_atoms=20, max_edges=10, max_batch_size=1
+        )
+        dynamics = BaseDynamics(model=self.model, sampler=sampler, device_type="cpu")
+        batch = sampler.build_initial_batch()
+        batch["status"] = torch.tensor([[1]])
+        with (
+            patch.object(sampler, "request_replacements_budget", return_value=[]),
+            pytest.raises(ValueError, match="empty active batch"),
+        ):
+            dynamics.refill_check(batch, exit_status=1)
+        assert not dynamics.done
 
     def test_refill_raises_without_sampler(self) -> None:
         """Should raise RuntimeError when sampler is None.
@@ -878,10 +1546,13 @@ class TestRefillCheck:
         # All samples at status=0 (not graduated)
         batch["status"] = torch.tensor([[0], [0], [0], [0], [0]])
 
+        dynamics._ensure_admission_initialized(batch)
         result = dynamics.refill_check(batch, exit_status=1)
 
         # Should return same batch unchanged
         assert result is batch
+        assert dynamics._admission_initialized
+        assert dynamics._pending_graph_indices is None
 
     def test_compute_detaches_live_inputs_before_refill(self) -> None:
         """Autograd inputs must be detached after compute() so refill is clean.

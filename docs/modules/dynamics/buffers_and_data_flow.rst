@@ -178,8 +178,7 @@ to coordinate data flow between ranks:
    in async modes the handle is stored for later completion.
 
 2. **_complete_pending_recv()**: Waits on the deferred receive, routes
-   data through the recv buffer into the active batch (stripping buffer
-   padding via ``to_data_list`` / ``from_data_list``), and drains
+   data through the recv buffer into the active batch, and drains
    overflow sinks to backfill any available capacity.
 
 3. **step()**: The dynamics integration step (forward pass, pre_update,
@@ -263,10 +262,10 @@ several helper methods for routing data between buffers:
   recv buffer.
 
 - **_buffer_to_batch(incoming)**: Routes incoming data into the active
-  batch.  All code paths reconstruct the batch via
-  :meth:`to_data_list() <nvalchemi.data.Batch.to_data_list>` +
-  :meth:`from_data_list() <nvalchemi.data.Batch.from_data_list>` to
-  strip buffer padding and produce tight tensors.  Three cases:
+  batch.  Admitted graphs are copied out of the buffer with
+  :meth:`index_select() <nvalchemi.data.Batch.index_select>`, which
+  drops buffer padding, and added with :meth:`append()
+  <nvalchemi.data.Batch.append>`.  Three cases:
 
   1. No active batch exists: adopt the incoming data directly.
   2. Room available: append to the existing active batch.
@@ -294,16 +293,6 @@ several helper methods for routing data between buffers:
 
 - **_drain_sinks_to_batch()**: Pulls samples from sinks back into the
   active batch when room is available.
-
-.. note::
-
-   ``_buffer_to_batch`` uses :meth:`to_data_list()
-   <nvalchemi.data.Batch.to_data_list>` + :meth:`from_data_list()
-   <nvalchemi.data.Batch.from_data_list>` for combining batches. This
-   is O(N) Python-level reconstruction. In high-throughput pipelines,
-   this can be a bottleneck compared to the Warp-accelerated
-   ``put`` / ``defrag`` path.
-
 
 Sample lifecycle
 ----------------
@@ -455,8 +444,8 @@ available:
   of :meth:`index_select() <nvalchemi.data.Batch.index_select>` due to
   Warp int32/int64 dtype incompatibility.
 
-- :class:`~nvalchemi.dynamics.HostMemory`: CPU-resident, decomposes
-  batches into :class:`~nvalchemi.data.AtomicData` lists.
+- :class:`~nvalchemi.dynamics.HostMemory`: CPU-resident, stores each write
+  as a CPU copy of the batch.
 
 - :class:`~nvalchemi.dynamics.ZarrData`: Disk-backed, delegates to
   :class:`~nvalchemi.data.AtomicDataZarrWriter`.

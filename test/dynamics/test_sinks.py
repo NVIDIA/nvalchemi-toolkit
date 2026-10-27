@@ -22,11 +22,12 @@ HostMemory, and ZarrData.
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import torch
 
-from nvalchemi.data import AtomicData, Batch
+from nvalchemi.data import AtomicData, Batch, LevelSchema
 from nvalchemi.dynamics.sinks import (
     DataSink,
     GPUBuffer,
@@ -90,6 +91,25 @@ def create_single_atom_batch(num_graphs: int = 1, device: str = "cpu") -> Batch:
         for _ in range(num_graphs)
     ]
     return Batch.from_data_list(data_list, device=device)
+
+
+def create_grouped_batch(group_sizes: list[int], device: str = "cpu") -> Batch:
+    """Create a grouped batch with the given number of graphs per group."""
+    batch = create_test_batch(num_graphs=sum(group_sizes), device=device)
+    batch.set_group_layout(
+        torch.repeat_interleave(
+            torch.arange(len(group_sizes), device=device),
+            torch.tensor(group_sizes, device=device),
+        )
+    )
+    return batch
+
+
+def _make_sink(kind: str, tmp_path: Path, capacity: int = 100) -> DataSink:
+    """Create a host or Zarr sink for grouped-write tests."""
+    if kind == "host":
+        return HostMemory(capacity=capacity)
+    return ZarrData(store=tmp_path / "grouped_store", capacity=capacity)
 
 
 # -----------------------------------------------------------------------------
@@ -620,6 +640,251 @@ class TestHostMemory:
             buffer.write(batch, mask=mask)
 
 
+class TestHostMemoryStorage:
+    """HostMemory stores bulk CPU copies that stay isolated from callers."""
+
+    def test_write_and_read_do_not_decompose_graphs(self, device: str) -> None:
+        """Grouped writes and reads stay bulk instead of rebuilding each graph."""
+        sink = HostMemory(capacity=100)
+        batch = create_grouped_batch([3, 2], device=device)
+        with patch.object(Batch, "get_data", side_effect=AssertionError):
+            sink.write(batch)
+            sink.write(batch, mask=torch.tensor([0, 0, 0, 1, 1], device=device) > 0)
+            result = sink.read()
+        assert result.group_idx.tolist() == [0, 0, 0, 1, 1, 2, 2]
+
+    def test_read_keeps_custom_fields_identity_and_connectivity(
+        self, device: str
+    ) -> None:
+        """Custom fields, path identity and edge offsets survive grouped writes."""
+
+        def make(group_idx: list[int], ids: list[int]) -> Batch:
+            data_list = [
+                AtomicData(
+                    atomic_numbers=torch.tensor([6, 8]),
+                    positions=torch.randn(2, 3),
+                    neighbor_list=torch.tensor([[0, 1], [1, 0]]),
+                )
+                for _ in group_idx
+            ]
+            batch = Batch.from_data_list(data_list, device=device)
+            batch.set_group_layout(torch.tensor(group_idx, device=device))
+            batch.add_key("group_id", [torch.tensor([i]) for i in ids], level="system")
+            batch.add_key(
+                "status",
+                list(torch.arange(batch.num_graphs).float().unbind()),
+                level="system",
+            )
+            return batch
+
+        first = make([0, 0, 1], [7, 7, 3])
+        second = make([0, 1, 1], [5, 9, 9])
+        sink = HostMemory(capacity=100)
+        sink.write(first)
+        sink.write(second, mask=torch.tensor([False, True, True], device=device))
+
+        result = sink.read()
+        assert result.device == torch.device("cpu")
+        assert result.group_idx.tolist() == [0, 0, 1, 2, 2]
+        assert result.group_id.flatten().tolist() == [7, 7, 3, 9, 9]
+        assert result.status.flatten().tolist() == [0.0, 1.0, 2.0, 1.0, 2.0]
+        expected = torch.cat([first.positions, second.positions[2:]]).cpu()
+        assert torch.equal(result.positions, expected)
+        # Each graph's edges point at its own two atoms after concatenation.
+        starts = result.batch_ptr[:-1].repeat_interleave(2)
+        assert torch.equal(
+            result.neighbor_list,
+            torch.tensor([[0, 1], [1, 0]] * result.num_graphs) + starts[:, None],
+        )
+
+    def test_stored_data_is_independent_of_source_and_reads(self, device: str) -> None:
+        """Later changes to the source batch or a read result do not leak in."""
+        sink = HostMemory(capacity=100)
+        batch = create_grouped_batch([2, 1], device=device)
+        expected = batch.positions.cpu().clone()
+        sink.write(batch)
+
+        # A reused source buffer is overwritten after the write.
+        batch.positions.zero_()
+        batch.group_idx.fill_(5)
+        first_read = sink.read()
+        first_read.positions.add_(1.0)
+        first_read.group_idx.add_(3)
+
+        second_read = sink.read()
+        assert torch.equal(second_read.positions, expected)
+        assert second_read.group_idx.tolist() == [0, 0, 1]
+
+    def test_rejected_writes_leave_the_sink_unchanged(self) -> None:
+        """Partial groups, overflow and mixed modes raise before storing."""
+        sink = HostMemory(capacity=5)
+        sink.write(create_grouped_batch([2, 1]))
+        before = sink.read().positions
+
+        batch = create_grouped_batch([1, 2])
+        with pytest.raises(ValueError, match="complete groups"):
+            sink.write(batch, mask=torch.tensor([True, True, False]))
+        with pytest.raises(RuntimeError, match="Buffer is full"):
+            sink.write(create_grouped_batch([3]))
+        with pytest.raises(ValueError, match="mix grouped and ungrouped"):
+            sink.write(create_test_batch(num_graphs=1))
+
+        assert len(sink) == 3
+        assert torch.equal(sink.read().positions, before)
+        # Capacity counts graphs, so two more graphs still fit.
+        sink.write(create_grouped_batch([2]))
+        assert len(sink) == 5
+        assert sink.is_full
+
+    def test_read_rejects_a_later_write_missing_a_stored_field(self) -> None:
+        """A field the first write stored is never zero-filled or dropped."""
+        sink = HostMemory(capacity=10)
+        first = create_grouped_batch([2, 1])
+        first.add_key("status", [torch.tensor([1.0])] * 3, level="system")
+        sink.write(first)
+        sink.write(create_grouped_batch([2]))
+        assert len(sink) == 5
+
+        for _ in range(2):
+            with pytest.raises(
+                ValueError,
+                match=r"Field 'status' in level 'system' is missing from samples \[3, 4\]",
+            ):
+                sink.read()
+
+    @pytest.mark.parametrize("grouped", [False, True])
+    @pytest.mark.parametrize(
+        "padded_first,padded_second", [(True, False), (False, True), (True, True)]
+    )
+    def test_read_padded_writes(self, device, grouped, padded_first, padded_second):
+        """Whole-buffer writes retain capacity; merging excludes unoccupied rows."""
+        source = (
+            create_grouped_batch([2, 1], device)
+            if grouped
+            else create_test_batch(3, device)
+        )
+        writes = []
+        for padded in (padded_first, padded_second):
+            if padded:
+                batch = Batch.empty(
+                    num_systems=8,
+                    num_nodes=32,
+                    num_edges=0,
+                    template=source,
+                    device=device,
+                )
+                batch.put(source, torch.ones(3, dtype=torch.bool, device=device))
+                writes.append(batch)
+            else:
+                writes.append(source.clone())
+        sink = HostMemory(capacity=6)
+        for batch in writes:
+            sink.write(batch)
+        for stored, original in zip(sink._batches, writes, strict=True):
+            assert stored.system_capacity == original.system_capacity
+        result = sink.read()
+        assert result.num_graphs == 6
+        assert result.num_nodes == 12
+        assert result.positions.shape[0] == 12
+        torch.testing.assert_close(
+            result.positions, torch.cat([source.positions.cpu()] * 2)
+        )
+        if grouped:
+            assert result.system_capacity == 6
+            assert result.group_idx.tolist() == [0, 0, 1, 2, 2, 3]
+        for original in writes:
+            assert original.num_graphs == 3
+
+    def test_read_ignores_fields_only_later_writes_carry(self) -> None:
+        """The first write's fields stay authoritative for extra incoming fields."""
+        first = create_grouped_batch([2, 1])
+        second = create_grouped_batch([1, 2])
+        second.add_key("status", [torch.tensor([1.0])] * 3, level="system")
+        sink = HostMemory(capacity=10)
+        sink.write(first)
+        sink.write(second)
+        result = sink.read()
+        assert "status" not in result
+        assert "status" in second
+        assert result.group_idx.tolist() == [0, 0, 1, 2, 3, 3]
+
+    def test_failed_concatenation_keeps_stored_writes(self) -> None:
+        """A failed bulk merge leaves the original cached writes intact."""
+        sink = HostMemory(capacity=10)
+        first = create_test_batch(1)
+        second = create_test_batch(1)
+        second.positions = torch.ones(second.num_nodes, 4)
+        sink.write(first)
+        sink.write(second)
+        stored = sink._batches.copy()
+        for _ in range(2):
+            with pytest.raises(ValueError, match="incompatible trailing shapes"):
+                sink.read()
+            assert len(sink._batches) == len(stored)
+            assert all(
+                actual is before for actual, before in zip(sink._batches, stored)
+            )
+            torch.testing.assert_close(sink._batches[0].positions, first.positions)
+
+    def test_zero_allows_a_different_mode(self) -> None:
+        """After zero() the sink accepts ungrouped data and starts empty."""
+        sink = HostMemory(capacity=10)
+        sink.write(create_grouped_batch([2]))
+        sink.zero()
+        with pytest.raises(RuntimeError, match="empty"):
+            sink.read()
+        sink.write(create_test_batch(num_graphs=3))
+        result = sink.read()
+        assert len(sink) == 3
+        assert "group_idx" not in result
+
+    def test_writes_after_a_read_keep_accumulating(self) -> None:
+        """A read between writes does not lose, repeat or merge groups."""
+        sink = HostMemory(capacity=20)
+        batches = [create_grouped_batch(sizes) for sizes in ([2, 1], [1], [3, 1])]
+        sink.write(batches[0])
+        sink.write(batches[1])
+        assert sink.read().group_idx.tolist() == [0, 0, 1, 2]
+
+        sink.write(batches[2])
+        result = sink.read()
+        assert len(sink) == 8
+        assert result.group_idx.tolist() == [0, 0, 1, 2, 3, 3, 3, 4]
+        expected = torch.cat([batch.positions for batch in batches])
+        assert torch.equal(result.positions, expected)
+        assert torch.equal(sink.read().positions, expected)
+
+    def test_read_keeps_data_class_and_custom_levels(self) -> None:
+        """Custom AtomicData classes and custom-level fields round-trip."""
+
+        class TaggedData(AtomicData):
+            """AtomicData subclass standing in for a user data class."""
+
+        def make(num_graphs: int, offset: float) -> Batch:
+            data_list = []
+            for i in range(num_graphs):
+                data = TaggedData(
+                    atomic_numbers=torch.tensor([6, 8]),
+                    positions=torch.randn(2, 3),
+                )
+                data.samples = torch.full((i + 1, 1), offset + i)
+                data_list.append(data)
+            schema = LevelSchema()
+            schema.add_level("draws", segmented=True)
+            schema.set("samples", "draws")
+            return Batch.from_data_list(data_list, attr_map=schema)
+
+        sink = HostMemory(capacity=10)
+        sink.write(make(2, 0.0))
+        sink.write(make(1, 10.0))
+        result = sink.read()
+
+        assert "draws" in result.level_keys
+        assert result.samples.flatten().tolist() == [0.0, 1.0, 1.0, 10.0]
+        assert isinstance(result.get_data(2), TaggedData)
+        assert result.get_data(1).samples.flatten().tolist() == [1.0, 1.0]
+
+
 class TestZarrData:
     """Test suite for ZarrData implementation."""
 
@@ -742,3 +1007,52 @@ class TestZarrData:
         mask = torch.tensor([True, False])  # Wrong length
         with pytest.raises(ValueError, match="mask length"):
             sink.write(batch, mask=mask)
+
+    def test_zero_restarts_group_labels(self, tmp_path: Path) -> None:
+        """Group labels written after zero() start again at zero."""
+        sink = ZarrData(store=tmp_path / "test_store", capacity=100)
+        sink.write(create_grouped_batch([2, 1]))
+        sink.zero()
+        sink.write(create_grouped_batch([1, 2]))
+        assert sink.read().group_idx.tolist() == [0, 1, 1]
+
+
+@pytest.mark.parametrize("kind", ["host", "zarr"])
+class TestGroupedHostAndZarrSinks:
+    """Grouped writes to HostMemory and ZarrData keep groups intact."""
+
+    def test_repeated_writes_keep_groups_distinct(
+        self, kind: str, device: str, tmp_path: Path
+    ) -> None:
+        """Labels from separate writes, including masked ones, never merge."""
+        sink = _make_sink(kind, tmp_path)
+        first = create_grouped_batch([3, 2], device=device)
+        second = create_grouped_batch([2, 1], device=device)
+        sink.write(first)
+        sink.write(second, mask=torch.tensor([True, True, False], device=device))
+
+        assert len(sink) == 7
+        result = sink.read()
+        assert result.group_idx.tolist() == [0, 0, 0, 1, 1, 2, 2]
+        assert result.group_layout.num_groups == 3
+        expected = torch.cat([first.positions, second.positions[:4]]).cpu()
+        assert torch.equal(result.positions.cpu(), expected)
+        # The caller's labels are not offset in place.
+        assert second.group_idx.tolist() == [0, 0, 1]
+
+    def test_partial_group_mask_raises(self, kind: str, tmp_path: Path) -> None:
+        """A mask that splits a group is rejected and nothing is written."""
+        sink = _make_sink(kind, tmp_path)
+        batch = create_grouped_batch([3, 2])
+        with pytest.raises(ValueError, match="complete groups"):
+            sink.write(batch, mask=torch.tensor([True, True, False, False, False]))
+        assert len(sink) == 0
+
+    def test_mixing_grouped_and_ungrouped_writes_raises(
+        self, kind: str, tmp_path: Path
+    ) -> None:
+        """A sink holding grouped data rejects ungrouped writes."""
+        sink = _make_sink(kind, tmp_path)
+        sink.write(create_grouped_batch([2]))
+        with pytest.raises(ValueError, match="mix grouped and ungrouped"):
+            sink.write(create_test_batch(num_graphs=1))

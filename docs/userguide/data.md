@@ -72,6 +72,7 @@ concatenated with node-index offsets so each graph’s edges refer to the correc
 System-level tensors are stacked so that the first dimension is the number of graphs.
 
 - Build a batch: {py:meth}`nvalchemi.data.batch.Batch.from_data_list`\ (data_list).
+- Combine batches: {py:meth}`nvalchemi.data.batch.Batch.concatenate`\ (batches).
 - Access batch size: `num_graphs`, `num_nodes`, `num_edges`, `num_nodes_list`, `num_edges_list`.
 - Recover a single graph: {py:meth}`nvalchemi.data.batch.Batch.get_data`\ (index).
 - Recover all graphs: {py:meth}`nvalchemi.data.batch.Batch.to_data_list`\ ().
@@ -125,11 +126,13 @@ mutates (selection, `zero`, `defrag`, ...). The derived metadata is a snapshot
 taken when `group_layout` is first accessed. In-place changes such as
 `batch.group_idx[3] = 2` cannot be detected; call
 `batch.set_group_layout(batch.group_idx)` afterward to validate the new grouping
-and rebuild the cached layout. A selection that leaves group numbering
-non-dense must be repaired with `batch.set_group_layout(batch.group_idx)` before
-`group_layout` is accessed again. `append()` requires both batches grouped or
-both ungrouped and rebases labels. `put()` rejects a grouped source or
-destination because graph-level buffer masks can split logical groups, while
+and rebuild the cached layout. On a grouped batch, `index_select()` must select
+complete, contiguous groups without repeated graphs, and it rebuilds the
+result's labels and layout. Groups may be reordered. `append()` requires both
+batches grouped or both ungrouped and rebases labels. `put()` also requires
+matching grouping and copies complete groups, stopping at the first selected
+group that does not fit. Masks passed to `put()` or `trim()` must select
+complete groups. Partial-group masks are rejected.
 `append_data()` is rejected on a grouped batch.
 
 ### Indexing and selection

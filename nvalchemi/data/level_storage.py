@@ -1517,7 +1517,6 @@ class UniformLevelStorage(BaseLevelStorage):
         self,
         source: UniformLevelStorage,
         source_mask: Tensor,
-        dest_mask: Tensor | None,
         fit_mask: Tensor,
     ) -> None:
         """Compute which source rows would fit in this storage; write result into fit_mask in place.
@@ -1528,8 +1527,6 @@ class UniformLevelStorage(BaseLevelStorage):
             Source storage; length gives num_systems.
         source_mask : Tensor, shape (num_systems,), dtype bool
             True for each system considered for copy.
-        dest_mask : Tensor, optional, shape (len(self),), dtype bool
-            True = slot occupied. If None, all slots are treated as empty.
         fit_mask : Tensor, shape (num_systems,), dtype bool
             Output written in place: True where that source row would fit.
 
@@ -1537,6 +1534,9 @@ class UniformLevelStorage(BaseLevelStorage):
         -----
         No data is copied. Use with put after combining (e.g. logical_and) with other
         levels' fit masks so only systems that fit in every level are copied.
+
+        The first ``len(self)`` slots are treated as occupied, so a storage
+        without a fill count (``_num_kept``) counts as full and nothing fits.
         """
         n_src = len(source)
         if source_mask.shape[0] != n_src:
@@ -1545,18 +1545,10 @@ class UniformLevelStorage(BaseLevelStorage):
             )
         if fit_mask.shape[0] != n_src:
             raise ValueError(f"fit_mask shape {fit_mask.shape[0]} != {n_src}")
-        dest_capacity = self._data.shape[0]
         source_mask = source_mask.to(device=self.device, dtype=torch.bool)
         fit_mask = fit_mask.to(device=self.device, dtype=torch.bool)
-        if dest_mask is None:
-            dest_mask = torch.zeros(dest_capacity, device=self.device, dtype=torch.bool)
-        else:
-            dest_mask = dest_mask.to(device=self.device, dtype=torch.bool)
-            if dest_mask.shape[0] != dest_capacity:
-                raise ValueError(
-                    f"dest_mask shape {dest_mask.shape[0]} != dest capacity {dest_capacity}"
-                )
-        compute_put_fit_mask_per_system(source_mask, dest_mask, fit_mask)
+        occupied = torch.arange(self._data.shape[0], device=self.device) < len(self)
+        compute_put_fit_mask_per_system(source_mask, occupied, fit_mask)
 
     def put(
         self,
@@ -1564,13 +1556,15 @@ class UniformLevelStorage(BaseLevelStorage):
         mask: Tensor,
         *,
         copied_mask: Tensor | None = None,
-        dest_mask: Tensor | None = None,
     ) -> None:
         """Put rows where mask[i] is True from src into this storage (buffer).
 
         Supported payload dtypes are bool, float32, float64, int32, and int64;
-        source and destination dtypes must match. Only as many rows as fit in
-        this storage's empty slots (dest_mask[i] False = empty) are copied.
+        source and destination dtypes must match. Rows are appended after the
+        first ``len(self)`` slots, and only as many rows as fit in the
+        remaining slots are copied. ``len(self)`` is the fill count
+        (``_num_kept``) of a pre-allocated buffer. A storage without one
+        counts as full, so nothing is copied.
         Uses Warp buffer kernels. If copied_mask is provided, it is updated in
         place with True for each row that was copied.
 
@@ -1584,11 +1578,6 @@ class UniformLevelStorage(BaseLevelStorage):
             (num_systems,) bool; if provided, modified in place with which
             rows were actually copied. If None, stored as ``_copied_mask`` for
             use by :meth:`defrag`.
-        dest_mask : Tensor, optional
-            (capacity,) bool, True = slot occupied; capacity = ``len(self)``
-            or ``self._data.shape[0]`` when ``_num_kept`` is set (pre-allocated
-            buffer). Occupied slots must form a dense prefix. If None, all slots
-            are treated as empty.
         """
         if self._data.is_empty() or src._data.is_empty():
             raise ValueError("put requires non-empty source and dest")
@@ -1613,15 +1602,7 @@ class UniformLevelStorage(BaseLevelStorage):
         else:
             out_mask = torch.zeros(n_src, device=self.device, dtype=torch.bool)
             object.__setattr__(src, "_copied_mask", out_mask)
-        if dest_mask is None:
-            dest_mask = torch.zeros(dest_capacity, device=self.device, dtype=torch.bool)
-        else:
-            dest_mask = dest_mask.to(device=self.device, dtype=torch.bool)
-            if dest_mask.shape[0] != dest_capacity:
-                raise ValueError(
-                    f"dest_mask shape {dest_mask.shape[0]} != dest capacity {dest_capacity}"
-                )
-        initial_dest_mask = dest_mask.clone()
+        initial_dest_mask = torch.arange(dest_capacity, device=self.device) < len(self)
         first_key, *remaining_keys = fields
         first_dest_mask = initial_dest_mask.clone()
         put_masked_per_system(
@@ -1643,7 +1624,6 @@ class UniformLevelStorage(BaseLevelStorage):
                 field_dest_mask,
                 field_copied_mask,
             )
-        dest_mask.copy_(first_dest_mask)
         num_copied = out_mask.sum().item()
         if num_copied > 0 and getattr(self, "_num_kept", None) is not None:
             object.__setattr__(self, "_num_kept", self._num_kept + num_copied)
@@ -2288,7 +2268,6 @@ class SegmentedLevelStorage(BaseLevelStorage):
         self,
         source: SegmentedLevelStorage,
         source_mask: Tensor,
-        dest_mask: Tensor | None,
         fit_mask: Tensor,
     ) -> None:
         """Compute which source segments would fit in this storage; write result into fit_mask in place.
@@ -2299,8 +2278,6 @@ class SegmentedLevelStorage(BaseLevelStorage):
             Source storage; len(source) gives num_systems (segments).
         source_mask : Tensor, shape (num_systems,), dtype bool
             True for each segment considered for copy.
-        dest_mask : Tensor, optional
-            Ignored for segmented level (fit uses batch_ptr and data capacity only).
         fit_mask : Tensor, shape (num_systems,), dtype bool
             Output written in place: True where that segment fits in this storage.
 
