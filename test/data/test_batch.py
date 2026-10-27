@@ -1949,6 +1949,180 @@ class TestBatchEmptyFieldInsertion:
 # -----------------------------------------------------------------------------
 # Mutation and add_key
 # -----------------------------------------------------------------------------
+class TestBatchConcatenate:
+    """Bulk concatenation preserves append behavior and independent ownership."""
+
+    @pytest.mark.parametrize("grouped", [False, True])
+    def test_combines_payloads_offsets_and_groups(self, device, grouped):
+        """Variable graph sizes keep connectivity and distinct group boundaries."""
+        batches = [
+            Batch.from_data_list(
+                [
+                    _atomic_data_with_edges_and_system(nodes, nodes, device)
+                    for nodes in sizes
+                ]
+            )
+            for sizes in ([2, 3], [4], [1, 2, 3])
+        ]
+        if grouped:
+            for batch in batches:
+                batch.set_group_layout(
+                    torch.arange(batch.num_graphs, device=device) // 2
+                )
+        positions = [batch.positions.clone() for batch in batches]
+        edges = [batch.neighbor_list.clone() for batch in batches]
+        result = Batch.concatenate(batches)
+
+        assert result.num_nodes_list == [2, 3, 4, 1, 2, 3]
+        torch.testing.assert_close(result.positions, torch.cat(positions))
+        torch.testing.assert_close(
+            result.neighbor_list, torch.cat([edges[0], edges[1] + 5, edges[2] + 9])
+        )
+        if grouped:
+            assert result.group_idx.tolist() == [0, 0, 1, 2, 2, 3]
+            assert result.group_layout.group_ptr.tolist() == [0, 2, 3, 5, 6]
+        result.positions.zero_()
+        for batch, expected_positions, expected_edges in zip(
+            batches, positions, edges, strict=True
+        ):
+            torch.testing.assert_close(batch.positions, expected_positions)
+            torch.testing.assert_close(batch.neighbor_list, expected_edges)
+
+    @pytest.mark.parametrize("grouped", [False, True])
+    @pytest.mark.parametrize("kind", ["single", "padded", "empty"])
+    def test_trims_padding_and_keeps_inputs(self, device, grouped, kind):
+        """Singletons, empty buffers, and occupied buffers keep logical counts."""
+        source = Batch.from_data_list(
+            [_atomic_data_with_edges_and_system(2, 2, device)]
+        )
+        if grouped:
+            source.set_group_layout(torch.zeros(1, dtype=torch.long, device=device))
+        empty = Batch.empty(
+            num_systems=4, num_nodes=20, num_edges=24, template=source, device=device
+        )
+        occupied = empty.clone()
+        occupied.put(source, torch.ones(1, dtype=torch.bool, device=device))
+        inputs = {
+            "single": [occupied],
+            "padded": [empty, occupied, empty],
+            "empty": [empty, empty],
+        }[kind]
+        result = Batch.concatenate(inputs)
+        expected_graphs = 0 if kind == "empty" else 1
+        assert result.num_graphs == result.system_capacity == expected_graphs
+        assert result.num_nodes == result.num_edges == expected_graphs * 2
+        assert empty.system_capacity == occupied.system_capacity == 4
+        assert empty.num_graphs == 0
+        assert occupied.num_graphs == 1
+        if expected_graphs:
+            result.positions.zero_()
+            torch.testing.assert_close(occupied.positions[:2], source.positions)
+
+    @pytest.mark.parametrize("fieldless_parent", [False, True])
+    def test_custom_segmented_product_and_uniform_levels(
+        self, device, fieldless_parent
+    ):
+        """Custom cardinalities, including fieldless parents, stay aligned."""
+        schema = _custom_buffer_schema(fieldless_parent=fieldless_parent)
+        schema.add_level("metadata", segmented=False)
+        schema.set("metadata_values", "metadata")
+        batches = []
+        for nodes, molecules in ((2, 3), (3, 1)):
+            data = _custom_buffer_data(
+                nodes, molecules, fieldless_parent=fieldless_parent
+            )
+            data.metadata_values = torch.tensor([[float(nodes)]])
+            batches.append(Batch.from_data_list([data], attr_map=schema, device=device))
+        result = Batch.concatenate(batches)
+        assert result.level_ptr("molecules").tolist() == [0, 3, 4]
+        assert result.level_ptr("pairs").tolist() == [0, 6, 9]
+        torch.testing.assert_close(
+            result.pair_values, torch.cat([batch.pair_values for batch in batches])
+        )
+        assert result.metadata_values.flatten().tolist() == [2.0, 3.0]
+
+    def test_fallback_preserves_progressive_field_dropping(self):
+        """A field dropped by an earlier append does not constrain later shapes."""
+        batches = [Batch.from_data_list([_minimal_atomic_data(2)]) for _ in range(3)]
+        batches[0].forces = torch.ones(2, 3)
+        batches[2].forces = torch.ones(2, 4)
+        result = Batch.concatenate(batches)
+        assert result.num_graphs == 3
+        assert "forces" not in result
+        assert batches[0].forces.shape == (2, 3)
+        assert batches[2].forces.shape == (2, 4)
+
+    def test_builtin_dtype_promotion(self):
+        """Mixed built-in dtypes retain torch.cat's promotion behavior."""
+        first = Batch.from_data_list([_atomic_data_with_system(2)])
+        second = first.clone()
+        second.energy = torch.ones_like(second.energy, dtype=torch.float64)
+        result = Batch.concatenate([first, second])
+        assert result.energy.dtype == torch.float64
+        assert result.energy.flatten().tolist() == [0.0, 1.0]
+        assert first.energy.dtype == torch.float32
+
+    def test_missing_builtin_level_keeps_append_zero_fill(self):
+        """A missing system level is filled just as it is by append."""
+        first = Batch.from_data_list([_atomic_data_with_system(2)])
+        first.energy.fill_(1.0)
+        second = first.clone()
+        second._storage.groups.pop("system")
+        result = Batch.concatenate([first, second, first])
+        assert result.num_graphs == 3
+        assert result.energy.flatten().tolist() == [1.0, 0.0, 1.0]
+        assert "system" not in second._storage.groups
+
+    def test_cross_device_inputs(self, device):
+        """All payloads and segmentation follow the first input's device."""
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA required for mixed-device concatenation")
+        first = Batch.from_data_list([_atomic_data_with_edges_and_system(2, 2, device)])
+        other_device = "cuda" if device == "cpu" else "cpu"
+        second = first.to(other_device)
+        original_device = second.device
+        result = Batch.concatenate([first, second])
+        assert result.device == first.device
+        assert result.num_nodes_list == [2, 2]
+        torch.testing.assert_close(
+            result.neighbor_list,
+            torch.cat([first.neighbor_list, first.neighbor_list + 2]),
+        )
+        assert second.device == original_device
+
+    def test_invalid_shapes_leave_inputs_unchanged(self):
+        """Invalid paired shapes fail without changing either input."""
+        first = Batch.from_data_list([_minimal_atomic_data(2)])
+        second = first.clone()
+        second.positions = torch.ones(2, 4)
+        before = first.positions.clone()
+        with pytest.raises(ValueError, match="incompatible trailing shapes"):
+            Batch.concatenate([first, second])
+        torch.testing.assert_close(first.positions, before)
+        assert second.positions.shape == (2, 4)
+
+    def test_rejects_invalid_inputs_and_grouping(self):
+        """Empty sequences, non-batches, and mixed grouping fail precisely."""
+        with pytest.raises(ValueError, match="At least one batch"):
+            Batch.concatenate([])
+        with pytest.raises(TypeError, match="Batch objects"):
+            Batch.concatenate([None])
+        first = Batch.from_data_list([_minimal_atomic_data(2)])
+        second = first.clone()
+        second.set_group_layout(torch.zeros(1, dtype=torch.long))
+        with pytest.raises(ValueError, match="grouped and ungrouped"):
+            Batch.concatenate([first, second])
+
+    def test_prevalidates_pointer_overflow(self):
+        """Fieldless custom metadata cannot overflow the combined pointer."""
+        first = _custom_boundary_batch(torch.iinfo(torch.int32).max, 1.0)
+        second = _custom_boundary_batch(1, 2.0)
+        with pytest.raises(OverflowError):
+            Batch.concatenate([first, second])
+        assert first.energy.item() == 1.0
+        assert second.energy.item() == 2.0
+
+
 class TestBatchMutation:
     """Tests for append, append_data, add_key, __setitem__."""
 

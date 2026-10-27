@@ -2984,6 +2984,145 @@ class Batch(DataMixin):
             data_class=self._data_class,
         )
 
+    @classmethod
+    def concatenate(cls, batches: Sequence[Batch]) -> Batch:
+        """Combine batches into an independently owned batch.
+
+        Matching storage layouts use one concatenation per payload field.
+        Differing fields or materialized levels use :meth:`append` to preserve
+        its missing-field behavior. Unused buffer capacity is discarded.
+        Inputs are left unchanged, including when concatenation fails.
+
+        Parameters
+        ----------
+        batches : sequence of Batch
+            Nonempty sequence, all grouped or all ungrouped. Custom schemas
+            must satisfy :meth:`append` compatibility requirements. Tensors
+            are moved to the first batch's device, and built-in dtypes follow
+            PyTorch concatenation promotion rules.
+
+        Returns
+        -------
+        Batch
+            Combined data on the first batch's device, retaining its data
+            class. Neighbor indices are offset and group labels are rebased.
+
+        Raises
+        ------
+        ValueError
+            If no batches are supplied, grouping differs, or schemas or
+            trailing shapes are incompatible.
+        TypeError
+            If an input is not a Batch.
+        OverflowError
+            If a combined segmented pointer exceeds the signed int32 range.
+        """
+        # Strip padding once per input so only occupied rows are concatenated.
+        parts = []
+        for batch in batches:
+            if not isinstance(batch, Batch):
+                raise TypeError("All inputs must be Batch objects")
+            parts.append(batch._without_padding())
+        if not parts:
+            raise ValueError("At least one batch is required")
+        first = parts[0]
+        if len(parts) == 1:
+            return first.clone()
+
+        # The fast path needs identical group names, storage types, and field
+        # keys. Otherwise fall back to append, which drops fields that are not
+        # present in every batch.
+        first_groups = first._storage.groups
+        if any(
+            part._storage.groups.keys() != first_groups.keys()
+            or any(
+                type(part._storage.groups[name]) is not type(group)
+                or set(part._storage.groups[name].keys()) != set(group.keys())
+                for name, group in first_groups.items()
+            )
+            for part in parts[1:]
+        ):
+            merged = first.clone()
+            for part in parts[1:]:
+                merged.append(part)
+            return merged
+
+        # Apply append's custom-level schema checks.
+        for part in parts[1:]:
+            first._validate_custom_append(part)
+
+        device = first.device
+        # Check that the combined int32 segment pointers don't overflow before
+        # allocating the large tensors.
+        segment_lengths = {}
+        for name, group in first_groups.items():
+            if isinstance(group, SegmentedLevelStorage):
+                lengths = torch.cat(
+                    [
+                        part._storage.groups[name].segment_lengths.to(device)
+                        for part in parts
+                    ]
+                )
+                segment_lengths[name], _ = _checked_segment_metadata(lengths, device)
+
+        # Per-input atom offset (to shift neighbor indices) and first graph
+        # index (to mark group boundaries).
+        atom_offsets = []
+        graph_starts = []
+        num_atoms = num_graphs = 0
+        for part in parts:
+            atom_offsets.append(num_atoms)
+            if part.num_graphs:
+                graph_starts.append(num_graphs)
+            num_atoms += part.num_nodes
+            num_graphs += part.num_graphs
+
+        # Build each level with a single torch.cat per field.
+        schema = first._storage.attr_map.clone()
+        groups = {}
+        for name, group in first_groups.items():
+            sources = [part._storage.groups[name] for part in parts]
+            fields = {}
+            for key in group.keys():
+                values = [source[key].to(device) for source in sources]
+                if any(value.shape[1:] != values[0].shape[1:] for value in values[1:]):
+                    raise ValueError(
+                        f"Level '{name}' field '{key}' has incompatible trailing shapes"
+                    )
+                # Offset neighbor indices by the atom offsets.
+                if name == "edges" and key in _INDEX_KEYS:
+                    values = [
+                        value + offset if offset else value
+                        for value, offset in zip(values, atom_offsets, strict=True)
+                    ]
+                value = torch.cat(values, dim=0)
+                # Rebase group labels to dense, zero-based IDs via cumsum.
+                if key == "group_idx" and num_graphs:
+                    starts = torch.ones_like(value, dtype=torch.bool)
+                    starts[1:] = value[1:] != value[:-1]
+                    # Each input starts a distinct group even if labels match.
+                    starts[graph_starts] = True
+                    value = starts.cumsum(0) - 1
+                fields[key] = value
+            rows = sum(source._data.shape[0] for source in sources)
+            kwargs = {
+                "data": TensorDict(fields, batch_size=[rows], device=device),
+                "device": device,
+                "attr_map": schema,
+                "validate": False,
+            }
+            if isinstance(group, SegmentedLevelStorage):
+                kwargs["segment_lengths"] = segment_lengths[name]
+            groups[name] = type(group)(**kwargs)
+        return cls._construct(
+            device=device,
+            keys={level: names.copy() for level, names in first.keys.items()}
+            if first.keys is not None
+            else None,
+            storage=MultiLevelStorage(groups=groups, attr_map=schema, validate=False),
+            data_class=first._data_class,
+        )
+
     def append(
         self,
         other: Batch,
