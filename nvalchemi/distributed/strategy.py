@@ -775,7 +775,8 @@ def _halo_run_forward(
         )
     # Mark halo-receiver edges so the wrapper's ``(edge_index < n_atoms)``
     # filter drops them; see the helper's docstring for the rationale.
-    _mark_halo_receiver_edges_as_padding(padded_batch, meta.n_owned)
+    if dist_model._spec.halo_receiver_edge_filter:
+        _mark_halo_receiver_edges_as_padding(padded_batch, meta.n_owned)
 
     # Update per-step ctx state so the wrapper's ``adapt_input`` reads it.
     dist_model._dist_ctx.policy = dist_model._spec.distribution.policy
