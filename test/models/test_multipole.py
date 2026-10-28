@@ -548,6 +548,42 @@ class TestIntegration:
             )
 
     @BOTH
+    @pytest.mark.parametrize("l_max", [0, 1])
+    def test_plain_call_with_decomposition_seams_installed(
+        self, cls, l_max, device, monkeypatch
+    ):
+        """A plain forward matches while a decomposed model has the seams in place.
+
+        Domain decomposition swaps module-level helpers for the life of the
+        decomposed model, so a plain call in the same process meets them too.
+        """
+        if not multipole_module._ops_accept_partial_sources():
+            pytest.skip("installed nvalchemiops lacks source_weights / reduce_partial")
+        import nvalchemiops.torch.interactions.electrostatics.multipole_ewald as ops
+
+        w = _make(cls)
+        w.model_config.active_outputs = {"energy", "forces", "stress"}
+        batch = _make_batch(l_max=l_max, device=device)
+        _build_nl(batch, w)
+        expected = w(batch)
+
+        monkeypatch.setattr(
+            multipole_module,
+            "_partial_sources",
+            multipole_module._distributed_partial_sources,
+        )
+        monkeypatch.setattr(
+            ops,
+            "_AttachRealSpaceCellGradLmax1",
+            multipole_module._owned_cell_grad_attach(),
+        )
+        batch = _make_batch(l_max=l_max, device=device)
+        _build_nl(batch, w)
+        out = w(batch)
+        for key in ("energy", "forces", "stress"):
+            torch.testing.assert_close(out[key], expected[key], rtol=1e-12, atol=1e-12)
+
+    @BOTH
     def test_extra_matrix_padding_changes_nothing(self, cls, device):
         from nvalchemi.neighbors import compute_neighbors
 

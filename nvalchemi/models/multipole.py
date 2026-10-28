@@ -179,7 +179,12 @@ def _owned_cell_grad_attach() -> type:
     class _OwnedCellGradAttach(stock):
         @staticmethod
         def setup_context(ctx: Any, inputs: tuple[Any, ...], output: Any) -> None:
-            n_owned = get_compile_routing()[3]
+            routing = get_compile_routing()
+            if routing is None:  # a plain call while a decomposed model is open
+                stock.setup_context(ctx, inputs, output)
+                ctx.n_owned = None
+                return
+            n_owned = routing[3]
             ptr = inputs[8]
             owned_ptr = torch.minimum(ptr, ptr[n_owned])
             stock.setup_context(ctx, (*inputs[:8], owned_ptr, *inputs[9:]), output)
@@ -187,7 +192,7 @@ def _owned_cell_grad_attach() -> type:
 
         @staticmethod
         def backward(ctx: Any, grad_energy: torch.Tensor) -> tuple[Any, ...]:
-            if not ctx.has_batch:
+            if ctx.n_owned is None or not ctx.has_batch:
                 return stock.backward(ctx, grad_energy)
             cell = ctx.saved_tensors[0]
             batch_idx = ctx.saved_tensors[-1].to(torch.long)
@@ -206,18 +211,22 @@ def _owned_cell_grad_attach() -> type:
 
 def _distributed_partial_sources(
     num_atoms: int, device: torch.device
-) -> tuple[torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]:
+) -> tuple[torch.Tensor | None, Callable[[torch.Tensor], torch.Tensor] | None]:
     """Owned-atom spread weights and a cross-rank sum, for a rank's padded view.
 
     Each rank holds its owned atoms plus ghost copies, so only owned rows may
     feed the spread; the per-rank partial fields are then summed over the mesh.
+    Outside a decomposed forward (a plain call while the seam is installed) the
+    process holds every atom, so it behaves like :func:`_partial_sources`.
     """
     from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
         get_compile_routing,
     )
 
-    n_owned = get_compile_routing()[3]
-    owned = torch.arange(num_atoms, device=device) < n_owned
+    routing = get_compile_routing()
+    if routing is None:
+        return None, None
+    owned = torch.arange(num_atoms, device=device) < routing[3]
     return owned.to(torch.float64), _distributed_sum
 
 
