@@ -382,12 +382,18 @@ class HaloStrategy(ParallelizationStrategy):
         # atoms group holds exactly the per-atom (node-level) tensors, so each
         # can be resharded by the per-atom destination. Enumerating the group
         # (rather than a fixed list) keeps custom fields like atomic charges from
-        # vanishing when an atom crosses ranks.
+        # vanishing when an atom crosses ranks. Neighbor-list arrays are the
+        # exception: they are rebuilt after the move, and each rank sizes their
+        # width on its own, so resharding them mixes row widths across ranks.
+        from nvalchemi.distributed.sharded_batch import (  # noqa: PLC0415
+            _NL_ATOM_FIELDS,
+        )
+
         fields: dict[str, torch.Tensor] = {"positions": batch.positions}
         atoms_group = getattr(batch, "_atoms_group", None)
         if atoms_group is not None:
             for name in atoms_group.keys():
-                if name != "positions":
+                if name != "positions" and name not in _NL_ATOM_FIELDS:
                     fields[name] = atoms_group[name]
         else:  # fallback: attribute access
             for name in ("atomic_numbers", "atomic_masses", "velocities", "forces"):
