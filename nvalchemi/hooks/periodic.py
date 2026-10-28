@@ -91,7 +91,9 @@ def wrap_positions_into_cell(
     same tensor.  Delegates to ``nvalchemiops.dynamics.utils.wrap_positions_to_cell``
     for GPU-optimized wrapping along all three lattice vectors, recovers
     the integer lattice shift of each atom, and then drops the shift along
-    non-periodic lattice vectors in pure PyTorch.
+    non-periodic lattice vectors in pure PyTorch.  If a graph's cell is
+    singular (for example a zero lattice vector), its atoms are not moved,
+    also along periodic axes.
 
     Parameters
     ----------
@@ -118,14 +120,19 @@ def wrap_positions_into_cell(
         # shift per lattice vector (row convention: r = s @ cell) and keep
         # it only along periodic ones. ``inv_ex`` avoids the host sync of
         # ``inv``'s singularity check; a singular cell gives a non-finite
-        # shift, which is dropped.
+        # shift, and those atoms stay where they are.
         inv_cell, _ = torch.linalg.inv_ex(cell)
         shift = torch.einsum(
             "vi,vij->vj", wrapped - original, inv_cell[batch_idx]
         ).round()
-        keep = pbc[batch_idx] & torch.isfinite(shift)
-        shift = torch.where(keep, shift, torch.zeros_like(shift))
-        positions.copy_(original + torch.einsum("vi,vij->vj", shift, cell[batch_idx]))
+        finite = torch.isfinite(shift).all(dim=-1, keepdim=True)
+        periodic = pbc[batch_idx]
+        shift = torch.where(periodic & finite, shift, torch.zeros_like(shift))
+        result = original + torch.einsum("vi,vij->vj", shift, cell[batch_idx])
+        # Fully periodic atoms take the kernel output as is, which avoids
+        # float32 rounding of ``shift @ cell`` for atoms many cells away.
+        fully_periodic = periodic.all(dim=-1, keepdim=True) & finite
+        positions.copy_(torch.where(fully_periodic, wrapped, result))
     return positions
 
 
