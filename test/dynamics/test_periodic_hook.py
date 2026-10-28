@@ -249,6 +249,64 @@ class TestWrapPeriodicHook:
         )
         assert torch.allclose(batch.positions, expected, atol=1e-5)
 
+    @pytest.mark.parametrize(
+        "pbc",
+        [
+            (True, True, False),
+            (True, False, True),
+            (False, True, True),
+            (True, False, False),
+            (False, True, False),
+            (False, False, True),
+        ],
+    )
+    def test_mixed_pbc_triclinic(
+        self, device: str, pbc: tuple[bool, bool, bool]
+    ) -> None:
+        """pbc applies per lattice vector, so only periodic fractions wrap."""
+        batch = _make_periodic_batch(
+            atoms_per_graph=2, cell_size=10.0, pbc=pbc, device=device
+        )
+        # Every lattice vector has components along more than one axis.
+        cell = torch.tensor(
+            [[10.0, 0.0, 0.0], [3.0, 10.0, 0.0], [2.0, 1.0, 10.0]], device=device
+        )
+        batch["cell"] = cell.unsqueeze(0)
+        frac = torch.tensor([[2.3, -0.6, 1.25], [-1.75, 1.5, -0.2]], device=device)
+        batch["positions"] = frac @ cell
+
+        WrapPeriodicHook()(
+            _make_ctx(batch, _make_dynamics()), DynamicsStage.AFTER_POST_UPDATE
+        )
+
+        # Hand-computed: periodic fractions wrap into [0, 1), others stay.
+        wrapped = torch.tensor([[0.3, 0.4, 0.25], [0.25, 0.5, 0.8]], device=device)
+        periodic = torch.tensor(pbc, device=device)
+        expected = torch.where(periodic, wrapped, frac) @ cell
+        assert torch.allclose(batch.positions, expected, atol=1e-4)
+
+    def test_mixed_pbc_triclinic_non_periodic_tilt(self, device: str) -> None:
+        """A tilted non-periodic lattice vector does not move the atom.
+
+        The atom sits at fractions (0.05, 1.5, 0.2). Only ``b`` is outside
+        [0, 1), and ``b`` is not periodic, so nothing moves.  A per-axis
+        Cartesian mask moved the atom to fractions (-0.25, 1.5, 0.2).
+        """
+        batch = _make_periodic_batch(
+            atoms_per_graph=1, cell_size=10.0, pbc=(True, False, True), device=device
+        )
+        batch["cell"] = torch.tensor(
+            [[[10.0, 0.0, 0.0], [3.0, 10.0, 0.0], [0.0, 0.0, 10.0]]], device=device
+        )
+        batch["positions"] = torch.tensor([[5.0, 15.0, 2.0]], device=device)
+
+        WrapPeriodicHook()(
+            _make_ctx(batch, _make_dynamics()), DynamicsStage.AFTER_POST_UPDATE
+        )
+
+        expected = torch.tensor([[5.0, 15.0, 2.0]], device=device)
+        assert torch.allclose(batch.positions, expected, atol=1e-5)
+
     def test_triclinic_cell(self, device: str) -> None:
         """Verify wrapping with a non-orthorhombic (triclinic) cell."""
         batch = _make_periodic_batch(cell_size=10.0, device=device)
