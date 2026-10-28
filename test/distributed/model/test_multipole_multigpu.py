@@ -80,8 +80,10 @@ def _batch(system: dict[str, torch.Tensor], device: torch.device) -> Batch:
 def _wrapper(l_max: int, device: torch.device):
     from nvalchemi.models.multipole import MultipolePMEModelWrapper
 
+    # Order 4 keeps the first-use Warp kernel build short; DD correctness does
+    # not depend on the spline order.
     model = MultipolePMEModelWrapper(
-        cutoff=CUTOFF, sigma=0.8, accuracy=1e-5, l_max=l_max
+        cutoff=CUTOFF, sigma=0.8, accuracy=1e-5, l_max=l_max, spline_order=4
     ).to(device)
     model.model_config.active_outputs = {"energy", "forces", "stress"}
     return model
