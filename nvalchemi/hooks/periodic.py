@@ -110,7 +110,16 @@ def wrap_positions_into_cell(
     -------
     Float[Tensor, "V 3"]
         The same ``positions`` tensor (modified in-place).
+
+    Raises
+    ------
+    ValueError
+        If ``pbc`` does not have one flag per lattice vector (last
+        dimension of size 3).
     """
+    # Shape-only check: no host sync, free under torch.compile.
+    if pbc.shape[-1] != 3:
+        raise ValueError(f"pbc must have shape (B, 3), got {tuple(pbc.shape)}")
     # Positions can still require grad here (FusedStage); see #206.
     with torch.no_grad():
         original = positions.clone()

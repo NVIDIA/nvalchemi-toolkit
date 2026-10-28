@@ -258,6 +258,7 @@ class TestWrapPeriodicHook:
             (True, False, False),
             (False, True, False),
             (False, False, True),
+            (False, False, False),
         ],
     )
     def test_mixed_pbc_triclinic(
@@ -306,6 +307,20 @@ class TestWrapPeriodicHook:
 
         expected = torch.tensor([[5.0, 15.0, 2.0]], device=device)
         assert torch.allclose(batch.positions, expected, atol=1e-5)
+
+    def test_pbc_with_two_flags_raises(self, device: str) -> None:
+        """A ``pbc`` row needs one flag per lattice vector.
+
+        ``(False, False, )`` is a two-element tuple in Python, so this is
+        the shape a missing third flag produces.
+        """
+        batch = _make_periodic_batch(cell_size=10.0, device=device)
+        batch["pbc"] = torch.tensor([[False, False]], device=device)
+
+        with pytest.raises(ValueError, match=r"pbc must have shape \(B, 3\)"):
+            WrapPeriodicHook()(
+                _make_ctx(batch, _make_dynamics()), DynamicsStage.AFTER_POST_UPDATE
+            )
 
     def test_triclinic_cell(self, device: str) -> None:
         """Verify wrapping with a non-orthorhombic (triclinic) cell."""
