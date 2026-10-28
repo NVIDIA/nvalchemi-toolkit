@@ -10,7 +10,10 @@
   and `quadrupoles` batch fields (any subset); the Ewald split is derived from
   `cutoff`, `sigma` and `accuracy`;
   forces and stress come from autograd; `neighbor_format` accepts `MATRIX` or
-  `COO`. Single-GPU only. `compile_model=True` compiles the energy with
+  `COO`. `MultipolePMEModelWrapper` runs under halo domain decomposition
+  (`DomainParallel`, `MATRIX` neighbors, needs an `nvalchemiops` whose multipole
+  entry points accept `total_charge`); `MultipoleEwaldModelWrapper` is
+  single-GPU only. `compile_model=True` compiles the energy with
   `torch.compile` while forces and stress stay on eager autograd; Ewald needs an
   `nvalchemiops` that accepts `miller_indices`. Compiled evaluation supports
   dynamic shapes (inflight batching); the PME mesh only grows while compiled so
