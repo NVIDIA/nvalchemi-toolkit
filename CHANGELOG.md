@@ -10,11 +10,10 @@
   and `quadrupoles` batch fields (any subset); the Ewald split is derived from
   `cutoff`, `sigma` and `accuracy`;
   forces and stress come from autograd; `neighbor_format` accepts `MATRIX` or
-  `COO`. `MultipolePMEModelWrapper` runs under halo domain decomposition
-  (`DomainParallel`), eager or compiled, with `MATRIX` or `COO` neighbors and
-  orthorhombic or triclinic cells; it needs an `nvalchemiops` whose multipole
-  entry points accept `total_charge`, `source_weights` and
-  `reduce_partial`. `MultipoleEwaldModelWrapper` is single-GPU only.
+  `COO`. Both wrappers run under halo domain decomposition (`DomainParallel`),
+  eager or compiled, with `MATRIX` or `COO` neighbors and orthorhombic or
+  triclinic cells; this needs an `nvalchemiops` whose multipole entry points
+  accept `total_charge`, `source_weights` and `reduce_partial`.
   `compile_model=True` compiles the energy with
   `torch.compile` while forces and stress stay on eager autograd; Ewald needs an
   `nvalchemiops` that accepts `miller_indices`. Compiled evaluation supports

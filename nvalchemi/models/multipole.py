@@ -110,13 +110,15 @@ def _ops_accept_total_charge() -> bool:
 
 @functools.cache
 def _ops_accept_partial_sources() -> bool:
-    """Whether the installed ops take spread weights and a mesh reduction."""
+    """Whether the installed ops take spread weights and a partial-field reduction."""
     from nvalchemiops.torch.interactions.electrostatics import (  # noqa: PLC0415
+        multipole_ewald_summation,
         multipole_particle_mesh_ewald,
     )
 
-    return (
-        "reduce_partial" in inspect.signature(multipole_particle_mesh_ewald).parameters
+    return all(
+        "reduce_partial" in inspect.signature(fn).parameters
+        for fn in (multipole_ewald_summation, multipole_particle_mesh_ewald)
     )
 
 
@@ -413,8 +415,6 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
         """Call the ops entry point and return per-atom energies."""
         raise NotImplementedError
 
-    _supports_decomposition = True
-
     def distribution_spec(self, strategy: Any = None) -> Any:
         """Domain-decomposition spec for the multipole wrappers.
 
@@ -435,8 +435,6 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
 
         Raises
         ------
-        NotImplementedError
-            If this wrapper has no decomposed implementation.
         RuntimeError
             If the installed ``nvalchemiops`` lacks the arguments the decomposed
             evaluation relies on.
@@ -455,11 +453,6 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
             Reduce,
         )
 
-        if not self._supports_decomposition:
-            raise NotImplementedError(
-                f"{type(self).__name__} does not support domain decomposition; "
-                "use MultipolePMEModelWrapper."
-            )
         if not (_ops_accept_total_charge() and _ops_accept_partial_sources()):
             raise RuntimeError(
                 "Domain decomposition needs an nvalchemiops whose multipole "
@@ -1055,8 +1048,6 @@ class MultipoleEwaldModelWrapper(_BaseMultipoleWrapper):
         Forwarded to :func:`torch.compile` when ``compile_model=True``
         (``fullgraph=True`` by default).
     """
-
-    _supports_decomposition = False
 
     def __init__(
         self,

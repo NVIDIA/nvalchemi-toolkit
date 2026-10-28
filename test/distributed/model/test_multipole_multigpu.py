@@ -13,15 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Multi-GPU regression for distributed multipole PME electrostatics.
+"""Multi-GPU regression for distributed multipole electrostatics (PME and Ewald).
 
-A 2-rank halo ``DistributedModel(MultipolePMEModelWrapper)`` is checked against
+A 2-rank halo ``DistributedModel`` of each multipole wrapper is checked against
 the single-process wrapper on total energy, per-atom forces and stress for each
 multipole order, on a neutral and on a net-charged system (the latter exercises
 the globally reduced total charge in the background correction).
 
 Requires 2+ CUDA GPUs and an ``nvalchemiops`` whose multipole entry points
-accept ``total_charge``.
+accept ``total_charge``, ``source_weights`` and ``reduce_partial``.
 """
 
 from __future__ import annotations
@@ -87,20 +87,27 @@ def _batch(system: dict[str, torch.Tensor], device: torch.device) -> Batch:
     return Batch.from_data_list([data])
 
 
-def _wrapper(l_max: int, device: torch.device, neighbor_format: str):
+def _wrapper(l_max: int, device: torch.device, method: str, neighbor_format: str):
     from nvalchemi.models.base import NeighborListFormat
-    from nvalchemi.models.multipole import MultipolePMEModelWrapper
+    from nvalchemi.models.multipole import (
+        MultipoleEwaldModelWrapper,
+        MultipolePMEModelWrapper,
+    )
 
-    # Order 4 keeps the first-use Warp kernel build short; DD correctness does
-    # not depend on the spline order.
-    model = MultipolePMEModelWrapper(
-        cutoff=CUTOFF,
-        sigma=0.8,
-        accuracy=1e-5,
-        l_max=l_max,
-        spline_order=4,
-        neighbor_format=NeighborListFormat(neighbor_format),
-    ).to(device)
+    kwargs = {
+        "cutoff": CUTOFF,
+        "sigma": 0.8,
+        "accuracy": 1e-5,
+        "l_max": l_max,
+        "neighbor_format": NeighborListFormat(neighbor_format),
+    }
+    if method == "pme":
+        # Order 4 keeps the first-use Warp kernel build short; DD correctness
+        # does not depend on the spline order.
+        model = MultipolePMEModelWrapper(spline_order=4, **kwargs)
+    else:
+        model = MultipoleEwaldModelWrapper(**kwargs)
+    model.to(device)
     model.model_config.active_outputs = {"energy", "forces", "stress"}
     return model
 
@@ -111,6 +118,7 @@ def _equivalence_worker(
     l_max: int,
     net_charge: float,
     shear: float,
+    method: str,
     neighbor_format: str,
     compile: bool,
 ) -> None:
@@ -124,7 +132,7 @@ def _equivalence_worker(
     device = torch.device(f"cuda:{rank}")
     system = _system(l_max, net_charge, shear)
 
-    ref_model = _wrapper(l_max, device, neighbor_format)
+    ref_model = _wrapper(l_max, device, method, neighbor_format)
     ref_batch = _batch(system, device)
     compute_neighbors(ref_batch, config=ref_model.model_config.neighbor_config)
     ref = ref_model(ref_batch)
@@ -136,7 +144,7 @@ def _equivalence_worker(
     full = _batch(system, device) if rank == 0 else None
     sharded = ShardedBatch.from_batch(batch=full, mesh=mesh, config=config, src=0)
     with DistributedModel(
-        _wrapper(l_max, device, neighbor_format), config, compile=compile
+        _wrapper(l_max, device, method, neighbor_format), config, compile=compile
     ) as model:
         out = model(sharded)
         if compile:
@@ -175,27 +183,31 @@ def _equivalence_worker(
 @pytest.mark.multigpu
 @pytest.mark.parametrize("compile", [False, True], ids=["eager", "compiled"])
 @pytest.mark.parametrize(
-    ("net_charge", "shear", "neighbor_format"),
+    ("method", "net_charge", "shear", "neighbor_format"),
     [
-        (0.0, 0.0, "matrix"),
-        (1.5, 0.0, "matrix"),
-        (1.5, 0.3, "matrix"),
-        (1.5, 0.0, "coo"),
-        (1.5, 0.3, "coo"),
+        ("pme", 0.0, 0.0, "matrix"),
+        ("pme", 1.5, 0.0, "matrix"),
+        ("pme", 1.5, 0.3, "matrix"),
+        ("pme", 1.5, 0.0, "coo"),
+        ("pme", 1.5, 0.3, "coo"),
+        ("ewald", 1.5, 0.0, "matrix"),
+        ("ewald", 1.5, 0.3, "coo"),
     ],
     ids=[
-        "neutral-cubic",
-        "charged-cubic",
-        "charged-triclinic",
-        "charged-cubic-coo",
-        "charged-triclinic-coo",
+        "pme-neutral-cubic",
+        "pme-charged-cubic",
+        "pme-charged-triclinic",
+        "pme-charged-cubic-coo",
+        "pme-charged-triclinic-coo",
+        "ewald-charged-cubic",
+        "ewald-charged-triclinic-coo",
     ],
 )
 @pytest.mark.parametrize("l_max", [0, 1, 2])
-def test_multipole_pme_dist_model_equivalence_2ranks(
-    l_max, net_charge, shear, neighbor_format, compile
+def test_multipole_dist_model_equivalence_2ranks(
+    l_max, method, net_charge, shear, neighbor_format, compile
 ):
-    """Halo DD multipole PME matches single-process energy, forces and stress."""
+    """Halo DD multipole electrostatics match single-process energy, forces and stress."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")
     from nvalchemi.models.multipole import (
         _ops_accept_partial_sources,
@@ -217,17 +229,9 @@ def test_multipole_pme_dist_model_equivalence_2ranks(
             l_max,
             net_charge,
             shear,
+            method,
             neighbor_format,
             compile,
         ),
         nprocs=WORLD_SIZE,
     )
-
-
-def test_multipole_ewald_distribution_spec_unsupported():
-    """The direct-k Ewald wrapper declares no decomposition and says so."""
-    from nvalchemi.models.multipole import MultipoleEwaldModelWrapper
-
-    model = MultipoleEwaldModelWrapper(cutoff=CUTOFF, sigma=0.8, accuracy=1e-5)
-    with pytest.raises(NotImplementedError, match="MultipolePMEModelWrapper"):
-        model.distribution_spec()
