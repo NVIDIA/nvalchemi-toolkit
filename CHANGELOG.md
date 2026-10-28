@@ -552,6 +552,13 @@
   remains unchanged.
 - `AlignCellHook` no longer fails under `FusedStage` when positions require
   grad, and compiles with `fullgraph=True`.
+- `WrapPeriodicHook` no longer fails under `FusedStage` when positions
+  require grad: `wrap_positions_into_cell` now performs its in-place write
+  under `torch.no_grad()`.
+- `WrapPeriodicHook` and `wrap_positions_into_cell` now apply `pbc[i]` to
+  lattice vector `i` instead of Cartesian axis `i`. With mixed `pbc` on a
+  triclinic cell, atoms moved by a vector that was not a lattice translation.
+  A `pbc` that does not have 3 flags per graph now raises a `ValueError`.
 - **Dynamics hook lifecycle** — fused-level hooks now fire at the
   `BEFORE_PRE_UPDATE`, `AFTER_PRE_UPDATE`, `BEFORE_POST_UPDATE`, and
   `AFTER_POST_UPDATE` boundaries, and sub-stage `BEFORE_COMPUTE` hooks now
