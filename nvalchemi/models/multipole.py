@@ -491,6 +491,10 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
                 "atomic_energies": OutputSpec(OutputKind.PER_NODE),
             },
             node_energy_key="atomic_energies",
+            # The l=2 real-space backward needs every pair in both directions, so
+            # keep the full local edge list; ghost rows' energies are dropped by
+            # the owned-aware reduction instead.
+            halo_receiver_edge_filter=False,
             compile=CompilePolicy(
                 static_shapes=True,
                 force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY,
@@ -721,21 +725,30 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Return ``(idx_j, neighbor_ptr, unit_shifts)`` CSR for the ops.
 
-        ``COO`` edges are sender-sorted, so ``edge_ptr`` is already the CSR
-        pointer. ``MATRIX`` rows become a fixed-width CSR with ``K`` slots per
+        ``COO`` edges are re-sorted by receiver to form the CSR rows (see below).
+        ``MATRIX`` rows become a fixed-width CSR with ``K`` slots per
         atom; padding slots point at the atom itself with a zero shift, which the
         kernels skip (zero separation), so every shape is static.
         """
         if self.neighbor_format == NeighborListFormat.COO:
+            # Rows are the receivers, the side a decomposed run keeps edges for
+            # (edges to a ghost receiver are marked invalid and sort last, past
+            # the pointer). The list is symmetric, so reading each pair from its
+            # receiver with negated shifts gives the same energy.
             edges = data.neighbor_list
-            idx_j = edges[:, 1].to(torch.int32).contiguous()
-            ptr = data.edge_ptr.to(torch.int32)
+            order = torch.argsort(edges[:, 1], stable=True)
+            receivers = edges[:, 1][order].contiguous()
+            idx_j = edges[:, 0][order].to(torch.int32).contiguous()
+            ptr = torch.searchsorted(
+                receivers,
+                torch.arange(n_atoms + 1, device=device, dtype=edges.dtype),
+            ).to(torch.int32)
             shifts = getattr(data, "neighbor_list_shifts", None)
             if shifts is None:
                 shifts = torch.zeros(
                     edges.shape[0], 3, dtype=torch.int32, device=device
                 )
-            return idx_j, ptr, shifts.to(torch.int32).contiguous()
+            return idx_j, ptr, (-shifts[order]).to(torch.int32).contiguous()
 
         matrix = data.neighbor_matrix
         K = matrix.shape[1]

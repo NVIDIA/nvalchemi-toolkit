@@ -11,9 +11,11 @@
   `cutoff`, `sigma` and `accuracy`;
   forces and stress come from autograd; `neighbor_format` accepts `MATRIX` or
   `COO`. `MultipolePMEModelWrapper` runs under halo domain decomposition
-  (`DomainParallel`, `MATRIX` neighbors, needs an `nvalchemiops` whose multipole
-  entry points accept `total_charge`); `MultipoleEwaldModelWrapper` is
-  single-GPU only. `compile_model=True` compiles the energy with
+  (`DomainParallel`), eager or compiled, with `MATRIX` or `COO` neighbors and
+  orthorhombic or triclinic cells; it needs an `nvalchemiops` whose multipole
+  entry points accept `total_charge`, `source_weights` and
+  `reduce_partial`. `MultipoleEwaldModelWrapper` is single-GPU only.
+  `compile_model=True` compiles the energy with
   `torch.compile` while forces and stress stay on eager autograd; Ewald needs an
   `nvalchemiops` that accepts `miller_indices`. Compiled evaluation supports
   dynamic shapes (inflight batching); the PME mesh only grows while compiled so
