@@ -46,6 +46,7 @@ from torch import distributed as dist
 from torch.distributed import ProcessGroup, Work
 
 from nvalchemi.data.atomic_data import AtomicData
+from nvalchemi.data.buffer_kernels import shift_put_segments
 from nvalchemi.data.data import DataMixin
 from nvalchemi.data.group_layout import (
     GroupLayout,
@@ -1906,23 +1907,18 @@ class Batch(DataMixin):
             dest_atoms, src_atoms = levels["atoms"]
             dest_edges, src_edges = levels["edges"]
             index_keys = _INDEX_KEYS.intersection(src_edges.keys(), dest_edges.keys())
-            new_graphs = slice(num_dest_graphs, len(dest_atoms))
-            if index_keys and new_graphs.stop > new_graphs.start:
-                shift = (
-                    dest_atoms._batch_ptr[new_graphs]
-                    - src_atoms._batch_ptr[:n][fit_mask]
-                )
-                start, end = dest_edges._batch_ptr[
-                    [new_graphs.start, new_graphs.stop]
-                ].tolist()
-                edge_shift = torch.repeat_interleave(
-                    shift,
-                    dest_edges.segment_lengths[new_graphs],
-                    output_size=end - start,
-                ).unsqueeze(1)
+            if index_keys and len(dest_atoms) > num_dest_graphs:
                 for key in index_keys:
-                    rows = dest_edges._data[key][start:end]
-                    rows += edge_shift.to(rows.dtype)
+                    shift_put_segments(
+                        dest_edges._data[key],
+                        src_edges._batch_ptr,
+                        src_atoms._batch_ptr,
+                        dest_edges._batch_ptr,
+                        dest_atoms._batch_ptr,
+                        fit_mask,
+                        num_dest_graphs,
+                        src_edges._data[key].shape[0],
+                    )
 
         if source_index is None:
             copy_mask.copy_(fit_mask)
