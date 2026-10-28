@@ -42,15 +42,25 @@ N_ATOMS = 64
 CUTOFF = 7.0
 
 
-def _system(l_max: int, net_charge: float) -> dict[str, torch.Tensor]:
+def _cell(shear: float, device: torch.device | str = "cpu") -> torch.Tensor:
+    """Lattice vectors as rows: cubic for ``shear=0``, else a lower-triangular shear."""
+    cell = torch.eye(3, dtype=torch.float64, device=device)
+    cell[1, 0] = shear
+    cell[2, 0] = shear
+    cell[2, 1] = shear
+    return cell * BOX
+
+
+def _system(l_max: int, net_charge: float, shear: float) -> dict[str, torch.Tensor]:
     """A random periodic system with moments up to ``l_max`` (CPU, float64)."""
     g = torch.Generator().manual_seed(11)
     dtype = torch.float64
     q = torch.randn(N_ATOMS, generator=g, dtype=dtype)
     q += (net_charge - q.sum()) / N_ATOMS
     out = {
-        "positions": torch.rand(N_ATOMS, 3, generator=g, dtype=dtype) * BOX,
+        "positions": torch.rand(N_ATOMS, 3, generator=g, dtype=dtype) @ _cell(shear),
         "charges": q,
+        "cell": _cell(shear),
     }
     if l_max >= 1:
         out["dipoles"] = 0.3 * torch.randn(N_ATOMS, 3, generator=g, dtype=dtype)
@@ -65,7 +75,7 @@ def _batch(system: dict[str, torch.Tensor], device: torch.device) -> Batch:
         atomic_numbers=torch.ones(N_ATOMS, dtype=torch.long, device=device),
         positions=system["positions"].to(device).clone(),
         atomic_masses=torch.ones(N_ATOMS, dtype=torch.float64, device=device),
-        cell=(torch.eye(3, dtype=torch.float64, device=device) * BOX).unsqueeze(0),
+        cell=system["cell"].to(device).unsqueeze(0),
         pbc=torch.ones(1, 3, dtype=torch.bool, device=device),
         charges=system["charges"].to(device),
         forces=torch.zeros(N_ATOMS, 3, dtype=torch.float64, device=device),
@@ -90,7 +100,12 @@ def _wrapper(l_max: int, device: torch.device):
 
 
 def _equivalence_worker(
-    rank: int, world_size: int, l_max: int, net_charge: float, compile: bool = False
+    rank: int,
+    world_size: int,
+    l_max: int,
+    net_charge: float,
+    shear: float,
+    compile: bool,
 ) -> None:
     from torch.distributed import DeviceMesh
 
@@ -100,7 +115,7 @@ def _equivalence_worker(
     from nvalchemi.neighbors import compute_neighbors
 
     device = torch.device(f"cuda:{rank}")
-    system = _system(l_max, net_charge)
+    system = _system(l_max, net_charge, shear)
 
     ref_model = _wrapper(l_max, device)
     ref_batch = _batch(system, device)
@@ -128,9 +143,7 @@ def _equivalence_worker(
 
     partitioner = SpatialPartitioner(
         config=config,
-        cell_matrix=(torch.eye(3, dtype=torch.float64, device=device) * BOX).unsqueeze(
-            0
-        ),
+        cell_matrix=system["cell"].to(device).unsqueeze(0),
         pbc=torch.ones(1, 3, dtype=torch.bool, device=device),
     )
     owned = partitioner.assign_atoms_to_ranks(system["positions"].to(device)) == rank
@@ -152,21 +165,37 @@ def _equivalence_worker(
 
 @pytest.mark.multigpu
 @pytest.mark.parametrize("compile", [False, True], ids=["eager", "compiled"])
-@pytest.mark.parametrize("net_charge", [0.0, 1.5])
+@pytest.mark.parametrize(
+    ("net_charge", "shear"),
+    [(0.0, 0.0), (1.5, 0.0), (1.5, 0.3)],
+    ids=["neutral-cubic", "charged-cubic", "charged-triclinic"],
+)
 @pytest.mark.parametrize("l_max", [0, 1, 2])
-def test_multipole_pme_dist_model_equivalence_2ranks(l_max, net_charge, compile):
+def test_multipole_pme_dist_model_equivalence_2ranks(l_max, net_charge, shear, compile):
     """Halo DD multipole PME matches single-process energy, forces and stress."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")
-    from nvalchemi.models.multipole import _ops_accept_total_charge
+    from nvalchemi.models.multipole import (
+        _ops_accept_partial_sources,
+        _ops_accept_total_charge,
+    )
 
-    if not _ops_accept_total_charge():
+    if not (_ops_accept_total_charge() and _ops_accept_partial_sources()):
         pytest.skip(
-            "installed nvalchemiops lacks total_charge on multipole entry points"
+            "installed nvalchemiops lacks total_charge / source_weights / "
+            "reduce_partial on the multipole entry points"
         )
 
     mp.spawn(
         _worker,
-        args=(WORLD_SIZE, free_port(), _equivalence_worker, l_max, net_charge, compile),
+        args=(
+            WORLD_SIZE,
+            free_port(),
+            _equivalence_worker,
+            l_max,
+            net_charge,
+            shear,
+            compile,
+        ),
         nprocs=WORLD_SIZE,
     )
 
