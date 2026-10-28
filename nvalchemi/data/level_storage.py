@@ -2450,10 +2450,14 @@ class SegmentedLevelStorage(BaseLevelStorage):
         dest_batch_ptr = self._batch_ptr
         if dest_batch_ptr.shape[0] < min_batch_ptr_size:
             return
+        # A buffer source keeps spare pointer slots past its n_seg segments.
+        # The kernels size their launch from the pointer they are given, so
+        # pass only the occupied boundaries to match the n_seg-long mask.
+        src_batch_ptr = src._batch_ptr[: n_seg + 1]
         first_key, *remaining_keys = fields
         new_num_dest = put_masked_segmented(
             src._data[first_key],
-            src._batch_ptr,
+            src_batch_ptr,
             mask,
             self._data[first_key],
             dest_batch_ptr,
@@ -2465,7 +2469,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
             dest_t = self._data[key]
             put_masked_segmented(
                 src_t,
-                src._batch_ptr,
+                src_batch_ptr,
                 mask,
                 dest_t,
                 dest_batch_ptr,

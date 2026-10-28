@@ -545,7 +545,8 @@
 
 - `Batch.put` now copies selected graphs from sources larger than the buffer's
   remaining graph capacity and marks the indices of copied source graphs in
-  `copied_mask`.
+  `copied_mask`. A source that is itself a pre-allocated buffer no longer
+  needs room for its unused graph slots, and those slots are never copied.
 - Fix pipeline transfers with `BufferConfig(num_edges=0)` by omitting edges
   from transport. Received graphs are appended to the active batch instead of
   rebuilding it, so resident graphs keep their edges and other fields, and the

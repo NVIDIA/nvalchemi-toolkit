@@ -3364,6 +3364,46 @@ class TestBatchPutDefrag:
                 buffer.get_data(resident_index).neighbor_list, data.neighbor_list
             )
 
+    @pytest.mark.parametrize("selected", [[True, False, True], [True, True, True]])
+    def test_put_from_buffer_source_ignores_spare_pointer_capacity(
+        self, selected: list[bool], device: str
+    ) -> None:
+        """A source buffer's unused graph slots need no room and are not copied."""
+
+        def ring(num_nodes: int) -> AtomicData:
+            atoms = torch.arange(num_nodes, device=device)
+            return AtomicData(
+                positions=torch.randn(num_nodes, 3, device=device),
+                atomic_numbers=torch.ones(num_nodes, dtype=torch.long, device=device),
+                neighbor_list=torch.stack([atoms, atoms.roll(-1)], dim=1),
+                energy=torch.tensor([[0.0]], device=device),
+            )
+
+        data_list = [ring(n) for n in (2, 3, 4)]
+        tight = Batch.from_data_list(data_list, device=device)
+        source = Batch.empty(
+            num_systems=12, num_nodes=40, num_edges=40, template=tight, device=device
+        )
+        source.put(tight, torch.ones(3, dtype=torch.bool, device=device))
+        # Room for the source's three graphs, not for its 12-graph pointer.
+        buffer = Batch.empty(
+            num_systems=3, num_nodes=20, num_edges=20, template=tight, device=device
+        )
+        copied = torch.zeros(3, dtype=torch.bool, device=device)
+
+        buffer.put(source, torch.tensor(selected, device=device), copied_mask=copied)
+
+        expected_indices = [index for index, value in enumerate(selected) if value]
+        assert copied.tolist() == selected
+        assert buffer.num_graphs == len(expected_indices)
+        for level in ("atoms", "edges"):
+            assert len(buffer._storage.groups[level]) == len(expected_indices)
+        for dest_index, source_index in enumerate(expected_indices):
+            actual = buffer.get_data(dest_index)
+            expected = data_list[source_index]
+            torch.testing.assert_close(actual.neighbor_list, expected.neighbor_list)
+            torch.testing.assert_close(actual.positions, expected.positions)
+
     @pytest.mark.parametrize("node_capacity, expected", [(1, 0), (2, 1), (5, 2)])
     def test_put_from_larger_source_respects_atom_capacity(
         self, node_capacity: int, expected: int, device: str
