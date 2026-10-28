@@ -90,7 +90,7 @@ def _wrapper(l_max: int, device: torch.device):
 
 
 def _equivalence_worker(
-    rank: int, world_size: int, l_max: int, net_charge: float
+    rank: int, world_size: int, l_max: int, net_charge: float, compile: bool = False
 ) -> None:
     from torch.distributed import DeviceMesh
 
@@ -113,8 +113,18 @@ def _equivalence_worker(
     )
     full = _batch(system, device) if rank == 0 else None
     sharded = ShardedBatch.from_batch(batch=full, mesh=mesh, config=config, src=0)
-    with DistributedModel(_wrapper(l_max, device), config) as model:
+    with DistributedModel(_wrapper(l_max, device), config, compile=compile) as model:
         out = model(sharded)
+        if compile:
+            # A second call on the same geometry must reuse the compiled graphs.
+            from torch._dynamo.utils import counters
+
+            graphs = counters["stats"]["unique_graphs"]
+            assert graphs > 0, "the compiled path did not compile anything"
+            out = model(sharded)
+            assert counters["stats"]["unique_graphs"] == graphs, (
+                "the second call recompiled"
+            )
 
     partitioner = SpatialPartitioner(
         config=config,
@@ -141,9 +151,10 @@ def _equivalence_worker(
 
 
 @pytest.mark.multigpu
+@pytest.mark.parametrize("compile", [False, True], ids=["eager", "compiled"])
 @pytest.mark.parametrize("net_charge", [0.0, 1.5])
 @pytest.mark.parametrize("l_max", [0, 1, 2])
-def test_multipole_pme_dist_model_equivalence_2ranks(l_max, net_charge):
+def test_multipole_pme_dist_model_equivalence_2ranks(l_max, net_charge, compile):
     """Halo DD multipole PME matches single-process energy, forces and stress."""
     pytest.importorskip("nvalchemiops", reason="nvalchemiops not installed")
     from nvalchemi.models.multipole import _ops_accept_total_charge
@@ -155,7 +166,7 @@ def test_multipole_pme_dist_model_equivalence_2ranks(l_max, net_charge):
 
     mp.spawn(
         _worker,
-        args=(WORLD_SIZE, free_port(), _equivalence_worker, l_max, net_charge),
+        args=(WORLD_SIZE, free_port(), _equivalence_worker, l_max, net_charge, compile),
         nprocs=WORLD_SIZE,
     )
 

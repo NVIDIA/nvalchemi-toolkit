@@ -108,6 +108,18 @@ def _ops_accept_total_charge() -> bool:
     return "total_charge" in inspect.signature(multipole_ewald_summation).parameters
 
 
+@functools.cache
+def _ops_accept_partial_sources() -> bool:
+    """Whether the installed ops take spread weights and a mesh reduction."""
+    from nvalchemiops.torch.interactions.electrostatics import (  # noqa: PLC0415
+        multipole_particle_mesh_ewald,
+    )
+
+    return (
+        "reduce_partial" in inspect.signature(multipole_particle_mesh_ewald).parameters
+    )
+
+
 # Higher multipoles carry derivative prefactors the monopole tail estimate
 # ignores, so the requested accuracy is tightened per l_max before the split is
 # derived. Calibrated on a single geometry; see multipole-wrapper-scoping.md.
@@ -119,28 +131,29 @@ _ACCURACY_MARGIN = {0: 1.0, 1: 10.0, 2: 100.0}
 _MESH_OVERSAMPLING = {0: 2.5, 1: 2.5, 2: 4.0}
 
 
-def _system_total(
-    per_atom: torch.Tensor, batch_idx: torch.Tensor, num_graphs: int
-) -> torch.Tensor:
-    """Sum per-atom energies into per-system totals (float64)."""
-    total = torch.zeros(num_graphs, dtype=torch.float64, device=per_atom.device)
-    return total.scatter_add(0, batch_idx.to(torch.long), per_atom)
+def _system_sum(values: torch.Tensor, batch_idx: torch.Tensor, B: int) -> torch.Tensor:
+    """Sum per-atom values into ``(B,)`` float64 per-system totals.
 
-
-def _distributed_system_total(
-    per_atom: Any, batch_idx: Any, num_graphs: int
-) -> torch.Tensor:
-    """Owned-aware replacement for :func:`_system_total` under decomposition.
-
-    Sums each rank's owned rows and all-reduces, so the total is global and its
-    gradient reaches only owned energies.
+    Goes through an opaque custom op: Inductor's CPU codegen asserts on the
+    equivalent ``scatter_add`` into a small buffer.
     """
-    from nvalchemi.distributed._core.enums import Scope  # noqa: PLC0415
-    from nvalchemi.distributed.helpers import system_sum, to_local  # noqa: PLC0415
-
-    return system_sum(
-        to_local(per_atom), to_local(batch_idx), num_graphs, scope=Scope.OWNED
+    from nvalchemi.models._ops.electrostatics.pme import (  # noqa: F401, PLC0415
+        _batch_pme_compute_partial_total_charge,
     )
+
+    return torch.ops.alchemiops._batch_pme_compute_partial_total_charge(  # type: ignore[attr-defined]
+        values, batch_idx, B
+    )
+
+
+def _partial_sources(
+    num_atoms: int, device: torch.device
+) -> tuple[torch.Tensor | None, Callable[[torch.Tensor], torch.Tensor] | None]:
+    """Return ``(source_weights, reduce_partial)`` for the reciprocal sums.
+
+    A process that holds every atom spreads them all and reduces nothing.
+    """
+    return None, None
 
 
 def _owned_cell_grad_attach() -> type:
@@ -157,13 +170,14 @@ def _owned_cell_grad_attach() -> type:
         _AttachRealSpaceCellGradLmax1 as stock,
     )
 
-    from nvalchemi.distributed._core.context import current_dd_context  # noqa: PLC0415
-    from nvalchemi.distributed.helpers import to_local  # noqa: PLC0415
+    from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
+        get_compile_routing,
+    )
 
     class _OwnedCellGradAttach(stock):
         @staticmethod
         def setup_context(ctx: Any, inputs: tuple[Any, ...], output: Any) -> None:
-            n_owned = current_dd_context().n_owned
+            n_owned = get_compile_routing()[3]
             ptr = inputs[8]
             owned_ptr = torch.minimum(ptr, ptr[n_owned])
             stock.setup_context(ctx, (*inputs[:8], owned_ptr, *inputs[9:]), output)
@@ -173,18 +187,46 @@ def _owned_cell_grad_attach() -> type:
         def backward(ctx: Any, grad_energy: torch.Tensor) -> tuple[Any, ...]:
             if not ctx.has_batch:
                 return stock.backward(ctx, grad_energy)
-            cell = to_local(ctx.saved_tensors[0])
-            batch_idx = to_local(ctx.saved_tensors[-1]).to(torch.long)
-            grad = to_local(grad_energy).reshape(-1)
+            cell = ctx.saved_tensors[0]
+            batch_idx = ctx.saved_tensors[-1].to(torch.long)
+            grad = grad_energy.reshape(-1)
             owned = torch.arange(grad.numel(), device=grad.device) < ctx.n_owned
-            zeros = grad.new_zeros(cell.shape[0])
-            total = zeros.index_add(0, batch_idx, torch.where(owned, grad, 0.0))
-            count = zeros.index_add(0, batch_idx, owned.to(grad.dtype))
-            uniform = (total / count.clamp_min(1.0)).index_select(0, batch_idx)
+            n_sys = cell.shape[0]
+            total = _system_sum(torch.where(owned, grad, 0.0), batch_idx, n_sys)
+            count = _system_sum(owned.to(grad.dtype), batch_idx, n_sys)
+            mean = (total / count.clamp_min(1.0)).to(grad.dtype)
+            uniform = mean.index_select(0, batch_idx)
             fixed = torch.where(owned, grad, uniform).reshape(grad_energy.shape)
             return (grad_energy, *stock.backward(ctx, fixed)[1:])
 
     return _OwnedCellGradAttach
+
+
+def _distributed_partial_sources(
+    num_atoms: int, device: torch.device
+) -> tuple[torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]:
+    """Owned-atom spread weights and a cross-rank sum, for a rank's padded view.
+
+    Each rank holds its owned atoms plus ghost copies, so only owned rows may
+    feed the spread; the per-rank partial fields are then summed over the mesh.
+    """
+    from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
+        get_compile_routing,
+    )
+
+    n_owned = get_compile_routing()[3]
+    owned = torch.arange(num_atoms, device=device) < n_owned
+    return owned.to(torch.float64), _distributed_sum
+
+
+def _distributed_sum(partial: torch.Tensor) -> torch.Tensor:
+    """Sum a per-rank partial field across the domain mesh."""
+    from nvalchemi.distributed._core.context import current_dd_context  # noqa: PLC0415
+    from nvalchemi.distributed._core.gather_primitives import (  # noqa: PLC0415
+        distributed_all_reduce,
+    )
+
+    return distributed_all_reduce(partial, current_dd_context().halo_config)
 
 
 def _erfcinv(x: float) -> float:
@@ -371,51 +413,41 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
         """Call the ops entry point and return per-atom energies."""
         raise NotImplementedError
 
-    def _dd_real_space_ops(self) -> tuple[Any, ...]:
-        """Per-atom real-space kernels: unwrap for the kernel, re-wrap per-atom outputs."""
-        from nvalchemi.distributed.spec import OpAdapter  # noqa: PLC0415
-
-        nvops = torch.ops.nvalchemiops  # type: ignore[attr-defined]
-        return tuple(
-            OpAdapter(op=getattr(nvops, name))
-            for name in (
-                "batch_multipole_real_space_monopole_fused",
-                "batch_multipole_real_space_dipole_fused",
-                "batch_multipole_real_space_quadrupole",
-            )
-        )
-
-    def _dd_custom_ops(self) -> tuple[Any, ...]:
-        """Return the ``OpAdapter`` set that distributes the reciprocal-space ops."""
-        raise NotImplementedError(
-            f"{type(self).__name__} does not support domain decomposition; "
-            "use MultipolePMEModelWrapper."
-        )
+    _supports_decomposition = True
 
     def distribution_spec(self, strategy: Any = None) -> Any:
         """Domain-decomposition spec for the multipole wrappers.
 
         Halo-only; ``strategy`` is accepted for the framework contract and
-        ignored. The reciprocal-space ops get owned-slice and all-reduce
-        handlers (see :meth:`_dd_custom_ops`) and the total-charge ops reduce the
-        background-correction charge across ranks, so :meth:`forward` is
-        distribution-agnostic. Forces and stress come from the wrapper's own autograd.
+        ignored. The framework runs the energy-only forward on each rank's
+        padded view and derives forces and stress by autograd over the
+        owned-aware energy. Two helpers are swapped in for the decomposed run: the
+        source of per-atom spread weights and the cross-rank sum of partial
+        reciprocal fields, so each atom is spread once and the global field is
+        replicated on every rank; and the real-space cell-gradient attach, so
+        stress counts each pair once.
 
         Returns
         -------
         MLIPSpec
-            Halo-storage spec carrying the op adapters, with per-atom
-            ``atomic_energies`` reduced by the framework.
+            Halo-storage spec that declares framework-owned forces and stress
+            from the per-atom ``atomic_energies``.
 
         Raises
         ------
+        NotImplementedError
+            If this wrapper has no decomposed implementation.
         RuntimeError
-            If the installed ``nvalchemiops`` cannot take an external total charge.
+            If the installed ``nvalchemiops`` lacks the arguments the decomposed
+            evaluation relies on.
         """
         import dataclasses  # noqa: PLC0415
 
+        from nvalchemi.distributed.graph_padder import DenseBatchPadder  # noqa: PLC0415
         from nvalchemi.distributed.spec import (  # noqa: PLC0415
             SPEC_PME_HALO,
+            CompilePolicy,
+            ForceStrategy,
             MLIPSpec,
             OutputKind,
             OutputSpec,
@@ -423,34 +455,34 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
             Reduce,
         )
 
-        custom_ops = self._dd_custom_ops()
-        if not _ops_accept_total_charge():
+        if not self._supports_decomposition:
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support domain decomposition; "
+                "use MultipolePMEModelWrapper."
+            )
+        if not (_ops_accept_total_charge() and _ops_accept_partial_sources()):
             raise RuntimeError(
                 "Domain decomposition needs an nvalchemiops whose multipole "
-                "entry points accept total_charge."
+                "entry points accept total_charge, source_weights and "
+                "reduce_partial."
             )
+        helpers = (
+            PythonAdapter(
+                module_path=__name__,
+                attr_name="_partial_sources",
+                replacement=_distributed_partial_sources,
+            ),
+            PythonAdapter(
+                module_path=(
+                    "nvalchemiops.torch.interactions.electrostatics.multipole_ewald"
+                ),
+                attr_name="_AttachRealSpaceCellGradLmax1",
+                replacement=_owned_cell_grad_attach(),
+            ),
+        )
         return MLIPSpec(
             distribution=dataclasses.replace(
-                SPEC_PME_HALO.distribution,
-                custom_ops=custom_ops,
-                # batch_idx keeps per-system lookups (volume, total charge)
-                # sharded alongside the per-atom tensors they multiply.
-                shard_fields=(*SPEC_PME_HALO.distribution.shard_fields, "batch_idx"),
-                third_party_helpers=(
-                    PythonAdapter(
-                        module_path=__name__,
-                        attr_name="_system_total",
-                        replacement=_distributed_system_total,
-                    ),
-                    PythonAdapter(
-                        module_path=(
-                            "nvalchemiops.torch.interactions.electrostatics"
-                            ".multipole_ewald"
-                        ),
-                        attr_name="_AttachRealSpaceCellGradLmax1",
-                        replacement=_owned_cell_grad_attach(),
-                    ),
-                ),
+                SPEC_PME_HALO.distribution, third_party_helpers=helpers
             ),
             outputs={
                 "energy": OutputSpec(OutputKind.PER_GRAPH),
@@ -458,6 +490,17 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
                 "stress": OutputSpec(OutputKind.PER_GRAPH, Reduce.ALL_REDUCE),
                 "atomic_energies": OutputSpec(OutputKind.PER_NODE),
             },
+            node_energy_key="atomic_energies",
+            compile=CompilePolicy(
+                static_shapes=True,
+                force_strategy=ForceStrategy.FRAMEWORK_FROM_NODE_ENERGY,
+                graph_padder=(
+                    DenseBatchPadder()
+                    if self.neighbor_format == NeighborListFormat.MATRIX
+                    else None
+                ),
+                stress_via_strain=True,
+            ),
         )
 
     def invalidate_cache(self) -> None:
@@ -474,13 +517,20 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
         batch_idx: torch.Tensor,
         reciprocal: dict[str, Any],
         total_charge: torch.Tensor | None = None,
+        source_weights: torch.Tensor | None = None,
+        reduce_partial: Callable[[torch.Tensor], torch.Tensor] | None = None,
     ) -> torch.Tensor:
         """Per-atom energy as a pure function of tensors and resolved parameters.
 
         Everything data dependent (``alpha``, mesh, k-grid) arrives in
         ``reciprocal``, so this is the unit ``compile_model`` compiles.
         """
-        extra = {} if total_charge is None else {"total_charge": total_charge}
+        extra: dict[str, Any] = {}
+        if total_charge is not None:
+            extra["total_charge"] = total_charge
+        if source_weights is not None:
+            extra["source_weights"] = source_weights
+            extra["reduce_partial"] = reduce_partial
         return self._energy_op(
             positions,
             moments,
@@ -494,20 +544,25 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
             **extra,
         ).to(torch.float64)
 
-    def _total_charge(self, data: Batch, batch_idx: torch.Tensor, B: int) -> Any:
+    def _total_charge(
+        self,
+        data: Batch,
+        batch_idx: torch.Tensor,
+        B: int,
+        weights: torch.Tensor | None,
+        reduce_partial: Callable[[torch.Tensor], torch.Tensor] | None,
+    ) -> torch.Tensor | None:
         """Per-system total charge for the background term, or ``None`` if unsupported."""
         if not _ops_accept_total_charge():
             return None
-        from nvalchemi.models._ops.electrostatics.pme import (  # noqa: F401, PLC0415
-            _batch_pme_compute_partial_total_charge,
-        )
-
         charges = getattr(data, "charges", None)
         if charges is None:
             return torch.zeros(B, dtype=torch.float64, device=batch_idx.device)
-        return torch.ops.alchemiops._batch_pme_compute_partial_total_charge(  # type: ignore[attr-defined]
-            charges, batch_idx, B
-        )
+        source = charges.to(torch.float64)
+        if weights is not None:
+            source = source * weights
+        total = _system_sum(source, batch_idx, B)
+        return total if reduce_partial is None else reduce_partial(total)
 
     def _compile_energy(self, compile_kwargs: dict[str, Any] | None) -> None:
         """Compile the pure energy function (strain and force/stress autograd stay eager).
@@ -882,7 +937,12 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
             reciprocal = self._reciprocal_kwargs(l_max, cell)
 
         idx_j, ptr, shifts = self._csr(data, positions.shape[0], positions.device)
-        total_charge = self._total_charge(data, batch_idx, B)
+        weights, reduce_partial = (
+            _partial_sources(positions.shape[0], positions.device)
+            if _ops_accept_partial_sources()
+            else (None, None)
+        )
+        total_charge = self._total_charge(data, batch_idx, B, weights, reduce_partial)
         with self._compile_scope():
             energy_fn = self._compiled_energy or self._per_atom_energy
             per_atom = energy_fn(
@@ -895,9 +955,11 @@ class _BaseMultipoleWrapper(nn.Module, BaseModelMixin):
                 batch_idx,
                 reciprocal,
                 total_charge,
+                weights,
+                reduce_partial,
             )
 
-            total = _system_total(per_atom, batch_idx, B)
+            total = _system_sum(per_atom, batch_idx, B)
 
             model_output: dict[str, Any] = {
                 "energy": total.to(positions.dtype).unsqueeze(-1),
@@ -980,6 +1042,8 @@ class MultipoleEwaldModelWrapper(_BaseMultipoleWrapper):
         Forwarded to :func:`torch.compile` when ``compile_model=True``
         (``fullgraph=True`` by default).
     """
+
+    _supports_decomposition = False
 
     def __init__(
         self,
@@ -1224,59 +1288,6 @@ class MultipolePMEModelWrapper(_BaseMultipoleWrapper):
             "mesh_dimensions": self._mesh(l_max, cell),
             "spline_order": self.spline_order,
         }
-
-    def _dd_custom_ops(self) -> tuple[Any, ...]:
-        """Owned-slice + all-reduce handlers for the spread and total-charge ops.
-
-        Each rank spreads only its owned atoms and the partial meshes are summed
-        into the global mesh, which every downstream stage (FFT, convolution,
-        gather) then reads identically on every rank; its incoming gradient is
-        already global, hence the replicated adjoint.
-        """
-        from nvalchemiops.torch.interactions.electrostatics import (  # noqa: F401, PLC0415
-            pme_multipole,
-        )
-
-        from nvalchemi.distributed._core.op_transforms import (  # noqa: PLC0415
-            AllReduceSum,
-            SliceOwned,
-        )
-        from nvalchemi.distributed.spec import OpAdapter  # noqa: PLC0415
-        from nvalchemi.models._ops.electrostatics.pme import (  # noqa: F401, PLC0415
-            _batch_pme_compute_partial_total_charge,
-            _pme_compute_partial_total_charge,
-        )
-
-        nvops = torch.ops.nvalchemiops  # type: ignore[attr-defined]
-        ops = torch.ops.alchemiops  # type: ignore[attr-defined]
-        mesh = {0: AllReduceSum()}
-        return self._dd_real_space_ops() + (
-            # Fractionalization is per atom: re-wrap its outputs as sharded.
-            OpAdapter(op=nvops.multipole_pme_fractionalize),
-            # (p_frac, charges, dipoles, quadrupoles, cell_inv_t, ...)
-            OpAdapter(
-                op=nvops.multipole_pme_spread_unified,
-                arg_transforms={i: SliceOwned() for i in range(4)},
-                output_transforms=mesh,
-            ),
-            # (p_frac, charges, dipoles, quadrupoles, batch_idx, cell_inv_t, ...)
-            OpAdapter(
-                op=nvops.multipole_pme_spread_unified_batch,
-                arg_transforms={i: SliceOwned() for i in range(5)},
-                output_transforms=mesh,
-            ),
-            OpAdapter(op=nvops.multipole_pme_gather_via_spread_t_batch),
-            OpAdapter(
-                op=ops._pme_compute_partial_total_charge,
-                arg_transforms={0: SliceOwned()},
-                output_transforms={0: AllReduceSum()},
-            ),
-            OpAdapter(
-                op=ops._batch_pme_compute_partial_total_charge,
-                arg_transforms={0: SliceOwned(), 1: SliceOwned()},
-                output_transforms={0: AllReduceSum()},
-            ),
-        )
 
     def _energy_op(self, *args: Any, **kwargs: Any) -> torch.Tensor:
         """Call ``multipole_particle_mesh_ewald``."""
