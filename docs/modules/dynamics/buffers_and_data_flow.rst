@@ -307,8 +307,10 @@ several helper methods for routing data between buffers:
   result sink with room for all of them.
 
 - **_drain_sinks_to_batch()**: Pulls samples from ``overflow_sinks``
-  back into the active batch when room is available. Result sinks are
-  never read.
+  back into the active batch when room is available. Each sink gives up
+  only as many of its oldest samples as fit, via
+  ``DataSink.drain(max_samples=...)``, and the rest stay in place. Result
+  sinks are never read.
 
 Result and overflow sinks omit neighbor data to avoid shape mismatches
 between refills. Fields are temporarily hidden during writes, then restored
