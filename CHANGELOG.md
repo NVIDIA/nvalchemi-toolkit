@@ -1,15 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Added
-
-- Per-dynamics `reprime_on_entry` control for fused and distributed pipeline
-  stages, including `DomainParallel`, refreshing arrivals' forces while
-  preserving resident graphs' forces and updates.
-
-### Fixed
-
 ## 0.3.0
 
 ### Added
@@ -71,10 +61,10 @@
 - Add `DynamicsStage.ON_ADMISSION` to `BaseDynamics`, enabling hooks to
   initialize per-system state once when a batch is admitted, before force
   priming and outside compiled fused steps.
-- `FusedStage(reprime_on_entry=...)` — status codes whose newly entering
-  graphs skip one integrator update so the shared compute and target-stage
-  `AFTER_COMPUTE` hooks can refresh forces under the new stage's context
-  before it advances them.
+- `reprime_on_entry` on dynamics, used by `FusedStage`, distributed pipeline
+  stages, and `DomainParallel`. Graphs entering with these status codes skip one
+  integrator update so their forces are refreshed under the new stage's context.
+  Resident graphs are unaffected.
 - **Batched minimum-energy path (MEP) workflows**: the new
   `nvalchemi.dynamics.mep` subpackage provides endpoint interpolation with
   optional alignment, IDPP initialization, and a GPU-first `NEB` strategy for
