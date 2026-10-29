@@ -584,11 +584,14 @@ class DistributedModel:
                 raise DistributionError(
                     f"{type(wrapper).__name__}'s model is already torch.compiled "
                     "(e.g. from_checkpoint(compile_model=True)), but its "
-                    "distribution_spec declares no CompilePolicy, so a correct "
-                    "compiled distributed forward cannot be built. Either build "
-                    "the wrapper WITHOUT compiling it and pass "
-                    "DistributedModel(..., compile=True), or add a CompilePolicy "
-                    "to its distribution_spec."
+                    "distribution_spec declares no CompilePolicy. The eager "
+                    "distributed path cannot apply the halo correction inside a "
+                    "compiled model, and a compiled distributed forward "
+                    "(DistributedModel(..., compile=True)) also requires a "
+                    "CompilePolicy, so neither can be used. Either build the "
+                    "wrapper WITHOUT compiling it (the eager distributed path "
+                    "then works), or add a CompilePolicy to its "
+                    "distribution_spec."
                 )
         # Tune Dynamo/inductor for DD unconditionally: the wrapped model may be
         # compiled by its own loader (e.g. MACE ``loader.compile``) rather than the

@@ -1713,7 +1713,26 @@ class TestStrategyCheckpoint:
         kwargs = mocked.call_args.kwargs
         assert kwargs["enable_cueq"] is False
         assert kwargs["compile_model"] is False
+        assert kwargs["train"] is True
         assert kwargs["dtype"] is torch.float32
+
+    def test_mace_adapter_forwards_train_option(self, tmp_path: Path) -> None:
+        """The MACE adapter accepts ``train`` and passes it to the wrapper."""
+        checkpoint_path = tmp_path / "mace.pt"
+        checkpoint_path.write_bytes(b"placeholder")
+
+        with patch(
+            "nvalchemi.models.mace.MACEWrapper.from_checkpoint",
+            return_value=nn.Linear(1, 1),
+        ) as mocked:
+            with pytest.warns(UserWarning, match="trusted"):
+                load_checkpoint(
+                    checkpoint_path,
+                    adapter="mace",
+                    adapter_kwargs={"train": False},
+                )
+
+        assert mocked.call_args.kwargs["train"] is False
 
     def test_trainable_only_checkpoint_saves_selected_parameters_and_buffers(
         self, tmp_path: Path

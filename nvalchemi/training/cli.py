@@ -1189,6 +1189,7 @@ def _build_supported_source_model(source: SourceSpec, *, device: Any) -> Any:
             checkpoint,
             device=torch.device(device),
             compile_model=compile_model,
+            train=True,
             atomic_energies=mace_options.atomic_energies,
             atomic_energies_path=mace_options.atomic_energies_path,
         )
