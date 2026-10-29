@@ -225,6 +225,10 @@ class InitialStructures(OrderedStructureSampler):
                 self._wraps += 1
             index = self._rows[self._next_row]
             scanned += 1
+            if index in self._oversized_rows:
+                # Known not to fit on its own: no metadata read on later passes.
+                self._next_row += 1
+                continue
             num_atoms, num_edges = self.dataset.get_metadata(index)
             if not budget(num_atoms, num_edges):
                 if index not in self._oversized_rows:
