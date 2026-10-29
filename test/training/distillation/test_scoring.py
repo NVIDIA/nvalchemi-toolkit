@@ -1119,6 +1119,20 @@ class TestInProcessTeacherScorerLabeling:
         InProcessTeacherScorer(demo_teacher, ["energy", "forces"]).label(small_batch)
         assert small_batch.positions.requires_grad is True
 
+    def test_a_grad_flag_on_an_undeclared_field_is_cleared(
+        self, direct_force_teacher: _DirectForceTeacher, periodic_batch: Batch
+    ) -> None:
+        """A teacher enabling ``cell`` gradients, as a stress head does, is undone."""
+
+        class _CellGradTeacher(_DirectForceTeacher):
+            def forward(self, data: Batch, **kwargs: Any) -> Any:
+                data.cell.requires_grad_(True)
+                return super().forward(data, **kwargs)
+
+        teacher = _CellGradTeacher(direct_force_teacher.model)
+        InProcessTeacherScorer(teacher, ["energy", "forces"]).label(periodic_batch)
+        assert periodic_batch.cell.requires_grad is False
+
     def test_active_outputs_are_restored_after_label(
         self, lj_teacher: LennardJonesModelWrapper, periodic_batch: Batch
     ) -> None:

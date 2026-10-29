@@ -218,6 +218,25 @@ class TestReplayBufferCapacity:
 
         assert len(buffer) == 4
 
+    def test_stored_frames_carry_no_autograd_graph(self) -> None:
+        """Frames handed over with gradients enabled are stored detached.
+
+        An evicting write selects the resident frames; with autograd on, that
+        selection would chain every frame to one shared graph node.
+        """
+        buffer = _make_buffer([0.0, 1.0], capacity=2)
+        frames = _make_frames([2.0])
+        frames.positions.requires_grad_(True)
+
+        buffer.extend(frames)
+
+        resident = buffer.dataset.in_memory_batch
+        assert all(
+            not value.requires_grad and value.grad_fn is None
+            for _, value in resident
+            if isinstance(value, torch.Tensor)
+        )
+
     def test_seeding_over_capacity_evicts_immediately(self) -> None:
         """Capacity is enforced on the first extend as well as later ones."""
         buffer = _make_buffer([0.0, 1.0, 2.0], capacity=2)

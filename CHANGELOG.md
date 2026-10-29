@@ -126,6 +126,21 @@
   `nvalchemi.training._spec_utils.dataset_spec_dict`,
   `dataset_from_spec_dict`, and `DatasetRef`; and
   `nvalchemi._serialization.MeasurementRecord`.
+- **On-policy trajectory lifetime** — `OnPolicySettings.max_trajectory_steps`
+  (default `None`, off) caps how many propagator steps a generated
+  trajectory runs; one that reaches it is stored once, retired, and
+  backfilled from the initial structures, so an MD propagator rotates through
+  its seed pool. It enables the lifecycle on its own and composes with `fmax`.
+  Its backfill stops at a row that does not fit the room left; an
+  `InitialStructures` row larger than the whole `max_atoms`/`max_edges`
+  budget is passed over with a warning (`oversized_rows`) instead of parking
+  the source.
+- **On-policy divergence quarantine** — `OnPolicySettings.quarantine_diverged`
+  (default `False`, off) zeroes a diverged graph's velocities and forces and
+  makes its positions finite on the step it is flagged. A frozen graph is
+  still evaluated by the propagator until the segment boundary retires it, so
+  without this a non-finite geometry can reach the model's neighbor-list
+  construction; the sanitized frame is never captured.
 
 ### Changed
 
@@ -601,6 +616,20 @@
 - `DistributedPipeline` now admits systems received by a `FusedStage` at its
   `entry_status`, fixing downstream stages that never terminated, and no longer
   hangs in teardown when a rank raises.
+- The on-policy divergence hook runs ahead of the trajectory-age hook, so a
+  graph that diverges on the step its lifetime ends is judged while still
+  moving and quarantined like any other diverged graph.
+- `NVTLangevin` derives the per-atom system ids from the batch on every step
+  instead of caching them until the atom count changes. A replacement batch
+  with the same atom count but fewer or reordered systems (the on-policy
+  backfill, for example) read another system's `dt`, temperature, and
+  friction, or rows past the end of the integrator state.
+- Teacher scoring restores the `requires_grad` flag of every batch field, not
+  only the declared autograd inputs, and `ReplayBuffer.extend` runs without
+  autograd. A teacher that enabled gradients on `cell` (a stress head) left a
+  retired on-policy frame carrying the flag, so an evicting buffer write
+  chained the resident frames to one graph node and the second training step
+  failed with "backward through the graph a second time".
 
 ### Deprecated
 

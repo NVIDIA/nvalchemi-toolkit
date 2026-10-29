@@ -787,6 +787,32 @@ the backfill without serving a structure twice. When the position reaches the
 end with nothing left and no `recycle`, the run warns once and spends its
 remaining training steps on the frames it already has.
 
+A thermostatted integrator has the opposite problem: its trajectories never
+end, so without a lifecycle the initial batch is the only set of structures the
+run ever propagates, and the teacher keeps labeling new geometries of the same
+molecules. `max_trajectory_steps` gives every trajectory a lifetime in
+propagator steps. A trajectory that reaches it is frozen on that step, stored
+once through the converged route, and retired and backfilled at the segment
+boundary exactly like a converged one, so the run rotates through the whole
+source. It turns the lifecycle on by itself and also works beside `fmax`, for a
+relaxation that should give up on a structure that never converges. A multiple
+of `generation_steps` retires on segment boundaries, so no frozen trajectory
+idles inside a segment; a source the run outlives needs `recycle=True`. Under a
+lifetime the backfill stops at the first row that does not fit the freed room
+instead of passing over it: every trajectory retires in turn, so the room grows
+to the full budget and that row is served then, and the pool is consumed in
+order with no row lost. A row larger than the whole budget would never fit, so
+`InitialStructures` passes over it with a warning and records it in
+`oversized_rows`.
+
+A diverged trajectory is frozen on the step the predicate flags it, but the
+propagator keeps stepping and evaluating the whole batch, frozen graphs
+included, so a graph frozen with infinite forces presents a non-finite or
+runaway geometry to the model on every remaining step of the segment, which a
+model's neighbor-list builder may not survive; `quarantine_diverged` (default
+`False`) zeroes the flagged graph's velocities and forces and makes its
+positions finite on that step, and the sanitized frame is never captured.
+
 ### The mixture ratio
 
 `replay_ratio`, written λ, is the fraction of every training batch drawn from
