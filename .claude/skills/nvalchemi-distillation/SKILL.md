@@ -309,6 +309,24 @@ Constraints worth knowing before you write the script:
   ORed into a record the capture hook and the segment boundary read. The
   default, `nonfinite_divergence`, is an alias of the core
   `nvalchemi.dynamics.hooks.nonfinite_graph_mask` over positions and forces.
+  A frozen graph still passes through the propagator's step until the
+  boundary retires it, so `OnPolicySettings.quarantine_diverged` (default
+  `False`) zeroes a flagged graph's velocities and forces and makes its
+  positions finite on the step it is flagged, keeping it a finite model
+  input; the sanitized frame is never captured.
+- **A thermostatted trajectory needs a lifetime to rotate seeds.** Without
+  `fmax` nothing ever graduates, so the initial batch is the only set of
+  structures an MD run propagates and `InitialStructures` never advances.
+  `OnPolicySettings.max_trajectory_steps` (default `None`) retires a
+  trajectory after that many propagator steps, stored once like a converged
+  one, and backfills its place from the source; it turns the lifecycle on by
+  itself and also works beside `fmax`. Use a multiple of `generation_steps`
+  so retirement lands on segment boundaries, and `recycle=True` on the source
+  when the run outlives it. Its backfill stops at the first row that does not
+  fit the freed room (a criterion-only lifecycle skips it), so the pool is
+  served in order and no row is lost. A row larger than the whole
+  `max_atoms`/`max_edges` budget is passed over with a warning
+  (`InitialStructures.oversized_rows`).
 - **Graduation is reported at `ON_GRADUATE`.** A structure graduates on the
   step its status reaches `exit_status`; the propagator dispatches
   `DynamicsStage.ON_GRADUATE` with `ctx.graduated_mask`, where the

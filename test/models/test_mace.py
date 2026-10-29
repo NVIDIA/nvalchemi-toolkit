@@ -660,7 +660,8 @@ class TestForward:
         assert forces.shape == (1, 3)
         assert torch.allclose(forces[0], torch.tensor([-1.0, 0.0, 0.0]), atol=1e-5)
 
-    def test_train_mode_works_with_optimizer(self, wrapper):
+    def test_train_mode_works_with_optimizer(self, mock_model):
+        wrapper = MACEWrapper(mock_model, train=True)
         data = _make_single_atom()
         batch = Batch.from_data_list([data])
         optimizer = torch.optim.SGD(wrapper.parameters(), lr=0.1)
@@ -707,6 +708,67 @@ class TestForward:
         wrapper.eval()
         wrapper.forward(single_batch)
         assert wrapper.model.training_flags[-2:] == [True, False]
+
+
+# ---------------------------------------------------------------------------
+# ``train`` flag
+# ---------------------------------------------------------------------------
+
+
+class TestTrainFlag:
+    """``train`` controls weight gradients, independently of ``torch.compile``."""
+
+    def test_default_freezes_weights_and_uses_eval_mode(self):
+        wrapper = MACEWrapper(TrainableMockMACEModel())
+        assert not wrapper.training
+        assert all(not p.requires_grad for p in wrapper.parameters())
+
+    def test_train_true_keeps_weights_trainable_in_train_mode(self):
+        wrapper = MACEWrapper(TrainableMockMACEModel(), train=True)
+        assert wrapper.training
+        assert all(p.requires_grad for p in wrapper.parameters())
+
+    def test_train_true_weights_update_and_forces_still_work(self):
+        """A trainable wrapper still returns autograd forces and learns from them."""
+        wrapper = MACEWrapper(TrainableMockMACEModel(), train=True)
+        optimizer = torch.optim.SGD(wrapper.parameters(), lr=0.05)
+        batch = _make_finetune_batch()
+        before = wrapper.model.scale.detach().clone()
+
+        optimizer.zero_grad()
+        out = wrapper.forward(batch)
+        assert out["forces"].shape[-1] == 3
+        (out["energy"].square().sum() + out["forces"].square().sum()).backward()
+        assert wrapper.model.scale.grad is not None
+        optimizer.step()
+
+        assert not torch.equal(wrapper.model.scale.detach(), before)
+
+    def test_frozen_wrapper_still_returns_autograd_forces(self):
+        """Freezing weights is lossless: forces differentiate positions only."""
+        frozen = MACEWrapper(TrainableMockMACEModel(), train=False)
+        trainable = MACEWrapper(TrainableMockMACEModel(), train=True)
+        batch = _make_finetune_batch()
+        f_frozen = frozen.forward(batch)["forces"]
+        f_trainable = trainable.eval().forward(batch)["forces"]
+        assert torch.allclose(f_frozen, f_trainable)
+
+    def test_checkpoint_spec_round_trips_train_flag(self):
+        """The generic spec path must read the stored flag, not ``Module.train``."""
+        from nvalchemi._serialization import _extract_init_kwargs_from_attrs
+
+        assert (
+            _extract_init_kwargs_from_attrs(
+                MACEWrapper(TrainableMockMACEModel(), train=True)
+            )["train"]
+            is True
+        )
+        assert (
+            _extract_init_kwargs_from_attrs(
+                MACEWrapper(TrainableMockMACEModel(), train=False)
+            )["train"]
+            is False
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -873,7 +935,7 @@ class TestEMAIntegration:
         averaged ``MACEWrapper`` against the restored CUDA model.
         """
         device = torch.device("cuda", torch.cuda.current_device())
-        source = MACEWrapper(MockMACEModel().to(device))
+        source = MACEWrapper(MockMACEModel().to(device), train=True)
         batch = Batch.from_data_list([_make_water(device="cuda")])
 
         ema = EMAHook(model_key="main", decay=0.0)
@@ -1491,6 +1553,44 @@ class TestRealCheckpoint:
         assert real_wrapper_cpu.training is False
         assert real_wrapper_cpu.model.training is False
 
+    def test_checkpoint_wrapper_defaults_to_frozen(self, real_wrapper_cpu):
+        assert all(not p.requires_grad for p in real_wrapper_cpu.parameters())
+
+    @pytest.mark.parametrize("compile_model", [False, True])
+    def test_train_is_independent_of_compile(
+        self, small_checkpoint_path, compile_model
+    ):
+        """``train`` alone decides whether weights are trainable, with or without compile."""
+        kwargs = dict(
+            device=torch.device("cpu"), dtype=torch.float32, compile_model=compile_model
+        )
+        frozen = MACEWrapper.from_checkpoint(small_checkpoint_path, **kwargs)
+        trainable = MACEWrapper.from_checkpoint(
+            small_checkpoint_path, train=True, **kwargs
+        )
+        assert all(not p.requires_grad for p in frozen.parameters())
+        assert not frozen.training
+        assert all(p.requires_grad for p in trainable.parameters())
+        assert trainable.training
+
+    def test_train_true_checkpoint_weights_update(self, small_checkpoint_path):
+        """A ``train=True`` checkpoint accepts an optimizer step on a force loss."""
+        wrapper = MACEWrapper.from_checkpoint(
+            small_checkpoint_path,
+            device=torch.device("cpu"),
+            dtype=torch.float32,
+            train=True,
+        )
+        before = {n: p.detach().clone() for n, p in wrapper.named_parameters()}
+        optimizer = torch.optim.SGD(wrapper.parameters(), lr=1e-3)
+        out = wrapper.forward(_water_batch_with_energy(dtype=torch.float32))
+        (out["energy"].square().sum() + out["forces"].square().sum()).backward()
+        optimizer.step()
+        changed = [
+            n for n, p in wrapper.named_parameters() if not torch.equal(p, before[n])
+        ]
+        assert changed
+
     def test_underlying_model_is_mace(self, real_wrapper_cpu):
         from mace.modules import ScaleShiftMACE
 
@@ -1664,6 +1764,7 @@ class TestRealCheckpoint:
             device=device,
             dtype=torch.float32,
             enable_cueq=True,
+            train=True,
         )
 
         ema = EMAHook(model_key="main", decay=0.0)
@@ -1736,6 +1837,7 @@ class TestRealCheckpoint:
             device=device,
             dtype=torch.float32,
             enable_cueq=True,
+            train=True,
         )
 
         train_batch = _water_batch_with_energy(dtype=torch.float32, device="cuda")

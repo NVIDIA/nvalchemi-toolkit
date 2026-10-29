@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 ### Added
 
@@ -61,10 +61,10 @@
 - Add `DynamicsStage.ON_ADMISSION` to `BaseDynamics`, enabling hooks to
   initialize per-system state once when a batch is admitted, before force
   priming and outside compiled fused steps.
-- `FusedStage(reprime_on_entry=...)` — status codes whose newly entering
-  graphs skip one integrator update so the shared compute and target-stage
-  `AFTER_COMPUTE` hooks can refresh forces under the new stage's context
-  before it advances them.
+- `reprime_on_entry` on dynamics, used by `FusedStage`, distributed pipeline
+  stages, and `DomainParallel`. Graphs entering with these status codes skip one
+  integrator update so their forces are refreshed under the new stage's context.
+  Resident graphs are unaffected.
 - **Batched minimum-energy path (MEP) workflows**: the new
   `nvalchemi.dynamics.mep` subpackage provides endpoint interpolation with
   optional alignment, IDPP initialization, and a GPU-first `NEB` strategy for
@@ -126,6 +126,21 @@
   `nvalchemi.training._spec_utils.dataset_spec_dict`,
   `dataset_from_spec_dict`, and `DatasetRef`; and
   `nvalchemi._serialization.MeasurementRecord`.
+- **On-policy trajectory lifetime** — `OnPolicySettings.max_trajectory_steps`
+  (default `None`, off) caps how many propagator steps a generated
+  trajectory runs; one that reaches it is stored once, retired, and
+  backfilled from the initial structures, so an MD propagator rotates through
+  its seed pool. It enables the lifecycle on its own and composes with `fmax`.
+  Its backfill stops at a row that does not fit the room left; an
+  `InitialStructures` row larger than the whole `max_atoms`/`max_edges`
+  budget is passed over with a warning (`oversized_rows`) instead of parking
+  the source.
+- **On-policy divergence quarantine** — `OnPolicySettings.quarantine_diverged`
+  (default `False`, off) zeroes a diverged graph's velocities and forces and
+  makes its positions finite on the step it is flagged. A frozen graph is
+  still evaluated by the propagator until the segment boundary retires it, so
+  without this a non-finite geometry can reach the model's neighbor-list
+  construction; the sanitized frame is never captured.
 
 ### Changed
 
@@ -536,6 +551,17 @@
 
 ### Breaking Changes
 
+- `MACEWrapper` and `MACEWrapper.from_checkpoint` take a `train` argument
+  (default `False`), matching `UMAWrapper`. By default the weights are now
+  frozen and the wrapper is in eval mode, which is lossless for autograd forces.
+  Full-model training and fine-tuning must pass `train=True`; with a frozen
+  wrapper, `TrainingStrategy` and `FineTuningStrategy` raise "no trainable
+  parameters" unless parameters are selected explicitly (`trainable_patterns`,
+  trainable module patches) or added through PEFT such as LoRA. The `spec run`
+  CLI and the `load_checkpoint(adapter="mace")` adapter pass `train=True` (the
+  adapter accepts a `train` option to override it).
+  `from_checkpoint(compile_model=True)` no longer freezes the weights itself:
+  `train` and `compile_model` are independent.
 - `MACEWrapper` no longer declares or passes through an ordinary `"hessian"`
   model output. Custom MACE modules that relied on the raw upstream value must
   use `hessian_vector_product()`, `prepare_hessian()`, or `compute_hessian()` for
@@ -543,6 +569,24 @@
 
 ### Fixed
 
+- `Batch.put` now copies selected graphs from sources larger than the buffer's
+  remaining graph capacity and marks the indices of copied source graphs in
+  `copied_mask`. A source that is itself a pre-allocated buffer no longer
+  needs room for its unused graph slots, and those slots are never copied.
+- Fix pipeline transfers with `BufferConfig(num_edges=0)` by omitting edges
+  from transport. Received graphs are appended to the active batch instead of
+  rebuilding it, so resident graphs keep their edges and other fields, and the
+  batch stays on its device.
+- The `DistributedModel` error for a loader-compiled wrapper whose spec has no
+  `CompilePolicy` no longer recommends `compile=True`, which needs the same
+  policy; it now advises building the wrapper without compiling it, or adding a
+  `CompilePolicy`.
+- `DistributedModel(..., compile=True)` on an eagerly loaded `MACEWrapper` no
+  longer compiles weight-gradient work: the weights are frozen by default, so
+  the compiled backward differentiates positions only.
+- Generic model specs record a constructor argument that shares its name with an
+  inherited method (such as `train` on an `nn.Module`) from the private
+  attribute that stores it, instead of the bound method.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain
@@ -552,6 +596,13 @@
   remains unchanged.
 - `AlignCellHook` no longer fails under `FusedStage` when positions require
   grad, and compiles with `fullgraph=True`.
+- `WrapPeriodicHook` no longer fails under `FusedStage` when positions
+  require grad: `wrap_positions_into_cell` now performs its in-place write
+  under `torch.no_grad()`.
+- `WrapPeriodicHook` and `wrap_positions_into_cell` now apply `pbc[i]` to
+  lattice vector `i` instead of Cartesian axis `i`. With mixed `pbc` on a
+  triclinic cell, atoms moved by a vector that was not a lattice translation.
+  A `pbc` that does not have 3 flags per graph now raises a `ValueError`.
 - **Dynamics hook lifecycle** — fused-level hooks now fire at the
   `BEFORE_PRE_UPDATE`, `AFTER_PRE_UPDATE`, `BEFORE_POST_UPDATE`, and
   `AFTER_POST_UPDATE` boundaries, and sub-stage `BEFORE_COMPUTE` hooks now
@@ -562,6 +613,23 @@
 - **`FusedStage` force priming** — a dynamics instance's own adaptive
   optimizer state (e.g. FIRE's per-graph `dt`/`alpha`/step counters in
   `self._state`) is now preserved across masked `pre_update`/`post_update` calls.
+- `DistributedPipeline` now admits systems received by a `FusedStage` at its
+  `entry_status`, fixing downstream stages that never terminated, and no longer
+  hangs in teardown when a rank raises.
+- The on-policy divergence hook runs ahead of the trajectory-age hook, so a
+  graph that diverges on the step its lifetime ends is judged while still
+  moving and quarantined like any other diverged graph.
+- `NVTLangevin` derives the per-atom system ids from the batch on every step
+  instead of caching them until the atom count changes. A replacement batch
+  with the same atom count but fewer or reordered systems (the on-policy
+  backfill, for example) read another system's `dt`, temperature, and
+  friction, or rows past the end of the integrator state.
+- Teacher scoring restores the `requires_grad` flag of every batch field, not
+  only the declared autograd inputs, and `ReplayBuffer.extend` runs without
+  autograd. A teacher that enabled gradients on `cell` (a stress head) left a
+  retired on-policy frame carrying the flag, so an evicting buffer write
+  chained the resident frames to one graph node and the second training step
+  failed with "backward through the graph a second time".
 
 ### Deprecated
 

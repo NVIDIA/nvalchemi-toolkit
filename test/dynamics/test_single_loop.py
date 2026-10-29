@@ -186,6 +186,21 @@ class _RandomSizeAllocationHook:
         self.allocations.append(torch.empty(size, device=ctx.batch.device))
 
 
+class CompilerFriendlyBatchPtrModel(CompilerFriendlyModel):
+    """Analytical model that uses batch pointers to sum per-system energies."""
+
+    def forward(self, batch: Batch) -> dict[str, torch.Tensor]:
+        """Sum atomic energies between each system's batch pointers."""
+        outputs = super().forward(batch)
+        atomic_energies = outputs["energy"].view(-1)
+        cumulative = torch.cat(
+            (atomic_energies.new_zeros(1), atomic_energies.cumsum(0))
+        )
+        ptr = batch.batch_ptr
+        outputs["energy"] = (cumulative[ptr[1:]] - cumulative[ptr[:-1]]).unsqueeze(-1)
+        return outputs
+
+
 class CompilerFriendlyAutogradModel(CompilerFriendlyModel):
     """Analytical test model declaring positions as an autograd input."""
 
@@ -592,11 +607,9 @@ class TestFusedStage:
             model=self.model,
             n_steps=2,
             hooks=[target_pre_hook, target_compute_hook],
+            reprime_on_entry=True,
         )
-        fused = FusedStage(
-            sub_stages=[(0, dynamics0), (1, dynamics1)],
-            reprime_on_entry={1},
-        )
+        fused = FusedStage(sub_stages=[(0, dynamics0), (1, dynamics1)])
 
         batch = create_batch_with_status(n_graphs=3)
         batch.status = torch.tensor([0, 0, 1])
@@ -625,20 +638,26 @@ class TestFusedStage:
         assert batch.n_steps_counter_1.view(-1).tolist() == [1, 0, 0]
         assert batch.status.tolist() == [1, 0, fused.exit_status]
 
-    def test_reprime_on_entry_is_validated(self) -> None:
-        """Reprime targets must be a set of known integer status codes."""
-        dynamics0 = BaseDynamics(model=self.model)
-        dynamics1 = BaseDynamics(model=self.model)
-        sub_stages = [(0, dynamics0), (1, dynamics1)]
+    @pytest.mark.parametrize("invalid", [None, 0, 1, {1}, "false"])
+    def test_dynamics_reprime_on_entry_requires_bool(self, invalid) -> None:
+        """A dynamics rejects a non-bool reprime_on_entry."""
+        with pytest.raises(TypeError, match="reprime_on_entry must be a bool"):
+            BaseDynamics(model=self.model, reprime_on_entry=invalid)
 
-        with pytest.raises(TypeError, match="must be a set"):
-            FusedStage(sub_stages=sub_stages, reprime_on_entry=[1])
+    def test_fused_stage_rejects_reprime_on_entry(self) -> None:
+        """The reprime flag belongs on the sub-stage dynamics, not the fused stage."""
+        sub_stages = [(0, BaseDynamics(model=self.model))]
+        with pytest.raises(TypeError, match="sub-stage dynamics"):
+            FusedStage(sub_stages=sub_stages, reprime_on_entry={0})
 
-        with pytest.raises(TypeError, match="must be integers"):
-            FusedStage(sub_stages=sub_stages, reprime_on_entry={True})
-
-        with pytest.raises(ValueError, match="unknown.*3"):
-            FusedStage(sub_stages=sub_stages, reprime_on_entry={3})
+    def test_add_derives_reprime_status_codes_from_sub_stages(self) -> None:
+        """The + operator picks up reprime_on_entry from the sub-stage dynamics."""
+        a = BaseDynamics(model=self.model)
+        b = BaseDynamics(model=self.model, reprime_on_entry=True)
+        fused = a + b
+        assert fused._reprime_status_codes == frozenset({1})
+        # Pipeline arrivals enter status 0, which did not opt in.
+        assert fused.reprime_on_entry is False
 
     def test_convergence_migration_auto_registered(self) -> None:
         """ConvergenceHook should be auto-registered between adjacent sub-stages."""
@@ -805,6 +824,46 @@ class TestFusedStage:
         fused.step(batch)
         assert fused.step_count == 2
 
+    @pytest.mark.parametrize(
+        "model_cls", [CompilerFriendlyModel, CompilerFriendlyBatchPtrModel]
+    )
+    def test_refill_priming_is_fullgraph_compile_safe(
+        self, model_cls: type[CompilerFriendlyModel]
+    ) -> None:
+        """Compiled refill supports models with lazy batch-pointer access."""
+        torch.compiler.reset()
+        try:
+            model = model_cls()
+            sampler = MagicMock()
+            sampler.max_atoms = sampler.max_edges = sampler.max_batch_size = None
+            sampler.request_replacements_budget.return_value = [
+                AtomicData(atomic_numbers=torch.tensor([6]), positions=torch.ones(1, 3))
+            ]
+            fused = FusedStage(
+                sub_stages=[(0, _CompileNoOpDynamics(model=model, n_steps=10))],
+                sampler=sampler,
+                compile_step=True,
+                compile_kwargs={"backend": "eager", "fullgraph": True},
+                device_type="cpu",
+            )
+            batch = create_batch_with_status(n_graphs=2)
+            fused.step(batch)
+            batch.status[1] = fused.exit_status
+            batch = fused.refill_check(batch, fused.exit_status)
+            assert batch.reprime_pending.view(-1).tolist() == [False, True]
+            with patch.object(
+                fused, "_prime_forces", wraps=fused._prime_forces
+            ) as prime:
+                fused.step(batch)
+            assert prime.call_count == 0
+            assert not batch.reprime_pending.any()
+            assert batch.n_steps_counter_0.view(-1).tolist() == [2, 0]
+            torch.testing.assert_close(batch.forces, -2 * batch.positions)
+            fused.step(batch)
+            assert batch.n_steps_counter_0.view(-1).tolist() == [3, 1]
+        finally:
+            torch.compiler.reset()
+
     def test_reprime_on_entry_is_fullgraph_compile_safe(self) -> None:
         """Compiled fused steps support transition and delayed reprime masks."""
         torch.compiler.reset()
@@ -819,10 +878,10 @@ class TestFusedStage:
                 model=model,
                 convergence_hook=ConvergenceHook.from_fmax(1e6),
                 device_type="cpu",
+                reprime_on_entry=True,
             )
             fused = FusedStage(
                 sub_stages=[(0, dynamics0), (1, dynamics1)],
-                reprime_on_entry={1},
                 compile_step=True,
                 compile_kwargs={"backend": "eager", "fullgraph": True},
                 device_type="cpu",
@@ -1068,11 +1127,11 @@ class TestFusedStage:
         dynamics1 = BaseDynamics(
             model=self.model,
             convergence_hook=ConvergenceHook.from_fmax(1e6),
+            reprime_on_entry=True,
         )
         dynamics2 = BaseDynamics(model=self.model)
         fused = FusedStage(
             sub_stages=[(0, dynamics0), (1, dynamics1), (2, dynamics2)],
-            reprime_on_entry={1},
         )
         batch = create_batch_with_status(n_graphs=1)
         batch.status = torch.tensor([0])
@@ -1090,10 +1149,9 @@ class TestFusedStage:
         fused = FusedStage(
             sub_stages=[
                 (0, BaseDynamics(model=self.model, n_steps=1)),
-                (1, BaseDynamics(model=self.model, n_steps=1)),
+                (1, BaseDynamics(model=self.model, n_steps=1, reprime_on_entry=True)),
                 (2, BaseDynamics(model=self.model)),
             ],
-            reprime_on_entry={1},
         )
         batch = create_batch_with_status(n_graphs=1)
         batch.status = torch.tensor([0])
@@ -1221,14 +1279,12 @@ class TestFusedStage:
 
     def test_add_chain_defers_all_intermediates(self) -> None:
         """dyn0 + dyn1 + dyn2 with compile intent defers to final stage."""
-        dyn0 = BaseDynamics(model=self.model)
+        dyn0 = BaseDynamics(model=self.model, reprime_on_entry=True)
         dyn1 = BaseDynamics(model=self.model)
         dyn2 = BaseDynamics(model=self.model)
 
         # BaseDynamics.__add__ doesn't set compile_step, so start with FusedStage
-        fused_compiled = FusedStage(
-            sub_stages=[(0, dyn0)], compile_step=True, reprime_on_entry={0}
-        )
+        fused_compiled = FusedStage(sub_stages=[(0, dyn0)], compile_step=True)
         fused2 = fused_compiled + dyn1
         fused3 = fused2 + dyn2
 
@@ -1236,7 +1292,7 @@ class TestFusedStage:
         assert fused3.compile_step is True
         assert fused3._compiled_step is None
         assert len(fused3.sub_stages) == 3
-        assert fused3.reprime_on_entry == frozenset({0})
+        assert fused3._reprime_status_codes == frozenset({0})
 
         # Explicit compile triggers it
         fused3.compile()
@@ -2491,11 +2547,8 @@ class TestFusedStageSubstageHooks:
         """Fused update hooks exclude graphs sitting out for force repriming."""
         events: list[str] = []
         dynamics0 = BaseDynamics(model=self.model, n_steps=1)
-        dynamics1 = BaseDynamics(model=self.model)
-        fused = FusedStage(
-            sub_stages=[(0, dynamics0), (1, dynamics1)],
-            reprime_on_entry={1},
-        )
+        dynamics1 = BaseDynamics(model=self.model, reprime_on_entry=True)
+        fused = FusedStage(sub_stages=[(0, dynamics0), (1, dynamics1)])
         update_hook = _OrderedHook(stage, "update", events)
         compute_hook = _OrderedHook(DynamicsStage.AFTER_COMPUTE, "compute", events)
         fused.register_hook(update_hook)

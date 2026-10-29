@@ -138,6 +138,7 @@ _NEB_MANAGED_OPTIMIZER_KWARGS = {
     "hooks",
     "model",
     "n_steps",
+    "reprime_on_entry",
 }
 
 _NEB_FIRE2_DEFAULTS = {
@@ -611,10 +612,10 @@ class NEB(DynamicsStrategy):
                             fmax=self.fmax,
                             regular_stage=False,
                         ),
+                        reprime_on_entry=True,
                     ),
                 ),
             ]
-            reprime_on_entry = {1}
         else:
             climbing_status = 0 if self.climbing is not None else None
             stages = [
@@ -634,7 +635,6 @@ class NEB(DynamicsStrategy):
                     ),
                 )
             ]
-            reprime_on_entry = set()
 
         neighbor_hooks = (
             self.model.make_neighbor_hooks()
@@ -651,7 +651,6 @@ class NEB(DynamicsStrategy):
             n_steps=self.n_steps,
             by_group=True,
             hooks=fused_hooks,
-            reprime_on_entry=reprime_on_entry,
             compile_step=self.compile,
             compile_kwargs=dict(self.compile_kwargs),
             device_type=stages[0][1].device_type,

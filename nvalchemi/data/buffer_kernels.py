@@ -476,11 +476,13 @@ def _set_new_num_dest_segmented_kernel(
     fit_scan: wp.array(dtype=wp.int32),
     fits: wp.array(dtype=wp.int32),
     num_systems: wp.int32,
+    max_new_segments: wp.int32,
     new_num_dest: wp.array(dtype=wp.int32),
 ) -> None:
-    """new_num_dest[0] = num_dest_segments + fit_scan[num_systems-1] + fits[num_systems-1]. Launch: dim=1."""
+    """new_num_dest[0] = num_dest_segments + min(fitting segments, max_new_segments). Launch: dim=1."""
     n = num_systems
-    new_num_dest[0] = num_dest_segments + fit_scan[n - 1] + fits[n - 1]
+    num_fit = fit_scan[n - 1] + fits[n - 1]
+    new_num_dest[0] = num_dest_segments + wp.min(num_fit, max_new_segments)
 
 
 @wp.kernel
@@ -669,11 +671,15 @@ def _copy_masked_segmented_kernel(
     new_num_dest: wp.array(dtype=wp.int32),
     fits: wp.array(dtype=wp.int32),
 ) -> None:
-    """Copy only masked segments that fit; parallel over num_systems. Skip if not fits[i]."""
+    """Copy only masked segments that fit; parallel over num_systems. Skip if not fits[i].
+
+    Segments past the ``n_fit`` boundary slots left in ``dest_batch_ptr`` are
+    also skipped, so the first fitting segments are copied.
+    """
     i = wp.tid()
     base = dest_batch_ptr[num_dest_segments]
     n_fit = new_num_dest[0] - num_dest_segments
-    if not (source_mask[i] and fits[i]):
+    if not (source_mask[i] and fits[i]) or fit_scan[i] >= n_fit:
         return
     start = source_batch_ptr[i]
     end = source_batch_ptr[i + 1]
@@ -1437,6 +1443,9 @@ def put_masked_segmented_impl(
     wp_fit_scan = wp.from_torch(fit_scan, dtype=wp.int32)
     wp.utils.array_scan(wp_fits, wp_fit_scan, inclusive=False)
     wp_new_num_dest = wp.from_torch(new_num_dest, dtype=wp.int32)
+    # Pointer slots left for new boundaries; the slot after the last one holds
+    # the duplicated final end written by the copy kernel.
+    max_new_segments = dest_batch_ptr.shape[0] - num_dest_segments - 2
     wp.launch(
         _set_new_num_dest_segmented_kernel,
         dim=1,
@@ -1445,6 +1454,7 @@ def put_masked_segmented_impl(
             wp_fit_scan,
             wp_fits,
             num_systems,
+            max_new_segments,
             wp_new_num_dest,
         ],
         device=device,
@@ -1486,7 +1496,9 @@ def put_masked_segmented(
     layout as source: segment boundaries in a batch_ptr). Data is written
     starting at dest_batch_ptr[num_dest_segments]. New segment end indices
     are written into dest_batch_ptr[num_dest_segments+1 : num_dest_segments+1+num_copied].
-    No host sync. Supports bool, float32, float64, int32, int64.
+    Only the first masked segments that fit in both the data capacity and the
+    free pointer slots are copied. No host sync. Supports bool, float32,
+    float64, int32, int64.
 
     Parameters
     ----------
@@ -1498,10 +1510,11 @@ def put_masked_segmented(
         True for each segment to copy.
     dest : torch.Tensor, shape (dest_capacity, cols) or similar
         Destination buffer; same dtype as source.
-    dest_batch_ptr : torch.Tensor, shape >= num_dest_segments + num_systems + 2, dtype int32
+    dest_batch_ptr : torch.Tensor, shape >= num_dest_segments + 2, dtype int32
         Segment boundaries in dest. Read: dest_batch_ptr[num_dest_segments] = next
         free element. Write: new segment end indices appended at
-        [num_dest_segments+1, num_dest_segments+1+num_copied_segments].
+        [num_dest_segments+1, num_dest_segments+1+num_copied_segments]. At most
+        ``dest_batch_ptr.shape[0] - num_dest_segments - 2`` segments are copied.
     num_dest_segments : int
         Current number of segments in dest (dest_batch_ptr has num_dest_segments+1
         valid entries; dest_batch_ptr[num_dest_segments] is the next free index).
@@ -1514,10 +1527,10 @@ def put_masked_segmented(
         If num_systems > 0: (1,) int32 tensor new_num_dest_segments =
         num_dest_segments + num_copied_segments. If num_systems == 0, None.
 
-    Notes
-    -----
-    dest_batch_ptr must be pre-allocated with size at least
-    num_dest_segments + num_systems + 2 so that new boundaries can be appended.
+    Raises
+    ------
+    ValueError
+        If dest_batch_ptr has fewer than num_dest_segments + 2 entries.
     """
     if source.dim() != 2:
         source = source.view(source.shape[0], -1)
@@ -1528,11 +1541,11 @@ def put_masked_segmented(
     if num_systems == 0:
         return None
 
-    min_dest_batch_size = num_dest_segments + num_systems + 2
+    min_dest_batch_size = num_dest_segments + 2
     new_num_dest = torch.empty(1, device=source.device, dtype=torch.int32)
     if dest_batch_ptr.shape[0] < min_dest_batch_size:
         raise ValueError(
-            f"dest_batch_ptr must have size >= num_dest_segments + num_systems + 2 "
+            f"dest_batch_ptr must have size >= num_dest_segments + 2 "
             f"({min_dest_batch_size}); got {dest_batch_ptr.shape[0]}"
         )
 
@@ -1547,6 +1560,139 @@ def put_masked_segmented(
         new_num_dest,
     )
     return new_num_dest
+
+
+@wp.kernel
+def _shift_put_segments_kernel(
+    dest: wp.array2d(dtype=Any),
+    source_batch_ptr: wp.array(dtype=wp.int32),
+    source_offset_ptr: wp.array(dtype=wp.int32),
+    dest_batch_ptr: wp.array(dtype=wp.int32),
+    dest_offset_ptr: wp.array(dtype=wp.int32),
+    copied_mask: wp.array(dtype=wp.bool),
+    copied_rank: wp.array(dtype=wp.int32),
+    num_systems: wp.int32,
+    num_dest_segments: wp.int32,
+) -> None:
+    """Add each put segment's offset change to its rows in dest.
+
+    Each thread takes one source row (rows past the last segment return) and:
+
+    1. finds its source segment ``i`` by binary search in ``source_batch_ptr``;
+    2. returns unless ``copied_mask[i]``;
+    3. finds the segment's dest slot ``g = num_dest_segments + copied_rank[i] - 1``
+       and adds ``dest_offset_ptr[g] - source_offset_ptr[i]`` to the row's copy.
+    """
+    row = wp.tid()
+    if row >= source_batch_ptr[num_systems]:
+        return
+    # A graph with no edges starts where the next graph does; on such a tie,
+    # pick the later graph, since the empty one owns no rows.
+    lo = wp.int32(0)
+    hi = num_systems
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if source_batch_ptr[mid] <= row:
+            lo = mid
+        else:
+            hi = mid
+    if not copied_mask[lo]:
+        return
+    g = num_dest_segments + copied_rank[lo] - 1
+    dest_row = dest_batch_ptr[g] + row - source_batch_ptr[lo]
+    dd = dest[0, 0]
+    shift = type(dd)(dest_offset_ptr[g] - source_offset_ptr[lo])
+    for c in range(dest.shape[1]):
+        dest[dest_row, c] = dest[dest_row, c] + shift
+
+
+_shift_put_segments_overloads: dict[type, Any] = {}
+for _wp_t in [wp.int32, wp.int64]:
+    _shift_put_segments_overloads[_wp_t] = wp.overload(
+        _shift_put_segments_kernel,
+        [
+            wp.array2d(dtype=_wp_t),
+            wp.array(dtype=wp.int32),
+            wp.array(dtype=wp.int32),
+            wp.array(dtype=wp.int32),
+            wp.array(dtype=wp.int32),
+            wp.array(dtype=wp.bool),
+            wp.array(dtype=wp.int32),
+            wp.int32,
+            wp.int32,
+        ],
+    )
+
+
+def shift_put_segments(
+    dest: torch.Tensor,
+    source_batch_ptr: torch.Tensor,
+    source_offset_ptr: torch.Tensor,
+    dest_batch_ptr: torch.Tensor,
+    dest_offset_ptr: torch.Tensor,
+    copied_mask: torch.Tensor,
+    num_dest_segments: int,
+    num_source_rows: int,
+) -> None:
+    """Shift index values of segments appended by :func:`put_masked_segmented`.
+
+    Segmented index fields such as ``neighbor_list`` store positions in another
+    segmented level (atoms). A put copies them unchanged, so they still point at
+    the source layout. This adds, to every row of each copied segment, the
+    difference between the segment's offset in the destination and in the
+    source. Work is proportional to the source rows, and there is no host sync.
+
+    Parameters
+    ----------
+    dest : torch.Tensor, shape (dest_capacity, ...), dtype int32 or int64
+        Destination index field, already filled by the put. Updated in place.
+    source_batch_ptr : torch.Tensor, shape (num_systems + 1,) or larger, dtype int32
+        Source segment boundaries of *dest*'s level (e.g. edges).
+    source_offset_ptr : torch.Tensor, shape (num_systems + 1,) or larger, dtype int32
+        Source segment boundaries of the indexed level (e.g. atoms).
+    dest_batch_ptr : torch.Tensor, dtype int32
+        Destination boundaries of *dest*'s level after the put.
+    dest_offset_ptr : torch.Tensor, dtype int32
+        Destination boundaries of the indexed level after the put.
+    copied_mask : torch.Tensor, shape (num_systems,), dtype bool
+        Segments copied by the put. Each level must have copied the same ones.
+    num_dest_segments : int
+        Number of destination segments before the put.
+    num_source_rows : int
+        Launch size; at least ``source_batch_ptr[num_systems]``, for example
+        the source field's first dimension.
+
+    Raises
+    ------
+    TypeError
+        If *dest* is not int32 or int64.
+    """
+    if dest.dtype not in (torch.int32, torch.int64):
+        raise TypeError(f"shift_put_segments expects int32 or int64, got {dest.dtype}")
+    num_systems = copied_mask.shape[0]
+    if num_systems == 0 or num_source_rows == 0:
+        return
+    if dest.dim() != 2:
+        dest = dest.view(dest.shape[0], -1)
+    device = _put_launch_device(source_batch_ptr, dest)
+    copied_rank = torch.cumsum(copied_mask, 0, dtype=torch.int32)
+    # Not a custom_op: Batch.put is untraceable, and dispatch doubles host cost.
+    wp.launch(
+        _shift_put_segments_overloads[TORCH_TO_WP[dest.dtype]],
+        dim=num_source_rows,
+        inputs=[
+            wp.from_torch(dest, return_ctype=True),
+            wp.from_torch(source_batch_ptr, dtype=wp.int32, return_ctype=True),
+            wp.from_torch(source_offset_ptr, dtype=wp.int32, return_ctype=True),
+            wp.from_torch(dest_batch_ptr, dtype=wp.int32, return_ctype=True),
+            wp.from_torch(dest_offset_ptr, dtype=wp.int32, return_ctype=True),
+            wp.from_torch(copied_mask, dtype=wp.bool, return_ctype=True),
+            wp.from_torch(copied_rank, dtype=wp.int32, return_ctype=True),
+            num_systems,
+            num_dest_segments,
+        ],
+        device=device,
+    )
 
 
 @torch.library.custom_op(

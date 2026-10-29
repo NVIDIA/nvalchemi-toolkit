@@ -32,10 +32,11 @@ Performance advantages over the Pydantic-based ``nvalchemi.data.batch.Batch``:
 
 from __future__ import annotations
 
+import warnings
 from collections import defaultdict
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from typing import Any, TypeAlias
+from typing import Any, Literal, TypeAlias
 
 import numpy as np
 import torch
@@ -45,6 +46,7 @@ from torch import distributed as dist
 from torch.distributed import ProcessGroup, Work
 
 from nvalchemi.data.atomic_data import AtomicData
+from nvalchemi.data.buffer_kernels import shift_put_segments
 from nvalchemi.data.data import DataMixin
 from nvalchemi.data.group_layout import (
     GroupLayout,
@@ -1347,8 +1349,7 @@ class Batch(DataMixin):
 
         Storage tensors are allocated with the given capacities; no graphs are
         stored initially (``num_graphs == 0``). Use :meth:`put` to copy graphs
-        into the buffer; pass ``dest_mask`` of shape ``(num_systems,)`` with
-        ``False`` for empty slots.
+        into the buffer; each put appends after the graphs already stored.
 
         Parameters
         ----------
@@ -1770,9 +1771,11 @@ class Batch(DataMixin):
             (num_graphs,) bool; if provided, modified in place with the actual
             copy mask (fit in all levels). If None, stored on *src_batch*.
         dest_mask : Tensor, optional
-            Shared occupancy mask for uniform levels, with ``True`` denoting an
-            occupied destination slot. Occupied slots must form a dense prefix.
-            If ``None``, all slots are available.
+            Deprecated and ignored; occupancy is derived from :attr:`num_graphs`.
+
+            .. deprecated:: 0.3.0
+                Omit ``dest_mask``; it will be removed in the release after
+                0.3.0.
 
         Raises
         ------
@@ -1782,8 +1785,17 @@ class Batch(DataMixin):
             another device than this batch, or if a mask's
             length does not match ``src_batch.num_graphs``.
 
+        Warns
+        -----
+        DeprecationWarning
+            If *dest_mask* is passed. The argument is ignored.
+
         Notes
         -----
+        Graphs are appended after the first :attr:`num_graphs` slots at every
+        level, so per-graph and per-atom data stay aligned. Each copied graph's
+        ``neighbor_list`` is re-offset to where its atoms land in this batch.
+
         The copy runs as a Warp kernel over both batches' raw pointers, so a
         source on another device is rejected rather than moved: moving it would
         hide a per-step host-device transfer inside what callers use as an
@@ -1805,6 +1817,13 @@ class Batch(DataMixin):
         n = src_batch.num_graphs
         if mask.shape[0] != n:
             raise ValueError(f"mask shape {mask.shape[0]} != num_graphs {n}")
+        if dest_mask is not None:
+            warnings.warn(
+                "Batch.put(dest_mask=...) is deprecated and ignored; occupancy "
+                "is derived from num_graphs. Omit dest_mask.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self._validate_custom_put(src_batch)
         self._prevalidate_buffer_put(src_batch)
         mask = mask.to(device=device, dtype=torch.bool)
@@ -1815,18 +1834,6 @@ class Batch(DataMixin):
         else:
             copy_mask = torch.zeros(n, device=device, dtype=torch.bool)
             object.__setattr__(src_batch, "_copied_mask", copy_mask)
-
-        # Uniform groups all represent the same graph slots.  Snapshot the
-        # caller's occupancy before either group mutates it, so each fit and
-        # copy sees the same free slots.  The caller's mask is updated once
-        # after all uniform groups have copied.
-        uniform_dest_mask = (
-            dest_mask.to(device=device, dtype=torch.bool)
-            if dest_mask is not None
-            else None
-        )
-
-        fit_mask = torch.ones(n, device=device, dtype=torch.bool)
 
         # Keep the historical built-in order for communication layouts, then
         # process custom levels in schema order.
@@ -1851,44 +1858,49 @@ class Batch(DataMixin):
             ):
                 fit_groups.append((group_name, dest_group, src_group))
 
+        fit_mask = torch.ones(n, device=device, dtype=torch.bool)
+
         # Compute every fit before entering the copy phase so a rejected
-        # custom group cannot leave built-in data partially written.
+        # custom group cannot leave built-in data partially written.  Each
+        # level derives its free slots from its own fill count, which keeps
+        # uniform rows aligned with the segments appended after len(self).
         for _, group, src_group in fit_groups:
             level_fit = torch.empty(n, device=device, dtype=torch.bool)
-            group_dest_mask = uniform_dest_mask if not group.is_segmented() else None
-            group.compute_put_per_system_fit_mask(
-                src_group, mask, group_dest_mask, level_fit
-            )
+            group.compute_put_per_system_fit_mask(src_group, mask, level_fit)
             fit_mask.logical_and_(level_fit)
+        # Read one count for all levels: put's only host sync.
+        num_copied = int(fit_mask.sum())
+        num_dest_graphs = self.num_graphs
+        for _, group, src_group in fit_groups:
+            group.put(
+                src_group, fit_mask, copied_mask=fit_mask, num_selected=num_copied
+            )
+
+        # Edge index fields hold batch-wide atom indices but are copied as raw
+        # values, so move each appended graph's edges by its destination atom
+        # start minus its source atom start.
+        levels = {name: (group, src_group) for name, group, src_group in fit_groups}
+        if "atoms" in levels and "edges" in levels:
+            dest_atoms, src_atoms = levels["atoms"]
+            dest_edges, src_edges = levels["edges"]
+            index_keys = _INDEX_KEYS.intersection(src_edges.keys(), dest_edges.keys())
+            if index_keys and num_copied:
+                for key in index_keys:
+                    shift_put_segments(
+                        dest_edges._data[key],
+                        src_edges._batch_ptr,
+                        src_atoms._batch_ptr,
+                        dest_edges._batch_ptr,
+                        dest_atoms._batch_ptr,
+                        fit_mask,
+                        num_dest_graphs,
+                        src_edges._data[key].shape[0],
+                    )
+
         copy_mask.copy_(fit_mask)
 
-        final_uniform_dest_mask: Tensor | None = None
-        for _, group, src_group in fit_groups:
-            if group.is_segmented():
-                group.put(src_group, copy_mask, copied_mask=copy_mask)
-            else:
-                group_dest_mask = (
-                    uniform_dest_mask.clone()
-                    if uniform_dest_mask is not None
-                    else torch.zeros(
-                        group._data.shape[0], device=device, dtype=torch.bool
-                    )
-                )
-                group.put(
-                    src_group,
-                    copy_mask,
-                    copied_mask=copy_mask,
-                    dest_mask=group_dest_mask,
-                )
-                if final_uniform_dest_mask is None:
-                    final_uniform_dest_mask = group_dest_mask
-
-        if dest_mask is not None and final_uniform_dest_mask is not None:
-            dest_mask.copy_(
-                final_uniform_dest_mask.to(
-                    device=dest_mask.device, dtype=dest_mask.dtype
-                )
-            )
+        if copied_mask is not None and copied_mask is not copy_mask:
+            copied_mask.copy_(copy_mask)
 
     def defrag(
         self,
@@ -2798,12 +2810,26 @@ class Batch(DataMixin):
                         "supported by buffer kernels"
                     )
 
-    def append(self, other: Batch) -> None:
+    def append(
+        self,
+        other: Batch,
+        *,
+        missing_fields: Literal["drop", "fill"] = "drop",
+        field_defaults: Mapping[str, Callable[[int, torch.device], Tensor]]
+        | None = None,
+    ) -> None:
         """Append another batch (in-place via concatenation).
 
         If *other* is missing a group that this batch has (e.g. system-level
         data), this batch's tensors in that group are extended with zeros so
         that the first dimension (num graphs) stays aligned.
+
+        With ``missing_fields="fill"``, this batch keeps all of its fields:
+        rows for appended graphs that lack a field are filled with zeros or
+        supplied system-field defaults. Fields only *other* carries are dropped
+        as with ``"drop"``. Zero-filled values are storage placeholders, not
+        valid model outputs. Custom levels retain their strict schema
+        compatibility requirements.
 
         Grouped batches may only be appended to other grouped batches. The
         appended batch's local ``group_idx`` values are rebased after the
@@ -2815,6 +2841,15 @@ class Batch(DataMixin):
         other : Batch
             Batch to append.  Must not share storage with *self* —
             use ``batch.append(batch.clone())`` to double a batch.
+        missing_fields : {"drop", "fill"}, optional
+            Default ``"drop"`` keeps shared fields within paired storage groups.
+            ``"fill"`` keeps every field of this batch without modifying
+            *other*.
+        field_defaults : mapping, optional
+            System-field factories accepting ``(num_graphs, device)`` and
+            returning a tensor with one row per graph. Requires ``"fill"``.
+            They fill this batch's fields that *other* lacks; other missing
+            fields use zeros. Fields this batch lacks are never added.
         """
         if other is self or other._storage is self._storage:
             raise ValueError(
@@ -2823,7 +2858,56 @@ class Batch(DataMixin):
                 "batch.append(batch.clone()) instead."
             )
 
+        if missing_fields not in {"drop", "fill"}:
+            raise ValueError(f"Unknown missing_fields policy: {missing_fields!r}")
+        if field_defaults is not None and missing_fields != "fill":
+            raise ValueError("field_defaults requires missing_fields='fill'")
         self._validate_custom_append(other)
+        if missing_fields == "fill":
+            field_defaults = field_defaults or {}
+            for key in field_defaults:
+                if self._storage._group_name_from_attr(key) not in (None, "system"):
+                    raise ValueError(f"Default field '{key}' must be system-level")
+            # Fill this batch's fields that *other* lacks; group_idx mismatches
+            # are rejected below instead.
+            fills = []
+            for level, group in self._storage.groups.items():
+                other_group = other._storage.groups.get(level)
+                for key, ref in group.items():
+                    if key == "group_idx" or (
+                        other_group is not None and key in other_group
+                    ):
+                        continue
+                    if other_group is None and level != "system":
+                        continue  # append zero-extends levels other lacks
+                    rows = (
+                        other.num_graphs
+                        if other_group is None
+                        else other_group._data.shape[0]
+                    )
+                    shape = (rows, *ref.shape[1:])
+                    if key not in field_defaults:
+                        value = torch.zeros(shape, dtype=ref.dtype, device=other.device)
+                    else:
+                        value = field_defaults[key](other.num_graphs, other.device)
+                        if not isinstance(value, Tensor):
+                            raise TypeError(f"Default for '{key}' must return a tensor")
+                        if (value.shape, value.dtype) != (shape, ref.dtype):
+                            raise ValueError(
+                                f"Default for '{key}' must have shape {shape} and "
+                                f"dtype {ref.dtype}, got {tuple(value.shape)} and "
+                                f"{value.dtype}"
+                            )
+                    fills.append((level, key, value))
+            if fills:
+                # Pad a copy so the caller's batch is left unchanged.
+                other = other.clone()
+                for level, key, value in fills:
+                    group = other._storage.groups.get(level)
+                    if group is None:
+                        other[key] = value  # creates the system group
+                    else:
+                        group[key] = value
 
         # Verify every segmented pointer that the append will extend before
         # any payload or neighbor-list offset can mutate either batch.

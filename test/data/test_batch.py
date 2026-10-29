@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import socket
 from datetime import timedelta
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -1959,6 +1960,147 @@ class TestBatchMutation:
         assert b1.num_nodes_list == [2, 3, 4]
         assert b1.num_nodes == 9
 
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    def test_append_fill_preserves_receiver_fields_without_mutating_other(self, device):
+        """Receiver fields are zero-filled for arrivals; arrival-only fields drop."""
+        if device == "cuda" and not torch.cuda.is_available():
+            pytest.skip("CUDA unavailable")
+        left = Batch.from_data_list([_minimal_atomic_data(2)]).to(device)
+        right = Batch.from_data_list([_minimal_atomic_data(3)]).to(device)
+        left.add_key("forces", [torch.full((2, 3), 7.0, device=device)])
+        left.add_key(
+            "resident_id", [torch.tensor([[4]], device=device)], level="system"
+        )
+        right.add_key("charges", [torch.full((3, 1), 2.0, device=device)])
+        right.add_key(
+            "arrival_id", [torch.tensor([[9]], device=device)], level="system"
+        )
+        before = right.clone()
+
+        left.append(right, missing_fields="fill")
+
+        torch.testing.assert_close(
+            left.forces[:2], torch.full((2, 3), 7.0, device=device)
+        )
+        assert not left.forces[2:].any()
+        assert left.resident_id.tolist() == [[4], [0]]
+        assert "charges" not in left
+        assert "arrival_id" not in left
+        assert left.num_nodes_list == [2, 3]
+        assert right.keys == before.keys
+        assert "forces" not in right
+        for key, value in before:
+            torch.testing.assert_close(right[key], value)
+
+    def test_append_fill_system_defaults_preserve_existing_values(self):
+        """Factories fill receiver fields; fields absent on the receiver are not added."""
+        left = Batch.from_data_list([_minimal_atomic_data(2)])
+        right = Batch.from_data_list([_minimal_atomic_data(3)])
+        left["system_id"] = torch.tensor([[42]])
+        left["reprime_pending"] = torch.tensor([[True]])
+        defaults = {
+            "system_id": lambda n, dev: torch.full(
+                (n, 1), -1, dtype=torch.long, device=dev
+            ),
+            "reprime_pending": lambda n, dev: torch.zeros(
+                n, 1, dtype=torch.bool, device=dev
+            ),
+            "counter": lambda n, dev: torch.full(
+                (n, 1), 5, dtype=torch.long, device=dev
+            ),
+        }
+
+        left.append(right, missing_fields="fill", field_defaults=defaults)
+
+        assert left.system_id.tolist() == [[42], [-1]]
+        assert left.reprime_pending.tolist() == [[True], [False]]
+        assert "counter" not in left
+        assert "counter" not in right
+
+    @pytest.mark.parametrize("bad_default", ["not_tensor", "rows", "shape", "dtype"])
+    def test_append_fill_invalid_default_does_not_mutate_inputs(self, bad_default):
+        """Invalid factories fail before altering resident or incoming storage."""
+        left = Batch.from_data_list([_minimal_atomic_data(2)])
+        right = Batch.from_data_list([_minimal_atomic_data(3)])
+        left["system_id"] = torch.tensor([[42]])
+        before = left._storage
+        values = {
+            "not_tensor": None,
+            "rows": torch.zeros(2, 1, dtype=torch.long),
+            "shape": torch.zeros(1, 2, dtype=torch.long),
+            "dtype": torch.zeros(1, 1),
+        }
+        with pytest.raises((ValueError, TypeError), match="Default"):
+            left.append(
+                right,
+                missing_fields="fill",
+                field_defaults={"system_id": lambda n, dev: values[bad_default]},
+            )
+        assert left._storage is before
+        assert left.num_graphs == 1
+        assert left.system_id.tolist() == [[42]]
+        assert "system_id" not in right
+
+    def test_append_fill_preserves_group_layout_and_neighbor_indices(self):
+        """Filling fields retains append's group and edge offset semantics."""
+        left = Batch.from_data_list([_minimal_atomic_data(2, num_edges=1)])
+        right = Batch.from_data_list([_minimal_atomic_data(3, num_edges=2)])
+        left.set_group_layout(torch.tensor([0]))
+        right.set_group_layout(torch.tensor([0]))
+        left.add_key("extra", [torch.ones(2, 1)])
+        edges = right.neighbor_list.clone()
+
+        left.append(right, missing_fields="fill")
+
+        assert left.group_idx.tolist() == [0, 1]
+        torch.testing.assert_close(left.neighbor_list[-len(edges) :], edges + 2)
+        torch.testing.assert_close(right.neighbor_list, edges)
+        assert not left.extra[2:].any()
+
+    def test_append_fill_retains_fieldless_builtin_cardinalities(self):
+        """Filling payload-free levels must not erase their segment metadata."""
+        left = _fieldless_builtin_batch([2, 1], [3, 0])
+        right = _fieldless_builtin_batch([4], [2])
+        left.append(right, missing_fields="fill")
+        assert left.level_ptr("atoms").tolist() == [0, 2, 3, 7]
+        assert left.level_ptr("edges").tolist() == [0, 3, 3, 5]
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"missing_fields": "invalid"},
+            {"field_defaults": {}},
+            {
+                "missing_fields": "fill",
+                "field_defaults": {"positions": lambda n, dev: torch.zeros(n, 3)},
+            },
+        ],
+    )
+    def test_append_rejects_invalid_fill_options(self, kwargs):
+        """Invalid policies and defaults fail before modifying either batch."""
+        left = Batch.from_data_list([_minimal_atomic_data(2)])
+        right = Batch.from_data_list([_minimal_atomic_data(3)])
+        with pytest.raises(ValueError):
+            left.append(right, **kwargs)
+        assert left.num_graphs == right.num_graphs == 1
+
+    def test_append_fill_skips_clone_when_nothing_is_missing(self):
+        """Arrivals that already carry every receiver field are not copied."""
+        left = Batch.from_data_list([_minimal_atomic_data(2)])
+        right = Batch.from_data_list([_minimal_atomic_data(3)])
+        with patch.object(Batch, "clone") as clone:
+            left.append(right, missing_fields="fill")
+        clone.assert_not_called()
+        assert left.num_graphs == 2
+
+    def test_append_default_still_drops_unshared_fields(self):
+        """Opt-in filling does not change legacy append behavior."""
+        left = Batch.from_data_list([_minimal_atomic_data(2)])
+        right = Batch.from_data_list([_minimal_atomic_data(3)])
+        left.add_key("forces", [torch.ones(2, 3)])
+        left.append(right)
+        assert "forces" not in left
+
     def test_append_select_and_rebatch_fieldless_builtin_segment_metadata(self):
         left = _fieldless_builtin_batch([2, 1], [3, 0], pointer_capacity=5)
         right = _fieldless_builtin_batch([4], [2])
@@ -2019,24 +2161,28 @@ class TestBatchMutation:
                 original.get_data(source_idx).atom_edge_values,
             )
 
-    def test_append_fieldless_metadata_prevalidates_pointer_overflow(self):
+    @pytest.mark.parametrize("missing_fields", ["drop", "fill"])
+    def test_append_fieldless_metadata_prevalidates_pointer_overflow(
+        self, missing_fields
+    ):
         maximum = torch.iinfo(torch.int32).max
         left = _fieldless_builtin_batch([maximum], [0], pointer_capacity=4)
         right = _fieldless_builtin_batch([1], [0])
 
         with pytest.raises(OverflowError, match="Segment pointer exceeds"):
-            left.append(right)
+            left.append(right, missing_fields=missing_fields)
 
         assert left.level_ptr("atoms").tolist() == [0, maximum]
         assert left.level_ptr("edges").tolist() == [0, 0]
 
-    def test_append_payload_overflow_is_atomic_across_levels(self):
+    @pytest.mark.parametrize("missing_fields", ["drop", "fill"])
+    def test_append_payload_overflow_is_atomic_across_levels(self, missing_fields):
         maximum = torch.iinfo(torch.int32).max
         left = _custom_boundary_batch(maximum, 11.0, payload_value=7.0)
         right = _custom_boundary_batch(1, 22.0, payload_value=9.0)
 
         with pytest.raises(OverflowError, match="Segment pointer exceeds"):
-            left.append(right)
+            left.append(right, missing_fields=missing_fields)
 
         assert left.num_graphs == 1
         assert left.energy.tolist() == [[11.0]]
@@ -2401,7 +2547,10 @@ class TestBatchMutation:
         torch.testing.assert_close(other.pair_values, other_before)
         assert receiver.level_ptr("pairs").tolist() == receiver_ptr_before.tolist()
 
-    def test_append_rejects_incompatible_custom_fields_before_mutation(self):
+    @pytest.mark.parametrize("missing_fields", ["drop", "fill"])
+    def test_append_rejects_incompatible_custom_fields_before_mutation(
+        self, missing_fields
+    ):
         schema = LevelSchema()
         schema.add_level("samples", segmented=True)
         schema.set("sample_features", "samples")
@@ -2419,7 +2568,7 @@ class TestBatchMutation:
         right_before = right.other_features.clone()
 
         with pytest.raises(ValueError, match="field sets"):
-            left.append(right)
+            left.append(right, missing_fields=missing_fields)
         assert left.num_graphs == 1
         torch.testing.assert_close(left.sample_features, left_before)
         torch.testing.assert_close(right.other_features, right_before)
@@ -2693,12 +2842,15 @@ class TestHessianBatchLifecycle:
             )
         torch.testing.assert_close(rebuilt.hessian, batch.hessian)
 
-    def test_append_compatible_hessian_batches(self, hessian_batch_factory):
+    @pytest.mark.parametrize("missing_fields", ["drop", "fill"])
+    def test_append_compatible_hessian_batches(
+        self, hessian_batch_factory, missing_fields
+    ):
         left = hessian_batch_factory(2, 1)
         right = hessian_batch_factory(3, 2, offset=5000.0)
         expected = [data.hessian for data in left.to_data_list() + right.to_data_list()]
 
-        left.append(right)
+        left.append(right, missing_fields=missing_fields)
 
         assert left.num_graphs == 4
         _assert_hessian_batch(left, (2, 1, 3, 2))
@@ -3100,6 +3252,183 @@ class TestBatchPutDefrag:
         buffer.put(src_batch, mask, copied_mask=copied_mask)
         assert copied_mask.shape == (1,)
         assert copied_mask.sum().item() == 0
+
+    @pytest.mark.parametrize(
+        "selected", [[False, False, False], [False, False, True], [True, True, True]]
+    )
+    @pytest.mark.parametrize("prefill", [0, 1, 2])
+    @pytest.mark.parametrize("explicit_mask", [False, True])
+    def test_put_from_larger_source_uses_selected_graph_capacity(
+        self, selected: list[bool], prefill: int, explicit_mask: bool, device: str
+    ) -> None:
+        """A small buffer copies selected graphs and reports original source indices."""
+        data_list = [_atomic_data_with_system() for _ in range(3)]
+        for index, data in enumerate(data_list):
+            data.energy.fill_(index)
+        source = Batch.from_data_list(data_list, device=device)
+        original = source.clone()
+        buffer = Batch.empty(
+            num_systems=2, num_nodes=4, num_edges=0, template=source, device=device
+        )
+        if prefill:
+            first = source.index_select(list(range(prefill)))
+            buffer.put(first, torch.ones(prefill, dtype=torch.bool, device=device))
+        pointers = {
+            name: level.batch_ptr
+            for name, level in buffer._storage.groups.items()
+            if isinstance(level, SegmentedLevelStorage)
+        }
+        copied = (
+            torch.ones(3, dtype=torch.bool, device=device) if explicit_mask else None
+        )
+
+        buffer.put(source, torch.tensor(selected, device=device), copied_mask=copied)
+
+        expected_indices = [index for index, value in enumerate(selected) if value][
+            : 2 - prefill
+        ]
+        actual_mask = copied if explicit_mask else source._copied_mask
+        assert actual_mask.tolist() == [index in expected_indices for index in range(3)]
+        assert buffer.num_graphs == prefill + len(expected_indices)
+        for dest_index, source_index in enumerate(
+            list(range(prefill)) + expected_indices
+        ):
+            actual = buffer.get_data(dest_index)
+            expected = original.get_data(source_index)
+            for key in ("positions", "energy"):
+                torch.testing.assert_close(actual[key], expected[key])
+        torch.testing.assert_close(source.positions, original.positions)
+        for name, pointer in pointers.items():
+            assert buffer._storage.groups[name].batch_ptr.shape == pointer.shape
+
+        source.defrag(copied)
+
+        remaining = [index for index in range(3) if index not in expected_indices]
+        assert source.num_graphs == len(remaining)
+        for index, source_index in enumerate(remaining):
+            torch.testing.assert_close(
+                source.get_data(index).positions,
+                original.get_data(source_index).positions,
+            )
+
+    # num_systems=2 compacts the 3-graph source; num_systems=5 copies it directly.
+    @pytest.mark.parametrize("num_systems", [2, 5])
+    @pytest.mark.parametrize("prefill", [0, 1])
+    @pytest.mark.parametrize("index_dtype", [torch.int32, torch.int64])
+    def test_put_offsets_neighbor_list_to_destination_atoms(
+        self, num_systems: int, prefill: int, index_dtype: torch.dtype, device: str
+    ) -> None:
+        """Copied edges point at the copied graph's atoms, even after a skipped graph."""
+
+        def ring(num_nodes: int) -> AtomicData:
+            atoms = torch.arange(num_nodes, device=device)
+            return AtomicData(
+                positions=torch.randn(num_nodes, 3, device=device),
+                atomic_numbers=torch.ones(num_nodes, dtype=torch.long, device=device),
+                neighbor_list=torch.stack([atoms, atoms.roll(-1)], dim=1).to(
+                    index_dtype
+                ),
+                energy=torch.tensor([[0.0]], device=device),
+            )
+
+        source = Batch.from_data_list([ring(2), ring(3), ring(4)], device=device)
+        original = source.clone()
+        buffer = Batch.empty(
+            num_systems=num_systems,
+            num_nodes=20,
+            num_edges=20,
+            template=source,
+            device=device,
+        )
+        resident = [ring(3) for _ in range(prefill)]
+        if resident:
+            buffer.put(
+                Batch.from_data_list(resident, device=device),
+                torch.ones(prefill, dtype=torch.bool, device=device),
+            )
+        copied = torch.zeros(3, dtype=torch.bool, device=device)
+
+        buffer.put(
+            source, torch.tensor([True, False, True], device=device), copied_mask=copied
+        )
+
+        expected_indices = [0, 2][: num_systems - prefill]
+        assert copied.tolist() == [index in expected_indices for index in range(3)]
+        for dest_index, source_index in enumerate(expected_indices, start=prefill):
+            actual = buffer.get_data(dest_index)
+            expected = original.get_data(source_index)
+            torch.testing.assert_close(actual.neighbor_list, expected.neighbor_list)
+            torch.testing.assert_close(actual.positions, expected.positions)
+        for resident_index, data in enumerate(resident):
+            torch.testing.assert_close(
+                buffer.get_data(resident_index).neighbor_list, data.neighbor_list
+            )
+
+    @pytest.mark.parametrize("selected", [[True, False, True], [True, True, True]])
+    def test_put_from_buffer_source_ignores_spare_pointer_capacity(
+        self, selected: list[bool], device: str
+    ) -> None:
+        """A source buffer's unused graph slots need no room and are not copied."""
+
+        def ring(num_nodes: int) -> AtomicData:
+            atoms = torch.arange(num_nodes, device=device)
+            return AtomicData(
+                positions=torch.randn(num_nodes, 3, device=device),
+                atomic_numbers=torch.ones(num_nodes, dtype=torch.long, device=device),
+                neighbor_list=torch.stack([atoms, atoms.roll(-1)], dim=1),
+                energy=torch.tensor([[0.0]], device=device),
+            )
+
+        data_list = [ring(n) for n in (2, 3, 4)]
+        tight = Batch.from_data_list(data_list, device=device)
+        source = Batch.empty(
+            num_systems=12, num_nodes=40, num_edges=40, template=tight, device=device
+        )
+        source.put(tight, torch.ones(3, dtype=torch.bool, device=device))
+        # Room for the source's three graphs, not for its 12-graph pointer.
+        buffer = Batch.empty(
+            num_systems=3, num_nodes=20, num_edges=20, template=tight, device=device
+        )
+        copied = torch.zeros(3, dtype=torch.bool, device=device)
+
+        buffer.put(source, torch.tensor(selected, device=device), copied_mask=copied)
+
+        expected_indices = [index for index, value in enumerate(selected) if value]
+        assert copied.tolist() == selected
+        assert buffer.num_graphs == len(expected_indices)
+        for level in ("atoms", "edges"):
+            assert len(buffer._storage.groups[level]) == len(expected_indices)
+        for dest_index, source_index in enumerate(expected_indices):
+            actual = buffer.get_data(dest_index)
+            expected = data_list[source_index]
+            torch.testing.assert_close(actual.neighbor_list, expected.neighbor_list)
+            torch.testing.assert_close(actual.positions, expected.positions)
+
+    @pytest.mark.parametrize("node_capacity, expected", [(1, 0), (2, 1), (5, 2)])
+    def test_put_from_larger_source_respects_atom_capacity(
+        self, node_capacity: int, expected: int, device: str
+    ) -> None:
+        """Source compaction still rejects graphs whose atom payload does not fit."""
+        source = Batch.from_data_list(
+            [_atomic_data_with_system(count) for count in (2, 3, 1)], device=device
+        )
+        buffer = Batch.empty(
+            num_systems=2,
+            num_nodes=node_capacity,
+            num_edges=0,
+            template=source,
+            device=device,
+        )
+        copied = torch.ones(3, dtype=torch.bool, device=device)
+
+        buffer.put(source, torch.ones_like(copied), copied_mask=copied)
+
+        assert copied.tolist() == [index < expected for index in range(3)]
+        assert buffer.num_graphs == expected
+        assert buffer.num_nodes_list == [2, 3][:expected]
+        torch.testing.assert_close(
+            buffer.positions[: buffer.num_nodes], source.positions[: buffer.num_nodes]
+        )
 
     def test_put_copied_mask_when_same_size_buffer_no_room(self):
         """When buffer and src have same size, fixed storage has no room to append; copied_mask all False."""
@@ -3505,6 +3834,53 @@ class TestBatchPutDefrag:
         assert trimmed.level_ptr("pairs").tolist() == [0, 12]
         assert trimmed.get_data(0).pair_values.shape == (4, 3, 1)
 
+    @pytest.mark.parametrize("fieldless_parent", [False, True])
+    @pytest.mark.parametrize("pair_capacity", [1, 2])
+    def test_put_from_larger_source_preserves_custom_levels(
+        self, fieldless_parent: bool, pair_capacity: int, device: str
+    ) -> None:
+        """Compaction preserves custom payloads and checks all levels before copying."""
+        schema = _custom_buffer_schema(fieldless_parent=fieldless_parent)
+        source = Batch.from_data_list(
+            [
+                _custom_buffer_data(nodes, molecules, fieldless_parent=fieldless_parent)
+                for nodes, molecules in ((2, 3), (3, 1), (1, 2))
+            ],
+            attr_map=schema,
+            device=device,
+        )
+        buffer = Batch.empty(
+            num_systems=1,
+            num_nodes=3,
+            num_edges=0,
+            template=source,
+            level_capacities={"molecules": 2, "pairs": pair_capacity},
+            device=device,
+        )
+        copied = torch.ones(3, dtype=torch.bool, device=device)
+
+        buffer.put(
+            source,
+            torch.tensor([False, False, True], device=device),
+            copied_mask=copied,
+        )
+
+        fits = pair_capacity == 2
+        assert copied.tolist() == [False, False, fits]
+        assert buffer.num_graphs == int(fits)
+        if fits:
+            actual = buffer.get_data(0)
+            expected = source.get_data(2)
+            torch.testing.assert_close(actual.positions, expected.positions)
+            torch.testing.assert_close(actual.pair_values, expected.pair_values)
+            assert buffer.level_ptr("molecules").tolist() == [0, 2]
+            if not fieldless_parent:
+                torch.testing.assert_close(
+                    actual.molecule_values, expected.molecule_values
+                )
+        else:
+            assert buffer.positions.eq(0).all()
+
     def test_put_combines_custom_rejection_before_legacy_copy(self):
         schema = _custom_buffer_schema(fieldless_parent=True)
         source = Batch.from_data_list(
@@ -3539,63 +3915,48 @@ class TestBatchPutDefrag:
             num_edges=0,
             template=first,
         )
-        occupancy = torch.zeros(2, dtype=torch.bool)
         copied = torch.zeros(1, dtype=torch.bool)
 
-        buffer.put(
-            first,
-            torch.tensor([True]),
-            copied_mask=copied,
-            dest_mask=occupancy,
-        )
+        buffer.put(first, torch.tensor([True]), copied_mask=copied)
         assert copied.tolist() == [True]
-        assert occupancy.tolist() == [True, False]
+        assert buffer.num_graphs == 1
 
         copied.zero_()
-        buffer.put(
-            second,
-            torch.tensor([True]),
-            copied_mask=copied,
-            dest_mask=occupancy,
-        )
+        buffer.put(second, torch.tensor([True]), copied_mask=copied)
 
         assert copied.tolist() == [False]
-        assert occupancy.tolist() == [True, False]
         assert buffer.num_graphs == 1
         assert buffer.energy.tolist() == [[11.0], [0.0]]
         assert buffer.level_ptr("samples").tolist() == [0, maximum]
 
-    def test_put_uniform_groups_share_occupancy_snapshot(self):
+    def test_consecutive_puts_keep_system_and_atom_data_aligned(self):
+        """Regression: per-graph levels append at num_graphs, next to their atoms."""
         schema = _custom_uniform_schema()
         data_list = []
-        for energy, metadata in ((10.0, 20.0), (30.0, 40.0)):
-            data = _atomic_data_with_system(2)
-            data.energy = torch.tensor([[energy]])
-            data.metadata_values = torch.tensor([[metadata]])
+        for num_nodes, value in ((2, 1.0), (3, 2.0), (4, 3.0)):
+            data = AtomicData(
+                positions=torch.full((num_nodes, 3), value),
+                atomic_numbers=torch.ones(num_nodes, dtype=torch.long),
+                energy=torch.tensor([[value]]),
+            )
+            data.metadata_values = torch.tensor([[10 * value]])
             data_list.append(data)
-        source = Batch.from_data_list(data_list, attr_map=schema)
-        buffer = Batch.empty(
-            num_systems=3,
-            num_nodes=10,
-            num_edges=0,
-            template=source,
-        )
+        first = Batch.from_data_list(data_list[:1], attr_map=schema)
+        second = Batch.from_data_list(data_list[1:], attr_map=schema)
+        buffer = Batch.empty(num_systems=3, num_nodes=10, num_edges=0, template=first)
+
+        buffer.put(first, torch.ones(1, dtype=torch.bool))
         copied = torch.zeros(2, dtype=torch.bool)
-        dest_mask = torch.tensor([True, False, True])
+        buffer.put(second, torch.ones(2, dtype=torch.bool), copied_mask=copied)
 
-        buffer.put(
-            source,
-            torch.ones(2, dtype=torch.bool),
-            copied_mask=copied,
-            dest_mask=dest_mask,
-        )
-
-        assert copied.tolist() == [True, False]
-        assert dest_mask.tolist() == [True, True, True]
-        assert buffer.energy[1].item() == 10.0
-        assert buffer.metadata_values[1].item() == 20.0
-        assert buffer.energy[0].item() == 0.0
-        assert buffer.energy[2].item() == 0.0
+        assert copied.tolist() == [True, True]
+        assert buffer.num_graphs == 3
+        assert buffer.num_nodes_per_graph.tolist() == [2, 3, 4]
+        for index, value in enumerate((1.0, 2.0, 3.0)):
+            graph = buffer.get_data(index)
+            assert graph.energy.item() == value
+            assert graph.metadata_values.item() == 10 * value
+            assert graph.positions.eq(value).all()
 
     def test_put_and_defrag_preserve_mixed_builtin_buffer_dtypes(self):
         first = _minimal_atomic_data(2)
