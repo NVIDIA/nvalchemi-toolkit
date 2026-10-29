@@ -402,8 +402,9 @@ class _DivergenceHook:
         that judges on the host is accepted for a frame on an accelerator.
         Default :func:`nonfinite_divergence`.
     quarantine : bool, optional
-        Sanitize each graph's state on the step it is flagged. Default
-        ``False`` leaves the flagged state as it is.
+        Sanitize each graph's state on the step it is flagged: velocities and
+        forces zeroed, positions restored to the graph's last finite frame.
+        Default ``False`` leaves the flagged state as it is.
 
     Raises
     ------
@@ -426,6 +427,7 @@ class _DivergenceHook:
         self.divergence = divergence
         self.quarantine = quarantine
         self._diverged: Bool[torch.Tensor, "G"] | None = None
+        self._last_finite: torch.Tensor | None = None
 
     @property
     def diverged(self) -> Bool[torch.Tensor, "G"] | None:
@@ -435,6 +437,7 @@ class _DivergenceHook:
     def reset(self) -> None:
         """Forget which graphs diverged, after a refill changed the batch."""
         self._diverged = None
+        self._last_finite = None
 
     def _flags(self, batch: Batch) -> Bool[torch.Tensor, "G"]:
         """Evaluate the predicate on *batch* and return its one-boolean-per-graph verdict on the batch's device."""
@@ -461,6 +464,8 @@ class _DivergenceHook:
         if moving is None:
             return
         flags = self._flags(ctx.batch)
+        if self.quarantine:
+            self._remember_finite(ctx.batch, flags)
         if self._diverged is None or self._diverged.numel() != flags.numel():
             self._diverged = torch.zeros_like(flags)
         self._diverged |= flags
@@ -471,9 +476,29 @@ class _DivergenceHook:
         if self.quarantine:
             self._sanitize(ctx.batch, frozen)
 
-    @staticmethod
-    def _sanitize(batch: Batch, graphs: Bool[torch.Tensor, "G"]) -> None:
-        """Zero the velocities and forces of *graphs* and make their positions finite."""
+    def _remember_finite(self, batch: Batch, flags: Bool[torch.Tensor, "G"]) -> None:
+        """Keep the positions of every unflagged graph as its last finite frame.
+
+        Rows of graphs the predicate flags keep the snapshot they had, so a
+        graph that diverges is restored to the step before its divergence
+        instead of collapsing onto one point. A batch whose shape changed (a
+        refill without :meth:`reset`) starts a fresh snapshot.
+        """
+        positions = batch.positions.detach()
+        if self._last_finite is None or self._last_finite.shape != positions.shape:
+            self._last_finite = positions.clone()
+            return
+        nodes = flags[batch.batch_idx.long()]
+        keep = nodes.view(nodes.shape[0], *([1] * (positions.dim() - 1)))
+        self._last_finite = torch.where(keep, self._last_finite, positions)
+
+    def _sanitize(self, batch: Batch, graphs: Bool[torch.Tensor, "G"]) -> None:
+        """Zero the velocities and forces of *graphs* and restore finite positions.
+
+        Positions come from the last finite snapshot when one exists; any
+        value still non-finite (a graph flagged on the very first step) is
+        zeroed as a last resort.
+        """
         nodes = graphs[batch.batch_idx.long()]
         with torch.no_grad():
             for key in ("velocities", "forces"):
@@ -484,7 +509,13 @@ class _DivergenceHook:
                 tensor.masked_fill_(mask, 0.0)
             positions = batch.positions
             mask = nodes.view(nodes.shape[0], *([1] * (positions.dim() - 1)))
-            finite = torch.nan_to_num(positions, nan=0.0, posinf=0.0, neginf=0.0)
+            source = (
+                self._last_finite
+                if self._last_finite is not None
+                and self._last_finite.shape == positions.shape
+                else positions
+            )
+            finite = torch.nan_to_num(source, nan=0.0, posinf=0.0, neginf=0.0)
             torch.where(mask, finite, positions, out=positions)
 
 
