@@ -251,6 +251,37 @@ with pipeline:
     pipeline.run()
 ```
 
+Dynamics default to `reprime_on_entry=False`: received graphs use the
+upstream stage's forces for their first update when they carry every model output
+the receiving dynamics needs. Graphs missing any of those outputs are primed
+locally, as with `True`: they skip one update while the stage's next model
+evaluation supplies them. This assumes the stages use compatible models and force
+modifications. To refresh forces under the receiving stage's model and hooks
+before updating, opt in explicitly on the receiving stage's dynamics:
+
+```python
+coarse = FIRE2(model=fast_model, buffer_config=buffer_cfg, ...)
+fine = FIRE2(model=accurate_model, buffer_config=buffer_cfg, ..., reprime_on_entry=True)
+pipeline = coarse | fine
+```
+
+With this option, received graphs skip one update while the stage's next regular
+model evaluation gives them forces. Residents keep their forces and keep updating,
+so graphs arriving at different steps add no extra model evaluations. Sending,
+final-stage removal, and sampler refill do not refresh residents' forces.
+
+With either setting, initial sampler batches are primed locally. When received
+graphs need local forces, an empty or unprimed receiving stage primes the whole
+batch instead of skipping their update.
+
+Inside a `FusedStage`, the flag works the same way for sub-stage transitions. Set
+it on a sub-stage's dynamics, and graphs whose status changes into that sub-stage
+skip one update while their forces are refreshed.
+
+A `DomainParallel` stage reads the flag from the dynamics it wraps. It holds one
+system at a time, so a received system that needs local forces is primed as a
+whole before its first update.
+
 By default, `setup()` (called automatically by the context manager) sorts stages by
 rank and wires `prior_rank` / `next_rank` between adjacent stages as a simple linear
 chain. For more sophisticated topologies --- such as multiple independent

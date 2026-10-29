@@ -136,6 +136,19 @@ class TestInit:
 
         assert dp.exit_status == inner.exit_status == 3
 
+    def test_reads_reprime_on_entry_from_inner_dynamics(self) -> None:
+        model = DemoModelWrapper(DemoModel())
+        inner = DemoDynamics(model=model, n_steps=1, reprime_on_entry=True)
+        dp = DomainParallel(dynamics=inner, config=DomainConfig(cutoff=3.0, skin=0.5))
+        assert dp.reprime_on_entry is True
+
+    def test_rejects_reprime_on_entry(self) -> None:
+        model = DemoModelWrapper(DemoModel())
+        inner = DemoDynamics(model=model, n_steps=1)
+        config = DomainConfig(cutoff=3.0, skin=0.5)
+        with pytest.raises(TypeError, match="set reprime_on_entry on the wrapped"):
+            DomainParallel(dynamics=inner, config=config, reprime_on_entry=True)
+
 
 # ======================================================================
 # Property delegation — __needs_keys__ / __provides_keys__ read from
@@ -471,6 +484,35 @@ class TestPrimeForces:
             torch.tensor([[1.25], [-13.0]], dtype=torch.float32),
         )
         assert dp._dynamics._last_outputs["energy"].dtype == torch.float64
+
+    @pytest.mark.parametrize(
+        ("reprime_on_entry", "drop_forces", "expected_primed"),
+        [(False, False, True), (True, False, False), (False, True, False)],
+    )
+    def test_received_system_reprimes_when_needed(
+        self, reprime_on_entry: bool, drop_forces: bool, expected_primed: bool
+    ) -> None:
+        """Reprime a received system when opted in or when it lacks forces."""
+        model = DemoModelWrapper(DemoModel())
+        inner = DemoDynamics(model=model, n_steps=1, reprime_on_entry=reprime_on_entry)
+        dp = DomainParallel(dynamics=inner, config=DomainConfig(cutoff=3.0, skin=0.5))
+        dp.prior_rank = 0
+        # Model the first arrival at startup: valid received outputs must
+        # change the initially unprimed stage to primed.
+        dp._forces_primed = False
+        received = _make_batch()
+        if drop_forces:
+            del received["forces"]
+
+        with (
+            patch.object(Batch, "irecv") as irecv,
+            patch.object(dp, "partition", return_value=received),
+        ):
+            irecv.return_value.wait.return_value = received
+            dp._prestep_sync_buffers()
+
+        assert dp.active_batch is received
+        assert dp._forces_primed is expected_primed
 
     def test_prime_forces_not_called_in_single_process(self) -> None:
         """No ``_dist_model`` means step() short-circuits to inner
