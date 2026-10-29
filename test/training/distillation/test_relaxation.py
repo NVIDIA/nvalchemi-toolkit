@@ -186,6 +186,34 @@ def _make_sized_dataset(sizes: list[int]) -> InMemoryDataset:
     return InMemoryDataset(in_memory_batch=Batch.from_data_list(data_list))
 
 
+def _make_edged_dataset(sizes: list[int]) -> InMemoryDataset:
+    """Return structures of *sizes* atoms, each carrying its complete graph as edges.
+
+    A row of ``n`` atoms stores ``n * (n - 1)`` directed edges, so edge budgets
+    see counts the source metadata and the live batch agree on.
+    """
+    data_list = []
+    for index, size in enumerate(sizes):
+        generator = torch.Generator().manual_seed(700 + index)
+        rows, cols = torch.meshgrid(
+            torch.arange(size), torch.arange(size), indexing="ij"
+        )
+        off_diagonal = rows != cols
+        data_list.append(
+            AtomicData(
+                positions=torch.randn(size, 3, generator=generator),
+                atomic_numbers=torch.full((size,), _INITIAL_ELEMENT, dtype=torch.long),
+                atomic_masses=torch.ones(size),
+                energy=torch.zeros(1, 1),
+                forces=torch.zeros(size, 3),
+                neighbor_list=torch.stack(
+                    [rows[off_diagonal], cols[off_diagonal]], dim=1
+                ),
+            )
+        )
+    return InMemoryDataset(in_memory_batch=Batch.from_data_list(data_list))
+
+
 def _make_relaxation_strategy(
     *,
     fmax: float | None = None,
@@ -2422,7 +2450,13 @@ class TestTrajectoryLifetime:
         assert probe.node_counts[::2] == [6, 6, 6]
         assert structures.oversized_rows == frozenset({3})
 
-    def _run_staggered(self, **budget: int) -> _StateProbe:
+    def _run_staggered(
+        self,
+        dataset: InMemoryDataset | None = None,
+        *,
+        num_steps: int = 8,
+        **budget: int,
+    ) -> _StateProbe:
         """Seven two-atom rows, lifetime 4, two-step segments; system 0 diverges on step 1.
 
         Row 0 retires at the first boundary (age 2), rows 1 and 2 at the
@@ -2431,10 +2465,12 @@ class TestTrajectoryLifetime:
         others of a different age.
         """
         structures = InitialStructures(
-            _make_sized_dataset([2] * 7), recycle=True, **budget
+            _make_sized_dataset([2] * 7) if dataset is None else dataset,
+            recycle=True,
+            **budget,
         )
         strategy = _make_relaxation_strategy(
-            num_steps=8,
+            num_steps=num_steps,
             generation_steps=2,
             structures=structures,
             config_overrides={"max_trajectory_steps": 4, "quarantine_diverged": True},
@@ -2465,6 +2501,36 @@ class TestTrajectoryLifetime:
         assert probe.systems[4] == [3, 4, 5]
         assert probe.systems[6] == [4, 5, 6]
         assert probe.graph_counts[::2] == [3, 3, 3, 3]
+
+    def test_the_edge_budget_frees_room_for_the_retired_rows_only(self) -> None:
+        """``max_edges`` room is the budget less the survivors' stored edges."""
+        probe = self._run_staggered(_make_edged_dataset([2] * 7), max_edges=6)
+
+        assert probe.systems[0] == [0, 1, 2]
+        assert probe.systems[2] == [1, 2, 3]
+        assert probe.systems[4] == [3, 4, 5]
+        assert probe.systems[6] == [4, 5, 6]
+
+    def test_a_row_the_atom_room_admits_but_the_edge_room_refuses_waits(self) -> None:
+        """A three-atom row (six edges) fits two freed atoms' worth of room only by edges.
+
+        Under ``max_edges=6`` and no atom cap, row 0's retirement frees two
+        edges; row 3 carries six, so the first backfill stops on it and the
+        batch runs with two graphs. The second boundary retires rows 1 and 2,
+        frees the whole budget, and row 3 enters alone. It lives to the fourth
+        boundary, where the two-atom rows behind it and the recycled first row
+        fill the budget again (every draw stamps a fresh system id).
+        """
+        probe = self._run_staggered(
+            _make_edged_dataset([2, 2, 2, 3, 2, 2]), num_steps=10, max_edges=6
+        )
+
+        assert probe.systems[0] == [0, 1, 2]
+        assert probe.systems[2] == [1, 2]
+        assert probe.systems[4] == [3]
+        assert probe.systems[6] == [3]
+        assert probe.systems[8] == [4, 5, 6]
+        assert probe.node_counts[::2] == [6, 4, 3, 3, 6]
 
     def test_an_oversized_row_is_read_once(self) -> None:
         """After its first pass a known oversized row costs no metadata read."""
