@@ -68,14 +68,16 @@ conflicts = [[
 overrides = [
     { name = "lmdb", marker = "python_full_version < '3.14'", specifier = ">=1.6.2,<=1.7.3" },
     { name = "lmdb", marker = "python_full_version >= '3.14'", specifier = ">=2.0.0" },
-    { name = "python-hostlist", marker = "sys_platform == 'never'" },
 ]
-
-[[manifest.dependency-metadata]]
-name = "nvalchemi-toolkit-ops"
-version = "0.5.0"
-requires-dist = ["warp-lang>=1.16.0", "numpy", "torch>=2.10.0 ; extra == 'torch'", "torch>=2.10.0 ; extra == 'torch-cu12'", "torch>=2.10.0 ; extra == 'torch-cu13'", "jax[cuda13] ; extra == 'jax'", "jax[cuda12] ; extra == 'jax-cu12'", "jax[cuda13] ; extra == 'jax-cu13'"]
-provides-extras = ["torch", "torch-cu12", "torch-cu13", "jax", "jax-cu12", "jax-cu13"]
+excludes = [
+    "ase-db-backends",
+    "bibtexparser",
+    "llvmlite",
+    "numba",
+    "psycopg2-binary",
+    "pymysql",
+    "python-hostlist",
+]
 
 [[package]]
 name = "absl-py"
@@ -363,24 +365,6 @@ wheels = [
 ]
 
 [[package]]
-name = "ase-db-backends"
-version = "0.11.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "ase" },
-    { name = "cryptography" },
-    { name = "lmdb", version = "1.7.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.14' and extra == 'extra-17-nvalchemi-toolkit-uma') or (python_full_version < '3.14' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (python_full_version < '3.14' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu13' and extra == 'group-17-nvalchemi-toolkit-build')" },
-    { name = "lmdb", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.14' and extra == 'extra-17-nvalchemi-toolkit-uma') or (python_full_version >= '3.14' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (python_full_version >= '3.14' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu13' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13')" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" } },
-    { name = "psycopg2-binary" },
-    { name = "pymysql" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/83/d5/c448e9c4470e4b8612154e13cd5369c8b8792a1bdf901a32a35e79408d20/ase_db_backends-0.11.0.tar.gz", hash = "sha256:8575938eaf7708a52eb951c6f955f39082fa79c8332f4568715dacb8e733717a", size = 35605, upload-time = "2025-11-12T08:02:50.328Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/90/24/35e57bdbd6d1c37ae889b669c4bf06b159fa275afe189a81460d392d187e/ase_db_backends-0.11.0-py3-none-any.whl", hash = "sha256:dd5959b9a3cbe3deb5726724afa0045d7d009e04e08be5f4b7ffae703a563a99", size = 44738, upload-time = "2025-11-12T08:02:49.215Z" },
-]
-
-[[package]]
 name = "attrs"
 version = "25.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -442,15 +426,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/c3/b0/1c6a16426d389813b
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1a/39/47f9197bdd44df24d67ac8893641e16f386c984a0619ef2ee4c51fbbc019/beautifulsoup4-4.14.3-py3-none-any.whl", hash = "sha256:0918bfe44902e6ad8d57732ba310582e98da931428d231a5ecb9e7c703a735bb", size = 107721, upload-time = "2025-11-30T15:08:24.087Z" },
 ]
-
-[[package]]
-name = "bibtexparser"
-version = "1.4.4"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pyparsing" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/44/1c/577d3ce406e88f370e80a6ebf76ae52a2866521e0b585e8ec612759894f1/bibtexparser-1.4.4.tar.gz", hash = "sha256:093b6c824f7a71d3a748867c4057b71f77c55b8dbc07efc993b781771520d8fb", size = 55594, upload-time = "2026-01-29T18:58:01.366Z" }
 
 [[package]]
 name = "botocore"
@@ -1381,7 +1356,6 @@ version = "2.22.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ase" },
-    { name = "ase-db-backends" },
     { name = "clusterscope" },
     { name = "e3nn", version = "0.6.0", source = { registry = "https://pypi.org/simple" } },
     { name = "huggingface-hub" },
@@ -1389,7 +1363,6 @@ dependencies = [
     { name = "lmdb", version = "1.7.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.14' and extra == 'extra-17-nvalchemi-toolkit-uma') or (python_full_version < '3.14' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (python_full_version < '3.14' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu13' and extra == 'group-17-nvalchemi-toolkit-build')" },
     { name = "lmdb", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.14' and extra == 'extra-17-nvalchemi-toolkit-uma') or (python_full_version >= '3.14' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (python_full_version >= '3.14' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu13' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13')" },
     { name = "monty" },
-    { name = "numba" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" } },
     { name = "orjson" },
     { name = "pyyaml" },
@@ -2287,30 +2260,6 @@ wheels = [
 ]
 
 [[package]]
-name = "llvmlite"
-version = "0.46.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/74/cd/08ae687ba099c7e3d21fe2ea536500563ef1943c5105bf6ab4ee3829f68e/llvmlite-0.46.0.tar.gz", hash = "sha256:227c9fd6d09dce2783c18b754b7cd9d9b3b3515210c46acc2d3c5badd9870ceb", size = 193456, upload-time = "2025-12-08T18:15:36.295Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/a1/2ad4b2367915faeebe8447f0a057861f646dbf5fbbb3561db42c65659cf3/llvmlite-0.46.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:82f3d39b16f19aa1a56d5fe625883a6ab600d5cc9ea8906cca70ce94cabba067", size = 37232766, upload-time = "2025-12-08T18:14:48.836Z" },
-    { url = "https://files.pythonhosted.org/packages/12/b5/99cf8772fdd846c07da4fd70f07812a3c8fd17ea2409522c946bb0f2b277/llvmlite-0.46.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:a3df43900119803bbc52720e758c76f316a9a0f34612a886862dfe0a5591a17e", size = 56275175, upload-time = "2025-12-08T18:14:51.604Z" },
-    { url = "https://files.pythonhosted.org/packages/38/f2/ed806f9c003563732da156139c45d970ee435bd0bfa5ed8de87ba972b452/llvmlite-0.46.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:de183fefc8022d21b0aa37fc3e90410bc3524aed8617f0ff76732fc6c3af5361", size = 55128630, upload-time = "2025-12-08T18:14:55.107Z" },
-    { url = "https://files.pythonhosted.org/packages/19/0c/8f5a37a65fc9b7b17408508145edd5f86263ad69c19d3574e818f533a0eb/llvmlite-0.46.0-cp311-cp311-win_amd64.whl", hash = "sha256:e8b10bc585c58bdffec9e0c309bb7d51be1f2f15e169a4b4d42f2389e431eb93", size = 38138652, upload-time = "2025-12-08T18:14:58.171Z" },
-    { url = "https://files.pythonhosted.org/packages/2b/f8/4db016a5e547d4e054ff2f3b99203d63a497465f81ab78ec8eb2ff7b2304/llvmlite-0.46.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:6b9588ad4c63b4f0175a3984b85494f0c927c6b001e3a246a3a7fb3920d9a137", size = 37232767, upload-time = "2025-12-08T18:15:00.737Z" },
-    { url = "https://files.pythonhosted.org/packages/aa/85/4890a7c14b4fa54400945cb52ac3cd88545bbdb973c440f98ca41591cdc5/llvmlite-0.46.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:3535bd2bb6a2d7ae4012681ac228e5132cdb75fefb1bcb24e33f2f3e0c865ed4", size = 56275176, upload-time = "2025-12-08T18:15:03.936Z" },
-    { url = "https://files.pythonhosted.org/packages/6a/07/3d31d39c1a1a08cd5337e78299fca77e6aebc07c059fbd0033e3edfab45c/llvmlite-0.46.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:4cbfd366e60ff87ea6cc62f50bc4cd800ebb13ed4c149466f50cf2163a473d1e", size = 55128630, upload-time = "2025-12-08T18:15:07.196Z" },
-    { url = "https://files.pythonhosted.org/packages/2a/6b/d139535d7590a1bba1ceb68751bef22fadaa5b815bbdf0e858e3875726b2/llvmlite-0.46.0-cp312-cp312-win_amd64.whl", hash = "sha256:398b39db462c39563a97b912d4f2866cd37cba60537975a09679b28fbbc0fb38", size = 38138940, upload-time = "2025-12-08T18:15:10.162Z" },
-    { url = "https://files.pythonhosted.org/packages/e6/ff/3eba7eb0aed4b6fca37125387cd417e8c458e750621fce56d2c541f67fa8/llvmlite-0.46.0-cp313-cp313-macosx_12_0_arm64.whl", hash = "sha256:30b60892d034bc560e0ec6654737aaa74e5ca327bd8114d82136aa071d611172", size = 37232767, upload-time = "2025-12-08T18:15:13.22Z" },
-    { url = "https://files.pythonhosted.org/packages/0e/54/737755c0a91558364b9200702c3c9c15d70ed63f9b98a2c32f1c2aa1f3ba/llvmlite-0.46.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:6cc19b051753368a9c9f31dc041299059ee91aceec81bd57b0e385e5d5bf1a54", size = 56275176, upload-time = "2025-12-08T18:15:16.339Z" },
-    { url = "https://files.pythonhosted.org/packages/e6/91/14f32e1d70905c1c0aa4e6609ab5d705c3183116ca02ac6df2091868413a/llvmlite-0.46.0-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:bca185892908f9ede48c0acd547fe4dc1bafefb8a4967d47db6cf664f9332d12", size = 55128629, upload-time = "2025-12-08T18:15:19.493Z" },
-    { url = "https://files.pythonhosted.org/packages/4a/a7/d526ae86708cea531935ae777b6dbcabe7db52718e6401e0fb9c5edea80e/llvmlite-0.46.0-cp313-cp313-win_amd64.whl", hash = "sha256:67438fd30e12349ebb054d86a5a1a57fd5e87d264d2451bcfafbbbaa25b82a35", size = 38138941, upload-time = "2025-12-08T18:15:22.536Z" },
-    { url = "https://files.pythonhosted.org/packages/95/ae/af0ffb724814cc2ea64445acad05f71cff5f799bb7efb22e47ee99340dbc/llvmlite-0.46.0-cp314-cp314-macosx_12_0_arm64.whl", hash = "sha256:d252edfb9f4ac1fcf20652258e3f102b26b03eef738dc8a6ffdab7d7d341d547", size = 37232768, upload-time = "2025-12-08T18:15:25.055Z" },
-    { url = "https://files.pythonhosted.org/packages/c9/19/5018e5352019be753b7b07f7759cdabb69ca5779fea2494be8839270df4c/llvmlite-0.46.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:379fdd1c59badeff8982cb47e4694a6143bec3bb49aa10a466e095410522064d", size = 56275173, upload-time = "2025-12-08T18:15:28.109Z" },
-    { url = "https://files.pythonhosted.org/packages/9f/c9/d57877759d707e84c082163c543853245f91b70c804115a5010532890f18/llvmlite-0.46.0-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:2e8cbfff7f6db0fa2c771ad24154e2a7e457c2444d7673e6de06b8b698c3b269", size = 55128628, upload-time = "2025-12-08T18:15:31.098Z" },
-    { url = "https://files.pythonhosted.org/packages/30/a8/e61a8c2b3cc7a597073d9cde1fcbb567e9d827f1db30c93cf80422eac70d/llvmlite-0.46.0-cp314-cp314-win_amd64.whl", hash = "sha256:7821eda3ec1f18050f981819756631d60b6d7ab1a6cf806d9efefbe3f4082d61", size = 39153056, upload-time = "2025-12-08T18:15:33.938Z" },
-]
-
-[[package]]
 name = "lmdb"
 version = "1.7.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2418,7 +2367,6 @@ dependencies = [
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.14' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (python_full_version >= '3.14' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (python_full_version >= '3.14' and extra == 'extra-17-nvalchemi-toolkit-mace') or (python_full_version >= '3.14' and extra != 'extra-17-nvalchemi-toolkit-uma' and extra != 'extra-17-nvalchemi-toolkit-uma-cu12' and extra != 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu13' and extra == 'group-17-nvalchemi-toolkit-build')" },
     { name = "pandas", version = "3.0.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.14' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (python_full_version < '3.14' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (python_full_version < '3.14' and extra == 'extra-17-nvalchemi-toolkit-mace') or (python_full_version < '3.14' and extra != 'extra-17-nvalchemi-toolkit-uma' and extra != 'extra-17-nvalchemi-toolkit-uma-cu12' and extra != 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu13' and extra == 'group-17-nvalchemi-toolkit-build')" },
     { name = "prettytable" },
-    { name = "python-hostlist", marker = "sys_platform == 'never' or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
     { name = "pyyaml" },
     { name = "torch", version = "2.13.0", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra != 'extra-17-nvalchemi-toolkit-cu12' and extra != 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-mace') or (extra != 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra != 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra != 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'group-17-nvalchemi-toolkit-build') or (extra != 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra != 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'group-17-nvalchemi-toolkit-build') or (extra != 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13' and extra == 'group-17-nvalchemi-toolkit-build') or (extra != 'extra-17-nvalchemi-toolkit-cu12' and extra != 'extra-17-nvalchemi-toolkit-cu13' and extra != 'extra-17-nvalchemi-toolkit-uma' and extra != 'extra-17-nvalchemi-toolkit-uma-cu12' and extra != 'extra-17-nvalchemi-toolkit-uma-cu13')" },
     { name = "torch", version = "2.13.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-17-nvalchemi-toolkit-cu13' or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu13' and extra == 'group-17-nvalchemi-toolkit-build')" },
@@ -3128,34 +3076,6 @@ wheels = [
 ]
 
 [[package]]
-name = "numba"
-version = "0.64.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "llvmlite" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" } },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/23/c9/a0fb41787d01d621046138da30f6c2100d80857bf34b3390dd68040f27a3/numba-0.64.0.tar.gz", hash = "sha256:95e7300af648baa3308127b1955b52ce6d11889d16e8cfe637b4f85d2fca52b1", size = 2765679, upload-time = "2026-02-18T18:41:20.974Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/89/a3/1a4286a1c16136c8896d8e2090d950e79b3ec626d3a8dc9620f6234d5a38/numba-0.64.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:766156ee4b8afeeb2b2e23c81307c5d19031f18d5ce76ae2c5fb1429e72fa92b", size = 2682938, upload-time = "2026-02-18T18:40:52.897Z" },
-    { url = "https://files.pythonhosted.org/packages/19/16/aa6e3ba3cd45435c117d1101b278b646444ed05b7c712af631b91353f573/numba-0.64.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:d17071b4ffc9d39b75d8e6c101a36f0c81b646123859898c9799cb31807c8f78", size = 3747376, upload-time = "2026-02-18T18:40:54.925Z" },
-    { url = "https://files.pythonhosted.org/packages/c0/f1/dd2f25e18d75fdf897f730b78c5a7b00cc4450f2405564dbebfaf359f21f/numba-0.64.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:4ead5630434133bac87fa67526eacb264535e4e9a2d5ec780e0b4fc381a7d275", size = 3453292, upload-time = "2026-02-18T18:40:56.818Z" },
-    { url = "https://files.pythonhosted.org/packages/31/29/e09d5630578a50a2b3fa154990b6b839cf95327aa0709e2d50d0b6816cd1/numba-0.64.0-cp311-cp311-win_amd64.whl", hash = "sha256:f2b1fd93e7aaac07d6fbaed059c00679f591f2423885c206d8c1b55d65ca3f2d", size = 2749824, upload-time = "2026-02-18T18:40:58.392Z" },
-    { url = "https://files.pythonhosted.org/packages/70/a6/9fc52cb4f0d5e6d8b5f4d81615bc01012e3cf24e1052a60f17a68deb8092/numba-0.64.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:69440a8e8bc1a81028446f06b363e28635aa67bd51b1e498023f03b812e0ce68", size = 2683418, upload-time = "2026-02-18T18:40:59.886Z" },
-    { url = "https://files.pythonhosted.org/packages/9b/89/1a74ea99b180b7a5587b0301ed1b183a2937c4b4b67f7994689b5d36fc34/numba-0.64.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:f13721011f693ba558b8dd4e4db7f2640462bba1b855bdc804be45bbeb55031a", size = 3804087, upload-time = "2026-02-18T18:41:01.699Z" },
-    { url = "https://files.pythonhosted.org/packages/91/e1/583c647404b15f807410510fec1eb9b80cb8474165940b7749f026f21cbc/numba-0.64.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:e0b180b1133f2b5d8b3f09d96b6d7a9e51a7da5dda3c09e998b5bcfac85d222c", size = 3504309, upload-time = "2026-02-18T18:41:03.252Z" },
-    { url = "https://files.pythonhosted.org/packages/85/23/0fce5789b8a5035e7ace21216a468143f3144e02013252116616c58339aa/numba-0.64.0-cp312-cp312-win_amd64.whl", hash = "sha256:e63dc94023b47894849b8b106db28ccb98b49d5498b98878fac1a38f83ac007a", size = 2752740, upload-time = "2026-02-18T18:41:05.097Z" },
-    { url = "https://files.pythonhosted.org/packages/52/80/2734de90f9300a6e2503b35ee50d9599926b90cbb7ac54f9e40074cd07f1/numba-0.64.0-cp313-cp313-macosx_12_0_arm64.whl", hash = "sha256:3bab2c872194dcd985f1153b70782ec0fbbe348fffef340264eacd3a76d59fd6", size = 2683392, upload-time = "2026-02-18T18:41:06.563Z" },
-    { url = "https://files.pythonhosted.org/packages/42/e8/14b5853ebefd5b37723ef365c5318a30ce0702d39057eaa8d7d76392859d/numba-0.64.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:703a246c60832cad231d2e73c1182f25bf3cc8b699759ec8fe58a2dbc689a70c", size = 3812245, upload-time = "2026-02-18T18:41:07.963Z" },
-    { url = "https://files.pythonhosted.org/packages/8a/a2/f60dc6c96d19b7185144265a5fbf01c14993d37ff4cd324b09d0212aa7ce/numba-0.64.0-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:7e2e49a7900ee971d32af7609adc0cfe6aa7477c6f6cccdf6d8138538cf7756f", size = 3511328, upload-time = "2026-02-18T18:41:09.504Z" },
-    { url = "https://files.pythonhosted.org/packages/9c/2a/fe7003ea7e7237ee7014f8eaeeb7b0d228a2db22572ca85bab2648cf52cb/numba-0.64.0-cp313-cp313-win_amd64.whl", hash = "sha256:396f43c3f77e78d7ec84cdfc6b04969c78f8f169351b3c4db814b97e7acf4245", size = 2752668, upload-time = "2026-02-18T18:41:11.455Z" },
-    { url = "https://files.pythonhosted.org/packages/3d/8a/77d26afe0988c592dd97cb8d4e80bfb3dfc7dbdacfca7d74a7c5c81dd8c2/numba-0.64.0-cp314-cp314-macosx_12_0_arm64.whl", hash = "sha256:f565d55eaeff382cbc86c63c8c610347453af3d1e7afb2b6569aac1c9b5c93ce", size = 2683590, upload-time = "2026-02-18T18:41:12.897Z" },
-    { url = "https://files.pythonhosted.org/packages/8e/4b/600b8b7cdbc7f9cebee9ea3d13bb70052a79baf28944024ffcb59f0712e3/numba-0.64.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:9b55169b18892c783f85e9ad9e6f5297a6d12967e4414e6b71361086025ff0bb", size = 3781163, upload-time = "2026-02-18T18:41:15.377Z" },
-    { url = "https://files.pythonhosted.org/packages/ff/73/53f2d32bfa45b7175e9944f6b816d8c32840178c3eee9325033db5bf838e/numba-0.64.0-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:196bcafa02c9dd1707e068434f6d5cedde0feb787e3432f7f1f0e993cc336c4c", size = 3481172, upload-time = "2026-02-18T18:41:17.281Z" },
-    { url = "https://files.pythonhosted.org/packages/b5/00/aebd2f7f1e11e38814bb96e95a27580817a7b340608d3ac085fdbab83174/numba-0.64.0-cp314-cp314-win_amd64.whl", hash = "sha256:213e9acbe7f1c05090592e79020315c1749dd52517b90e94c517dca3f014d4a1", size = 2754700, upload-time = "2026-02-18T18:41:19.277Z" },
-]
-
-[[package]]
 name = "numcodecs"
 version = "0.16.5"
 source = { registry = "https://pypi.org/simple" }
@@ -3479,11 +3399,11 @@ requires-dist = [
     { name = "loguru" },
     { name = "mace-torch", marker = "extra == 'mace'", specifier = "==0.3.15" },
     { name = "numpy", specifier = ">=2,<3" },
-    { name = "nvalchemi-toolkit-ops", git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops?rev=0.5.0-rc" },
-    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu12"], marker = "sys_platform != 'darwin' and extra == 'cu12'", git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops?rev=0.5.0-rc" },
-    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu12"], marker = "sys_platform != 'darwin' and extra == 'uma-cu12'", git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops?rev=0.5.0-rc" },
-    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu13"], marker = "sys_platform != 'darwin' and extra == 'cu13'", git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops?rev=0.5.0-rc" },
-    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu13"], marker = "sys_platform != 'darwin' and extra == 'uma-cu13'", git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops?rev=0.5.0-rc" },
+    { name = "nvalchemi-toolkit-ops", specifier = ">=0.5.0" },
+    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu12"], marker = "sys_platform != 'darwin' and extra == 'cu12'", specifier = ">=0.5.0" },
+    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu12"], marker = "sys_platform != 'darwin' and extra == 'uma-cu12'", specifier = ">=0.5.0" },
+    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu13"], marker = "sys_platform != 'darwin' and extra == 'cu13'", specifier = ">=0.5.0" },
+    { name = "nvalchemi-toolkit-ops", extras = ["torch-cu13"], marker = "sys_platform != 'darwin' and extra == 'uma-cu13'", specifier = ">=0.5.0" },
     { name = "nvidia-physicsnemo", specifier = ">=2.2.0" },
     { name = "nvidia-physicsnemo", marker = "sys_platform != 'darwin' and extra == 'cu12'", specifier = ">=2.2.0" },
     { name = "nvidia-physicsnemo", marker = "sys_platform != 'darwin' and extra == 'cu13'", specifier = ">=2.2.0" },
@@ -3555,11 +3475,14 @@ docs = [
 [[package]]
 name = "nvalchemi-toolkit-ops"
 version = "0.5.0"
-source = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops?rev=0.5.0-rc#6002cda69f6650f5c0cc2911c4ce3aac1516b79e" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' or extra == 'extra-17-nvalchemi-toolkit-uma' or extra == 'extra-17-nvalchemi-toolkit-uma-cu12' or extra == 'extra-17-nvalchemi-toolkit-uma-cu13' or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13')" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and extra == 'extra-17-nvalchemi-toolkit-cu12') or (python_full_version >= '3.12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (python_full_version >= '3.12' and extra == 'extra-17-nvalchemi-toolkit-mace') or (python_full_version >= '3.12' and extra != 'extra-17-nvalchemi-toolkit-uma' and extra != 'extra-17-nvalchemi-toolkit-uma-cu12' and extra != 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-cu13' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-mace' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu12') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'extra-17-nvalchemi-toolkit-uma-cu13') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu12' and extra == 'group-17-nvalchemi-toolkit-build') or (extra == 'extra-17-nvalchemi-toolkit-uma-cu13' and extra == 'group-17-nvalchemi-toolkit-build')" },
     { name = "warp-lang" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cf/18/07172fb669405806e990277df7e5d8feb727db6b60b8d4410417127530c9/nvalchemi_toolkit_ops-0.5.0-py3-none-any.whl", hash = "sha256:85bd1107003ac559698d3cfb2659b7fde6e20ba1c27be285f8995b132288fa36", size = 1574480, upload-time = "2026-10-13T16:37:38.719Z" },
 ]
 
 [package.optional-dependencies]
@@ -4735,58 +4658,6 @@ wheels = [
 ]
 
 [[package]]
-name = "psycopg2-binary"
-version = "2.9.12"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/2a/60/a3624f79acea344c16fbef3a94d28b89a8042ddfb8f3e4ca83f538671409/psycopg2_binary-2.9.12.tar.gz", hash = "sha256:5ac9444edc768c02a6b6a591f070b8aae28ff3a99be57560ac996001580f294c", size = 379686, upload-time = "2026-04-21T09:40:34.304Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d5/19/d4ce60954f3bb9d8e3bc5e5c4d1f2487de2d3851bf2391d54954c9df12a6/psycopg2_binary-2.9.12-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:5c8ce6c61bd1b1f6b9c24ee32211599f6166af2c55abb19456090a21fd16554b", size = 3712338, upload-time = "2026-04-20T23:34:03.961Z" },
-    { url = "https://files.pythonhosted.org/packages/53/71/c85409ee0d78890f0660eff262e815e7dd2bb741a17611d82e9e8cd9dc5e/psycopg2_binary-2.9.12-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:b4a9eaa6e7f4ff91bec10aa3fb296878e75187bced5cc4bafe17dc40915e1326", size = 3822407, upload-time = "2026-04-20T23:34:05.977Z" },
-    { url = "https://files.pythonhosted.org/packages/3c/ed/60486c2c7f0d4d1ede2bfb1ed27e2498477ce646bc7f6b2759906303117e/psycopg2_binary-2.9.12-cp311-cp311-manylinux2014_ppc64le.manylinux_2_17_ppc64le.whl", hash = "sha256:c6528cefc8e50fcc6f4a107e27a672058b36cc5736d665476aeb413ba88dbb06", size = 4578425, upload-time = "2026-04-20T23:34:08.246Z" },
-    { url = "https://files.pythonhosted.org/packages/0b/b9/656cb03fad9f4f49f2145c334b1126ee75189929ca4e6187d485a2d59951/psycopg2_binary-2.9.12-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:e4e184b1fb6072bf05388aa41c697e1b2d01b3473f107e7ec44f186a32cfd0b8", size = 4273709, upload-time = "2026-04-20T23:34:10.974Z" },
-    { url = "https://files.pythonhosted.org/packages/99/66/08cf0da0e25cc6fb142c89be45fc8418792858f0c4cbff5e24530ff02cd6/psycopg2_binary-2.9.12-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:4766ab678563054d3f1d064a4db19cc4b5f9e3a8d9018592a8285cf200c248f3", size = 5893779, upload-time = "2026-04-20T23:34:13.905Z" },
-    { url = "https://files.pythonhosted.org/packages/17/d7/eecd9ce8e146d3721115d82d3836efdbb712187e4590325df549989d18f4/psycopg2_binary-2.9.12-cp311-cp311-manylinux_2_38_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:5a0253224780c978746cb9be55a946bcdaf40fe3519c0f622924cdabdafe2c39", size = 4109308, upload-time = "2026-04-20T23:34:16.761Z" },
-    { url = "https://files.pythonhosted.org/packages/b6/2e/b1dc289b362cc8d45697b57eefbd673186f49a4ea0906928988e3affcc98/psycopg2_binary-2.9.12-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:0dc9228d47c46bda253d2ecd6bb93b56a9f2d7ad33b684a1fa3622bf74ffe30c", size = 3654405, upload-time = "2026-04-20T23:34:19.303Z" },
-    { url = "https://files.pythonhosted.org/packages/eb/e4/4c4aea6473214dbdbd0fbba11aa4691e76dc01722c55724c5951719865ff/psycopg2_binary-2.9.12-cp311-cp311-musllinux_1_2_ppc64le.whl", hash = "sha256:f921f3cd87035ef7df233383011d7a53ea1d346224752c1385f1edfd790ceb6a", size = 3299187, upload-time = "2026-04-20T23:34:21.206Z" },
-    { url = "https://files.pythonhosted.org/packages/ba/5d/b03b99986446a4f57b170ed9a2579fb7ff9783ca0fa5226b19db99737fee/psycopg2_binary-2.9.12-cp311-cp311-musllinux_1_2_riscv64.whl", hash = "sha256:3d999bd982a723113c1a45b55a7a6a90d64d0ed2278020ed625c490ff7bef96c", size = 3047716, upload-time = "2026-04-20T23:34:23.077Z" },
-    { url = "https://files.pythonhosted.org/packages/14/86/382ee4afbd1d97500c9d2862b20c2fdeddf4b7335e984df3fb4309f64108/psycopg2_binary-2.9.12-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:29d4d134bd0ab46ffb04e94aa3c5fa3ef582e9026609165e2f758ff76fc3a3be", size = 3349237, upload-time = "2026-04-20T23:34:25.211Z" },
-    { url = "https://files.pythonhosted.org/packages/a8/16/9a57c75ba1eda7165c017342f526810d5f5a12647dde749c99ae9a7141d7/psycopg2_binary-2.9.12-cp311-cp311-win_amd64.whl", hash = "sha256:cb4a1dacdd48077150dc762a9e5ddbf32c256d66cb46f80839391aa458774936", size = 2757036, upload-time = "2026-04-20T23:34:27.77Z" },
-    { url = "https://files.pythonhosted.org/packages/e2/9f/ef4ef3c8e15083df90ca35265cfd1a081a2f0cc07bb229c6314c6af817f4/psycopg2_binary-2.9.12-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:5cdc05117180c5fa9c40eea8ea559ce64d73824c39d928b7da9fb5f6a9392433", size = 3712459, upload-time = "2026-04-20T23:34:30.549Z" },
-    { url = "https://files.pythonhosted.org/packages/b5/01/3dd14e46ba48c1e1a6ec58ee599fa1b5efa00c246d5046cd903d0eeb1af1/psycopg2_binary-2.9.12-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:d3227a3bc228c10d21011a99245edca923e4e8bf461857e869a507d9a41fe9f6", size = 3822936, upload-time = "2026-04-20T23:34:32.77Z" },
-    { url = "https://files.pythonhosted.org/packages/a6/f7/0640e4901119d8a9f7a1784b927f494e2198e213ceb593753d1f2c8b1b30/psycopg2_binary-2.9.12-cp312-cp312-manylinux2014_ppc64le.manylinux_2_17_ppc64le.whl", hash = "sha256:995ce929eede89db6254b50827e2b7fd61e50d11f0b116b29fffe4a2e53c4580", size = 4578676, upload-time = "2026-04-20T23:34:35.18Z" },
-    { url = "https://files.pythonhosted.org/packages/b0/55/44df3965b5f297c50cc0b1b594a31c67d6127a9d133045b8a66611b14dfb/psycopg2_binary-2.9.12-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:9fe06d93e72f1c048e731a2e3e7854a5bfaa58fc736068df90b352cefe66f03f", size = 4274917, upload-time = "2026-04-20T23:34:37.982Z" },
-    { url = "https://files.pythonhosted.org/packages/b0/4b/74535248b1eac0c9336862e8617c765ac94dac76f9e25d7c4a79588c8907/psycopg2_binary-2.9.12-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:40e7b28b63aaf737cb3a1edc3a9bbc9a9f4ad3dcb7152e8c1130e4050eddcb7d", size = 5894843, upload-time = "2026-04-20T23:34:40.856Z" },
-    { url = "https://files.pythonhosted.org/packages/f2/ba/f1bf8d2ae71868ad800b661099086ee52bc0f8d9f05be1acd8ebb06757cc/psycopg2_binary-2.9.12-cp312-cp312-manylinux_2_38_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:89d19a9f7899e8eb0656a2b3a08e0da04c720a06db6e0033eab5928aabe60fa9", size = 4110556, upload-time = "2026-04-20T23:34:44.016Z" },
-    { url = "https://files.pythonhosted.org/packages/45/46/c15706c338403b7c420bcc0c2905aad116cc064545686d8bf85f1999ea00/psycopg2_binary-2.9.12-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:612b965daee295ae2da8f8218ce1d274645dc76ef3f1abf6a0a94fd57eff876d", size = 3655714, upload-time = "2026-04-20T23:34:46.233Z" },
-    { url = "https://files.pythonhosted.org/packages/b3/7c/a2d5dc09b64a4564db242a0fe418fde7d33f6f8259dd2c5b9d7def00fb5a/psycopg2_binary-2.9.12-cp312-cp312-musllinux_1_2_ppc64le.whl", hash = "sha256:b9a339b79d37c1b45f3235265f07cdeb0cb5ad7acd2ac7720a5920989c17c24e", size = 3301154, upload-time = "2026-04-20T23:34:49.528Z" },
-    { url = "https://files.pythonhosted.org/packages/c0/e8/cc8c9a4ce71461f9ec548d38cadc41dc184b34c73e6455450775a9334ccd/psycopg2_binary-2.9.12-cp312-cp312-musllinux_1_2_riscv64.whl", hash = "sha256:3471336e1acfd9c7fe507b8bad5af9317b6a89294f9eb37bd9a030bb7bebcdc6", size = 3048882, upload-time = "2026-04-20T23:34:51.86Z" },
-    { url = "https://files.pythonhosted.org/packages/19/6a/31e2296bc0787c5ab75d3d118e40b239db8151b5192b90b77c72bc9256e9/psycopg2_binary-2.9.12-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:7af18183109e23502c8b2ae7f6926c0882766f35b5175a4cd737ad825e4d7a1b", size = 3351298, upload-time = "2026-04-20T23:34:54.124Z" },
-    { url = "https://files.pythonhosted.org/packages/5f/a8/75f4e3e11203b590150abed2cf7794b9c9c9f7eceddae955191138b44dde/psycopg2_binary-2.9.12-cp312-cp312-win_amd64.whl", hash = "sha256:398fcd4db988c7d7d3713e2b8e18939776fd3fb447052daae4f24fa39daede4c", size = 2757230, upload-time = "2026-04-20T23:34:56.242Z" },
-    { url = "https://files.pythonhosted.org/packages/91/bb/4608c96f970f6e0c56572e87027ef4404f709382a3503e9934526d7ba051/psycopg2_binary-2.9.12-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:7c729a73c7b1b84de3582f73cdd27d905121dc2c531f3d9a3c32a3011033b965", size = 3712419, upload-time = "2026-04-20T23:34:58.754Z" },
-    { url = "https://files.pythonhosted.org/packages/5e/af/48f76af9d50d61cf390f8cd657b503168b089e2e9298e48465d029fcc713/psycopg2_binary-2.9.12-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:4413d0caef93c5cf50b96863df4c2efe8c269bf2267df353225595e7e15e8df7", size = 3822990, upload-time = "2026-04-20T23:35:00.821Z" },
-    { url = "https://files.pythonhosted.org/packages/7a/df/aba0f99397cd811d32e06fc0cc781f1f3ce98bc0e729cb423925085d781a/psycopg2_binary-2.9.12-cp313-cp313-manylinux2014_ppc64le.manylinux_2_17_ppc64le.whl", hash = "sha256:4dfcf8e45ebb0c663be34a3442f65e17311f3367089cd4e5e3a3e8e62c978777", size = 4578696, upload-time = "2026-04-20T23:35:03.409Z" },
-    { url = "https://files.pythonhosted.org/packages/95/9c/eaa74021ac4e4d5c2f83d82fc6615a63f4fe6c94dc4e94c3990427053f67/psycopg2_binary-2.9.12-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:c41321a14dd74aceb6a9a643b9253a334521babfa763fa873e33d89cfa122fb5", size = 4274982, upload-time = "2026-04-20T23:35:05.583Z" },
-    { url = "https://files.pythonhosted.org/packages/35/ed/c25deff98bd26187ba48b3b250a3ffc3037c46c5b89362534a15d200e0db/psycopg2_binary-2.9.12-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:83946ba43979ebfdc99a3cd0ee775c89f221df026984ba19d46133d8d75d3cd9", size = 5894867, upload-time = "2026-04-20T23:35:07.902Z" },
-    { url = "https://files.pythonhosted.org/packages/9a/81/8d0e21ca77373c6c9589e5c4528f6e8f0c08c62cafc76fb0bddb7a2cee22/psycopg2_binary-2.9.12-cp313-cp313-manylinux_2_38_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:411e85815652d13560fbe731878daa5d92378c4995a22302071890ec3397d019", size = 4110578, upload-time = "2026-04-20T23:35:10.149Z" },
-    { url = "https://files.pythonhosted.org/packages/00/fc/f481e2435bd8f742d0123309174aae4165160ad3ef17c1b99c3622c241d2/psycopg2_binary-2.9.12-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:1c8ad4c08e00f7679559eaed7aff1edfffc60c086b976f93972f686384a95e2c", size = 3655816, upload-time = "2026-04-20T23:35:12.56Z" },
-    { url = "https://files.pythonhosted.org/packages/53/79/b9f46466bdbe9f239c96cde8be33c1aace4842f06013b47b730dc9759187/psycopg2_binary-2.9.12-cp313-cp313-musllinux_1_2_ppc64le.whl", hash = "sha256:00814e40fa23c2b37ef0a1e3c749d89982c73a9cb5046137f0752a22d432e82f", size = 3301307, upload-time = "2026-04-20T23:35:15.029Z" },
-    { url = "https://files.pythonhosted.org/packages/3f/19/7dc003b32fe35024df89b658104f7c8538a8b2dcbde7a4e746ce929742e7/psycopg2_binary-2.9.12-cp313-cp313-musllinux_1_2_riscv64.whl", hash = "sha256:98062447aebc20ed20add1f547a364fd0ef8933640d5372ff1873f8deb9b61be", size = 3048968, upload-time = "2026-04-20T23:35:16.757Z" },
-    { url = "https://files.pythonhosted.org/packages/91/58/2dbd7db5c604d45f4950d988506aae672a14126ec22998ced5021cbb76bb/psycopg2_binary-2.9.12-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:66a7685d7e548f10fb4ce32fb01a7b7f4aa702134de92a292c7bd9e0d3dbd290", size = 3351369, upload-time = "2026-04-20T23:35:18.933Z" },
-    { url = "https://files.pythonhosted.org/packages/42/ee/dee8dcaad07f735824de3d6563bc67119fa6c28257b17977a8d624f02fab/psycopg2_binary-2.9.12-cp313-cp313-win_amd64.whl", hash = "sha256:b6937f5fe4e180aeee87de907a2fa982ded6f7f15d7218f78a083e4e1d68f2a0", size = 2757347, upload-time = "2026-04-20T23:35:21.283Z" },
-    { url = "https://files.pythonhosted.org/packages/13/1b/708c0dca874acfad6d65314271859899a79007686f3a1f74e82a2ed4b645/psycopg2_binary-2.9.12-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:6f3b3de8a74ef8db215f22edffb19e32dc6fa41340456de7ec99efdc8a7b3ec2", size = 3712428, upload-time = "2026-04-20T23:35:23.453Z" },
-    { url = "https://files.pythonhosted.org/packages/d6/39/ddbea9d4b4de6aca9431b6ed253f530f8a02d3b8f9bcfd0dbfe2b3de6fe4/psycopg2_binary-2.9.12-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:1006fb62f0f0bc5ce256a832356c6262e91be43f5e4eb15b5eaf38079464caf2", size = 3823184, upload-time = "2026-04-20T23:35:25.92Z" },
-    { url = "https://files.pythonhosted.org/packages/bf/a0/bc2fef74b106fa345567122a0659e6d94512ed7dc0131ec44c9e5aba3725/psycopg2_binary-2.9.12-cp314-cp314-manylinux2014_ppc64le.manylinux_2_17_ppc64le.whl", hash = "sha256:840066105706cd2eb29b9a1c2329620056582a4bf3e8169dec5c447042d0869f", size = 4579157, upload-time = "2026-04-20T23:35:28.542Z" },
-    { url = "https://files.pythonhosted.org/packages/57/d7/d4e3b2005d3de607ca4fbb0e8742e248056e52184a6b94ebda3c1c2c329b/psycopg2_binary-2.9.12-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:863f5d12241ebe1c76a72a04c2113b6dc905f90b9cef0e9be0efd994affd9354", size = 4274970, upload-time = "2026-04-20T23:35:30.418Z" },
-    { url = "https://files.pythonhosted.org/packages/2e/42/c9853f8db3967fe08bcde11f53d53b85d351750cae726ce001cb68afa9c1/psycopg2_binary-2.9.12-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:a99eaab34a9010f1a086b126de467466620a750634d114d20455f3a824aae033", size = 5895175, upload-time = "2026-04-20T23:35:33.584Z" },
-    { url = "https://files.pythonhosted.org/packages/eb/fd/b82b5601a97630308bef079f545ffec481bbbc795c2ba5ec416a01d03f60/psycopg2_binary-2.9.12-cp314-cp314-manylinux_2_38_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:ffdd7dc5463ccd61845ac37b7012d0f35a1548df9febe14f8dd549be4a0bc81e", size = 4110658, upload-time = "2026-04-20T23:35:35.638Z" },
-    { url = "https://files.pythonhosted.org/packages/62/8c/32ca69b0389ef25dd22937bf9e8fbe2ce27aea20b05ded48c4ce4cb42475/psycopg2_binary-2.9.12-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:54a0dfecab1b48731f934e06139dfe11e24219fb6d0ceb32177cf0375f14c7b5", size = 3656251, upload-time = "2026-04-20T23:35:37.854Z" },
-    { url = "https://files.pythonhosted.org/packages/c4/29/96992a2b59e3b9d730fcf9612d0a387305025dc867a9fc490a9e496e074e/psycopg2_binary-2.9.12-cp314-cp314-musllinux_1_2_ppc64le.whl", hash = "sha256:96937c9c5d891f772430f418a7a8b4691a90c3e6b93cf72b5bd7cad8cbca32a5", size = 3301810, upload-time = "2026-04-20T23:35:39.927Z" },
-    { url = "https://files.pythonhosted.org/packages/56/ad/44b06659949b243ae10112cd3b20a197f9bf3e81d5651379b9eb889bfaad/psycopg2_binary-2.9.12-cp314-cp314-musllinux_1_2_riscv64.whl", hash = "sha256:77b348775efd4cdab410ec6609d81ccecd1139c90265fa583a7255c8064bc03d", size = 3048977, upload-time = "2026-04-20T23:35:41.806Z" },
-    { url = "https://files.pythonhosted.org/packages/1d/f2/10a1bcebadb6aa55e280e1f58975c36a7b560ea525184c7aa4064c466633/psycopg2_binary-2.9.12-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:527e6342b3e44c2f0544f6b8e927d60de7f163f5723b8f1dfa7d2a84298738cd", size = 3351466, upload-time = "2026-04-20T23:35:43.993Z" },
-    { url = "https://files.pythonhosted.org/packages/20/be/b732c8418ffa5bcfda002890f5dc4c869fc17db66ff11f53b17cfe44afc0/psycopg2_binary-2.9.12-cp314-cp314-win_amd64.whl", hash = "sha256:f12ae41fcafadb39b2785e64a40f9db05d6de2ac114077457e0e7c597f3af980", size = 2848762, upload-time = "2026-04-20T23:35:46.421Z" },
-]
-
-[[package]]
 name = "py"
 version = "1.11.0"
 source = { registry = "https://pypi.org/simple" }
@@ -5063,7 +4934,6 @@ name = "pymatgen-core"
 version = "2026.4.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "bibtexparser" },
     { name = "joblib" },
     { name = "matplotlib" },
     { name = "monty" },
@@ -5105,15 +4975,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/94/2b/42def0e5d17c647c7c68e278880e85fe94665bf08db0ca341c0d4760cf6d/pymatgen_core-2026.4.7-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:63adbc1f64eaa33466bafcc2a2378a4cc16d395ddf3417104b8c93dc9086fdfc", size = 3912848, upload-time = "2026-04-07T23:23:26.058Z" },
     { url = "https://files.pythonhosted.org/packages/35/1f/e18e5734e5ab8bc99277fd5723043f7caf687c89ab29c7652401ddb2f8cb/pymatgen_core-2026.4.7-cp314-cp314-win32.whl", hash = "sha256:39de7439487343e1a6908b6a104355ab51de1398eba39c5fd1aa8fe82970db69", size = 2805313, upload-time = "2026-04-07T23:23:27.943Z" },
     { url = "https://files.pythonhosted.org/packages/bd/01/2d0a93d5f66de7923fb70fa6b60db91827371a36b468f8bd5330b64a5b2b/pymatgen_core-2026.4.7-cp314-cp314-win_amd64.whl", hash = "sha256:ae3652d117bccb8b44fb940592d85040f7aec19f0495aaf9da7ef5b6b4cf63d6", size = 2836829, upload-time = "2026-04-07T23:23:29.738Z" },
-]
-
-[[package]]
-name = "pymysql"
-version = "1.2.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/c9/bc/1c6a92f385940f727daeecf3bacaf186e03875dff57197801046c583bcf0/pymysql-1.2.0.tar.gz", hash = "sha256:6c7b17ca686988104d7426c27895b455cdeea3e9d3ceb1270f0c3704fead8c33", size = 49021, upload-time = "2026-05-19T08:26:22.302Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c4/bd/2534e130295c8cfd4f0a2e31623baab7502278f1e97bcfe61db75656a77f/pymysql-1.2.0-py3-none-any.whl", hash = "sha256:62169ce6d5510f08e140c5e7990ee884a9764024e4a9a27b2cc11f1099322ae0", size = 45716, upload-time = "2026-05-19T08:26:20.974Z" },
 ]
 
 [[package]]
@@ -5271,12 +5132,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/82/ed/0301aeeac3e5353ef
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0b/d7/1959b9648791274998a9c3526f6d0ec8fd2233e4d4acce81bbae76b44b2a/python_dotenv-1.2.2-py3-none-any.whl", hash = "sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a", size = 22101, upload-time = "2026-03-01T16:00:25.09Z" },
 ]
-
-[[package]]
-name = "python-hostlist"
-version = "2.3.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/90/cc/bb6395c3f2b6bb739b1d3fc0e71f94e6a1c2e256df496237cbfd13cd74a6/python_hostlist-2.3.0.tar.gz", hash = "sha256:e1a0b18e525a5fca573cb9862799f11b3f2bd3ba7aec70c4ecd8b95341bb71ea", size = 37326, upload-time = "2025-08-29T11:40:19.06Z" }
 
 [[package]]
 name = "pytz"

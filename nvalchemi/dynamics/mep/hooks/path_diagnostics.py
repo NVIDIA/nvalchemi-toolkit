@@ -115,9 +115,10 @@ class PathDiagnosticsHook:
     Active-path behavior
     --------------------
     Activity must be consistent across every image in a path. Diagnostics for
-    inactive paths retain their last valid values. Newly admitted paths contain
-    NaN floating-point diagnostics and a highest-interior-image index of ``-1`` until
-    their first active evaluation.
+    inactive paths retain their last valid values between admissions. Every
+    admission resets all diagnostics to NaN and highest-interior-image indices
+    to ``-1`` until each path's first active evaluation. Compatible buffers are
+    reused even though their values are reset.
     """
 
     stage = None
@@ -134,6 +135,7 @@ class PathDiagnosticsHook:
         self.energy_stats_hook = energy_stats_hook
         self.frequency = frequency
         self._diagnostics: PathDiagnostics | None = None
+        self._force_norms: Tensor | None = None
 
     def on_register(self, workflow: object) -> None:
         """Require group-aware dynamics for per-path reductions."""
@@ -151,7 +153,7 @@ class PathDiagnosticsHook:
 
     @torch.compiler.disable
     def _prepare_batch(self, ctx: DynamicsContext) -> None:
-        """Validate inputs and allocate persistent per-path reductions."""
+        """Prepare current reductions and reset diagnostics, reusing compatible buffers."""
         batch = ctx.batch
         validate_paths(batch)
         link_lengths = getattr(batch, "forward_link_length", None)
@@ -177,30 +179,49 @@ class PathDiagnosticsHook:
         dtype = batch.positions.dtype
         device = batch.positions.device
 
-        self._diagnostics = PathDiagnostics(
-            fmax=torch.full((num_paths,), torch.nan, dtype=dtype, device=device),
-            energy_barrier=torch.full(
-                (num_paths,), torch.nan, dtype=dtype, device=device
-            ),
-            highest_interior_image_idx=torch.full(
-                (num_paths,), -1, dtype=torch.int32, device=device
-            ),
-            path_length=torch.full((num_paths,), torch.nan, dtype=dtype, device=device),
-        )
+        # Reuse path-sized buffers when path count, floating-point dtype,
+        # and device are unchanged.
+        if (
+            self._diagnostics is None
+            or self._diagnostics.fmax.shape != (num_paths,)
+            or self._diagnostics.fmax.dtype != dtype
+            or self._diagnostics.fmax.device != device
+        ):
+            self._diagnostics = PathDiagnostics(
+                fmax=torch.empty(num_paths, dtype=dtype, device=device),
+                energy_barrier=torch.empty(num_paths, dtype=dtype, device=device),
+                highest_interior_image_idx=torch.empty(
+                    num_paths, dtype=torch.int32, device=device
+                ),
+                path_length=torch.empty(num_paths, dtype=dtype, device=device),
+            )
+            self._path_start = torch.empty(num_paths, dtype=torch.int32, device=device)
+            self._active_paths = torch.empty(num_paths, dtype=torch.bool, device=device)
+            self._candidate_fmax = torch.empty(num_paths, dtype=dtype, device=device)
+            self._candidate_energy_barrier = torch.empty(
+                num_paths, dtype=dtype, device=device
+            )
+            self._candidate_path_length = torch.empty(
+                num_paths, dtype=dtype, device=device
+            )
+            self._candidate_highest_interior_image_idx = torch.empty(
+                num_paths, dtype=torch.int32, device=device
+            )
+        self._diagnostics.fmax.fill_(torch.nan)
+        self._diagnostics.energy_barrier.fill_(torch.nan)
+        self._diagnostics.path_length.fill_(torch.nan)
+        self._diagnostics.highest_interior_image_idx.fill_(-1)
         self._node_to_path = layout.node_to_group.long().contiguous()
         self._image_to_path = layout.group_idx.long().contiguous()
         self._path_start_index = layout.group_ptr[:-1].long().contiguous()
-        self._path_start = self._path_start_index.to(torch.int32)
-        self._active_paths = torch.empty(num_paths, dtype=torch.bool, device=device)
-        self._force_norms = torch.empty(batch.num_nodes, dtype=dtype, device=device)
-        self._candidate_fmax = torch.empty(num_paths, dtype=dtype, device=device)
-        self._candidate_energy_barrier = torch.empty(
-            num_paths, dtype=dtype, device=device
-        )
-        self._candidate_path_length = torch.empty(num_paths, dtype=dtype, device=device)
-        self._candidate_highest_interior_image_idx = torch.empty(
-            num_paths, dtype=torch.int32, device=device
-        )
+        self._path_start.copy_(self._path_start_index)
+        if (
+            self._force_norms is None
+            or self._force_norms.shape != (batch.num_nodes,)
+            or self._force_norms.dtype != dtype
+            or self._force_norms.device != device
+        ):
+            self._force_norms = torch.empty(batch.num_nodes, dtype=dtype, device=device)
 
     def get_diagnostics(self) -> PathDiagnostics:
         """Return diagnostics refreshed for the current path evaluation.

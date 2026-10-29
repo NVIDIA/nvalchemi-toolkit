@@ -248,13 +248,16 @@ of one NEB path). Use `batch.set_group_layout(group_idx)` to assign integer
 labels per graph, normalized to dense zero-based IDs. Read the derived
 `batch.group_layout`, a cached `GroupLayout` with `graph_rank`, `node_to_group`,
 `group_ptr`, `num_graphs_per_group`, and mask/broadcast helpers `reduce_all`,
-`reduce_any`, and `broadcast`. The cache invalidates when `group_idx` is reassigned
-or graph membership changes, but not
-after in-place changes such as `batch.group_idx[3] = 2`. Call
-`batch.set_group_layout(batch.group_idx)` to validate and rebuild it. `append()`
-requires both batches grouped or both ungrouped and rebases labels. `put()`
-rejects a grouped source or destination because graph-level buffer masks can
-split logical groups. `append_data()` is also rejected on a grouped batch.
+`reduce_any`, and `broadcast`. The cache invalidates when `group_idx` is
+reassigned or graph membership changes, but not after in-place changes such as
+`batch.group_idx[3] = 2`.
+Call `batch.set_group_layout(batch.group_idx)` to validate and rebuild it.
+`index_select()` selects complete groups by graph index, without repeats.
+Reordered groups must stay contiguous; selection normalizes labels and builds
+the result's layout. `append()` requires both batches grouped or both ungrouped
+and rebases labels.
+`put()` and `trim()` reject partial-group masks; `put()` copies only whole
+groups that fit. Grouped batches reject `append_data()`.
 
 ### Pre-allocated buffer operations
 
@@ -264,11 +267,10 @@ For high-throughput workflows (e.g. streaming dynamics), use pre-allocated buffe
 # Create buffer
 buffer = Batch.empty(num_systems=40, num_nodes=80, num_edges=80, template=data)
 
-# Copy selected graphs into buffer
+# Copy selected graphs into buffer; each put appends after buffer.num_graphs
 mask = torch.tensor([True, False])           # which src graphs to copy
 copied_mask = torch.zeros(2, dtype=torch.bool)  # updated in-place: which actually fit
-dest_mask = torch.zeros(buffer.system_capacity, dtype=torch.bool)
-buffer.put(src_batch, mask, copied_mask=copied_mask, dest_mask=dest_mask)
+buffer.put(src_batch, mask, copied_mask=copied_mask)
 
 # Remove copied graphs from source (compact in-place)
 src_batch.defrag(copied_mask=copied_mask)

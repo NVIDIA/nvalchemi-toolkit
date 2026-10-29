@@ -30,9 +30,9 @@ The three buffer layers
      - Pre-allocated :meth:`Batch.empty() <nvalchemi.data.Batch.empty>`
      - Zero-copy inter-rank transfer via ``isend`` / ``irecv``
    * - Overflow sinks
-     - :class:`~nvalchemi.dynamics.DataSink` (``GPUBuffer``, ``HostMemory``, ``ZarrData``)
-     - Varies
-     - Staging when active batch is full
+     - ``overflow_sinks``: :class:`~nvalchemi.dynamics.DataSink` (``GPUBuffer``, ``HostMemory``, ``ZarrData``)
+     - Private ``HostMemory`` by default
+     - Received samples waiting for room in the active batch
    * - Active batch
      - ``active_batch`` on :class:`~nvalchemi.dynamics.base._CommunicationMixin`
      - Live :class:`~nvalchemi.data.Batch`
@@ -79,8 +79,12 @@ The three buffer layers
        irecv -> recv [style=bold]
        recv -> batch [label="_recv_to_batch" style=bold]
 
-       sinks [label="Overflow Sinks" style="rounded,dashed" fillcolor=none]
-       send -> sinks [label="final rank:\nwrite to sinks" style=dashed color="#999999"]
+       overflow [label="Overflow Sinks" style="rounded,dashed" fillcolor=none]
+       recv -> overflow [label="excess" style=dashed color="#999999"]
+       overflow -> batch [label="_drain_sinks_to_batch" style=dashed color="#999999"]
+
+       sinks [label="Result Sinks" style="rounded,dashed" fillcolor=none]
+       conv -> sinks [label="final rank:\nwrite results" style=dashed color="#999999"]
    }
 
 Data flows from samplers or upstream ranks into the active batch,
@@ -178,8 +182,7 @@ to coordinate data flow between ranks:
    in async modes the handle is stored for later completion.
 
 2. **_complete_pending_recv()**: Waits on the deferred receive, routes
-   data through the recv buffer into the active batch (stripping buffer
-   padding via ``to_data_list`` / ``from_data_list``), and drains
+   data through the recv buffer into the active batch, and drains
    overflow sinks to backfill any available capacity.
 
 3. **step()**: The dynamics integration step (forward pass, pre_update,
@@ -260,17 +263,18 @@ several helper methods for routing data between buffers:
 
 - **_recv_to_batch(incoming)**: Stages data through the recv buffer
   into the active batch via ``_buffer_to_batch``, then zeros the
-  recv buffer.
+  recv buffer. When the active batch is full, new arrivals go directly
+  to overflow storage without the extra receive-buffer copy.
 
 - **_buffer_to_batch(incoming)**: Routes incoming data into the active
-  batch.  All code paths reconstruct the batch via
-  :meth:`to_data_list() <nvalchemi.data.Batch.to_data_list>` +
-  :meth:`from_data_list() <nvalchemi.data.Batch.from_data_list>` to
-  strip buffer padding and produce tight tensors.  Three cases:
+  batch.  Admitted graphs are copied out of the buffer with
+  :meth:`index_select() <nvalchemi.data.Batch.index_select>`, which
+  drops buffer padding, and added with :meth:`append()
+  <nvalchemi.data.Batch.append>`.  Three cases:
 
   1. No active batch exists: adopt the incoming data directly.
   2. Room available: append to the existing active batch.
-  3. No room: overflow to sinks.
+  3. No room: write to ``overflow_sinks``.
 
 - **_batch_to_buffer(mask)**: Copies graduated samples from the active
   batch into the send buffer via :meth:`put()
@@ -284,26 +288,21 @@ several helper methods for routing data between buffers:
 
 - **_remove_converged_final_stage(converged_indices)**: On the final
   stage, extracts converged graphs via ``index_select``, removes them
-  from the active batch, and writes them to sinks.
+  from the active batch, and writes them to result sinks via
+  ``_write_to_sinks``.
 
 - **_manage_send_handle(handle)**: Stores the send handle for later
   draining (``fully_async``) or waits on it immediately (other modes).
 
-- **_overflow_to_sinks(batch, mask)**: Writes to the first non-full
-  sink in priority order.
+- **_overflow_to_sinks(batch, mask)**: Writes pending samples to the
+  first overflow sink with room for all of them.
 
-- **_drain_sinks_to_batch()**: Pulls samples from sinks back into the
-  active batch when room is available.
+- **_write_to_sinks(batch, mask)**: Writes finished results to the first
+  result sink with room for all of them.
 
-.. note::
-
-   ``_buffer_to_batch`` uses :meth:`to_data_list()
-   <nvalchemi.data.Batch.to_data_list>` + :meth:`from_data_list()
-   <nvalchemi.data.Batch.from_data_list>` for combining batches. This
-   is O(N) Python-level reconstruction. In high-throughput pipelines,
-   this can be a bottleneck compared to the Warp-accelerated
-   ``put`` / ``defrag`` path.
-
+- **_drain_sinks_to_batch()**: Pulls samples from ``overflow_sinks``
+  back into the active batch when room is available. Result sinks are
+  never read.
 
 Sample lifecycle
 ----------------
@@ -390,7 +389,7 @@ samples are continuously replaced from the sampler.
            r0_build  [label="build batch\nfrom sampler"]
            r0_step   [label="run step"]
            r0_send   [label="_poststep_sync_buffers\nsend converged downstream"]
-           r0_refill [label="refill from sampler"]
+           r0_refill [label="refill available capacity\nfrom sampler"]
 
            r0_build -> r0_step -> r0_send -> r0_refill [style=bold]
            r0_refill -> r0_step [label="loop" style=dashed color="#999999"]
@@ -449,14 +448,11 @@ Three :class:`~nvalchemi.dynamics.DataSink` implementations are
 available:
 
 - :class:`~nvalchemi.dynamics.GPUBuffer`: Pre-allocates on first write.
-  Uses :meth:`Batch.put() <nvalchemi.data.Batch.put>` internally. Has a
-  known performance limitation: ``read()`` falls back to
-  :meth:`to_data_list() <nvalchemi.data.Batch.to_data_list>` instead
-  of :meth:`index_select() <nvalchemi.data.Batch.index_select>` due to
-  Warp int32/int64 dtype incompatibility.
+  Writes with :meth:`Batch.put() <nvalchemi.data.Batch.put>` and reads
+  with :meth:`index_select() <nvalchemi.data.Batch.index_select>`.
 
-- :class:`~nvalchemi.dynamics.HostMemory`: CPU-resident, decomposes
-  batches into :class:`~nvalchemi.data.AtomicData` lists.
+- :class:`~nvalchemi.dynamics.HostMemory`: CPU-resident, stores each write
+  as a CPU copy of the batch.
 
 - :class:`~nvalchemi.dynamics.ZarrData`: Disk-backed, delegates to
   :class:`~nvalchemi.data.AtomicDataZarrWriter`.

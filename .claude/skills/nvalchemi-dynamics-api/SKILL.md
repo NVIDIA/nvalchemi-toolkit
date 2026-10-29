@@ -151,13 +151,14 @@ fused = FusedStage(
     exit_status=2,           # auto-set to len(sub_stages) if -1
     compile_step=False,      # enable torch.compile
     compile_kwargs=None,     # kwargs for torch.compile
-    reprime_on_entry=None,   # status codes needing a fresh force compute on entry
 )
 ```
 
 If a sub-stage needs freshly computed forces before it starts integrating
 (e.g. its `AFTER_COMPUTE` hooks differ from the stage the sample came from),
-pass its status code in `reprime_on_entry`. Newly entering samples skip one
+create that sub-stage's dynamics with `reprime_on_entry=True`
+(e.g. `md = NVTLangevin(..., hooks=[MaxForceClampHook(max_force=10.0)],
+reprime_on_entry=True)`). Newly entering samples skip one
 `pre_update`/`post_update` cycle while the shared compute and that stage's
 `AFTER_COMPUTE` hooks refresh their forces, then integrate normally the
 following iteration. This is separate from the initial batch-wide force
@@ -295,7 +296,8 @@ The dynamics framework manages data flow through three layers:
 |-------|----------|---------|
 | **Active batch** | `_CommunicationMixin.active_batch` | Working set being integrated |
 | **Communication buffers** | `send_buffer` / `recv_buffer` | Pre-allocated `Batch.empty()` for zero-copy inter-rank transfer |
-| **Overflow sinks** | `DataSink` list (priority-ordered) | Staging when active batch is full |
+| **Overflow sinks** | `overflow_sinks`: `DataSink` list (priority-ordered) | Received samples waiting for room; private `HostMemory` by default |
+| **Result sinks** | `sinks`: `DataSink` list (priority-ordered) | Finished samples; never drained back |
 
 ### Communication protocol (DistributedPipeline)
 
@@ -304,7 +306,7 @@ Each pipeline step follows a four-phase protocol:
 1. `_prestep_sync_buffers()` zeros the send buffer and posts `irecv`
    from the prior rank.
 2. `_complete_pending_recv()` waits on deferred receive, routes into
-   the active batch, and drains overflow sinks.
+   the active batch, and drains `overflow_sinks` (never `sinks`).
 3. `step()` runs dynamics integration.
 4. `_poststep_sync_buffers(converged_indices)` extracts converged
    samples into the send buffer and sends them to the next rank.
@@ -349,10 +351,11 @@ float32 attributes. Adjacent pipeline stages must have identical
 | Method | Purpose |
 |--------|---------|
 | `_recv_to_batch(incoming)` | Route received data through recv buffer into active batch |
-| `_buffer_to_batch(incoming)` | Append to active batch, overflow to sinks if full |
+| `_buffer_to_batch(incoming)` | Append to active batch, overflow to `overflow_sinks` if full |
 | `_batch_to_buffer(mask)` | Copy graduated samples into send buffer, defrag active batch |
-| `_overflow_to_sinks(batch)` | Write to first non-full sink in priority order |
-| `_drain_sinks_to_batch()` | Pull from sinks back into active batch when room available |
+| `_overflow_to_sinks(batch)` | Write pending samples to the first overflow sink with room for all of them |
+| `_write_to_sinks(batch)` | Write finished samples to the first result sink with room for all of them |
+| `_drain_sinks_to_batch()` | Pull from `overflow_sinks` back into active batch when room available |
 
 ---
 
@@ -487,7 +490,7 @@ from nvalchemi.dynamics.hooks import SnapshotHook
 
 dynamics = DemoDynamics(
     model=model, n_steps=1000, dt=0.5,
-    sinks=[gpu_sink, zarr_sink],   # for pipeline communication
+    sinks=[gpu_sink, zarr_sink],   # finished results, in priority order
     hooks=[
         SnapshotHook(sink=zarr_sink, frequency=10),
     ],

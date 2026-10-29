@@ -136,6 +136,19 @@ class TestInit:
 
         assert dp.exit_status == inner.exit_status == 3
 
+    def test_reads_reprime_on_entry_from_inner_dynamics(self) -> None:
+        model = DemoModelWrapper(DemoModel())
+        inner = DemoDynamics(model=model, n_steps=1, reprime_on_entry=True)
+        dp = DomainParallel(dynamics=inner, config=DomainConfig(cutoff=3.0, skin=0.5))
+        assert dp.reprime_on_entry is True
+
+    def test_rejects_reprime_on_entry(self) -> None:
+        model = DemoModelWrapper(DemoModel())
+        inner = DemoDynamics(model=model, n_steps=1)
+        config = DomainConfig(cutoff=3.0, skin=0.5)
+        with pytest.raises(TypeError, match="set reprime_on_entry on the wrapped"):
+            DomainParallel(dynamics=inner, config=config, reprime_on_entry=True)
+
 
 # ======================================================================
 # Property delegation — __needs_keys__ / __provides_keys__ read from
@@ -409,6 +422,22 @@ class TestRankResolution:
 
 
 class TestPrimeForces:
+    def test_refill_retains_whole_batch_priming(self) -> None:
+        """Domain decomposition does not use per-graph refill priming."""
+        dp, _ = _make_dp()
+        batch = _make_batch()
+        batch.status = torch.tensor([[dp.exit_status]])
+        dp.sampler = MagicMock()
+        dp.sampler.max_atoms = dp.sampler.max_edges = dp.sampler.max_batch_size = None
+        dp.sampler.request_replacements_budget.return_value = batch.to_data_list()
+        dp._forces_primed = True
+
+        result = dp.refill_check(batch, dp.exit_status)
+
+        assert result is not None
+        assert not dp._forces_primed
+        assert not result.reprime_pending.any()
+
     def test_distributed_step_initializes_admission_before_priming(self) -> None:
         """Initialize admission and safely publish mixed-dtype model outputs."""
         dp, _ = _make_dp()
@@ -455,6 +484,33 @@ class TestPrimeForces:
             torch.tensor([[1.25], [-13.0]], dtype=torch.float32),
         )
         assert dp._dynamics._last_outputs["energy"].dtype == torch.float64
+
+    @pytest.mark.parametrize(
+        ("reprime_on_entry", "drop_forces", "expected_primed"),
+        [(False, False, True), (True, False, False), (False, True, False)],
+    )
+    def test_received_system_reprimes_when_needed(
+        self, reprime_on_entry: bool, drop_forces: bool, expected_primed: bool
+    ) -> None:
+        """Reprime a received system when opted in or when it lacks forces."""
+        model = DemoModelWrapper(DemoModel())
+        inner = DemoDynamics(model=model, n_steps=1, reprime_on_entry=reprime_on_entry)
+        dp = DomainParallel(dynamics=inner, config=DomainConfig(cutoff=3.0, skin=0.5))
+        dp.prior_rank = 0
+        dp._forces_primed = True
+        received = _make_batch()
+        if drop_forces:
+            del received["forces"]
+
+        with (
+            patch.object(Batch, "irecv") as irecv,
+            patch.object(dp, "partition", return_value=received),
+        ):
+            irecv.return_value.wait.return_value = received
+            dp._prestep_sync_buffers()
+
+        assert dp.active_batch is received
+        assert dp._forces_primed is expected_primed
 
     def test_prime_forces_not_called_in_single_process(self) -> None:
         """No ``_dist_model`` means step() short-circuits to inner

@@ -80,7 +80,16 @@ class DomainParallel(BaseDynamics):
     **kwargs
         Forwarded to ``BaseDynamics.__init__`` (``hooks``, ``n_steps``,
         ``device_type``, ...).
+
+    Raises
+    ------
+    TypeError
+        If ``reprime_on_entry`` is passed. Set it on the wrapped dynamics
+        instead.
     """
+
+    # Whole systems are repartitioned and primed together across the domain group.
+    _supports_per_graph_priming: bool = False
 
     def __init__(
         self,
@@ -88,6 +97,11 @@ class DomainParallel(BaseDynamics):
         config: DomainConfig,
         **kwargs: Any,
     ) -> None:
+        if "reprime_on_entry" in kwargs:
+            raise TypeError(
+                "DomainParallel does not accept reprime_on_entry; set "
+                "reprime_on_entry on the wrapped dynamics instead."
+            )
         requested_exit_status = kwargs.get("exit_status", dynamics.exit_status)
         if requested_exit_status != dynamics.exit_status:
             warnings.warn(
@@ -99,6 +113,7 @@ class DomainParallel(BaseDynamics):
             )
         kwargs["exit_status"] = dynamics.exit_status
         super().__init__(model=dynamics.model, **kwargs)
+        self.reprime_on_entry = dynamics.reprime_on_entry
         self._dynamics: BaseDynamics = dynamics
         self._config: DomainConfig = config
 
@@ -900,6 +915,7 @@ class DomainParallel(BaseDynamics):
 
         received = None
         got_system = True
+        reprime = False
         if self._is_group_lead:
             received = Batch.irecv(
                 src=self.prior_rank,
@@ -908,6 +924,11 @@ class DomainParallel(BaseDynamics):
                 group=self._pipeline_group,
             ).wait()
             got_system = received.num_graphs > 0  # 0-graph sentinel = upstream done
+            # Reprime when opted in or when the system lacks outputs this stage needs.
+            reprime = self.reprime_on_entry or not all(
+                self._OUTPUT_KEY_TO_BATCH_ATTR.get(key, key) in received
+                for key in self.__needs_keys__ | {"forces"}
+            )
         got_system = self._bcast_group_flag(got_system)
         if not got_system:
             self.active_batch = None
@@ -915,6 +936,8 @@ class DomainParallel(BaseDynamics):
             self._send_sentinel()  # forward the drain signal down the chain
             self._dd_event(f"upstream (rank {self.prior_rank}) drained → stage done")
             return
+        if self._bcast_group_flag(reprime):
+            self._forces_primed = False
         self._system_step = 0
         self.active_batch = self.partition(received if self._is_group_lead else None)
         self._dd_event(

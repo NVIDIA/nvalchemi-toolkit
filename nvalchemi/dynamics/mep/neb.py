@@ -61,6 +61,9 @@ from nvalchemi.dynamics.strategy import (
 from nvalchemi.hooks import Hook
 
 if TYPE_CHECKING:
+    from nvalchemi.data import Batch
+    from nvalchemi.dynamics.sampler import SizeAwareSampler
+    from nvalchemi.dynamics.sinks import DataSink
     from nvalchemi.models.base import BaseModelMixin
 
 __all__ = ["ClimbingImageConfig", "NEB"]
@@ -138,6 +141,7 @@ _NEB_MANAGED_OPTIMIZER_KWARGS = {
     "hooks",
     "model",
     "n_steps",
+    "reprime_on_entry",
 }
 
 _NEB_FIRE2_DEFAULTS = {
@@ -227,7 +231,7 @@ class NEB(DynamicsStrategy):
         default=None,
         description=(
             "Mapping from path indices to atom indices held fixed in every image "
-            "of that path."
+            "of that path. For streaming, supply batch.neb_fixed_node_mask instead."
         ),
     )
     diagnostics_log_path: Path | None = Field(
@@ -240,6 +244,15 @@ class NEB(DynamicsStrategy):
     diagnostics_frequency: PositiveInt = Field(
         default=1,
         description="Step frequency for computing and logging per-path diagnostics.",
+    )
+    refill_frequency: PositiveInt = Field(
+        default=10,
+        strict=True,
+        description=(
+            "Steps between whole-path refill checks when run streams a sampler. "
+            "Larger values batch refills and avoid a per-step host sync, while "
+            "converged paths stay in the batch until the next check."
+        ),
     )
     compile: bool = Field(
         default=False,
@@ -524,13 +537,13 @@ class NEB(DynamicsStrategy):
                 fixed_atom_indices=self.fixed_atom_indices,
             )
         )
-        if self.endpoint_mode == "fixed" or self.fixed_atom_indices:
-            hooks.append(
-                FreezeAtomsHook(
-                    mask_key="neb_fixed_node_mask",
-                    zero_velocities=("velocities" in self.optimizer.__provides_keys__),
-                )
+        # A batch may supply this mask even when endpoints are relaxed.
+        hooks.append(
+            FreezeAtomsHook(
+                mask_key="neb_fixed_node_mask",
+                zero_velocities=("velocities" in self.optimizer.__provides_keys__),
             )
+        )
         if self.diagnostics_log_path is not None:
             diagnostics_hook = PathDiagnosticsHook(
                 energy_stats_hook=energy_stats,
@@ -570,8 +583,22 @@ class NEB(DynamicsStrategy):
             )
         return hooks
 
-    def build_engine(self) -> FusedStage:
+    def build_engine(
+        self,
+        *,
+        sampler: SizeAwareSampler | None = None,
+        sinks: Sequence[DataSink] | None = None,
+    ) -> FusedStage:
         """Construct a fresh fused optimizer.
+
+        Parameters
+        ----------
+        sampler : SizeAwareSampler or None, optional
+            Prepared-path sampler with ``by_group=True``. ``None`` builds an
+            engine for a supplied batch. With a sampler, the engine refills
+            whole paths every ``refill_frequency`` steps.
+        sinks : sequence of DataSink or None, optional
+            Completed-path sinks, tried in order. Default is no sinks.
 
         Returns
         -------
@@ -611,10 +638,10 @@ class NEB(DynamicsStrategy):
                             fmax=self.fmax,
                             regular_stage=False,
                         ),
+                        reprime_on_entry=True,
                     ),
                 ),
             ]
-            reprime_on_entry = {1}
         else:
             climbing_status = 0 if self.climbing is not None else None
             stages = [
@@ -634,7 +661,6 @@ class NEB(DynamicsStrategy):
                     ),
                 )
             ]
-            reprime_on_entry = set()
 
         neighbor_hooks = (
             self.model.make_neighbor_hooks()
@@ -651,11 +677,64 @@ class NEB(DynamicsStrategy):
             n_steps=self.n_steps,
             by_group=True,
             hooks=fused_hooks,
-            reprime_on_entry=reprime_on_entry,
             compile_step=self.compile,
             compile_kwargs=dict(self.compile_kwargs),
             device_type=stages[0][1].device_type,
+            sampler=sampler,
+            refill_frequency=self.refill_frequency,
+            sinks=sinks,
         )
+
+    def run(
+        self,
+        batch: Batch | None = None,
+        n_steps: int | None = None,
+        *,
+        sampler: SizeAwareSampler | None = None,
+        sinks: Sequence[DataSink] | None = None,
+    ) -> Batch | None:
+        """Optimize a supplied batch of paths, or stream paths from a sampler.
+
+        With ``batch``, this behaves like :meth:`DynamicsStrategy.run`. With
+        ``sampler``, each call builds a fresh engine regardless of
+        ``cache_engine``, refills whole paths every ``refill_frequency`` steps,
+        and writes completed paths to ``sinks``. The step limit stays global and
+        does not become a per-path budget.
+
+        Parameters
+        ----------
+        batch : Batch or None, optional
+            Paths to optimize in place. Mutually exclusive with ``sampler``.
+        n_steps : int or None, optional
+            Per-run step-limit override. ``None`` uses :attr:`n_steps`.
+        sampler : SizeAwareSampler or None, optional
+            Prepared-path sampler with ``by_group=True``. Each dataset item
+            contains one complete path. Mutually exclusive with ``batch``.
+        sinks : sequence of DataSink or None, optional
+            Completed-path sinks, tried in order. Required with ``sampler``.
+
+        Returns
+        -------
+        Batch or None
+            The optimized batch for a supplied batch. When streaming, the
+            remaining active batch if the step limit stops the run, or None
+            once the sampler is exhausted and all paths have graduated.
+
+        Raises
+        ------
+        ValueError
+            If neither or both of ``batch`` and ``sampler`` are given, or if
+            ``sinks`` is empty when streaming or given without a sampler.
+        """
+        if (batch is None) == (sampler is None):
+            raise ValueError("NEB.run requires exactly one of batch or sampler")
+        if sampler is None:
+            if sinks is not None:
+                raise ValueError("sinks require a sampler")
+            return super().run(batch, n_steps=n_steps)
+        if not sinks:
+            raise ValueError("Streaming NEB requires at least one result sink")
+        return self.build_engine(sampler=sampler, sinks=sinks).run(n_steps=n_steps)
 
     def to_spec_dict(self) -> dict[str, Any]:
         """Serialize NEB configuration and convergence hooks."""
