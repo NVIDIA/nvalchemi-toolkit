@@ -173,7 +173,9 @@ class BufferConfig(BaseModel):
     batch is available to act as a dtype/device template, so only the capacities
     are needed up front. Set a capacity to ``0`` for a dimension the batch does
     not carry (for example ``num_edges=0`` when edges are recomputed downstream
-    rather than communicated).
+    rather than communicated). With ``num_edges=0`` the buffers leave the edges
+    level out entirely, and arriving graphs have no edges until a neighbor-list
+    hook rebuilds them.
 
     Examples
     --------
@@ -699,7 +701,12 @@ class _CommunicationMixin:
         if self.buffer_config is None:
             return
         cfg = self.buffer_config
-        if self.send_buffer is None and self.next_rank is not None:
+        need_send = self.send_buffer is None and self.next_rank is not None
+        need_recv = self.recv_buffer is None and self.prior_rank is not None
+        if not (need_send or need_recv):
+            return
+        template = self._transport_template(template)
+        if need_send:
             self.send_buffer = Batch.empty(
                 num_systems=cfg.num_systems,
                 num_nodes=cfg.num_nodes,
@@ -707,7 +714,7 @@ class _CommunicationMixin:
                 template=template,
                 device=self.device,
             )
-        if self.recv_buffer is None and self.prior_rank is not None:
+        if need_recv:
             self.recv_buffer = Batch.empty(
                 num_systems=cfg.num_systems,
                 num_nodes=cfg.num_nodes,
@@ -715,6 +722,51 @@ class _CommunicationMixin:
                 template=template,
                 device=self.device,
             )
+
+    def _transport_template(self, template: Batch) -> Batch:
+        """Return *template* without its edges level when buffers carry no edges.
+
+        ``BufferConfig(num_edges=0)`` means edges are rebuilt downstream rather
+        than communicated. Both ends of a link must then leave the edges level
+        out entirely: ``Batch.irecv`` expects exactly the levels the sender
+        transmits, and a zero-capacity edges level would reject every graph
+        that has edges.
+
+        Parameters
+        ----------
+        template : Batch
+            Batch whose schema defines a buffer or receive layout.
+
+        Returns
+        -------
+        Batch
+            *template* itself, or a zero-capacity copy of its schema without
+            the edges level.
+        """
+        if (
+            self.buffer_config is None
+            or self.buffer_config.num_edges > 0
+            or "edges" not in template._storage.groups
+        ):
+            return template
+        # Only field names, dtypes, and trailing shapes matter, so build an
+        # empty schema copy instead of cloning the template's data.
+        stripped = Batch.empty(
+            num_systems=0,
+            num_nodes=0,
+            num_edges=0,
+            template=template,
+            device=template.device,
+            attr_map=template._storage.attr_map,
+            level_capacities={
+                name: 0
+                for name, group in template._storage.groups.items()
+                if name not in ("atoms", "edges", "system")
+                and isinstance(group, SegmentedLevelStorage)
+            },
+        )
+        stripped.drop_level("edges")
+        return stripped
 
     @property
     def is_final_stage(self) -> bool:
@@ -1045,20 +1097,31 @@ class _CommunicationMixin:
             self._overflow_to_sinks(incoming_batch)
             return
 
-        data_list = incoming_batch.to_data_list()
-        admitted = data_list[:room]
-        overflow = data_list[room:]
+        n_incoming = incoming_batch.num_graphs
+        n_admitted = min(room, n_incoming)
+        # index_select copies, which matters because callers such as
+        # _recv_to_batch zero the incoming buffer right after this call.
+        admitted = incoming_batch.index_select(list(range(n_admitted)))
         if self.active_batch is None:
-            combined = admitted
+            self.active_batch = admitted
         else:
-            combined = self.active_batch.to_data_list() + admitted
-        self.active_batch = Batch.from_data_list(combined, device=incoming_batch.device)
+            if callable(ensure_bookkeeping):
+                ensure_bookkeeping(self.active_batch)
+            if admitted.device != self.active_batch.device:
+                admitted = admitted.to(self.active_batch.device)
+            # "fill" keeps resident fields the arrivals lack, such as edges a
+            # BufferConfig(num_edges=0) leaves out, and fills the new rows.
+            self.active_batch.append(
+                admitted,
+                missing_fields="fill",
+                field_defaults=getattr(self, "_bookkeeping_keys", None),
+            )
         self._admission_initialized = False
         # TODO: Reprime when admission hooks change workflow-specific forces.
 
-        if overflow:
+        if n_admitted < n_incoming:
             self._overflow_to_sinks(
-                Batch.from_data_list(overflow, device=incoming_batch.device)
+                incoming_batch.index_select(list(range(n_admitted, n_incoming)))
             )
 
         # Received graphs extend the active-batch layout. Preserve state for
@@ -1068,7 +1131,7 @@ class _CommunicationMixin:
             existing_indices = torch.arange(
                 n_existing, dtype=torch.long, device=self.active_batch.device
             )
-            sync_state(existing_indices, len(admitted), self.active_batch)
+            sync_state(existing_indices, n_admitted, self.active_batch)
 
     def _on_receive(self, incoming: Batch) -> None:
         """Normalize freshly received samples before they join the active batch.
@@ -1242,7 +1305,13 @@ class _CommunicationMixin:
             if self.recv_buffer is not None:
                 self.recv_buffer.zero()
 
-            template = self.recv_buffer or self._recv_template
+            if self._recv_template is not None:
+                # Match the sender's send buffer, which omits edges the same way.
+                self._recv_template = self._transport_template(self._recv_template)
+            # Receive with _recv_template, which matches what the sender transmits.
+            # The receive buffer is built from this stage's own batch, so it can hold
+            # bookkeeping fields the sender never sends.
+            template = self._recv_template
             if self.debug_mode:
                 logger.debug(
                     "[rank {}] posting irecv from rank {} (template={})",

@@ -1435,6 +1435,73 @@ class TestSegmentedLevelStorage:
             torch.tensor([[1.0], [1.0], [2.0], [2.0], [3.0], [3.0]], device=device),
         )
 
+    def test_put_copies_first_selected_segments_up_to_free_pointer_slots(self):
+        """A source with more selected segments than free pointer slots copies the first ones."""
+        src = SegmentedLevelStorage(
+            data={"x": torch.arange(6, dtype=torch.float32).view(6, 1)},
+            segment_lengths=[1, 2, 1, 2],
+            device="cpu",
+            validate=False,
+        )
+        # Pointer length 5 with 1 segment leaves 5 - 1 - 2 = 2 free slots.
+        dest = SegmentedLevelStorage(
+            data={"x": torch.zeros(10, 1)},
+            segment_lengths=[0],
+            batch_ptr_capacity=5,
+            device="cpu",
+            validate=False,
+        )
+        mask = torch.tensor([True, False, True, True])
+        fit = torch.empty(4, dtype=torch.bool)
+        copied = torch.zeros(4, dtype=torch.bool)
+
+        dest.compute_put_per_system_fit_mask(src, mask, fit)
+        dest.put(src, mask, copied_mask=copied)
+
+        assert fit.tolist() == [True, False, True, False]
+        assert copied.tolist() == [True, False, True, False]
+        assert dest.segment_lengths.tolist() == [0, 1, 1]
+        assert dest.batch_ptr.tolist() == [0, 0, 1, 2, 2]
+        torch.testing.assert_close(dest["x"][:2], src["x"][[0, 3]])
+
+    @pytest.mark.parametrize("fieldless", [False, True])
+    def test_put_with_num_selected_matches_counted_put(self, fieldless: bool):
+        """Passing the known selected count gives the same result as reading it back."""
+        mask = torch.tensor([True, False, True, True])
+        results = []
+        for num_selected in (None, 3):
+            src = SegmentedLevelStorage(
+                data=None
+                if fieldless
+                else {"x": torch.arange(6, dtype=torch.float32).view(6, 1)},
+                segment_lengths=[1, 2, 1, 2],
+                device="cpu",
+                validate=False,
+            )
+            dest = SegmentedLevelStorage(
+                data=None if fieldless else {"x": torch.zeros(10, 1)},
+                segment_lengths=[0],
+                batch_ptr_capacity=6,
+                device="cpu",
+                validate=False,
+            )
+            copied = torch.zeros(4, dtype=torch.bool)
+            dest.put(src, mask, copied_mask=copied, num_selected=num_selected)
+            results.append(
+                (
+                    copied.tolist(),
+                    dest.segment_lengths.tolist(),
+                    dest.batch_ptr.tolist(),
+                    None if fieldless else dest["x"].clone(),
+                )
+            )
+
+        counted, known = results
+        assert counted[:3] == known[:3]
+        assert counted[1] == [0, 1, 1, 2]
+        if not fieldless:
+            torch.testing.assert_close(counted[3], known[3])
+
     def test_put_with_copied_mask_out_segmented(self):
         """put with copied_mask provided updates it in place; defrag uses it."""
         device = "cpu"

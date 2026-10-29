@@ -46,6 +46,7 @@ from torch import distributed as dist
 from torch.distributed import ProcessGroup, Work
 
 from nvalchemi.data.atomic_data import AtomicData
+from nvalchemi.data.buffer_kernels import shift_put_segments
 from nvalchemi.data.data import DataMixin
 from nvalchemi.data.group_layout import (
     GroupLayout,
@@ -1792,7 +1793,8 @@ class Batch(DataMixin):
         Notes
         -----
         Graphs are appended after the first :attr:`num_graphs` slots at every
-        level, so per-graph and per-atom data stay aligned.
+        level, so per-graph and per-atom data stay aligned. Each copied graph's
+        ``neighbor_list`` is re-offset to where its atoms land in this batch.
 
         The copy runs as a Warp kernel over both batches' raw pointers, so a
         source on another device is rejected rather than moved: moving it would
@@ -1833,8 +1835,6 @@ class Batch(DataMixin):
             copy_mask = torch.zeros(n, device=device, dtype=torch.bool)
             object.__setattr__(src_batch, "_copied_mask", copy_mask)
 
-        fit_mask = torch.ones(n, device=device, dtype=torch.bool)
-
         # Keep the historical built-in order for communication layouts, then
         # process custom levels in schema order.
         legacy_groups = ("system", "atoms", "edges")
@@ -1858,6 +1858,8 @@ class Batch(DataMixin):
             ):
                 fit_groups.append((group_name, dest_group, src_group))
 
+        fit_mask = torch.ones(n, device=device, dtype=torch.bool)
+
         # Compute every fit before entering the copy phase so a rejected
         # custom group cannot leave built-in data partially written.  Each
         # level derives its free slots from its own fill count, which keeps
@@ -1866,10 +1868,39 @@ class Batch(DataMixin):
             level_fit = torch.empty(n, device=device, dtype=torch.bool)
             group.compute_put_per_system_fit_mask(src_group, mask, level_fit)
             fit_mask.logical_and_(level_fit)
+        # Read one count for all levels: put's only host sync.
+        num_copied = int(fit_mask.sum())
+        num_dest_graphs = self.num_graphs
+        for _, group, src_group in fit_groups:
+            group.put(
+                src_group, fit_mask, copied_mask=fit_mask, num_selected=num_copied
+            )
+
+        # Edge index fields hold batch-wide atom indices but are copied as raw
+        # values, so move each appended graph's edges by its destination atom
+        # start minus its source atom start.
+        levels = {name: (group, src_group) for name, group, src_group in fit_groups}
+        if "atoms" in levels and "edges" in levels:
+            dest_atoms, src_atoms = levels["atoms"]
+            dest_edges, src_edges = levels["edges"]
+            index_keys = _INDEX_KEYS.intersection(src_edges.keys(), dest_edges.keys())
+            if index_keys and num_copied:
+                for key in index_keys:
+                    shift_put_segments(
+                        dest_edges._data[key],
+                        src_edges._batch_ptr,
+                        src_atoms._batch_ptr,
+                        dest_edges._batch_ptr,
+                        dest_atoms._batch_ptr,
+                        fit_mask,
+                        num_dest_graphs,
+                        src_edges._data[key].shape[0],
+                    )
+
         copy_mask.copy_(fit_mask)
 
-        for _, group, src_group in fit_groups:
-            group.put(src_group, copy_mask, copied_mask=copy_mask)
+        if copied_mask is not None and copied_mask is not copy_mask:
+            copied_mask.copy_(copy_mask)
 
     def defrag(
         self,

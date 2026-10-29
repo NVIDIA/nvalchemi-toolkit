@@ -752,32 +752,36 @@ def _checked_segment_metadata(
     *,
     batch_ptr: Tensor | None = None,
     batch_ptr_capacity: int | None = None,
+    check: bool = True,
 ) -> tuple[Tensor, Tensor]:
     """Normalize segmented lengths and build an int32 pointer without wrapping.
 
     All arithmetic is performed in int64 before the in-memory int32 metadata is
     materialized.  A supplied pointer is retained (including its spare capacity)
     after the same range check; otherwise a logical pointer is built from the
-    supplied lengths and optionally expanded to *batch_ptr_capacity*.
+    supplied lengths and optionally expanded to *batch_ptr_capacity*. With
+    ``check=False`` the range check, which reads a flag back to the host, is
+    skipped; use it only for metadata that is already known to be in range.
     """
     lengths64 = to_tensor(segment_lengths, device=device).to(torch.int64)
     if lengths64.ndim != 1:
         raise ValueError("segment_lengths must be one-dimensional")
     cumulative64 = torch.cumsum(lengths64, dim=0, dtype=torch.int64)
-    invalid_lengths = (
-        (lengths64 < 0) | (lengths64 > _INT32_MAX) | (cumulative64 > _INT32_MAX)
-    ).any()
     supplied64: Tensor | None = None
-    invalid_metadata = invalid_lengths
     if batch_ptr is not None:
         supplied64 = to_tensor(batch_ptr, device=device).to(torch.int64)
         if supplied64.ndim != 1:
             raise ValueError("batch_ptr must be one-dimensional")
+    if check:
         invalid_metadata = (
-            invalid_metadata | ((supplied64 < 0) | (supplied64 > _INT32_MAX)).any()
-        )
+            (lengths64 < 0) | (lengths64 > _INT32_MAX) | (cumulative64 > _INT32_MAX)
+        ).any()
+        if supplied64 is not None:
+            invalid_metadata = (
+                invalid_metadata | ((supplied64 < 0) | (supplied64 > _INT32_MAX)).any()
+            )
 
-    if bool(invalid_metadata):
+    if check and bool(invalid_metadata):
         if bool((lengths64 < 0).any()):
             raise ValueError(f"Segment lengths cannot be negative: {lengths64}")
         if bool((lengths64 > _INT32_MAX).any()):
@@ -1556,6 +1560,7 @@ class UniformLevelStorage(BaseLevelStorage):
         mask: Tensor,
         *,
         copied_mask: Tensor | None = None,
+        num_selected: int | None = None,
     ) -> None:
         """Put rows where mask[i] is True from src into this storage (buffer).
 
@@ -1578,6 +1583,9 @@ class UniformLevelStorage(BaseLevelStorage):
             (num_systems,) bool; if provided, modified in place with which
             rows were actually copied. If None, stored as ``_copied_mask`` for
             use by :meth:`defrag`.
+        num_selected : int, optional
+            Number of True entries in ``mask``. Supply only when all selected
+            rows are known to fit. Avoids a host sync to count copied rows.
         """
         if self._data.is_empty() or src._data.is_empty():
             raise ValueError("put requires non-empty source and dest")
@@ -1624,7 +1632,7 @@ class UniformLevelStorage(BaseLevelStorage):
                 field_dest_mask,
                 field_copied_mask,
             )
-        num_copied = out_mask.sum().item()
+        num_copied = num_selected if num_selected is not None else out_mask.sum().item()
         if num_copied > 0 and getattr(self, "_num_kept", None) is not None:
             object.__setattr__(self, "_num_kept", self._num_kept + num_copied)
 
@@ -1901,10 +1909,13 @@ class SegmentedLevelStorage(BaseLevelStorage):
     @torch.compiler.disable
     def _lazy_init_batch_ptr(self) -> None:
         if self._batch_ptr is None:
+            # segment_lengths were range-checked when set, so building the
+            # pointer needs no second, host-synchronizing check.
             self.segment_lengths, self._batch_ptr = _checked_segment_metadata(
                 self.segment_lengths,
                 self.device,
                 batch_ptr_capacity=self._batch_ptr_capacity,
+                check=False,
             )
             self._batch_ptr_capacity = (
                 self._batch_ptr.shape[0]
@@ -2283,11 +2294,12 @@ class SegmentedLevelStorage(BaseLevelStorage):
 
         Notes
         -----
-        No data is copied. If this storage's batch_ptr has insufficient capacity for
-        new segment boundaries, fit_mask is zeroed. Use with put after combining
-        (e.g. logical_and) with other levels' fit masks. Fieldless source and
-        destination groups check both pointer capacity and whether cumulative
-        cardinality remains within the signed int32 range.
+        No data is copied. Each copied segment needs a free slot in this
+        storage's batch_ptr, so only the first selected segments up to the free
+        slot count can fit. Use with put after combining (e.g. logical_and) with
+        other levels' fit masks. Fieldless source and destination groups check
+        pointer capacity and whether cumulative cardinality remains within the
+        signed int32 range.
         """
         n_seg = len(source)
         if source_mask.shape[0] != n_seg:
@@ -2306,30 +2318,12 @@ class SegmentedLevelStorage(BaseLevelStorage):
                 "Segmented put requires both source and destination to be "
                 "fieldless or both to contain payload data"
             )
-        if source_fieldless:
-            source._lazy_init_batch_ptr()
-            self._lazy_init_batch_ptr()
-            min_batch_ptr_size = num_dest_segments + n_seg + 2
-            if self._batch_ptr.shape[0] < min_batch_ptr_size:
-                fit_mask.zero_()
-                return
-            source_lengths = (
-                source._batch_ptr[1 : n_seg + 1] - source._batch_ptr[:n_seg]
-            ).to(torch.int64)
-            masked_lengths = torch.where(
-                source_mask,
-                source_lengths,
-                torch.zeros_like(source_lengths),
-            )
-            ends = self._batch_ptr[num_dest_segments].to(torch.int64) + torch.cumsum(
-                masked_lengths, dim=0, dtype=torch.int64
-            )
-            fit_mask.copy_(source_mask & (ends >= 0) & (ends <= _INT32_MAX))
-            return
         source._lazy_init_batch_ptr()
         self._lazy_init_batch_ptr()
-        min_batch_ptr_size = num_dest_segments + n_seg + 2
-        if self._batch_ptr.shape[0] < min_batch_ptr_size:
+        # The -2 reserves the current end boundary and the duplicate final end
+        # written by _copy_masked_segmented_kernel.
+        free_slots = self._batch_ptr.shape[0] - num_dest_segments - 2
+        if free_slots <= 0:
             fit_mask.zero_()
             return
         source_lengths = (
@@ -2343,8 +2337,13 @@ class SegmentedLevelStorage(BaseLevelStorage):
         ends = self._batch_ptr[num_dest_segments].to(torch.int64) + torch.cumsum(
             masked_lengths, dim=0, dtype=torch.int64
         )
-        dest_capacity = min(self._data.shape[0], _INT32_MAX)
-        fit_mask.copy_(source_mask & (ends >= 0) & (ends <= dest_capacity))
+        dest_capacity = (
+            _INT32_MAX if source_fieldless else min(self._data.shape[0], _INT32_MAX)
+        )
+        within_slots = torch.cumsum(source_mask, dim=0) <= free_slots
+        fit_mask.copy_(
+            source_mask & within_slots & (ends >= 0) & (ends <= dest_capacity)
+        )
 
     def put(
         self,
@@ -2352,14 +2351,17 @@ class SegmentedLevelStorage(BaseLevelStorage):
         mask: Tensor,
         *,
         copied_mask: Tensor | None = None,
+        num_selected: int | None = None,
     ) -> None:
         """Put segments where mask[i] is True from src into this storage (buffer).
 
         New segment boundaries are appended to this storage's batch_ptr.
         Supported payload dtypes are bool, float32, float64, int32, and int64;
         source and destination dtypes must match. Fieldless source and
-        destination groups copy segment metadata only. If *copied_mask* is
-        provided, it is updated in place for each copied segment.
+        destination groups copy segment metadata only. Only the first selected
+        segments that fit the data capacity and the free batch_ptr slots are
+        copied. If *copied_mask* is provided, it is updated in place for each
+        copied segment.
 
         Parameters
         ----------
@@ -2371,11 +2373,17 @@ class SegmentedLevelStorage(BaseLevelStorage):
             (num_segments,) bool; if provided, modified in place with which
             segments were actually copied. If None, stored on *src* as
             ``_copied_mask`` for use by :meth:`defrag`.
+        num_selected : int, optional
+            Number of True entries in *mask* when every selected segment is
+            known to fit, as after :meth:`compute_put_per_system_fit_mask`.
+            Skips the int32 range check and reading the copied count back
+            from the device.
 
         Raises
         ------
         OverflowError
-            If the resulting segmented pointer exceeds the signed int32 range.
+            If *num_selected* is not given and the resulting segmented pointer
+            would exceed the signed int32 range.
         """
         source_fieldless = src._data.is_empty()
         dest_fieldless = self._data.is_empty()
@@ -2390,14 +2398,30 @@ class SegmentedLevelStorage(BaseLevelStorage):
                 raise ValueError(f"mask shape {mask.shape[0]} != num segments {n_seg}")
             mask = mask.to(device=self.device, dtype=torch.bool)
             num_dest_segments = len(self)
+            src._lazy_init_batch_ptr()
+            self._lazy_init_batch_ptr()
+            free_slots = self._batch_ptr.shape[0] - num_dest_segments - 2
             source_lengths = src.segment_lengths[:n_seg].to(self.device)
-            selected_lengths = source_lengths[mask]
+            if num_selected is None:
+                # Update mask to allow partial copies up to the free pointer slots.
+                mask = mask & (torch.cumsum(mask, dim=0) <= free_slots)
+                selected_lengths = source_lengths[mask]
+            else:
+                # Gather the selected lengths into a known-size tensor; boolean
+                # indexing would read the count back from the device.
+                rank = torch.cumsum(mask, dim=0) - 1
+                selected_lengths_buffer = source_lengths.new_zeros(num_selected + 1)
+                selected_lengths_buffer.scatter_(
+                    0, torch.where(mask, rank, num_selected), source_lengths
+                )
+                selected_lengths = selected_lengths_buffer[:num_selected]
             old_lengths = self.segment_lengths[:num_dest_segments]
             combined_lengths = torch.cat([old_lengths, selected_lengths])
             normalized_metadata = _checked_segment_metadata(
                 combined_lengths,
                 self.device,
                 batch_ptr_capacity=self._batch_ptr_capacity,
+                check=num_selected is None,
             )
             if copied_mask is not None:
                 if copied_mask.shape[0] != n_seg:
@@ -2408,10 +2432,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
             else:
                 out_mask = torch.zeros(n_seg, device=self.device, dtype=torch.bool)
                 object.__setattr__(src, "_copied_mask", out_mask)
-            src._lazy_init_batch_ptr()
-            self._lazy_init_batch_ptr()
-            min_batch_ptr_size = num_dest_segments + n_seg + 2
-            if self._batch_ptr.shape[0] < min_batch_ptr_size:
+            if free_slots <= 0:
                 out_mask.zero_()
                 return
             self._replace_segment_lengths(
@@ -2431,12 +2452,13 @@ class SegmentedLevelStorage(BaseLevelStorage):
             raise ValueError(f"mask shape {mask.shape[0]} != num segments {n_seg}")
         mask = mask.to(device=self.device, dtype=torch.bool)
         num_dest_segments = len(self)
-        source_lengths = src.segment_lengths[:n_seg].to(self.device)
-        selected_lengths = source_lengths[mask]
-        old_lengths = self.segment_lengths[:num_dest_segments]
-        _checked_segment_metadata(
-            torch.cat([old_lengths, selected_lengths]), self.device
-        )
+        if num_selected is None:
+            source_lengths = src.segment_lengths[:n_seg].to(self.device)
+            selected_lengths = source_lengths[mask]
+            old_lengths = self.segment_lengths[:num_dest_segments]
+            _checked_segment_metadata(
+                torch.cat([old_lengths, selected_lengths]), self.device
+            )
         if copied_mask is not None:
             if copied_mask.shape[0] != n_seg:
                 raise ValueError(f"copied_mask shape {copied_mask.shape[0]} != {n_seg}")
@@ -2446,14 +2468,18 @@ class SegmentedLevelStorage(BaseLevelStorage):
             object.__setattr__(src, "_copied_mask", out_mask)
         src._lazy_init_batch_ptr()
         self._lazy_init_batch_ptr()
-        min_batch_ptr_size = num_dest_segments + n_seg + 2
         dest_batch_ptr = self._batch_ptr
-        if dest_batch_ptr.shape[0] < min_batch_ptr_size:
+        # Require room for at least one new segment.
+        if dest_batch_ptr.shape[0] <= num_dest_segments + 2:
             return
+        # A buffer source keeps spare pointer slots past its n_seg segments.
+        # The kernels size their launch from the pointer they are given, so
+        # pass only the occupied boundaries to match the n_seg-long mask.
+        src_batch_ptr = src._batch_ptr[: n_seg + 1]
         first_key, *remaining_keys = fields
         new_num_dest = put_masked_segmented(
             src._data[first_key],
-            src._batch_ptr,
+            src_batch_ptr,
             mask,
             self._data[first_key],
             dest_batch_ptr,
@@ -2465,7 +2491,7 @@ class SegmentedLevelStorage(BaseLevelStorage):
             dest_t = self._data[key]
             put_masked_segmented(
                 src_t,
-                src._batch_ptr,
+                src_batch_ptr,
                 mask,
                 dest_t,
                 dest_batch_ptr,
@@ -2473,10 +2499,18 @@ class SegmentedLevelStorage(BaseLevelStorage):
                 out_mask,
             )
         if new_num_dest is not None:
-            new_n = int(new_num_dest.item())
+            if num_selected is None:
+                new_n = int(new_num_dest.item())
+            else:
+                new_n = num_dest_segments + num_selected
+            # Pad unused slots with the final boundary and reuse the pointer to avoid
+            # rebuilding it and another host sync.
+            dest_batch_ptr[new_n + 1 :] = dest_batch_ptr[new_n]
+            lengths = dest_batch_ptr[1 : new_n + 1] - dest_batch_ptr[:new_n]
             self._replace_segment_lengths(
-                dest_batch_ptr[1 : new_n + 1] - dest_batch_ptr[:new_n],
+                lengths,
                 preserve_pointer=True,
+                normalized_metadata=(lengths, dest_batch_ptr),
             )
 
     def defrag(

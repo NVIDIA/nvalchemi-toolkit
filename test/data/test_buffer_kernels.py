@@ -26,6 +26,7 @@ from nvalchemi.data.buffer_kernels import (
     defrag_segmented,
     put_masked_per_system,
     put_masked_segmented,
+    shift_put_segments,
 )
 
 # Dtypes supported by the buffer kernels (overloaded).
@@ -230,6 +231,48 @@ def test_segmented_copy_enough_room(device: str, dtype: torch.dtype):
     assert source_data_copied[2].item() is True
     torch.testing.assert_close(dest[0:2], source[0:2])
     torch.testing.assert_close(dest[2:3], source[5:6])
+
+
+@pytest.mark.parametrize("dtype", SUPPORTED_DTYPES)
+def test_segmented_copy_stops_at_free_pointer_slots(device: str, dtype: torch.dtype):
+    """With fewer free pointer slots than masked segments, the first ones are copied."""
+    # 3 segments: lengths 2, 3, 1
+    batch_ptr = torch.tensor([0, 2, 5, 6], device=device, dtype=torch.int32)
+    source = _make_source_data((6, 2), device, dtype)
+    source_data_copied = torch.zeros(3, dtype=torch.bool, device=device)
+    dest = torch.zeros(10, 2, device=device, dtype=dtype)
+    # Room for 2 new boundaries: 0 existing segments + 2 + 2 reserved entries.
+    dest_batch_ptr = torch.zeros(4, device=device, dtype=torch.int32)
+
+    new_num_dest = put_masked_segmented(
+        source,
+        batch_ptr,
+        torch.ones(3, dtype=torch.bool, device=device),
+        dest,
+        dest_batch_ptr,
+        0,
+        source_data_copied,
+    )
+
+    assert new_num_dest[0].item() == 2
+    assert dest_batch_ptr[:3].tolist() == [0, 2, 5]
+    assert source_data_copied.tolist() == [True, True, False]
+    torch.testing.assert_close(dest[:5], source[:5])
+    assert not dest[5:].any()
+
+
+def test_segmented_copy_rejects_pointer_without_end_slot(device: str):
+    """The destination pointer must at least hold its current end boundary."""
+    with pytest.raises(ValueError, match="num_dest_segments \\+ 2"):
+        put_masked_segmented(
+            torch.zeros(1, 1, device=device),
+            torch.tensor([0, 1], device=device, dtype=torch.int32),
+            torch.ones(1, dtype=torch.bool, device=device),
+            torch.zeros(1, 1, device=device),
+            torch.zeros(1, device=device, dtype=torch.int32),
+            0,
+            torch.zeros(1, dtype=torch.bool, device=device),
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -533,3 +576,88 @@ def test_defrag_segmented_three_segments_keep_middle(device: str, dtype: torch.d
     # Kept segment 1 was source[2:5] = [[2], [3], [4]]
     expected = torch.tensor([[2], [3], [4]], device=device, dtype=dtype)
     torch.testing.assert_close(source[:3], expected)
+
+
+# -----------------------------------------------------------------------------
+# Segmented: shift index values of put segments
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+@pytest.mark.parametrize("num_dest_segments", [0, 3])
+def test_shift_put_segments_matches_per_segment_offsets(
+    device: str, dtype: torch.dtype, num_dest_segments: int
+):
+    """Each copied segment moves by its dest-minus-source offset; other rows stay."""
+    generator = torch.Generator().manual_seed(0)
+    num_systems = 7
+    copied = torch.tensor([True, False, True, True, False, False, True])
+    atom_lengths = torch.randint(
+        1, 6, (num_dest_segments + num_systems,), generator=generator
+    )
+    edge_lengths = torch.randint(
+        0, 4, (num_dest_segments + num_systems,), generator=generator
+    )
+    # Zero-length segments next to copied ones exercise repeated boundaries.
+    edge_lengths[num_dest_segments + 1] = 0
+    edge_lengths[num_dest_segments + 2] = 0
+
+    def pointer(lengths: torch.Tensor, capacity: int) -> torch.Tensor:
+        """Return an int32 pointer padded to capacity with its final value."""
+        ptr = torch.zeros(capacity, dtype=torch.int32)
+        ptr[1 : lengths.numel() + 1] = lengths.cumsum(0).to(torch.int32)
+        ptr[lengths.numel() + 1 :] = ptr[lengths.numel()]
+        return ptr
+
+    source_atoms, source_edges = (
+        atom_lengths[num_dest_segments:],
+        edge_lengths[num_dest_segments:],
+    )
+    dest_atoms = torch.cat([atom_lengths[:num_dest_segments], source_atoms[copied]])
+    dest_edges = torch.cat([edge_lengths[:num_dest_segments], source_edges[copied]])
+    source_ptr = pointer(source_edges, num_systems + 1)
+    source_offset_ptr = pointer(source_atoms, num_systems + 1)
+    dest_ptr = pointer(dest_edges, num_dest_segments + num_systems + 2)
+    dest_offset_ptr = pointer(dest_atoms, num_dest_segments + num_systems + 2)
+
+    # Unused source capacity must be ignored by the row launch.
+    num_source_rows = int(source_ptr[-1]) + 5
+    dest = torch.full((int(dest_ptr[-1]) + 4, 2), -777, dtype=dtype)
+    for start, end in zip(dest_ptr[:-1], dest_ptr[1:]):
+        dest[start:end] = torch.randint(0, 100, (int(end - start), 2), dtype=dtype)
+    expected = dest.clone()
+    for rank, i in enumerate(copied.nonzero().flatten().tolist()):
+        g = num_dest_segments + rank
+        expected[dest_ptr[g] : dest_ptr[g + 1]] += int(
+            dest_offset_ptr[g] - source_offset_ptr[i]
+        )
+
+    dest = dest.to(device)
+    shift_put_segments(
+        dest,
+        source_ptr.to(device),
+        source_offset_ptr.to(device),
+        dest_ptr.to(device),
+        dest_offset_ptr.to(device),
+        copied.to(device),
+        num_dest_segments,
+        num_source_rows,
+    )
+
+    torch.testing.assert_close(dest.cpu(), expected, rtol=0, atol=0)
+
+
+def test_shift_put_segments_rejects_float_dest(device: str):
+    """Only integer index fields can be shifted."""
+    ptr = torch.zeros(2, dtype=torch.int32, device=device)
+    with pytest.raises(TypeError, match="int32 or int64"):
+        shift_put_segments(
+            torch.zeros(1, 2, device=device),
+            ptr,
+            ptr,
+            ptr,
+            ptr,
+            torch.ones(1, dtype=torch.bool, device=device),
+            0,
+            1,
+        )
