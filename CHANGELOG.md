@@ -569,6 +569,10 @@
 
 ### Fixed
 
+- `MLIPSpec.with_adapters`, `with_compile` and `merge` no longer reset
+  `gp_replicate_geometry` to its default, so a spec that runs the wrapper on the
+  replicated geometry keeps doing so. `merge` raises `ValueError` when the two
+  specs disagree on it.
 - `Batch.put` now copies selected graphs from sources larger than the buffer's
   remaining graph capacity and marks the indices of copied source graphs in
   `copied_mask`. A source that is itself a pre-allocated buffer no longer
