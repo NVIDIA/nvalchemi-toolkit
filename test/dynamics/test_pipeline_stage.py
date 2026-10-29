@@ -1331,6 +1331,39 @@ class TestEdgelessBuffers:
         assert stage.active_batch.num_graphs == 4
         assert stage.active_batch.device.type == "cuda"
 
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+    def test_buffer_to_batch_cross_device_arrivals_are_independent(self) -> None:
+        """Arrivals moved to another device never share the caller's storage."""
+        stage = _CommunicationMixin(active_batch=None, max_batch_size=10)
+        stage.device_type = "cuda"
+        incoming = _make_batch(num_graphs=2)
+        expected = incoming.positions.clone()
+
+        stage._buffer_to_batch(incoming)
+        stage.active_batch.positions.zero_()
+
+        assert stage.active_batch.device.type == "cuda"
+        torch.testing.assert_close(incoming.positions, expected)
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+    def test_buffer_to_batch_trims_padded_cross_device_buffer(self) -> None:
+        """A preallocated buffer on another device joins without its padding."""
+        stage = _CommunicationMixin(active_batch=None, max_batch_size=10)
+        stage.device_type = "cuda"
+        incoming = _make_batch(num_graphs=2)
+        buffer = Batch.empty(
+            num_systems=4, num_nodes=20, num_edges=0, template=incoming
+        )
+        buffer.put(incoming, mask=torch.ones(2, dtype=torch.bool))
+
+        stage._buffer_to_batch(buffer)
+
+        assert stage.active_batch.num_graphs == 2
+        assert stage.active_batch.num_nodes == incoming.num_nodes
+        torch.testing.assert_close(
+            stage.active_batch.positions.cpu(), incoming.positions
+        )
+
 
 # ---------------------------------------------------------------------------
 # TestSyncDoneFlags — Distributed Done Flag Synchronization
@@ -2509,7 +2542,7 @@ class TestOverflowDrainBack:
         assert len(sink) == 0  # Sink should be empty
 
     def test_drain_does_not_overfill(self) -> None:
-        """Verify drain respects max_batch_size and overflows remainder."""
+        """Verify drain respects max_batch_size and leaves the remainder."""
         # Active batch with 8 graphs, room for 2 more
         batch = _make_batch(num_graphs=8)
         sink = HostMemory(capacity=50)
@@ -2529,6 +2562,27 @@ class TestOverflowDrainBack:
 
         assert stage.active_batch_size == 10  # Full
         assert len(sink) == 3  # 5 - 2 = 3 remaining
+
+    def test_drain_leaves_samples_that_do_not_fit_in_place(self) -> None:
+        """Only admitted samples leave the sink, so the queue is not rewritten."""
+        batch = _make_batch_with_system(num_graphs=5)
+        batch["system_id"] = torch.arange(5).view(-1, 1)
+        sink = HostMemory(capacity=50)
+        sink.write(batch.index_select([0, 1, 2]))
+        sink.write(batch.index_select([3, 4]))
+        stage = _CommunicationMixin(
+            active_batch=None, max_batch_size=2, overflow_sinks=[sink]
+        )
+
+        with patch.object(sink, "write", wraps=sink.write) as write:
+            stage._drain_sinks_to_batch()
+            assert stage.active_batch.system_id.view(-1).tolist() == [0, 1]
+            stage.active_batch = None
+            stage._drain_sinks_to_batch()
+
+        write.assert_not_called()
+        assert stage.active_batch.system_id.view(-1).tolist() == [2, 3]
+        assert sink.read().system_id.view(-1).tolist() == [4]
 
     def test_drain_skips_empty_sinks(self) -> None:
         """Verify drain handles empty sinks without error."""
@@ -2594,7 +2648,7 @@ class TestOverflowDrainBack:
         stage._drain_sinks_to_batch()
 
         assert stage.active_batch_size == 10  # Full
-        assert len(sink1) == 1  # 3 - 2 = 1 remaining (overflowed back)
+        assert len(sink1) == 1  # 3 - 2 = 1 remaining
         # sink2 should not be touched since batch is full
         assert len(sink2) == 3
 

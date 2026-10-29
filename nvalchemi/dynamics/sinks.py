@@ -75,8 +75,8 @@ class DataSink(ABC):
         Store a batch of data.
     read()
         Retrieve all stored data as a Batch.
-    drain()
-        Read all stored data and clear the sink.
+    drain(max_samples=None)
+        Remove and return the oldest samples, or all of them.
     zero()
         Clear all stored data.
     __len__()
@@ -175,26 +175,45 @@ class DataSink(ABC):
         """
         return len(self) >= self.capacity
 
-    def drain(self) -> Batch:
+    def drain(self, max_samples: int | None = None) -> Batch:
         """
-        Read all stored samples and clear the sink.
+        Remove and return the oldest stored samples.
 
-        This is equivalent to calling :meth:`read` followed by
-        :meth:`zero`, but subclasses may override for a more efficient
-        atomic operation.
+        Without *max_samples* this is equivalent to calling :meth:`read`
+        followed by :meth:`zero`. With *max_samples*, only the leading
+        samples are returned and the rest stay stored in order. This default
+        implementation reads everything and writes the rest back; subclasses
+        may override for a more efficient operation.
+
+        Parameters
+        ----------
+        max_samples : int | None, optional
+            Maximum number of samples to remove: complete groups for grouped
+            data, otherwise graphs. ``None`` removes everything. Default is
+            ``None``.
 
         Returns
         -------
         Batch
-            All samples that were stored in the sink.
+            The removed samples.
 
         Raises
         ------
         RuntimeError
             If the sink is empty.
+        ValueError
+            If *max_samples* is less than 1.
         """
+        if max_samples is not None and max_samples < 1:
+            raise ValueError(f"max_samples must be at least 1, got {max_samples}")
         batch = self.read()
         self.zero()
+        if max_samples is None:
+            return batch
+        num_taken = _leading_graphs(batch, max_samples)
+        if num_taken < batch.num_graphs:
+            self.write(batch.index_select(slice(num_taken, batch.num_graphs)))
+            batch = batch.index_select(slice(0, num_taken))
         return batch
 
     @property
@@ -569,6 +588,34 @@ def _select_for_write(batch: Batch, mask: torch.Tensor | None) -> Batch | None:
     return batch.index_select(torch.nonzero(mask, as_tuple=True)[0])
 
 
+def _leading_graphs(batch: Batch, max_samples: int, start: int = 0) -> int:
+    """Count the graphs in the first *max_samples* samples from graph *start*.
+
+    Parameters
+    ----------
+    batch : Batch
+        Stored samples.
+    max_samples : int
+        Number of samples: complete groups for grouped batches, otherwise
+        graphs.
+    start : int, optional
+        Graph index to count from. For grouped batches it must begin a
+        group. Default is 0.
+
+    Returns
+    -------
+    int
+        Number of graphs in those samples, at most
+        ``batch.num_graphs - start``.
+    """
+    if "group_idx" in batch:
+        group_ptr = batch.group_layout.group_ptr
+        first = int(torch.searchsorted(group_ptr, start))
+        end = min(first + max_samples, group_ptr.numel() - 1)
+        return int(group_ptr[end]) - start
+    return min(max_samples, batch.num_graphs - start)
+
+
 class HostMemory(DataSink):
     """
     CPU-resident buffer for storing batched atomic data.
@@ -613,6 +660,8 @@ class HostMemory(DataSink):
         self._batches: list[Batch] = []
         self._num_graphs = 0
         self._device = torch.device("cpu")
+        # Number of graphs already drained from the first stored batch.
+        self._offset = 0
 
     def write(self, batch: Batch, mask: torch.Tensor | None = None) -> None:
         """
@@ -662,6 +711,44 @@ class HostMemory(DataSink):
             self._batches.append(selected._without_padding().to(self._device))
             self._num_graphs += num_graphs
 
+    @staticmethod
+    def _merge(batches: list[Batch]) -> Batch:
+        """Concatenate stored writes after checking they carry the same fields.
+
+        Parameters
+        ----------
+        batches : list[Batch]
+            Nonempty list of stored writes, oldest first.
+
+        Returns
+        -------
+        Batch
+            The only write, or a new batch combining them.
+
+        Raises
+        ------
+        ValueError
+            If a later write lacks a field that the first write stored.
+        """
+        if len(batches) == 1:
+            return batches[0]
+        # The first write sets the fields. Check before merging because
+        # Batch.append would zero-fill or drop a missing field.
+        first_keys = batches[0].level_keys
+        start = batches[0].num_graphs
+        for stored in batches[1:]:
+            stored_keys = stored.level_keys
+            for level, keys in first_keys.items():
+                missing = sorted(keys - stored_keys.get(level, set()))
+                if missing:
+                    samples = list(range(start, start + stored.num_graphs))
+                    raise ValueError(
+                        f"Field '{missing[0]}' in level '{level}' is missing "
+                        f"from samples {samples}"
+                    )
+            start += stored.num_graphs
+        return Batch.concatenate(batches, assume_compact=True)
+
     def read(self) -> Batch:
         """
         Retrieve all stored data as a CPU-resident Batch.
@@ -680,29 +767,79 @@ class HostMemory(DataSink):
         """
         if not self._batches:
             raise RuntimeError("Cannot read from empty buffer.")
-        if len(self._batches) > 1:
-            # The first write sets the fields. Check before merging because
-            # Batch.append would zero-fill or drop a missing field.
-            first_keys = self._batches[0].level_keys
-            start = self._batches[0].num_graphs
-            for stored in self._batches[1:]:
-                stored_keys = stored.level_keys
-                for level, keys in first_keys.items():
-                    missing = sorted(keys - stored_keys.get(level, set()))
-                    if missing:
-                        samples = list(range(start, start + stored.num_graphs))
-                        raise ValueError(
-                            f"Field '{missing[0]}' in level '{level}' is missing "
-                            f"from samples {samples}"
-                        )
-                start += stored.num_graphs
-            # Concatenate each field once and cache only after merging succeeds.
-            self._batches = [Batch.concatenate(self._batches, assume_compact=True)]
+        if self._offset:
+            first = self._batches[0]
+            self._batches[0] = first.index_select(slice(self._offset, first.num_graphs))
+            self._offset = 0
+        # Cache the merged batch so repeated reads concatenate only once.
+        self._batches = [self._merge(self._batches)]
         return self._batches[0].clone()
+
+    def drain(self, max_samples: int | None = None) -> Batch:
+        """
+        Remove and return the oldest stored samples on CPU.
+
+        Writes are taken oldest first. A write that is only partly taken
+        keeps its remaining samples in place without copying them, so the
+        cost follows the samples removed rather than everything stored.
+        Removed samples no longer share storage with the sink.
+
+        Parameters
+        ----------
+        max_samples : int | None, optional
+            Maximum number of samples to remove: complete groups for grouped
+            data, otherwise graphs. ``None`` removes everything. Default is
+            ``None``.
+
+        Returns
+        -------
+        Batch
+            The removed samples on CPU.
+
+        Raises
+        ------
+        RuntimeError
+            If the buffer is empty.
+        ValueError
+            If *max_samples* is less than 1, or a later write lacks a field
+            that the first write stored. The sink is unchanged on error.
+        """
+        if max_samples is not None and max_samples < 1:
+            raise ValueError(f"max_samples must be at least 1, got {max_samples}")
+        if not self._batches:
+            raise RuntimeError("Cannot read from empty buffer.")
+        # Every sample holds at least one graph, so this bound takes all.
+        remaining = self._num_graphs if max_samples is None else max_samples
+        taken: list[Batch] = []
+        offset = 0
+        for stored in self._batches:
+            start = self._offset if not taken else 0
+            end = start + _leading_graphs(stored, remaining, start)
+            part = (
+                stored
+                if start == 0 and end == stored.num_graphs
+                else stored.index_select(slice(start, end))
+            )
+            taken.append(part)
+            if end < stored.num_graphs:
+                offset = end
+                break
+            remaining -= (
+                part.group_layout.num_groups if "group_idx" in part else part.num_graphs
+            )
+            if remaining == 0:
+                break
+        batch = self._merge(taken)
+        # Remove fully drained batches and keep any partly drained batch.
+        del self._batches[: len(taken) - (offset > 0)]
+        self._offset = offset
+        self._num_graphs -= batch.num_graphs
+        return batch
 
     def zero(self) -> None:
         """Clear all stored data and reset the buffer."""
         self._batches.clear()
+        self._offset = 0
         self._num_graphs = 0
 
     def __len__(self) -> int:

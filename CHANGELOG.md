@@ -47,6 +47,9 @@
   by default. Bounded host/GPU overflow storage raises when full rather than
   making upstream stages wait. Pipeline setup warns about result `sinks` on
   stages with a downstream rank.
+- `DataSink.drain(max_samples=...)` limits refills to the oldest samples that
+  fit, and `HostMemory` leaves the remaining samples in place without copying
+  or rewriting them.
 - `Batch.append()` discards unused buffer rows. Pass `assume_compact=True` to
   skip this for compact inputs. `HostMemory.write()` trims padding before
   copying to CPU.

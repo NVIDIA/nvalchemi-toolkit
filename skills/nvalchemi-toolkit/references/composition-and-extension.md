@@ -241,6 +241,10 @@ the active batch, and drains `overflow_sinks` (never `sinks`).
 | `_write_to_sinks(batch)` | Write finished samples to the first result sink with room for all of them |
 | `_drain_sinks_to_batch()` | Pull from `overflow_sinks` back into active batch when room available |
 
+`DataSink.drain(max_samples=None)` reads and clears the sink. With a limit,
+it removes the oldest `max_samples` samples (complete groups when grouped,
+otherwise graphs) and keeps the rest.
+
 ## Domain decomposition across GPUs
 
 - `DomainParallel(dynamics=integrator, config=DomainConfig(cutoff=...,
