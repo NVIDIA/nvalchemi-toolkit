@@ -569,6 +569,11 @@
 
 ### Fixed
 
+- `DomainParallel.partition` now closes the model from a previous `partition`
+  before building the new one. The old model's adapter restore could otherwise
+  run after the new model had installed its own and put the stock functions back
+  over them, so a compiled run on a second system silently lost its decomposition
+  adapters.
 - `Batch.put` now copies selected graphs from sources larger than the buffer's
   remaining graph capacity and marks the indices of copied source graphs in
   `copied_mask`. A source that is itself a pre-allocated buffer no longer
