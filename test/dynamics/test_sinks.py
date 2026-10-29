@@ -619,6 +619,45 @@ class TestHostMemory:
         with pytest.raises(ValueError, match="mask length"):
             buffer.write(batch, mask=mask)
 
+    @staticmethod
+    def _batch_with_neighbors(n_atoms: int, width: int) -> Batch:
+        data = AtomicData(
+            positions=torch.rand(n_atoms, 3),
+            atomic_numbers=torch.ones(n_atoms, dtype=torch.long),
+            cell=torch.eye(3).unsqueeze(0) * 10.0,
+            pbc=torch.ones(1, 3, dtype=torch.bool),
+        )
+        data.add_node_property(
+            "neighbor_matrix", torch.full((n_atoms, width), n_atoms, dtype=torch.int32)
+        )
+        data.add_node_property("num_neighbors", torch.zeros(n_atoms, dtype=torch.int32))
+        return Batch.from_data_list([data])
+
+    @pytest.mark.parametrize("masked", [False, True], ids=["all", "masked"])
+    def test_systems_with_different_neighbor_widths_read_back(
+        self, masked: bool
+    ) -> None:
+        """Neighbor arrays are not stored, so differing widths cannot break read()."""
+        buffer = HostMemory(capacity=10)
+        first = self._batch_with_neighbors(4, width=5)
+        second = self._batch_with_neighbors(6, width=9)
+        mask = torch.ones(1, dtype=torch.bool) if masked else None
+        buffer.write(first, mask=mask)
+        buffer.write(second, mask=mask)
+
+        out = buffer.read()
+
+        assert out.num_graphs == 2
+        assert out.positions.shape[0] == 10
+        assert getattr(out, "neighbor_matrix", None) is None
+        assert getattr(out, "num_neighbors", None) is None
+
+    def test_write_leaves_the_callers_neighbor_arrays_alone(self) -> None:
+        batch = self._batch_with_neighbors(4, width=5)
+        HostMemory(capacity=10).write(batch)
+        assert tuple(batch.neighbor_matrix.shape) == (4, 5)
+        assert batch.num_neighbors is not None
+
 
 class TestZarrData:
     """Test suite for ZarrData implementation."""

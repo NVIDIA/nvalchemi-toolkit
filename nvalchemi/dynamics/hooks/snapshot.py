@@ -29,6 +29,7 @@ import torch
 
 from nvalchemi.data import Batch
 from nvalchemi.dynamics.base import DynamicsStage
+from nvalchemi.dynamics.sinks import NEIGHBOR_KEYS
 from nvalchemi.hooks._context import DynamicsContext
 
 if TYPE_CHECKING:
@@ -173,15 +174,7 @@ class ConvergedSnapshotHook:
     # Neighbor tensors are ephemeral (rebuilt by NeighborListHook each step)
     # and their K-dimension can change between rebuilds due to adaptive
     # sizing, causing shape mismatches when the sink concatenates snapshots.
-    _NEIGHBOR_KEYS = frozenset(
-        {
-            "neighbor_matrix",
-            "num_neighbors",
-            "neighbor_matrix_shifts",
-            "neighbor_list",
-            "neighbor_list_shifts",
-        }
-    )
+    _NEIGHBOR_KEYS = NEIGHBOR_KEYS
 
     @torch.compiler.disable
     def _write_converged(self, batch: Batch, mask: torch.Tensor | None) -> None:
