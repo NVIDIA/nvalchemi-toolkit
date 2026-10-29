@@ -476,11 +476,13 @@ def _set_new_num_dest_segmented_kernel(
     fit_scan: wp.array(dtype=wp.int32),
     fits: wp.array(dtype=wp.int32),
     num_systems: wp.int32,
+    max_new_segments: wp.int32,
     new_num_dest: wp.array(dtype=wp.int32),
 ) -> None:
-    """new_num_dest[0] = num_dest_segments + fit_scan[num_systems-1] + fits[num_systems-1]. Launch: dim=1."""
+    """new_num_dest[0] = num_dest_segments + min(fitting segments, max_new_segments). Launch: dim=1."""
     n = num_systems
-    new_num_dest[0] = num_dest_segments + fit_scan[n - 1] + fits[n - 1]
+    num_fit = fit_scan[n - 1] + fits[n - 1]
+    new_num_dest[0] = num_dest_segments + wp.min(num_fit, max_new_segments)
 
 
 @wp.kernel
@@ -669,11 +671,15 @@ def _copy_masked_segmented_kernel(
     new_num_dest: wp.array(dtype=wp.int32),
     fits: wp.array(dtype=wp.int32),
 ) -> None:
-    """Copy only masked segments that fit; parallel over num_systems. Skip if not fits[i]."""
+    """Copy only masked segments that fit; parallel over num_systems. Skip if not fits[i].
+
+    Segments past the ``n_fit`` boundary slots left in ``dest_batch_ptr`` are
+    also skipped, so the first fitting segments are copied.
+    """
     i = wp.tid()
     base = dest_batch_ptr[num_dest_segments]
     n_fit = new_num_dest[0] - num_dest_segments
-    if not (source_mask[i] and fits[i]):
+    if not (source_mask[i] and fits[i]) or fit_scan[i] >= n_fit:
         return
     start = source_batch_ptr[i]
     end = source_batch_ptr[i + 1]
@@ -1437,6 +1443,9 @@ def put_masked_segmented_impl(
     wp_fit_scan = wp.from_torch(fit_scan, dtype=wp.int32)
     wp.utils.array_scan(wp_fits, wp_fit_scan, inclusive=False)
     wp_new_num_dest = wp.from_torch(new_num_dest, dtype=wp.int32)
+    # Pointer slots left for new boundaries; the slot after the last one holds
+    # the duplicated final end written by the copy kernel.
+    max_new_segments = dest_batch_ptr.shape[0] - num_dest_segments - 2
     wp.launch(
         _set_new_num_dest_segmented_kernel,
         dim=1,
@@ -1445,6 +1454,7 @@ def put_masked_segmented_impl(
             wp_fit_scan,
             wp_fits,
             num_systems,
+            max_new_segments,
             wp_new_num_dest,
         ],
         device=device,
@@ -1486,7 +1496,9 @@ def put_masked_segmented(
     layout as source: segment boundaries in a batch_ptr). Data is written
     starting at dest_batch_ptr[num_dest_segments]. New segment end indices
     are written into dest_batch_ptr[num_dest_segments+1 : num_dest_segments+1+num_copied].
-    No host sync. Supports bool, float32, float64, int32, int64.
+    Only the first masked segments that fit in both the data capacity and the
+    free pointer slots are copied. No host sync. Supports bool, float32,
+    float64, int32, int64.
 
     Parameters
     ----------
@@ -1498,10 +1510,11 @@ def put_masked_segmented(
         True for each segment to copy.
     dest : torch.Tensor, shape (dest_capacity, cols) or similar
         Destination buffer; same dtype as source.
-    dest_batch_ptr : torch.Tensor, shape >= num_dest_segments + num_systems + 2, dtype int32
+    dest_batch_ptr : torch.Tensor, shape >= num_dest_segments + 2, dtype int32
         Segment boundaries in dest. Read: dest_batch_ptr[num_dest_segments] = next
         free element. Write: new segment end indices appended at
-        [num_dest_segments+1, num_dest_segments+1+num_copied_segments].
+        [num_dest_segments+1, num_dest_segments+1+num_copied_segments]. At most
+        ``dest_batch_ptr.shape[0] - num_dest_segments - 2`` segments are copied.
     num_dest_segments : int
         Current number of segments in dest (dest_batch_ptr has num_dest_segments+1
         valid entries; dest_batch_ptr[num_dest_segments] is the next free index).
@@ -1514,10 +1527,10 @@ def put_masked_segmented(
         If num_systems > 0: (1,) int32 tensor new_num_dest_segments =
         num_dest_segments + num_copied_segments. If num_systems == 0, None.
 
-    Notes
-    -----
-    dest_batch_ptr must be pre-allocated with size at least
-    num_dest_segments + num_systems + 2 so that new boundaries can be appended.
+    Raises
+    ------
+    ValueError
+        If dest_batch_ptr has fewer than num_dest_segments + 2 entries.
     """
     if source.dim() != 2:
         source = source.view(source.shape[0], -1)
@@ -1528,11 +1541,11 @@ def put_masked_segmented(
     if num_systems == 0:
         return None
 
-    min_dest_batch_size = num_dest_segments + num_systems + 2
+    min_dest_batch_size = num_dest_segments + 2
     new_num_dest = torch.empty(1, device=source.device, dtype=torch.int32)
     if dest_batch_ptr.shape[0] < min_dest_batch_size:
         raise ValueError(
-            f"dest_batch_ptr must have size >= num_dest_segments + num_systems + 2 "
+            f"dest_batch_ptr must have size >= num_dest_segments + 2 "
             f"({min_dest_batch_size}); got {dest_batch_ptr.shape[0]}"
         )
 

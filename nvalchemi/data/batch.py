@@ -1858,33 +1858,6 @@ class Batch(DataMixin):
             ):
                 fit_groups.append((group_name, dest_group, src_group))
 
-        # The -2 reserves the existing end boundary and the duplicate final end
-        # pointer written by _copy_masked_segmented_kernel.
-        free_slots = min(
-            (
-                group.batch_ptr.numel() - len(group) - 2
-                for _, group, _ in fit_groups
-                if isinstance(group, SegmentedLevelStorage)
-            ),
-            default=n,
-        )
-        # When the full source exceeds the available graph-pointer slots, compact
-        # the first selected graphs that fit those slots. A non-None source_index
-        # maps compact graph positions to the original source for copied_mask.
-        source_index = None
-        if free_slots < n:
-            source_index = torch.where(mask)[0][: max(free_slots, 0)]
-            n = source_index.numel()
-            mask = torch.ones(n, device=device, dtype=torch.bool)
-            if n:
-                compact = src_batch.index_select(source_index)
-                fit_groups = [
-                    (name, group, compact._storage.groups[name])
-                    for name, group, _ in fit_groups
-                ]
-            else:
-                fit_groups = []
-
         fit_mask = torch.ones(n, device=device, dtype=torch.bool)
 
         # Compute every fit before entering the copy phase so a rejected
@@ -1895,9 +1868,13 @@ class Batch(DataMixin):
             level_fit = torch.empty(n, device=device, dtype=torch.bool)
             group.compute_put_per_system_fit_mask(src_group, mask, level_fit)
             fit_mask.logical_and_(level_fit)
+        # Read one count for all levels: put's only host sync.
+        num_copied = int(fit_mask.sum())
         num_dest_graphs = self.num_graphs
         for _, group, src_group in fit_groups:
-            group.put(src_group, fit_mask, copied_mask=fit_mask)
+            group.put(
+                src_group, fit_mask, copied_mask=fit_mask, num_selected=num_copied
+            )
 
         # Edge index fields hold batch-wide atom indices but are copied as raw
         # values, so move each appended graph's edges by its destination atom
@@ -1907,7 +1884,7 @@ class Batch(DataMixin):
             dest_atoms, src_atoms = levels["atoms"]
             dest_edges, src_edges = levels["edges"]
             index_keys = _INDEX_KEYS.intersection(src_edges.keys(), dest_edges.keys())
-            if index_keys and len(dest_atoms) > num_dest_graphs:
+            if index_keys and num_copied:
                 for key in index_keys:
                     shift_put_segments(
                         dest_edges._data[key],
@@ -1920,12 +1897,7 @@ class Batch(DataMixin):
                         src_edges._data[key].shape[0],
                     )
 
-        if source_index is None:
-            copy_mask.copy_(fit_mask)
-        else:
-            # Report copied graphs in the original source's index space.
-            copy_mask.zero_()
-            copy_mask[source_index] = fit_mask
+        copy_mask.copy_(fit_mask)
 
         if copied_mask is not None and copied_mask is not copy_mask:
             copied_mask.copy_(copy_mask)

@@ -233,6 +233,48 @@ def test_segmented_copy_enough_room(device: str, dtype: torch.dtype):
     torch.testing.assert_close(dest[2:3], source[5:6])
 
 
+@pytest.mark.parametrize("dtype", SUPPORTED_DTYPES)
+def test_segmented_copy_stops_at_free_pointer_slots(device: str, dtype: torch.dtype):
+    """With fewer free pointer slots than masked segments, the first ones are copied."""
+    # 3 segments: lengths 2, 3, 1
+    batch_ptr = torch.tensor([0, 2, 5, 6], device=device, dtype=torch.int32)
+    source = _make_source_data((6, 2), device, dtype)
+    source_data_copied = torch.zeros(3, dtype=torch.bool, device=device)
+    dest = torch.zeros(10, 2, device=device, dtype=dtype)
+    # Room for 2 new boundaries: 0 existing segments + 2 + 2 reserved entries.
+    dest_batch_ptr = torch.zeros(4, device=device, dtype=torch.int32)
+
+    new_num_dest = put_masked_segmented(
+        source,
+        batch_ptr,
+        torch.ones(3, dtype=torch.bool, device=device),
+        dest,
+        dest_batch_ptr,
+        0,
+        source_data_copied,
+    )
+
+    assert new_num_dest[0].item() == 2
+    assert dest_batch_ptr[:3].tolist() == [0, 2, 5]
+    assert source_data_copied.tolist() == [True, True, False]
+    torch.testing.assert_close(dest[:5], source[:5])
+    assert not dest[5:].any()
+
+
+def test_segmented_copy_rejects_pointer_without_end_slot(device: str):
+    """The destination pointer must at least hold its current end boundary."""
+    with pytest.raises(ValueError, match="num_dest_segments \\+ 2"):
+        put_masked_segmented(
+            torch.zeros(1, 1, device=device),
+            torch.tensor([0, 1], device=device, dtype=torch.int32),
+            torch.ones(1, dtype=torch.bool, device=device),
+            torch.zeros(1, 1, device=device),
+            torch.zeros(1, device=device, dtype=torch.int32),
+            0,
+            torch.zeros(1, dtype=torch.bool, device=device),
+        )
+
+
 # -----------------------------------------------------------------------------
 # Segmented: shapes (total_elems, 1) and (total_elems, 3, 3)
 # -----------------------------------------------------------------------------

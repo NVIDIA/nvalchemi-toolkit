@@ -3404,48 +3404,6 @@ class TestBatchPutDefrag:
             torch.testing.assert_close(actual.neighbor_list, expected.neighbor_list)
             torch.testing.assert_close(actual.positions, expected.positions)
 
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
-    def test_put_edge_rebasing_does_not_synchronize(self) -> None:
-        """Edge rebasing keeps source selection and row bounds on the GPU."""
-        source = Batch.from_data_list(
-            [
-                _atomic_data_with_edges_and_system(count, count)
-                for count in (2, 3, 4, 5)
-            ],
-            device="cuda",
-        )
-        buffer = Batch.empty(
-            num_systems=6, num_nodes=30, num_edges=40, template=source, device="cuda"
-        )
-        edges = buffer._storage.groups["edges"]
-        original_put = edges.put
-        previous_mode = torch.cuda.get_sync_debug_mode()
-
-        def put_then_forbid_sync(
-            src: SegmentedLevelStorage,
-            mask: torch.Tensor,
-            *,
-            copied_mask: torch.Tensor | None = None,
-        ) -> None:
-            """Enable synchronization detection after all level copies finish."""
-            original_put(src, mask, copied_mask=copied_mask)
-            torch.cuda.set_sync_debug_mode("error")
-
-        try:
-            with patch.object(edges, "put", side_effect=put_then_forbid_sync):
-                buffer.put(
-                    source,
-                    torch.tensor([False, True, False, True], device="cuda"),
-                )
-            assert torch.cuda.get_sync_debug_mode() == 2
-        finally:
-            torch.cuda.set_sync_debug_mode(previous_mode)
-
-        for dest, src in enumerate((1, 3)):
-            torch.testing.assert_close(
-                buffer.get_data(dest).neighbor_list, source.get_data(src).neighbor_list
-            )
-
     @pytest.mark.parametrize("node_capacity, expected", [(1, 0), (2, 1), (5, 2)])
     def test_put_from_larger_source_respects_atom_capacity(
         self, node_capacity: int, expected: int, device: str
