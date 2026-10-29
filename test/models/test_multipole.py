@@ -583,6 +583,22 @@ class TestIntegration:
         for key in ("energy", "forces", "stress"):
             torch.testing.assert_close(out[key], expected[key], rtol=1e-12, atol=1e-12)
 
+    def test_decomposed_forward_without_routing_raises(self):
+        """Inside a decomposed forward a missing routing must fail, not fall back.
+
+        Falling back to the plain path would sum ghost and padding rows as owned
+        and give a silently wrong energy.
+        """
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        with patch(
+            "nvalchemi.distributed._core.context.current_dd_context",
+            return_value=SimpleNamespace(is_distributed=True),
+        ):
+            with pytest.raises(RuntimeError, match="published halo routing"):
+                multipole_module._distributed_partial_sources(4, torch.device("cpu"))
+
     @BOTH
     def test_extra_matrix_padding_changes_nothing(self, cls, device):
         from nvalchemi.neighbors import compute_neighbors

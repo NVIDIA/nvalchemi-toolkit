@@ -158,6 +158,12 @@ def _partial_sources(
     return None, None
 
 
+_NO_ROUTING = (
+    "a decomposed multipole forward ran without the published halo routing, so "
+    "ghost and padding rows would be counted as owned"
+)
+
+
 def _owned_cell_grad_attach() -> type:
     """Cell-gradient attach for l<=1 real space that counts owned receivers only.
 
@@ -175,15 +181,20 @@ def _owned_cell_grad_attach() -> type:
     from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
         get_compile_routing,
     )
+    from nvalchemi.distributed._core.context import current_dd_context  # noqa: PLC0415
 
     class _OwnedCellGradAttach(stock):
         @staticmethod
         def setup_context(ctx: Any, inputs: tuple[Any, ...], output: Any) -> None:
-            routing = get_compile_routing()
-            if routing is None:  # a plain call while a decomposed model is open
+            if not current_dd_context().is_distributed:
+                # A plain call while a decomposed model is open. Inside a
+                # decomposed forward a missing routing must fail, not fall back.
                 stock.setup_context(ctx, inputs, output)
                 ctx.n_owned = None
                 return
+            routing = get_compile_routing()
+            if routing is None:
+                raise RuntimeError(_NO_ROUTING)
             n_owned = routing[3]
             ptr = inputs[8]
             owned_ptr = torch.minimum(ptr, ptr[n_owned])
@@ -217,15 +228,20 @@ def _distributed_partial_sources(
     Each rank holds its owned atoms plus ghost copies, so only owned rows may
     feed the spread; the per-rank partial fields are then summed over the mesh.
     Outside a decomposed forward (a plain call while the seam is installed) the
-    process holds every atom, so it behaves like :func:`_partial_sources`.
+    process holds every atom, so it behaves like :func:`_partial_sources`. Inside
+    one the routing must be published; a missing routing raises rather than
+    silently summing ghost and padding rows.
     """
     from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
         get_compile_routing,
     )
+    from nvalchemi.distributed._core.context import current_dd_context  # noqa: PLC0415
 
+    if not current_dd_context().is_distributed:
+        return None, None
     routing = get_compile_routing()
     if routing is None:
-        return None, None
+        raise RuntimeError(_NO_ROUTING)
     owned = torch.arange(num_atoms, device=device) < routing[3]
     return owned.to(torch.float64), _distributed_sum
 
