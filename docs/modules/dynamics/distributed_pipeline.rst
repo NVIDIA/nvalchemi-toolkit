@@ -353,8 +353,10 @@ Overflow of received samples
 ----------------------------
 
 When samples arrive while a stage's active batch is full, the excess waits in
-``overflow_sinks`` and is drained into the batch as room frees up. By default,
-each stage uses its own :class:`~nvalchemi.dynamics.HostMemory`. A downstream
+``overflow_sinks`` and is drained into the batch as room frees up. Each drain
+removes only the oldest samples that fit, so its cost follows the samples
+admitted rather than the length of the queue. By default, each stage uses its
+own :class:`~nvalchemi.dynamics.HostMemory`. A downstream
 stage finishes once its upstream stage is done and both its active batch and
 its overflow sinks are empty.
 
