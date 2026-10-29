@@ -1495,6 +1495,53 @@ class _ModelInputProbe:
         }
 
 
+class _BlowUpOnce:
+    """Send two atoms of one system to infinity on one step, after the model.
+
+    Positions as well as forces go non-finite, the state a real blow-up
+    leaves: zeroing the positions would stack those atoms on the origin.
+    """
+
+    frequency = 1
+    stage = DynamicsStage.AFTER_COMPUTE
+
+    def __init__(self, system: int, at_step: int) -> None:
+        """Diverge *system* on propagator step *at_step*."""
+        self.system = system
+        self.at_step = at_step
+
+    def __call__(self, ctx: Any, stage: Any) -> None:  # noqa: ARG002
+        """Poison two atoms' positions and every force of the system on its step."""
+        if ctx.step_count != self.at_step:
+            return
+        batch = ctx.batch
+        graphs = batch.system_id.view(-1)[: batch.num_graphs] == self.system
+        rows = torch.where(graphs[batch.batch_idx.long()])[0]
+        batch.forces[rows] = float("inf")
+        batch.positions[rows[:2]] = float("inf")
+
+
+class _PositionsProbe:
+    """Record, per step and system, the positions the model is about to see."""
+
+    frequency = 1
+    stage = DynamicsStage.BEFORE_COMPUTE
+
+    def __init__(self) -> None:
+        """Start with an empty trace."""
+        self.positions: dict[int, dict[int, torch.Tensor]] = {}
+
+    def __call__(self, ctx: Any, stage: Any) -> None:  # noqa: ARG002
+        """Copy each system's positions of the frame about to be evaluated."""
+        batch = ctx.batch
+        systems = batch.system_id.view(-1)[: batch.num_graphs].tolist()
+        rows = batch.batch_idx.long()
+        self.positions[ctx.step_count] = {
+            system: batch.positions[rows == row].detach().clone()
+            for row, system in enumerate(systems)
+        }
+
+
 class _MotionProbe:
     """Record, per step and system, the largest speed and force the step left."""
 
@@ -1620,6 +1667,40 @@ class TestDivergenceQuarantine:
         assert bool(torch.isfinite(frames.positions).all())
         assert bool(torch.isfinite(frames.teacher_forces).all())
         assert bool((frames.velocities.norm(dim=-1) > 0).any())
+
+    def test_the_quarantined_graph_returns_to_its_last_finite_positions(self) -> None:
+        """Every atom goes back to where it was before the divergence, not to one point.
+
+        Two atoms of system 0 are sent to infinity on step 2; zeroing them
+        would stack them on the origin. The hook keeps each graph's last
+        finite frame (the positions it left step 1 with), so from step 3 on
+        the model sees that frame, finite and with every atom distinct.
+        """
+        student = _build_demo_model()
+        strategy = _make_relaxation_strategy(
+            student=student,
+            structures=InitialStructures(
+                _build_initial_dataset(n_systems=3), recycle=True
+            ),
+            num_steps=6,
+            generation_steps=4,
+            config_overrides={
+                "dynamics": NVE(student, dt=0.1),
+                "max_trajectory_steps": 8,
+                "quarantine_diverged": True,
+            },
+        )
+        seen = _PositionsProbe()
+        dynamics = strategy.on_policy.dynamics
+        dynamics.register_hook(_BlowUpOnce(0, 2))
+        dynamics.register_hook(seen)
+        with pytest.warns(UserWarning, match="1 of 3 generated trajectories diverged"):
+            strategy.run()
+
+        restored = seen.positions[3][0]
+        assert bool(torch.isfinite(restored).all())
+        assert torch.equal(restored, seen.positions[1][0])
+        assert float(torch.pdist(restored).min()) > 0.0
 
 
 class TestDivergenceOnTheLifetimeStep:
@@ -2340,6 +2421,73 @@ class TestTrajectoryLifetime:
         assert served == [[0, 1, 2], [4, 0, 1], [2, 4, 0]]
         assert probe.node_counts[::2] == [6, 6, 6]
         assert structures.oversized_rows == frozenset({3})
+
+    def _run_staggered(self, **budget: int) -> _StateProbe:
+        """Seven two-atom rows, lifetime 4, two-step segments; system 0 diverges on step 1.
+
+        Row 0 retires at the first boundary (age 2), rows 1 and 2 at the
+        second (age 4) while the row that replaced 0 lives on at age 2, and so
+        forth: every boundary from the second on retires some graphs and keeps
+        others of a different age.
+        """
+        structures = InitialStructures(
+            _make_sized_dataset([2] * 7), recycle=True, **budget
+        )
+        strategy = _make_relaxation_strategy(
+            num_steps=8,
+            generation_steps=2,
+            structures=structures,
+            config_overrides={"max_trajectory_steps": 4, "quarantine_diverged": True},
+        )
+        probe = _StateProbe()
+        strategy.on_policy.dynamics.register_hook(_InfOnce(0, 1))
+        strategy.on_policy.dynamics.register_hook(probe)
+        with pytest.warns(UserWarning, match="1 of 3 generated trajectories diverged"):
+            strategy.run()
+        return probe
+
+    def test_survivors_keep_their_ages_when_one_row_retires_early(self) -> None:
+        """Under an atom budget each graph retires at its own age, not the batch's."""
+        probe = self._run_staggered(max_atoms=6)
+
+        assert probe.systems[0] == [0, 1, 2]
+        assert probe.systems[2] == [1, 2, 3]
+        assert probe.systems[4] == [3, 4, 5]
+        assert probe.systems[6] == [4, 5, 6]
+        assert probe.node_counts[::2] == [6, 6, 6, 6]
+
+    def test_the_batch_size_budget_frees_room_for_the_retired_rows_only(self) -> None:
+        """``max_batch_size`` room is the slots the retirees left, survivors kept."""
+        probe = self._run_staggered(max_batch_size=3)
+
+        assert probe.systems[0] == [0, 1, 2]
+        assert probe.systems[2] == [1, 2, 3]
+        assert probe.systems[4] == [3, 4, 5]
+        assert probe.systems[6] == [4, 5, 6]
+        assert probe.graph_counts[::2] == [3, 3, 3, 3]
+
+    def test_an_oversized_row_is_read_once(self) -> None:
+        """After its first pass a known oversized row costs no metadata read."""
+        dataset = _make_sized_dataset([2, 2, 2, 7, 2])
+        structures = InitialStructures(dataset, max_atoms=6, recycle=True)
+        strategy = _make_relaxation_strategy(
+            num_steps=6,
+            generation_steps=2,
+            structures=structures,
+            config_overrides={"max_trajectory_steps": 2},
+        )
+
+        with (
+            patch.object(dataset, "get_metadata", wraps=dataset.get_metadata) as spy,
+            pytest.warns(UserWarning, match="row 3 holds 7 atoms"),
+        ):
+            strategy.run()
+
+        # Once by the initial stopping draw, once by the first lifetime scan that
+        # records it; the two later passes over the pool skip it without a read.
+        looked_up = [call.args[0] for call in spy.call_args_list]
+        assert looked_up.count(3) == 2
+        assert structures.wraps >= 2
 
     def test_a_non_positive_lifetime_is_rejected(self) -> None:
         """Zero would retire every trajectory before its first step."""
