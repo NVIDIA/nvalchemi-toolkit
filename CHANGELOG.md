@@ -539,8 +539,12 @@
 - `MACEWrapper` and `MACEWrapper.from_checkpoint` take a `train` argument
   (default `False`), matching `UMAWrapper`. By default the weights are now
   frozen and the wrapper is in eval mode, which is lossless for autograd forces.
-  Training and fine-tuning must pass `train=True`; a frozen wrapper makes
-  `TrainingStrategy` and `FineTuningStrategy` raise "no trainable parameters".
+  Full-model training and fine-tuning must pass `train=True`; with a frozen
+  wrapper, `TrainingStrategy` and `FineTuningStrategy` raise "no trainable
+  parameters" unless parameters are selected explicitly (`trainable_patterns`,
+  trainable module patches) or added through PEFT such as LoRA. The `spec run`
+  CLI and the `load_checkpoint(adapter="mace")` adapter pass `train=True` (the
+  adapter accepts a `train` option to override it).
   `from_checkpoint(compile_model=True)` no longer freezes the weights itself:
   `train` and `compile_model` are independent.
 - `MACEWrapper` no longer declares or passes through an ordinary `"hessian"`

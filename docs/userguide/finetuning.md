@@ -1205,8 +1205,10 @@ strategy = FineTuningStrategy(
 )
 ```
 
-If a frozen model (`train=False`, the default) is passed, the strategy will raise
-an error before the run begins because the model has no trainable parameters.
+For full-model fine-tuning, pass `train=True`. Otherwise, the frozen base has no
+trainable parameters and the strategy will raise an error unless you select
+parameters with `trainable_patterns`, add trainable module patches, or configure
+PEFT such as LoRA.
 
 ## API reference
 
