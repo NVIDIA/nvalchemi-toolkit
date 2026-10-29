@@ -936,8 +936,8 @@ class DomainParallel(BaseDynamics):
             self._send_sentinel()  # forward the drain signal down the chain
             self._dd_event(f"upstream (rank {self.prior_rank}) drained → stage done")
             return
-        if self._bcast_group_flag(reprime):
-            self._forces_primed = False
+        # Complete received outputs need no extra compute, so mark them primed.
+        self._forces_primed = not self._bcast_group_flag(reprime)
         self._system_step = 0
         self.active_batch = self.partition(received if self._is_group_lead else None)
         self._dd_event(

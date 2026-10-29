@@ -497,7 +497,9 @@ class TestPrimeForces:
         inner = DemoDynamics(model=model, n_steps=1, reprime_on_entry=reprime_on_entry)
         dp = DomainParallel(dynamics=inner, config=DomainConfig(cutoff=3.0, skin=0.5))
         dp.prior_rank = 0
-        dp._forces_primed = True
+        # Model the first arrival at startup: valid received outputs must
+        # change the initially unprimed stage to primed.
+        dp._forces_primed = False
         received = _make_batch()
         if drop_forces:
             del received["forces"]
