@@ -164,6 +164,24 @@ _NO_ROUTING = (
 )
 
 
+def _is_plain_call(routing: Any) -> bool:
+    """Whether a decomposition seam runs in a plain (non-decomposed) call.
+
+    With the halo routing published the call is decomposed and the context is
+    never consulted, so a compiled forward does not trace ``current_dd_context``
+    (``ContextVar.get`` is a graph break). Without it, a compiled or decomposed
+    forward is missing its routing and raises instead of summing ghost and
+    padding rows as owned; only a plain eager call falls back.
+    """
+    if routing is not None:
+        return False
+    from nvalchemi.distributed._core.context import current_dd_context  # noqa: PLC0415
+
+    if torch.compiler.is_compiling() or current_dd_context().is_distributed:
+        raise RuntimeError(_NO_ROUTING)
+    return True
+
+
 def _owned_cell_grad_attach() -> type:
     """Cell-gradient attach for l<=1 real space that counts owned receivers only.
 
@@ -181,23 +199,19 @@ def _owned_cell_grad_attach() -> type:
     from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
         get_compile_routing,
     )
-    from nvalchemi.distributed._core.context import current_dd_context  # noqa: PLC0415
 
     class _OwnedCellGradAttach(stock):
         @staticmethod
         def setup_context(ctx: Any, inputs: tuple[Any, ...], output: Any) -> None:
-            if not current_dd_context().is_distributed:
-                # A plain call while a decomposed model is open. Inside a
-                # decomposed forward a missing routing must fail, not fall back.
+            routing = get_compile_routing()
+            if _is_plain_call(routing):
                 stock.setup_context(ctx, inputs, output)
                 ctx.n_owned = None
                 return
-            routing = get_compile_routing()
-            if routing is None:
-                raise RuntimeError(_NO_ROUTING)
             n_owned = routing[3]
             ptr = inputs[8]
-            owned_ptr = torch.minimum(ptr, ptr[n_owned])
+            # Index with a tensor so the owned count stays on the device.
+            owned_ptr = torch.minimum(ptr, ptr.index_select(0, n_owned.reshape(1)))
             stock.setup_context(ctx, (*inputs[:8], owned_ptr, *inputs[9:]), output)
             ctx.n_owned = n_owned
 
@@ -235,13 +249,10 @@ def _distributed_partial_sources(
     from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
         get_compile_routing,
     )
-    from nvalchemi.distributed._core.context import current_dd_context  # noqa: PLC0415
 
-    if not current_dd_context().is_distributed:
-        return None, None
     routing = get_compile_routing()
-    if routing is None:
-        raise RuntimeError(_NO_ROUTING)
+    if _is_plain_call(routing):
+        return None, None
     owned = torch.arange(num_atoms, device=device) < routing[3]
     return owned.to(torch.float64), _distributed_sum
 
