@@ -2985,12 +2985,14 @@ class Batch(DataMixin):
         )
 
     @classmethod
-    def concatenate(cls, batches: Sequence[Batch]) -> Batch:
+    def concatenate(
+        cls, batches: Sequence[Batch], *, strip_padding: bool = True
+    ) -> Batch:
         """Combine batches into an independently owned batch.
 
         Matching storage layouts use one concatenation per payload field.
         Differing fields or materialized levels use :meth:`append` to preserve
-        its missing-field behavior. Unused buffer capacity is discarded.
+        its missing-field behavior. Unused buffer capacity is discarded by default.
         Inputs are left unchanged, including when concatenation fails.
 
         Parameters
@@ -3000,6 +3002,9 @@ class Batch(DataMixin):
             must satisfy :meth:`append` compatibility requirements. Tensors
             are moved to the first batch's device, and built-in dtypes follow
             PyTorch concatenation promotion rules.
+        strip_padding : bool, optional
+            Discard unused buffer capacity before concatenating. Default is
+            ``True``. Set to ``False`` only when every input is already compact.
 
         Returns
         -------
@@ -3022,7 +3027,7 @@ class Batch(DataMixin):
         for batch in batches:
             if not isinstance(batch, Batch):
                 raise TypeError("All inputs must be Batch objects")
-            parts.append(batch._without_padding())
+            parts.append(batch._without_padding() if strip_padding else batch)
         if not parts:
             raise ValueError("At least one batch is required")
         first = parts[0]
@@ -3044,7 +3049,7 @@ class Batch(DataMixin):
         ):
             merged = first.clone()
             for part in parts[1:]:
-                merged.append(part)
+                merged.append(part, strip_padding=False)
             return merged
 
         # Apply append's custom-level schema checks.
@@ -3130,11 +3135,12 @@ class Batch(DataMixin):
         missing_fields: Literal["drop", "fill"] = "drop",
         field_defaults: Mapping[str, Callable[[int, torch.device], Tensor]]
         | None = None,
+        strip_padding: bool = True,
     ) -> None:
         """Append another batch (in-place via concatenation).
 
         Only occupied graph, atom, edge, and custom-level rows are appended.
-        Unused buffer capacity in either input is discarded from the result;
+        By default, unused buffer capacity in either input is discarded;
         *other* is left unchanged. Use :meth:`put` to retain buffer capacity.
 
         If *other* is missing a group that this batch has (e.g. system-level
@@ -3170,6 +3176,9 @@ class Batch(DataMixin):
             returning a tensor with one row per graph. Requires ``"fill"``.
             They fill this batch's fields that *other* lacks; other missing
             fields use zeros. Fields this batch lacks are never added.
+        strip_padding : bool, optional
+            Discard unused buffer capacity in both inputs. Default is ``True``.
+            Set to ``False`` only when both inputs are already compact.
         """
         if other is self or other._storage is self._storage:
             raise ValueError(
@@ -3183,8 +3192,8 @@ class Batch(DataMixin):
         if field_defaults is not None and missing_fields != "fill":
             raise ValueError("field_defaults requires missing_fields='fill'")
         self._validate_custom_append(other)
-        target = self._without_padding()
-        other = other._without_padding()
+        target = self._without_padding() if strip_padding else self
+        other = other._without_padding() if strip_padding else other
         if missing_fields == "fill":
             field_defaults = field_defaults or {}
             for key in field_defaults:
