@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Stage sinks drop neighbor data so samples with different neighbor widths
+  can be collected together.
 - Received pipeline samples bypass template-buffer copies so missing outputs
   trigger force priming.
 - Distributed pipelines retain and retry graduates that do not fit the send

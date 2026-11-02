@@ -302,6 +302,11 @@ several helper methods for routing data between buffers:
   back into the active batch when room is available. Result sinks are
   never read.
 
+Result and overflow sinks omit neighbor data to avoid shape mismatches
+between refills. Fields are temporarily hidden during writes, then restored
+without copying. When overflow samples return to the active batch,
+``NeighborListHook`` rebuilds their neighbor data before the model runs.
+
 Sample lifecycle
 ----------------
 
