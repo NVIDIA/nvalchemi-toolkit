@@ -543,6 +543,10 @@
 
 ### Fixed
 
+- `NeighborListHook` with `skin > 0` crashed on the first step when
+  `batch_cluster_tile` was used, which the method selector picks by default
+  for batched float32 full lists. The per-system tile state that
+  toolkit-ops needs for partial rebuilds is now allocated.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain
