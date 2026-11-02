@@ -120,8 +120,8 @@ class TestFusedStageOnReceive:
         assert stage._recv_template.level_keys == expected_keys
 
     @pytest.mark.parametrize("n_graphs", [1, 2, 3, 4])
-    def test_recv_buffer_initializes_missing_bookkeeping(self, n_graphs: int) -> None:
-        """Fused fields fit the buffer allocation even on partial receives."""
+    def test_receive_initializes_missing_bookkeeping(self, n_graphs: int) -> None:
+        """Received samples get fresh bookkeeping, including partial batches."""
         stage = _langevin_stage(
             prior_rank=0,
             next_rank=None,
@@ -143,8 +143,8 @@ class TestFusedStageOnReceive:
         assert (batch.n_steps_counter_0 == 0).all()
         torch.testing.assert_close(batch.system_id, incoming.system_id)
         assert stage.recv_buffer.num_graphs == 0
-        assert stage.recv_buffer.reprime_pending.shape == (4, 1)
-        assert stage.recv_buffer.n_steps_counter_0.shape == (4, 1)
+        assert batch.reprime_pending.shape == (n_graphs, 1)
+        assert batch.n_steps_counter_0.shape == (n_graphs, 1)
 
 
 class TestPipelineExit:
