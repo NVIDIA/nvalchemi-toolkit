@@ -1296,6 +1296,9 @@ class _CommunicationMixin:
     ) -> None:
         """Write samples to the first sink with room for all of them.
 
+        The sink performs selection and copying. Built-in sinks omit temporary
+        neighbor data whose shape can change between writes.
+
         Parameters
         ----------
         sinks : Sequence[DataSink]
@@ -1303,7 +1306,7 @@ class _CommunicationMixin:
         batch : Batch
             Samples to store.
         mask : torch.Tensor | None
-            Boolean mask for selective writing. Forwarded to sink.write().
+            Boolean mask selecting the graphs to store.
         kind : str
             Description of the samples, used in the error message.
 
@@ -1337,7 +1340,7 @@ class _CommunicationMixin:
         batch : Batch
             Pending samples to store.
         mask : torch.Tensor | None, optional
-            Boolean mask for selective writing. Forwarded to sink.write().
+            Boolean mask selecting the graphs to store.
 
         Raises
         ------
@@ -1354,7 +1357,7 @@ class _CommunicationMixin:
         batch : Batch
             Finished samples to store.
         mask : torch.Tensor | None, optional
-            Boolean mask for selective writing. Forwarded to sink.write().
+            Boolean mask selecting the graphs to store.
 
         Raises
         ------

@@ -13,6 +13,10 @@
 
 ## Fixed
 
+- `HostMemory`, `GPUBuffer`, and `ZarrData` omit temporary neighbor data so
+  samples with different neighbor widths can be stored together. This covers
+  stage sinks, direct writes, and DomainParallel snapshot hooks. Live batches
+  keep their neighbor tensors.
 - Received pipeline samples bypass template-buffer copies so missing outputs
   trigger force priming.
 - Distributed pipelines retain and retry graduates that do not fit the send

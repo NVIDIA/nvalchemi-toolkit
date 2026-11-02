@@ -106,9 +106,13 @@ def create_grouped_batch(group_sizes: list[int], device: str = "cpu") -> Batch:
 
 
 def _make_sink(kind: str, tmp_path: Path, capacity: int = 100) -> DataSink:
-    """Create a host or Zarr sink for grouped-write tests."""
+    """Create a built-in sink for storage tests."""
     if kind == "host":
         return HostMemory(capacity=capacity)
+    if kind == "gpu":
+        if not torch.cuda.is_available():
+            pytest.skip("CUDA required for GPUBuffer tests")
+        return GPUBuffer(capacity=capacity, max_atoms=10, max_edges=20)
     return ZarrData(store=tmp_path / "grouped_store", capacity=capacity)
 
 
@@ -186,6 +190,78 @@ class TestDataSinkABC:
         # Over capacity should also be full
         sink._count = 10
         assert sink.is_full
+
+
+class TestNeighborDataStorage:
+    """Every built-in sink excludes temporary neighbors on direct writes."""
+
+    @pytest.mark.parametrize("kind", ["host", "gpu", "zarr"])
+    @pytest.mark.parametrize("masked", [False, True])
+    def test_changing_neighbor_widths(
+        self, kind: str, masked: bool, tmp_path: Path
+    ) -> None:
+        """Different widths and missing neighbors can be stored together."""
+        sink = _make_sink(kind, tmp_path)
+        expected_positions = []
+        neighbor_keys = {
+            "neighbor_matrix",
+            "num_neighbors",
+            "neighbor_matrix_shifts",
+            "neighbor_list",
+            "neighbor_list_shifts",
+        }
+        for width in (16, 32, None):
+            batch = Batch.from_data_list(
+                [
+                    AtomicData(
+                        positions=torch.randn(2, 3),
+                        atomic_numbers=torch.tensor([6, 8]),
+                        forces=torch.ones(2, 3),
+                        energy=torch.ones(1, 1),
+                        neighbor_list=torch.tensor([[0, 1], [1, 0]]),
+                        neighbor_list_shifts=torch.zeros(2, 3, dtype=torch.long),
+                    )
+                    for _ in range(2)
+                ]
+            )
+            if width is not None:
+                batch._atoms_group["neighbor_matrix"] = torch.zeros(
+                    batch.num_nodes, width, dtype=torch.int32
+                )
+                batch._atoms_group["num_neighbors"] = torch.zeros(
+                    batch.num_nodes, dtype=torch.int32
+                )
+                batch._atoms_group["neighbor_matrix_shifts"] = torch.zeros(
+                    batch.num_nodes, width, 3, dtype=torch.int32
+                )
+            originals = {key: batch[key] for key in neighbor_keys if key in batch}
+            mask = torch.tensor([False, True]) if masked else None
+            sink.write(batch, mask=mask)
+            assert all(batch[key] is value for key, value in originals.items())
+            expected_positions.append(
+                batch.positions[2:] if masked else batch.positions
+            )
+
+        for stored in (sink.read(), sink.drain()):
+            assert neighbor_keys.isdisjoint(stored)
+            torch.testing.assert_close(
+                stored.positions.cpu(), torch.cat(expected_positions)
+            )
+            assert torch.all(stored.forces == 1)
+            assert torch.all(stored.energy == 1)
+        assert len(sink) == 0
+
+    @pytest.mark.parametrize("kind", ["host", "gpu", "zarr"])
+    def test_failed_write_restores_neighbors(self, kind: str, tmp_path: Path) -> None:
+        """Capacity errors preserve the caller's neighbor tensor identities."""
+        sink = _make_sink(kind, tmp_path, capacity=1)
+        batch = create_test_batch(num_graphs=2)
+        batch._atoms_group["neighbor_matrix"] = torch.zeros(batch.num_nodes, 16)
+        original = batch.neighbor_matrix
+        with pytest.raises(RuntimeError, match="full"):
+            sink.write(batch)
+        assert batch.neighbor_matrix is original
+        assert len(sink) == 0
 
 
 class TestDrainMethod:
@@ -653,10 +729,10 @@ class TestHostMemoryStorage:
             result = sink.read()
         assert result.group_idx.tolist() == [0, 0, 0, 1, 1, 2, 2]
 
-    def test_read_keeps_custom_fields_identity_and_connectivity(
+    def test_read_keeps_custom_fields_identity_and_edge_fields(
         self, device: str
     ) -> None:
-        """Custom fields, path identity and edge offsets survive grouped writes."""
+        """Custom fields and path identity survive while neighbors are omitted."""
 
         def make(group_idx: list[int], ids: list[int]) -> Batch:
             data_list = [
@@ -668,6 +744,9 @@ class TestHostMemoryStorage:
                 for _ in group_idx
             ]
             batch = Batch.from_data_list(data_list, device=device)
+            batch.add_key(
+                "edge_weights", [torch.ones(2) for _ in group_idx], level="edges"
+            )
             batch.set_group_layout(torch.tensor(group_idx, device=device))
             batch.add_key("group_id", [torch.tensor([i]) for i in ids], level="system")
             batch.add_key(
@@ -690,12 +769,9 @@ class TestHostMemoryStorage:
         assert result.status.flatten().tolist() == [0.0, 1.0, 2.0, 1.0, 2.0]
         expected = torch.cat([first.positions, second.positions[2:]]).cpu()
         assert torch.equal(result.positions, expected)
-        # Each graph's edges point at its own two atoms after concatenation.
-        starts = result.batch_ptr[:-1].repeat_interleave(2)
-        assert torch.equal(
-            result.neighbor_list,
-            torch.tensor([[0, 1], [1, 0]] * result.num_graphs) + starts[:, None],
-        )
+        assert "neighbor_list" not in result
+        assert torch.all(result.edge_weights == 1)
+        assert result.edge_weights.numel() == 2 * result.num_graphs
 
     def test_stored_data_is_independent_of_source_and_reads(self, device: str) -> None:
         """Later changes to the source batch or a read result do not leak in."""

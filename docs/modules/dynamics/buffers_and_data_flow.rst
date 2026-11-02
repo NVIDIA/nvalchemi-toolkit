@@ -302,6 +302,10 @@ several helper methods for routing data between buffers:
   back into the active batch when room is available. Result sinks are
   never read.
 
+Built-in result and overflow sinks omit neighbor data to avoid shape mismatches
+between refills. When overflow samples return to the active batch,
+``NeighborListHook`` rebuilds their neighbor data before the model runs.
+
 Sample lifecycle
 ----------------
 
@@ -454,6 +458,12 @@ available:
 
 - :class:`~nvalchemi.dynamics.ZarrData`: Disk-backed, delegates to
   :class:`~nvalchemi.data.AtomicDataZarrWriter`.
+
+All three sinks omit temporary neighbor fields, including on direct writes
+and writes from ``DomainParallel`` snapshot hooks. This prevents changing
+neighbor widths from breaking buffer copies, disk appends, or result reads.
+The source batch retains its neighbor tensors, even if a write fails.
+Other fields, including custom edge fields, are preserved.
 
 Sinks are tried in priority order; the first non-full sink receives
 the data.
