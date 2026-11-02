@@ -600,8 +600,9 @@ class HostMemory(DataSink):
         """
         Store a batch of atomic data on CPU.
 
-        Copies the selected graphs to CPU as one batch, without splitting
-        them into individual AtomicData objects. The copy never shares
+        Discards unused buffer capacity and copies the selected graphs to CPU
+        as one batch, without splitting them into individual AtomicData objects.
+        The copy never shares
         storage with the caller's batch. For a grouped batch, :meth:`read`
         shifts each write's ``group_idx`` labels after the groups already
         stored so that groups from different writes stay distinct.
@@ -639,7 +640,7 @@ class HostMemory(DataSink):
                 f"to buffer with {self._num_graphs}/{self._capacity} samples."
             )
         # Batch.to copies even when the batch is already on CPU.
-        self._batches.append(selected.to(self._device))
+        self._batches.append(selected._without_padding().to(self._device))
         self._num_graphs += num_graphs
 
     def read(self) -> Batch:
@@ -677,7 +678,7 @@ class HostMemory(DataSink):
                         )
                 start += stored.num_graphs
             # Concatenate each field once and cache only after merging succeeds.
-            self._batches = [Batch.concatenate(self._batches)]
+            self._batches = [Batch.concatenate(self._batches, strip_padding=False)]
         return self._batches[0].clone()
 
     def zero(self) -> None:

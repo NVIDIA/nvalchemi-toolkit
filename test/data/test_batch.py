@@ -1988,6 +1988,26 @@ class TestBatchConcatenate:
             torch.testing.assert_close(batch.positions, expected_positions)
             torch.testing.assert_close(batch.neighbor_list, expected_edges)
 
+    @pytest.mark.parametrize("fallback", [False, True])
+    def test_concatenate_skips_padding_checks(self, fallback):
+        """Concatenation skips checks on compact inputs, including its fallback."""
+        first = Batch.from_data_list([_atomic_data_with_edges_and_system(2, 2)])
+        second = first.clone()
+        if fallback:
+            first.forces = torch.ones(2, 3)
+        with patch.object(
+            Batch, "_without_padding", side_effect=AssertionError("Already compact")
+        ):
+            result = Batch.concatenate([first, second], strip_padding=False)
+        assert result.num_nodes_list == [2, 2]
+        torch.testing.assert_close(
+            result.positions, torch.cat([first.positions, second.positions])
+        )
+        torch.testing.assert_close(
+            result.neighbor_list,
+            torch.cat([first.neighbor_list, second.neighbor_list + 2]),
+        )
+
     @pytest.mark.parametrize("grouped", [False, True])
     @pytest.mark.parametrize("kind", ["single", "padded", "empty"])
     def test_trims_padding_and_keeps_inputs(self, device, grouped, kind):
@@ -2133,6 +2153,20 @@ class TestBatchMutation:
         assert b1.num_graphs == 3
         assert b1.num_nodes_list == [2, 3, 4]
         assert b1.num_nodes == 9
+
+    def test_append_skips_padding_checks(self):
+        """Trusted compact inputs retain payloads and neighbor offsets."""
+        first = Batch.from_data_list([_atomic_data_with_edges_and_system(2, 2)])
+        second = first.clone()
+        positions = torch.cat([first.positions, second.positions])
+        edges = torch.cat([first.neighbor_list, second.neighbor_list + 2])
+        with patch.object(
+            Batch, "_without_padding", side_effect=AssertionError("Already compact")
+        ):
+            first.append(second, strip_padding=False)
+        assert first.num_nodes_list == [2, 2]
+        torch.testing.assert_close(first.positions, positions)
+        torch.testing.assert_close(first.neighbor_list, edges)
 
     @pytest.mark.parametrize(
         "padded_left,padded_right", [(True, False), (False, True), (True, True)]

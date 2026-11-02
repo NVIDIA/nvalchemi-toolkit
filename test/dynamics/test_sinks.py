@@ -754,17 +754,18 @@ class TestHostMemoryStorage:
 
     @pytest.mark.parametrize("grouped", [False, True])
     @pytest.mark.parametrize(
-        "padded_first,padded_second", [(True, False), (False, True), (True, True)]
+        "padding", [(True,), (True, False), (False, True), (True, True)]
     )
-    def test_read_padded_writes(self, device, grouped, padded_first, padded_second):
-        """Whole-buffer writes retain capacity; merging excludes unoccupied rows."""
+    def test_read_padded_writes(self, device, grouped, padding):
+        """Single and multiple writes store only occupied rows without aliasing."""
         source = (
             create_grouped_batch([2, 1], device)
             if grouped
             else create_test_batch(3, device)
         )
+        source.energy = torch.ones(3, 1, device=device)
         writes = []
-        for padded in (padded_first, padded_second):
+        for padded in padding:
             if padded:
                 batch = Batch.empty(
                     num_systems=8,
@@ -780,18 +781,28 @@ class TestHostMemoryStorage:
         sink = HostMemory(capacity=6)
         for batch in writes:
             sink.write(batch)
-        for stored, original in zip(sink._batches, writes, strict=True):
-            assert stored.system_capacity == original.system_capacity
-        result = sink.read()
-        assert result.num_graphs == 6
-        assert result.num_nodes == 12
-        assert result.positions.shape[0] == 12
+        for stored in sink._batches:
+            assert stored.system_capacity == 3
+            assert stored.positions.shape[0] == 6
+        # Subsequent buffer reuse cannot change the stored snapshot.
+        for original in writes:
+            original.positions.zero_()
+        with patch.object(
+            Batch, "_without_padding", side_effect=AssertionError("Already compact")
+        ):
+            result = sink.read()
+        assert result.num_graphs == 3 * len(writes)
+        assert result.num_nodes == 6 * len(writes)
+        assert result.positions.shape[0] == 6 * len(writes)
+        torch.testing.assert_close(result.energy, torch.ones(3 * len(writes), 1))
         torch.testing.assert_close(
-            result.positions, torch.cat([source.positions.cpu()] * 2)
+            result.positions, torch.cat([source.positions.cpu()] * len(writes))
         )
         if grouped:
-            assert result.system_capacity == 6
-            assert result.group_idx.tolist() == [0, 0, 1, 2, 2, 3]
+            assert result.system_capacity == 3 * len(writes)
+            assert result.group_idx.tolist() == (
+                [0, 0, 1] if len(writes) == 1 else [0, 0, 1, 2, 2, 3]
+            )
         for original in writes:
             assert original.num_graphs == 3
 

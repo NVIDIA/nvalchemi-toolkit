@@ -9,8 +9,8 @@
 
 ### Fixed
 
-- `Batch.append()` discards unused buffer rows in either input, preserving
-  atom data and edge offsets while leaving the incoming batch unchanged.
+- `Batch.append()` and `concatenate()` discard unused buffer rows unless
+  `strip_padding=False`. `HostMemory.write()` trims padding before copying to CPU.
 
 ## 0.3.0
 
