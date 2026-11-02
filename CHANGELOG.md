@@ -14,6 +14,8 @@
 
 ### Fixed
 
+- Received pipeline samples bypass template-buffer copies so missing outputs
+  trigger force priming.
 - Distributed pipelines retain and retry graduates that do not fit the send
   buffer, without dropping them during in-flight sampler refills.
 - Pipeline receive templates retain their field layout when stages add

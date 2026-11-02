@@ -394,18 +394,16 @@ digraph buffer_sync {
         color="#76b900"
         fontcolor="#eeeeee"
 
-        d_recv  [label="recv_buffer" fillcolor="#4a3315"]
         d_batch [label="active_batch"]
         d_overflow [label="overflow_sinks\n(pending)" style=dashed]
         d_sinks [label="sinks\n(results)" style=dashed]
 
-        d_recv -> d_batch [label="incoming\nsamples" style=bold]
-        d_recv -> d_overflow [label="excess" style=dotted]
+        d_batch -> d_overflow [label="excess" style=dotted]
         d_overflow -> d_batch [label="drain when\ncapacity available" style=dotted]
         d_batch -> d_sinks [label="converged\nresults" style=bold]
     }
 
-    u_send -> d_recv [
+    u_send -> d_batch [
         label="isend / irecv\n(NCCL)";
         style=bold;
         color="#ee9040";

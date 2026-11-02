@@ -350,7 +350,7 @@ float32 attributes. Adjacent pipeline stages must have identical
 
 | Method | Purpose |
 |--------|---------|
-| `_recv_to_batch(incoming)` | Route received data through recv buffer into active batch |
+| `_recv_to_batch(incoming)` | Route received data directly into active batch or overflow sinks |
 | `_buffer_to_batch(incoming)` | Append to active batch, overflow to `overflow_sinks` if full |
 | `_batch_to_buffer(mask)` | Copy graduated samples into send buffer, defrag active batch |
 | `_overflow_to_sinks(batch)` | Write pending samples to the first overflow sink with room for all of them |
