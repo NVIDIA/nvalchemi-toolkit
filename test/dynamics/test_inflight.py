@@ -41,7 +41,8 @@ from nvalchemi.dynamics.base import (
 from nvalchemi.dynamics.demo import DemoDynamics
 from nvalchemi.dynamics.sampler import SizeAwareSampler
 from nvalchemi.dynamics.sinks import HostMemory
-from nvalchemi.hooks import DynamicsContext
+from nvalchemi.hooks import DynamicsContext, NeighborListHook
+from nvalchemi.models.base import NeighborConfig, NeighborListFormat
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 
 from ..distributed._gloo_harness import run_gloo
@@ -1153,6 +1154,47 @@ class TestFusedStageInflight:
         # All samples should have migrated to exit_status=1
         expected_status = torch.tensor([[1]] * 5)
         assert torch.equal(result.status, expected_status)
+
+    def test_inflight_results_with_changing_neighbor_width(self, device: str) -> None:
+        """MATRIX neighbors from differently sized refills do not enter results."""
+        dataset = MockDataset([(27, 0)] * 3 + [(2, 0)] * 6)
+        sampler = SizeAwareSampler(dataset, max_atoms=60, max_batch_size=3)
+        sink = HostMemory(capacity=len(dataset))
+        dynamics = BaseDynamics(
+            model=self.model,
+            convergence_hook=ConvergenceHook.from_fmax(1e6),
+            device_type=device,
+        )
+        fused = FusedStage(
+            sub_stages=[(0, dynamics)],
+            sampler=sampler,
+            sinks=[sink],
+            refill_frequency=1,
+            hooks=[
+                NeighborListHook(
+                    NeighborConfig(cutoff=2.5, format=NeighborListFormat.MATRIX),
+                    stage=DynamicsStage.BEFORE_COMPUTE,
+                )
+            ],
+            device_type=device,
+        )
+        widths = []
+        write = fused._write_to_sinks
+
+        def record_width(batch, mask=None):
+            widths.append(batch.neighbor_matrix.shape[1])
+            write(batch, mask=mask)
+
+        with patch.object(fused, "_write_to_sinks", side_effect=record_width):
+            fused.run(n_steps=20)
+
+        assert len(set(widths)) > 1
+        results = sink.drain()
+        assert results.num_graphs == len(dataset)
+        assert "neighbor_matrix" not in results
+        assert "num_neighbors" not in results
+        assert "energy" in results
+        assert "forces" in results
 
     def test_graduated_samples_written_to_sinks(self) -> None:
         """Graduated samples should be written to configured sinks.

@@ -84,6 +84,20 @@ if TYPE_CHECKING:
     from nvalchemi.dynamics.sinks import DataSink
 
 
+# Neighbor data keys to strip before writing to the sink.
+# Neighbor tensors are ephemeral (rebuilt by NeighborListHook each step)
+# and their K-dimension can change between rebuilds due to adaptive
+# sizing, causing shape mismatches when the sink concatenates snapshots.
+_NEIGHBOR_KEYS = frozenset(
+    {
+        "neighbor_matrix",
+        "num_neighbors",
+        "neighbor_matrix_shifts",
+        "neighbor_list",
+        "neighbor_list_shifts",
+    }
+)
+
 __all__ = [
     "Hook",
     "DynamicsStage",
@@ -1291,6 +1305,10 @@ class _CommunicationMixin:
     ) -> None:
         """Write samples to the first sink with room for all of them.
 
+        Omit ephemeral neighbor data whose shape can change between writes.
+        Hide these fields only during the write, restoring the same tensors
+        afterwards even on error. The sink performs its normal selection and copy.
+
         Parameters
         ----------
         sinks : Sequence[DataSink]
@@ -1298,7 +1316,7 @@ class _CommunicationMixin:
         batch : Batch
             Samples to store.
         mask : torch.Tensor | None
-            Boolean mask for selective writing. Forwarded to sink.write().
+            Boolean mask selecting the graphs to store.
         kind : str
             Description of the samples, used in the error message.
 
@@ -1312,7 +1330,8 @@ class _CommunicationMixin:
             return
         for sink in sinks:
             if len(sink) + num_graphs <= sink.capacity:
-                sink.write(batch, mask=mask)
+                with batch.without_keys(*_NEIGHBOR_KEYS):
+                    sink.write(batch, mask=mask)
                 return
         raise RuntimeError(
             f"All sinks are full. Cannot store {num_graphs} {kind} samples."
@@ -1332,7 +1351,7 @@ class _CommunicationMixin:
         batch : Batch
             Pending samples to store.
         mask : torch.Tensor | None, optional
-            Boolean mask for selective writing. Forwarded to sink.write().
+            Boolean mask selecting the graphs to store.
 
         Raises
         ------
@@ -1349,7 +1368,7 @@ class _CommunicationMixin:
         batch : Batch
             Finished samples to store.
         mask : torch.Tensor | None, optional
-            Boolean mask for selective writing. Forwarded to sink.write().
+            Boolean mask selecting the graphs to store.
 
         Raises
         ------
