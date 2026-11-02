@@ -1089,7 +1089,14 @@ class TestRelaxationLifecycleOwnership:
                 config_overrides={
                     "dynamics": FusedStage(
                         sub_stages=[
-                            (0, FIRE(student, dt=0.1)),
+                            (
+                                0,
+                                FIRE(
+                                    student,
+                                    dt=0.1,
+                                    convergence_hook=ConvergenceHook.from_fmax(0.05),
+                                ),
+                            ),
                             (1, NVE(student, dt=0.1)),
                         ]
                     )

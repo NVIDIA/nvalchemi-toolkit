@@ -562,6 +562,11 @@
 - **`FusedStage` force priming** — a dynamics instance's own adaptive
   optimizer state (e.g. FIRE's per-graph `dt`/`alpha`/step counters in
   `self._state`) is now preserved across masked `pre_update`/`post_update` calls.
+- **`FusedStage` step budgets** — a non-final sub-stage without a
+  `convergence_hook` is now ended by its `n_steps` alone. It was given the
+  default `fmax < 0.05` criterion before, so in
+  `FIRE2 + NVTLangevin(n_steps=...) + NVE(n_steps=...)` the NVT stage ran
+  0 steps (#238). A non-final sub-stage with neither raises a `UserWarning`.
 
 ### Deprecated
 

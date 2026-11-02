@@ -22,6 +22,7 @@ model where multiple dynamics engines share a batch.
 from __future__ import annotations
 
 import secrets
+import warnings
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -624,6 +625,65 @@ class TestFusedStage:
         assert dynamics1.updated_masks[-1].tolist() == [True, False, False]
         assert batch.n_steps_counter_1.view(-1).tolist() == [1, 0, 0]
         assert batch.status.tolist() == [1, 0, fused.exit_status]
+
+    @pytest.mark.parametrize("position", [0.0, 10.0], ids=["zero_force", "large_force"])
+    def test_n_steps_sub_stages_run_full_budget(self, position: float) -> None:
+        """Sub-stages with ``n_steps`` and no convergence hook run exactly
+        ``n_steps`` steps per system, at every position in the fused stage.
+
+        Zero forces satisfy the default ``fmax`` criterion, which must not
+        end a sub-stage that declares no convergence criterion.
+        """
+        budgets = [3, 2, 4]
+        stages = [
+            TrackingDynamics(model=CompilerFriendlyModel(), n_steps=n) for n in budgets
+        ]
+        fused = FusedStage(sub_stages=list(enumerate(stages)))
+        batch = create_batch_with_status(n_graphs=3)
+        batch.positions.fill_(position)  # CompilerFriendlyModel: forces = -2 * r
+        batch.status = torch.tensor([0, 1, 2])
+
+        for _ in range(2 * sum(budgets)):
+            fused.step(batch)
+        steps_per_stage = torch.stack(
+            [torch.stack(stage.updated_masks).sum(dim=0) for stage in stages], dim=1
+        )
+
+        assert steps_per_stage.tolist() == [[3, 2, 4], [0, 2, 4], [0, 0, 4]]
+        assert batch.status.tolist() == [fused.exit_status] * 3
+
+    @pytest.mark.parametrize(
+        ("first_kwargs", "warns"),
+        [
+            ({}, True),
+            ({"n_steps": 5}, False),
+            ({"convergence_hook": ConvergenceHook.from_fmax(0.05)}, False),
+            (
+                {
+                    "hooks": [
+                        ConvergenceHook.from_fmax(
+                            0.05, source_status=0, target_status=1
+                        )
+                    ]
+                },
+                False,
+            ),
+        ],
+        ids=["nothing", "n_steps", "convergence_hook", "own_migration_hook"],
+    )
+    def test_warns_when_sub_stage_cannot_hand_over(
+        self, first_kwargs: dict[str, Any], warns: bool
+    ) -> None:
+        """A non-final sub-stage with no way to move systems on is reported."""
+        first = BaseDynamics(model=self.model, **first_kwargs)
+        last = BaseDynamics(model=self.model)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            FusedStage(sub_stages=[(0, first), (1, last)])
+
+        messages = [str(w.message) for w in caught]
+        assert any("never move to the next sub-stage" in m for m in messages) == warns
 
     def test_reprime_on_entry_is_validated(self) -> None:
         """Reprime targets must be a set of known integer status codes."""
