@@ -31,6 +31,7 @@ import torch
 from torch import distributed as dist
 
 from nvalchemi.data import AtomicData, Batch
+from nvalchemi.data.level_storage import SegmentedLevelStorage
 from nvalchemi.dynamics.base import (
     BaseDynamics,
     BufferConfig,
@@ -2339,6 +2340,83 @@ class TestOverflowTransfer:
 
 class TestOverflowSinksSeparation:
     """Pending arrivals use ``overflow_sinks``; finished results use ``sinks``."""
+
+    @pytest.mark.parametrize("sink_kind", ["result", "overflow"])
+    @pytest.mark.parametrize("masked", [False, True])
+    def test_neighbor_width_changes_do_not_break_sink_read(
+        self, device: str, sink_kind: str, masked: bool
+    ) -> None:
+        """Sink writes omit neighbors without altering live data or selection."""
+        sink = HostMemory(capacity=10)
+        stage = _CommunicationMixin(
+            sinks=[sink] if sink_kind == "result" else [],
+            overflow_sinks=[sink] if sink_kind == "overflow" else [],
+            device_type=device,
+        )
+        write = (
+            stage._write_to_sinks if sink_kind == "result" else stage._overflow_to_sinks
+        )
+        neighbor_keys = {
+            "neighbor_matrix",
+            "num_neighbors",
+            "neighbor_matrix_shifts",
+            "neighbor_list",
+            "neighbor_list_shifts",
+        }
+        expected_ids = []
+        for start, width in [(0, 16), (2, 32)]:
+            batch = _make_batch_with_system(num_graphs=2).to(device)
+            batch.sample_id = torch.arange(start, start + 2, device=device).view(-1, 1)
+            batch.forces = torch.full_like(batch.positions, float(start + 1))
+            batch._atoms_group["neighbor_matrix"] = torch.full(
+                (batch.num_nodes, width),
+                batch.num_nodes,
+                dtype=torch.int32,
+                device=device,
+            )
+            batch._atoms_group["num_neighbors"] = torch.zeros(
+                batch.num_nodes, dtype=torch.int32, device=device
+            )
+            batch._atoms_group["neighbor_matrix_shifts"] = torch.zeros(
+                batch.num_nodes, width, 3, dtype=torch.int32, device=device
+            )
+            batch.set_level(
+                "edges",
+                SegmentedLevelStorage(
+                    data={
+                        "neighbor_list": torch.tensor([[0, 1], [3, 4]], device=device),
+                        "neighbor_list_shifts": torch.zeros(
+                            2, 3, dtype=torch.int32, device=device
+                        ),
+                    },
+                    segment_lengths=torch.tensor(
+                        [1, 1], dtype=torch.int32, device=device
+                    ),
+                    device=device,
+                ),
+            )
+            before = {key: batch[key].clone() for key in neighbor_keys}
+            mask = torch.tensor([False, True], device=device) if masked else None
+
+            write(batch, mask=mask)
+
+            for key, value in before.items():
+                torch.testing.assert_close(batch[key], value)
+            expected_ids.extend([start + 1] if masked else [start, start + 1])
+
+        for stored in (sink.read(), sink.drain()):
+            assert stored.sample_id.view(-1).tolist() == expected_ids
+            assert all(key not in stored for key in neighbor_keys)
+            assert "energy" in stored
+            assert "forces" in stored
+            expected_forces = (
+                torch.tensor(
+                    [1.0] * (3 if masked else 6) + [3.0] * (3 if masked else 6)
+                )
+                .view(-1, 1)
+                .expand(-1, 3)
+            )
+            torch.testing.assert_close(stored.forces, expected_forces)
 
     def test_drain_reads_only_overflow_sinks(self) -> None:
         """Draining refills the batch from pending storage, never results."""
