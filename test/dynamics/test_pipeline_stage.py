@@ -1606,20 +1606,18 @@ class TestPrestepZerosSendBuffer:
 
 
 # ---------------------------------------------------------------------------
-# TestRecvToBatch — _recv_to_batch staging behavior
+# TestRecvToBatch — _recv_to_batch routing behavior
 # ---------------------------------------------------------------------------
 
 
 class TestRecvToBatch:
-    """Test that _recv_to_batch correctly stages data through recv_buffer."""
+    """Test how _recv_to_batch routes received data into the active batch."""
 
-    def test_recv_to_batch_uses_recv_buffer(self) -> None:
-        """Verify _recv_to_batch copies incoming to recv_buffer, routes, then zeros.
+    def test_recv_to_batch_routes_incoming_directly(self) -> None:
+        """Verify _recv_to_batch routes incoming without staging it in recv_buffer.
 
-        When recv_buffer is present:
-        1. recv_buffer.put(incoming, mask=all_true) is called
-        2. _buffer_to_batch(recv_buffer) is called
-        3. recv_buffer.zero() is called
+        The recv buffer's fields follow its template, so staging could add
+        placeholder outputs the prior stage never sent.
         """
         batch = _make_batch(num_graphs=3)
         cfg = BufferConfig(num_systems=10, num_nodes=100, num_edges=200)
@@ -1632,7 +1630,6 @@ class TestRecvToBatch:
             buffer_config=cfg,
         )
 
-        # Create a mock recv_buffer
         mock_recv_buffer = Mock()
         stage.recv_buffer = mock_recv_buffer
 
@@ -1641,20 +1638,9 @@ class TestRecvToBatch:
         with patch.object(stage, "_buffer_to_batch") as mock_b2b:
             stage._recv_to_batch(incoming)
 
-            # Verify recv_buffer.put was called with incoming and all-True mask
-            mock_recv_buffer.put.assert_called_once()
-            call_args = mock_recv_buffer.put.call_args
-            assert call_args[0][0] is incoming  # First positional arg is incoming
-            mask_arg = call_args[1]["mask"]
-            assert mask_arg.dtype == torch.bool
-            assert mask_arg.shape == (2,)
-            assert mask_arg.all()
-
-            # Verify _buffer_to_batch was called with recv_buffer
-            mock_b2b.assert_called_once_with(mock_recv_buffer)
-
-            # Verify recv_buffer.zero() was called after routing
-            mock_recv_buffer.zero.assert_called_once()
+            mock_b2b.assert_called_once_with(incoming)
+            mock_recv_buffer.put.assert_not_called()
+            mock_recv_buffer.zero.assert_not_called()
 
     def test_recv_to_batch_falls_back_on_empty_incoming(self) -> None:
         """Verify _recv_to_batch routes directly when incoming has 0 graphs.
@@ -2009,10 +1995,10 @@ class TestOverflowDrainBack:
     @pytest.mark.parametrize("comm_mode", ["sync", "async_recv", "fully_async"])
     @pytest.mark.parametrize("max_batch_size", [1, 2])
     @pytest.mark.parametrize("recv_buffer_exists", [False, True])
-    def test_full_batch_skips_staging_without_changing_admission_order(
+    def test_receive_skips_staging_without_changing_admission_order(
         self, comm_mode: str, max_batch_size: int, recv_buffer_exists: bool
     ) -> None:
-        """Bypass staging only when full, preserving arrival-first admission."""
+        """Bypass staging at any occupancy, preserving arrival-first admission."""
         batch = _make_batch_with_system(num_graphs=5)
         batch["system_id"] = torch.arange(5).view(-1, 1)
         pending = HostMemory(capacity=10)
@@ -2040,10 +2026,7 @@ class TestOverflowDrainBack:
             stage._prestep_sync_buffers()
             stage._complete_pending_recv()
 
-        if recv_buffer_exists and max_batch_size == 2:
-            put.assert_called_once()
-        else:
-            put.assert_not_called()
+        put.assert_not_called()
         assert stage.active_batch.system_id.view(-1).tolist() == (
             [0, 3] if max_batch_size == 2 else [0]
         )
