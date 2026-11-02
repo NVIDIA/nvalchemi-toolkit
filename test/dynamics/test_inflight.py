@@ -1451,6 +1451,43 @@ class TestPipelinePerGraphPriming:
         assert "energy" in result
 
     @pytest.mark.parametrize("fused_stage", [False, True])
+    @pytest.mark.parametrize("via_overflow", [False, True])
+    def test_recv_buffer_placeholder_output_does_not_count_as_received(
+        self, fused_stage: bool, via_overflow: bool
+    ) -> None:
+        """A recv-buffer field the prior stage never sent does not skip priming."""
+        sink = HostMemory(capacity=10)
+        stage, sampler, pipeline = self._make_stage(
+            fused_stage,
+            sampler_batch_size=2,
+            prior_rank=0,
+            max_batch_size=2,
+            overflow_sinks=[sink],
+        )
+        stage.__needs_keys__ = {"forces", "energy"}
+        template = initialize_batch_for_dynamics(sampler.build_initial_batch())
+        stage._ensure_buffers(template)
+        assert "energy" in stage.recv_buffer
+        if via_overflow:
+            # A full stage sends arrivals to the sink until room opens up.
+            stage.active_batch = template
+        incoming = sampler.build_initial_batch()
+        incoming["forces"] = torch.full((incoming.num_nodes, 3), 99.0)
+        if "energy" in incoming:
+            del incoming["energy"]
+
+        stage._recv_to_batch(incoming)
+        if via_overflow:
+            assert stage.active_batch is template
+            assert len(sink) == 2
+            stage.active_batch = None
+            stage._drain_sinks_to_batch()
+
+        result = stage.active_batch
+        assert self._step_counting_calls(stage, result) == (1, 2)
+        assert not (result.forces == 99.0).any()
+
+    @pytest.mark.parametrize("fused_stage", [False, True])
     @pytest.mark.parametrize("reprime_on_entry", [False, True])
     @pytest.mark.parametrize("final_stage", [False, True])
     def test_removal_does_not_reprime_residents(
