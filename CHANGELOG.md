@@ -543,6 +543,10 @@
 
 ### Fixed
 
+- Validate a tensor `atom_categories` as a tensor first, instead of trying
+  `list[AtomCategory]` element by element. This removes one `Tensor.item()`
+  (a device sync on CUDA) per atom from `AtomicData` construction,
+  `AtomicData.to` and `Batch.get_data` / `Batch.to_data_list`.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain
