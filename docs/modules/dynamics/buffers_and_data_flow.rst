@@ -70,17 +70,15 @@ The three buffer layers
            color="#999999"
 
            irecv [label="Batch.irecv" shape=ellipse fillcolor="#1a1a1a"]
-           recv  [label="Recv Buffer" fillcolor="#4a3315"]
        }
 
        conv -> send [label="_poststep_sync_buffers" style=bold]
        send -> isend [style=bold]
        isend -> irecv [label="prior rank ← → next rank" style=bold color="#ee9040" fontcolor="#ee9040" penwidth=2]
-       irecv -> recv [style=bold]
-       recv -> batch [label="_recv_to_batch" style=bold]
+       irecv -> batch [label="_recv_to_batch" style=bold]
 
        overflow [label="Overflow Sinks" style="rounded,dashed" fillcolor=none]
-       recv -> overflow [label="excess" style=dashed color="#999999"]
+       irecv -> overflow [label="excess" style=dashed color="#999999"]
        overflow -> batch [label="_drain_sinks_to_batch" style=dashed color="#999999"]
 
        sinks [label="Result Sinks" style="rounded,dashed" fillcolor=none]
@@ -130,9 +128,10 @@ for attribute keys, dtypes, and trailing shapes (e.g., hidden
 dimensions). This lazy approach is necessary because the attribute
 schema is not known until a real batch appears.
 
-**The buffer lifecycle.**  Communication buffers (``send_buffer`` and
-``recv_buffer``) follow a ``Batch.empty()`` → ``put()`` → ``zero()``
-cycle:
+**The buffer lifecycle.**  The ``send_buffer`` follows a
+``Batch.empty()`` → ``put()`` → ``zero()`` cycle. Received batches are
+routed into the active batch directly rather than staged in
+``recv_buffer``:
 
 1. :meth:`Batch.empty() <nvalchemi.data.Batch.empty>` allocates storage
    with zero graphs but full capacity.
@@ -182,7 +181,7 @@ to coordinate data flow between ranks:
    in async modes the handle is stored for later completion.
 
 2. **_complete_pending_recv()**: Waits on the deferred receive, routes
-   data through the recv buffer into the active batch, and drains
+   the received data into the active batch, and drains
    overflow sinks to backfill any available capacity.
 
 3. **step()**: The dynamics integration step (forward pass, pre_update,
@@ -261,13 +260,12 @@ Data routing helpers
 The :class:`~nvalchemi.dynamics.base._CommunicationMixin` provides
 several helper methods for routing data between buffers:
 
-- **_recv_to_batch(incoming)**: Stages data through the recv buffer
-  into the active batch via ``_buffer_to_batch``, then zeros the
-  recv buffer. When the active batch is full, new arrivals go directly
-  to overflow storage without the extra receive-buffer copy.
+- **_recv_to_batch(incoming)**: Routes received data into the active
+  batch via ``_buffer_to_batch``. It bypasses the recv buffer so that
+  output checks see only the fields the prior stage sent.
 
 - **_buffer_to_batch(incoming)**: Routes incoming data into the active
-  batch.  Admitted graphs are copied out of the buffer with
+  batch.  Admitted graphs are copied out of *incoming* with
   :meth:`index_select() <nvalchemi.data.Batch.index_select>`, which
   drops buffer padding, and added with :meth:`append()
   <nvalchemi.data.Batch.append>`.  Three cases:
