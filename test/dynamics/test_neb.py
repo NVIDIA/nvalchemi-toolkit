@@ -59,6 +59,7 @@ from nvalchemi.dynamics.mep.neb_equations import (
     neb_effective_force,
     neb_effective_force_from_gram_stats,
 )
+from nvalchemi.dynamics.mep.neb_ops.modes import CLIMBING_NEB
 from nvalchemi.dynamics.optimizers.fire2 import FIRE2
 from nvalchemi.dynamics.optimizers.lbfgs import LBFGS
 from nvalchemi.dynamics.sampler import SizeAwareSampler
@@ -1549,11 +1550,15 @@ class TestNEBStreaming:
         assert sink.read().group_id.unique().tolist() == [0, 1, 2]
 
     @pytest.mark.parametrize(
-        "climbing",
-        [None, ClimbingImageConfig(max_regular_steps=5, max_climbing_steps=5)],
+        ("climbing", "equilibrated_first"),
+        [
+            (None, False),
+            (ClimbingImageConfig(max_regular_steps=5, max_climbing_steps=5), False),
+            (ClimbingImageConfig(mode="immediate", max_climbing_steps=5), True),
+        ],
     )
     def test_stream_matches_static_batch(
-        self, climbing: ClimbingImageConfig | None
+        self, climbing: ClimbingImageConfig | None, equilibrated_first: bool
     ) -> None:
         """Streaming with whole-path refill reproduces a static run of all paths.
 
@@ -1562,6 +1567,9 @@ class TestNEBStreaming:
         results agree only to float32 roundoff amplified over many steps.
         """
         sizes = [(3, 1), (5, 2), (4, 1)]
+        dataset = _BandDataset(sizes)
+        if equilibrated_first:
+            dataset.paths[0].positions.zero_()
 
         def neb() -> NEB:
             return NEB(
@@ -1569,6 +1577,7 @@ class TestNEBStreaming:
                 optimizer=LBFGS,
                 fmax=1e-3,
                 n_steps=500,
+                refill_frequency=1,
                 climbing=climbing,
                 optimizer_kwargs={"device_type": "cpu"},
             )
@@ -1584,20 +1593,70 @@ class TestNEBStreaming:
 
         static = neb().run(
             SizeAwareSampler(
-                _BandDataset(sizes), by_group=True, max_atoms=100
+                dataset, by_group=True, max_atoms=100
             ).build_initial_batch()
         )
         sampler = SizeAwareSampler(
-            _BandDataset(sizes), by_group=True, max_atoms=100, max_batch_size=2
+            dataset, by_group=True, max_atoms=100, max_batch_size=2
         )
         sink = HostMemory(100)
-        assert neb().run(sampler=sampler, sinks=[sink]) is None
+        with patch.object(
+            FusedStage,
+            "refill_check",
+            autospec=True,
+            side_effect=FusedStage.refill_check,
+        ) as refill:
+            assert neb().run(sampler=sampler, sinks=[sink]) is None
+        if equilibrated_first:
+            first_refill = refill.call_args_list[0].args[1]
+            departing = first_refill.group_id.view(-1) == 0
+            resident = ~departing
+            assert departing.any() and resident.any()
+            assert first_refill.status.view(-1)[departing].eq(1).all()
+            assert first_refill.status.view(-1)[resident].eq(0).all()
+            assert (
+                first_refill.force_mode.view(-1)[resident] == CLIMBING_NEB
+            ).sum() == 1
         assert torch.all(static.status == sink.read().status.max())
         expected = paths_by_id(static)
         streamed = paths_by_id(sink.read())
         assert streamed.keys() == expected.keys() == {0, 1, 2}
         for identity, positions in expected.items():
             torch.testing.assert_close(streamed[identity], positions, rtol=0, atol=0)
+
+    def test_stream_finishes_paths_after_sampler_exhaustion(self, device: str) -> None:
+        """Exhausting the grouped sampler does not discard unfinished paths."""
+        dataset = _BandDataset([(3, 1), (5, 1)], device)
+        dataset.paths[0].positions.zero_()
+        initial_positions = dataset.paths[1].positions.clone()
+        sampler = SizeAwareSampler(
+            dataset, by_group=True, max_atoms=20, max_batch_size=2
+        )
+        sink = HostMemory(20)
+        engine = NEB(
+            model=_HarmonicModel().to(device).eval(),
+            optimizer=LBFGS,
+            fmax=1e-3,
+            n_steps=500,
+            refill_frequency=1,
+            optimizer_kwargs={"device_type": device},
+        ).build_engine(sampler=sampler, sinks=[sink])
+        batch = sampler.build_initial_batch()
+        assert sampler.exhausted
+        with patch.object(engine, "refill_check", wraps=engine.refill_check) as refill:
+            assert engine.run(batch) is None
+        assert refill.call_count > 1
+        first_refill = refill.call_args_list[0].args[0]
+        assert first_refill.status.view(-1)[:3].eq(engine.exit_status).all()
+        assert first_refill.status.view(-1)[3:].lt(engine.exit_status).all()
+        assert refill.call_args_list[1].args[0].group_id.view(-1).eq(1).all()
+        result = sink.read()
+        assert result.group_id.view(-1).tolist() == [0] * 3 + [1] * 5
+        assert result.group_layout.num_graphs_per_group.tolist() == [3, 5]
+        assert result.status.eq(engine.exit_status).all()
+        assert not torch.allclose(result.positions[3:], initial_positions.cpu())
+        assert engine.done
+        assert engine.active_batch is None
 
     def test_refill_keeps_bookkeeping_carried_by_arriving_path(self) -> None:
         """Grouped refill keeps dataset bookkeeping, as ungrouped refill does."""
