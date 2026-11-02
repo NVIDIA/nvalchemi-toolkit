@@ -129,7 +129,12 @@ taken when `group_layout` is first accessed. In-place changes such as
 and rebuild the cached layout. On a grouped batch, `index_select()` must select
 complete, contiguous groups without repeated graphs, and it rebuilds the
 result's labels and layout. Groups may be reordered. `append()` requires both
-batches grouped or both ungrouped and rebases labels. `put()` also requires
+batches grouped or both ungrouped and rebases labels. Both inputs must already
+have dense, zero-based group labels with contiguous group membership. Use
+`set_group_layout()` when assigning or changing grouping metadata. To avoid
+repeated validation in dynamics operations such as assembly and refills,
+`append()` assumes valid labels and does not check them.
+`put()` also requires
 matching grouping and copies complete groups, stopping at the first selected
 group that does not fit. Masks passed to `put()` or `trim()` must select
 complete groups. Partial-group masks are rejected.

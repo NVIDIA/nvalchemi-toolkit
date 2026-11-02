@@ -3159,8 +3159,10 @@ class Batch(DataMixin):
         receiver's existing groups. Appending a grouped and an ungrouped batch
         is rejected before either batch is modified. The derived group layout
         is rebuilt lazily. Inputs must have dense, zero-based group IDs and
-        keep the graphs of each group contiguous; use
-        :meth:`set_group_layout` to validate grouping metadata before appending.
+        keep the graphs of each group contiguous. Labels are assumed valid and
+        are not checked here, avoiding repeated validation in dynamics
+        operations such as assembly and refills. Use :meth:`set_group_layout`
+        when assigning or changing grouping metadata before appending.
 
         Parameters
         ----------
