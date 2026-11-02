@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import random
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import torch
@@ -78,6 +78,14 @@ class SizeAwareSampler(Sampler[int]):
         Sample complete single-group batches instead of individual graphs. Each
         item returns ``(batch, metadata)`` with exactly one group.
         ``max_batch_size`` counts groups. Default False.
+
+    Attributes
+    ----------
+    assemble_samples : Callable[..., Batch]
+        Assemble a nonempty list of samples into a batch on the supplied
+        ``device``. Samples are AtomicData graphs by default or single-group
+        Batch objects when ``by_group=True``. Group labels are rebased across
+        samples in grouped mode.
 
     Raises
     ------
@@ -180,7 +188,7 @@ class SizeAwareSampler(Sampler[int]):
         self._max_batch_size = max_batch_size
         self.by_group = by_group
         self._load_sample = self._load_group if by_group else self._load_graph
-        self._assemble_samples = (
+        self.assemble_samples: Callable[..., Batch] = (
             self._assemble_groups if by_group else Batch.from_data_list
         )
         self._bin_width = bin_width
@@ -423,7 +431,7 @@ class SizeAwareSampler(Sampler[int]):
             )
 
         # Create batch
-        batch = self._assemble_samples(data_list, device=data_list[0].device)
+        batch = self.assemble_samples(data_list, device=data_list[0].device)
 
         # Initialize status attribute
         batch["status"] = torch.zeros(

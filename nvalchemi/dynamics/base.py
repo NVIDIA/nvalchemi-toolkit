@@ -3501,10 +3501,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         )
 
         if replacements:
-            repl_batch = (
-                self.sampler._assemble_samples(replacements, device=batch.device)
-                if self.by_group
-                else Batch.from_data_list(replacements, device=batch.device)
+            repl_batch = self.sampler.assemble_samples(
+                replacements, device=batch.device
             )
             if result is None:
                 result = repl_batch
