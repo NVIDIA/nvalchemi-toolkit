@@ -696,7 +696,9 @@ class NEB(DynamicsStrategy):
         """Optimize a supplied batch of paths, or stream paths from a sampler.
 
         With ``batch``, this behaves like :meth:`DynamicsStrategy.run`. With
-        ``sampler``, each call builds a fresh engine regardless of
+        no fixed atoms, a non-cached static engine omits the freeze hook.
+        Cached engines retain it to support changes to the fixed-atom mask.
+        With ``sampler``, each call builds a fresh engine regardless of
         ``cache_engine``, refills whole paths every ``refill_frequency`` steps,
         and writes completed paths to ``sinks``. The step limit stays global and
         does not become a per-path budget.
@@ -731,7 +733,29 @@ class NEB(DynamicsStrategy):
         if sampler is None:
             if sinks is not None:
                 raise ValueError("sinks require a sampler")
-            return super().run(batch, n_steps=n_steps)
+            if self.cache_engine:
+                return super().run(batch, n_steps=n_steps)
+            engine = self.build_engine()
+            if (
+                self.endpoint_mode == "relaxed"
+                and not self.fixed_atom_indices
+                and (
+                    "neb_fixed_node_mask" not in batch
+                    or not bool(batch.neb_fixed_node_mask.any())
+                )
+            ):
+                # Keep the shared list referenced by the optimizer sub-stages.
+                freeze_hook = next(
+                    hook
+                    for hook in engine.hooks
+                    if isinstance(hook, FreezeAtomsHook)
+                    and hook.mask_key == "neb_fixed_node_mask"
+                )
+                engine.hooks.remove(freeze_hook)
+            result = engine.run(batch, n_steps=n_steps)
+            if result is None:
+                raise RuntimeError("NEB unexpectedly completed without a result batch")
+            return result
         if not sinks:
             raise ValueError("Streaming NEB requires at least one result sink")
         return self.build_engine(sampler=sampler, sinks=sinks).run(n_steps=n_steps)

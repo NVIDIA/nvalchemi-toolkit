@@ -880,27 +880,57 @@ class TestNEBConfiguration:
 class TestNEBRun:
     """Exercise the public run entry point on grouped path batches."""
 
-    def test_node_mask_holds_positions_with_relaxed_endpoints(
-        self, device: str
+    @pytest.mark.parametrize("compile", [False, True])
+    @pytest.mark.parametrize("mask_value", [None, False, True])
+    @pytest.mark.parametrize("cache_engine", [False, True])
+    def test_static_freeze_hook_follows_batch_constraints(
+        self, device: str, compile: bool, mask_value: bool | None, cache_engine: bool
     ) -> None:
-        """The strategy freezes masked atoms while unmasked endpoints move."""
+        """Only non-cached unconstrained runs omit freezing; cached state persists."""
         batch = _bands(device)
         batch.positions[:, 1] = 1
-        batch.add_key(
-            "neb_fixed_node_mask",
-            list(torch.tensor([False, True, False], device=device).split(1)),
-            level="node",
-        )
+        if mask_value is not None:
+            batch.add_key(
+                "neb_fixed_node_mask",
+                list(torch.tensor([False, mask_value, False], device=device).split(1)),
+                level="node",
+            )
         before = batch.positions.clone()
-        result = NEB(
+        strategy = NEB(
             model=_CompilerFriendlyModel().to(device).eval(),
             endpoint_mode="relaxed",
             fmax=1e-12,
             n_steps=2,
+            cache_engine=cache_engine,
+            compile=compile,
+            compile_kwargs={"backend": "eager", "fullgraph": True},
             optimizer_kwargs={"device_type": device},
-        ).run(batch)
-        torch.testing.assert_close(result.positions[1], before[1])
-        assert torch.all(result.positions[[0, 2], 1] < before[[0, 2], 1])
+        )
+        engine = strategy.build_engine()
+        try:
+            with patch.object(NEB, "build_engine", return_value=engine) as build:
+                result = strategy.run(batch)
+                freeze_hooks = [
+                    hook for hook in engine.hooks if isinstance(hook, FreezeAtomsHook)
+                ]
+                assert bool(freeze_hooks) == (cache_engine or bool(mask_value))
+                if mask_value:
+                    torch.testing.assert_close(result.positions[1], before[1])
+                else:
+                    assert result.positions[1, 1] < before[1, 1]
+                assert torch.all(result.positions[[0, 2], 1] < before[[0, 2], 1])
+                if cache_engine:
+                    for enabled in (False, True, False):
+                        batch.neb_fixed_node_mask[1] = enabled
+                        step_count = engine.step_count
+                        strategy.run(batch, n_steps=1)
+                        assert strategy._engine is engine
+                        assert engine.step_count == step_count + 1
+                        assert freeze_hooks[0] in engine.hooks
+                    build.assert_called_once()
+        finally:
+            if compile:
+                torch.compiler.reset()
 
     @pytest.mark.parametrize(
         "climbing", [None, ClimbingImageConfig(max_regular_steps=1)]
