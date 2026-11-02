@@ -94,6 +94,23 @@ class _NEBWorkspace:
     link_lengths: Tensor
     vector_scratch: Tensor | None
 
+    def spring_constants_for(self, link_sources: Tensor) -> Tensor:
+        """Return spring constants for links identified by source-image indices.
+
+        Parameters
+        ----------
+        link_sources : Tensor
+            Packed indices of non-terminal source images.
+
+        Returns
+        -------
+        Tensor
+            Spring constants in the same order as ``link_sources``.
+        """
+        # Packed links omit one terminal image for each preceding path.
+        link_indices = link_sources - self.image_path_idx[link_sources]
+        return self.spring_constants[link_indices]
+
 
 class NEBForceHook:
     """Configure optimizer-facing forces for nudged elastic band dynamics.
@@ -456,9 +473,7 @@ class NEBForceHook:
             old_sources = mapping[link_source_image_idx]
             retained_links = old_sources >= 0
             old_sources = old_sources[retained_links]
-            old_paths = self._workspace.image_path_idx[old_sources]
-            # Packed links omit one terminal image for each preceding path.
-            retained_springs = self._workspace.spring_constants[old_sources - old_paths]
+            retained_springs = self._workspace.spring_constants_for(old_sources)
 
         # Include fields shared with other hooks on `Batch`.
         def set_batch_field(key: str, value: Tensor, level: str) -> None:
