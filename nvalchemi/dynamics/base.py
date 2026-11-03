@@ -4017,7 +4017,9 @@ class FusedStage(BaseDynamics):
                 # Only the n_steps counter, or a migration hook registered by
                 # the caller, moves systems on from this sub-stage.
                 has_own_migrator = any(
-                    isinstance(h, ConvergenceHook) and h.source_status == source_code
+                    isinstance(h, ConvergenceHook)
+                    and h.source_status == source_code
+                    and h.target_status not in (None, source_code)
                     for h in source_dynamics.hooks
                 )
                 has_budget = source_dynamics.n_steps is not None

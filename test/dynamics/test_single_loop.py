@@ -668,8 +668,18 @@ class TestFusedStage:
                 },
                 False,
             ),
+            (
+                {"hooks": [ConvergenceHook.from_fmax(0.05, source_status=0)]},
+                True,
+            ),
         ],
-        ids=["nothing", "n_steps", "convergence_hook", "own_migration_hook"],
+        ids=[
+            "nothing",
+            "n_steps",
+            "convergence_hook",
+            "own_migration_hook",
+            "hook_without_target",
+        ],
     )
     def test_warns_when_sub_stage_cannot_hand_over(
         self, first_kwargs: dict[str, Any], warns: bool

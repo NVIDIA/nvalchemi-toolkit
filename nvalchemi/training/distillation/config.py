@@ -36,7 +36,12 @@ from pydantic import (
 from nvalchemi.data.batch import Batch
 from nvalchemi.data.datapipes.dataset import BatchDatasetProtocol
 from nvalchemi.distributed.domain_parallel import DomainParallel
-from nvalchemi.dynamics.base import BaseDynamics, ConvergenceHook, DynamicsStage
+from nvalchemi.dynamics.base import (
+    BaseDynamics,
+    ConvergenceHook,
+    DynamicsStage,
+    FusedStage,
+)
 from nvalchemi.dynamics.sinks import DataSink, ResizableSink
 from nvalchemi.hooks import DynamicsContext
 from nvalchemi.training.distillation.replay import (
@@ -285,8 +290,8 @@ def _status_migrators(dynamics: BaseDynamics) -> list[ConvergenceHook]:
     a :class:`~nvalchemi.dynamics.FusedStage`, the hooks registered at the
     fused level) and its ``convergence_hook``. It also covers the same two
     places on every sub-stage, where a fused stage puts the migrators it
-    builds itself: one on every sub-stage except the last, and one on the
-    last whenever it declares a ``convergence_hook``.
+    builds itself: one on every sub-stage that declares a
+    ``convergence_hook``.
 
     Parameters
     ----------
@@ -356,8 +361,7 @@ def _check_sole_migrator(dynamics: BaseDynamics, criterion: ConvergenceHook) -> 
         f"({criterion.source_status!r}, {criterion.target_status!r}). "
         "Remove it, or drop fmax or convergence_hook and let the propagator "
         "manage its own lifecycle. A FusedStage builds one for every "
-        "sub-stage except the last, and for the last one when it declares a "
-        "convergence_hook."
+        "sub-stage that declares a convergence_hook."
     )
 
 
@@ -956,9 +960,11 @@ class OnPolicyConfig(OnPolicySettings):
     propagator that carries a second migrating
     :class:`~nvalchemi.dynamics.base.ConvergenceHook` is refused. A
     :class:`~nvalchemi.dynamics.FusedStage` builds such a hook for every
-    sub-stage except the last, and for the last one whenever it declares a
-    ``convergence_hook``. Only a single-sub-stage fused stage without a
-    criterion of its own is therefore accepted. A
+    sub-stage that declares a ``convergence_hook``. A fused stage with more
+    than one sub-stage is refused as well, because the criterion would
+    graduate systems before they reach the later sub-stages. Only a
+    single-sub-stage fused stage without a criterion of its own is therefore
+    accepted. A
     :class:`~nvalchemi.distributed.DomainParallel` propagator is refused with
     a criterion as well: its step dispatches no ``ON_GRADUATE``, the stage
     the converged route captures at, so its minima would never be stored. A
@@ -1230,6 +1236,17 @@ class OnPolicyConfig(OnPolicySettings):
                 f"fmax={self.fmax!r} and convergence_hook={self.convergence_hook!r}. "
                 "Pass the dynamics it wraps, or drop fmax and convergence_hook."
             )
+        for propagator in _propagator_tree(self.dynamics):
+            if isinstance(propagator, FusedStage) and len(propagator.sub_stages) > 1:
+                raise ValueError(
+                    "A FusedStage with more than one sub-stage cannot carry a "
+                    "trajectory lifecycle: the criterion would graduate systems "
+                    "before they reach the later sub-stages; got "
+                    f"{len(propagator.sub_stages)} sub-stages with "
+                    f"fmax={self.fmax!r} and "
+                    f"convergence_hook={self.convergence_hook!r}. Pass a single "
+                    "sub-stage, or drop fmax and convergence_hook."
+                )
         _check_sole_migrator(self.dynamics, self.convergence_criterion)
         return self
 
