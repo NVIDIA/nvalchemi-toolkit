@@ -903,7 +903,7 @@ if __name__ == "__main__":
 # The sharp transition near step 54,400 marks the stage-two loss-weight schedule
 # configured by ``training.loss.stage_two.start_step``.
 #
-# .. image:: ../_static/vanilla_mace_validation_metrics_260701.png
+# .. image:: /../examples/_static/vanilla_mace_validation_metrics_260701.png
 #    :align: center
 #    :width: 70%
 #
