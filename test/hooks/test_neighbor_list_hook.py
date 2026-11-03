@@ -114,6 +114,20 @@ def _is_neighbor(
     return j in neighbor_matrix[i, :n].tolist()
 
 
+def _sorted_pairs(batch: Batch) -> torch.Tensor:
+    """Return each atom's ``(neighbor, shift)`` pairs as sorted integer keys.
+
+    Padding slots get the largest key, so rows compare equal regardless of
+    the order the neighbors were written in.
+    """
+    neighbors = batch.neighbor_matrix.long()
+    # Image indices are small, so each fits in 4 bits after the offset.
+    sx, sy, sz = (batch.neighbor_matrix_shifts.long() + 8).unbind(-1)
+    keys = ((neighbors * 16 + sx) * 16 + sy) * 16 + sz
+    keys = keys.masked_fill(neighbors >= batch.num_nodes, torch.iinfo(torch.long).max)
+    return keys.sort(dim=1).values
+
+
 # ===========================================================================
 # TestNeighborListHookProtocol
 # ===========================================================================
@@ -830,13 +844,13 @@ class TestSkinCheck:
         batch.positions[0] += 0.4  # > skin / 2: system 0 must be rebuilt
         hook(_ctx(batch), _STAGE)
         assert hook._rebuild_flags.tolist() == [True] + [False] * (n_graphs - 1)
-        partial = batch.neighbor_matrix.sort(dim=1).values, batch.num_neighbors
+        partial = _sorted_pairs(batch), batch.num_neighbors.clone()
 
         fresh = NeighborListHook(
             _cfg(), skin=0.5, method=method, stage=DynamicsStage.BEFORE_COMPUTE
         )
         fresh(_ctx(batch), _STAGE)
-        full = batch.neighbor_matrix.sort(dim=1).values, batch.num_neighbors
+        full = _sorted_pairs(batch), batch.num_neighbors
 
         torch.testing.assert_close(partial[1], full[1])
         torch.testing.assert_close(partial[0], full[0])
