@@ -186,6 +186,11 @@ class DataclassTableDirective(Directive):
             )
             return [error]
 
+        if not fields:
+            # A list-table needs at least one body row; say so in plain text.
+            para = nodes.paragraph(text="This class has no configurable fields.")
+            return [para]
+
         rst_lines = [
             ".. list-table::",
             "   :widths: 20 25 55",
