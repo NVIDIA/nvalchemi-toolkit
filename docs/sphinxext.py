@@ -117,6 +117,15 @@ def _parse_numpy_section(docstring, section="Attributes"):
     return result
 
 
+def _format_annotation(annotation) -> str:
+    """Return a readable type string; ``str(bool)`` gives ``<class 'bool'>``."""
+    if isinstance(annotation, str):
+        return annotation
+    if isinstance(annotation, type):
+        return annotation.__qualname__
+    return str(annotation).replace("typing.", "")
+
+
 def _extract_fields(cls):
     """Return list of (name, type_str, description) for own fields of a dataclass or Pydantic model."""
     own = set(getattr(cls, "__annotations__", {}))
@@ -126,7 +135,7 @@ def _extract_fields(cls):
         return [
             (
                 f.name,
-                f.type if isinstance(f.type, str) else str(f.type),
+                _format_annotation(f.type),
                 descriptions.get(f.name, ""),
             )
             for f in dataclasses.fields(cls)
@@ -148,7 +157,7 @@ def _extract_fields(cls):
         for name, info in cls.model_fields.items():
             if name not in own:
                 continue
-            type_str = str(info.annotation)
+            type_str = _format_annotation(info.annotation)
             desc = (info.description or "").strip() or param_descs.get(name, "")
             result.append((name, type_str, desc))
         return result
