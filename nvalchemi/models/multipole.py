@@ -259,12 +259,19 @@ def _distributed_partial_sources(
 
 def _distributed_sum(partial: torch.Tensor) -> torch.Tensor:
     """Sum a per-rank partial field across the domain mesh."""
+    from nvalchemi.distributed._core.compile_routing import (  # noqa: PLC0415
+        get_compile_halo_config,
+    )
     from nvalchemi.distributed._core.context import current_dd_context  # noqa: PLC0415
     from nvalchemi.distributed._core.gather_primitives import (  # noqa: PLC0415
         distributed_all_reduce,
     )
 
-    return distributed_all_reduce(partial, current_dd_context().halo_config)
+    # The published config keeps the compiled path free of the ContextVar read.
+    config = get_compile_halo_config()
+    if config is None:
+        config = current_dd_context().halo_config
+    return distributed_all_reduce(partial, config)
 
 
 def _erfcinv(x: float) -> float:
