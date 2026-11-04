@@ -469,6 +469,24 @@ class OnPolicySettings(BaseModel):
         which converged structures leave the batch and fresh initial
         structures replace them. Default ``None`` ends no trajectory, which
         suits a molecular-dynamics run.
+    max_trajectory_steps : int | None, optional
+        Propagator steps a generated trajectory lives for. A trajectory that
+        reaches this age is frozen on that step, stored once, and retired at
+        the segment boundary like a converged one, so a fresh initial
+        structure takes its place. It turns on the trajectory lifecycle on
+        its own, which is how a thermostatted run rotates through its initial
+        structures instead of propagating the first batch forever. A multiple
+        of ``generation_steps`` retires on segment boundaries, so no frozen
+        graph idles inside a segment. Default ``None`` lets a trajectory live
+        for the whole run.
+    quarantine_diverged : bool, optional
+        Sanitize a diverged graph on the step it is flagged: its velocities
+        and forces are zeroed and its positions made finite, so the frozen
+        graph presents a finite geometry to the model on every remaining step
+        of the segment. The propagator still evaluates the whole batch, frozen
+        graphs included, and a non-finite or runaway geometry can break a
+        model's neighbor-list construction. The sanitized frame is never
+        captured. Default ``False`` leaves the flagged state as it is.
     weight_sync_frequency : int, optional
         Segments between weight syncs to the propagator. Default ``1``, the
         only accepted value while the propagator shares the student module.
@@ -678,6 +696,31 @@ class OnPolicySettings(BaseModel):
             ),
         ),
     ] = None
+    max_trajectory_steps: Annotated[
+        int | None,
+        Field(
+            default=None,
+            gt=0,
+            description=(
+                "Propagator steps a generated trajectory lives for before it is "
+                "retired and a fresh initial structure takes its place. Turns on "
+                "the trajectory lifecycle on its own. None lets every "
+                "trajectory live for the whole run."
+            ),
+        ),
+    ] = None
+    quarantine_diverged: Annotated[
+        bool,
+        Field(
+            default=False,
+            description=(
+                "Zero the velocities and forces of a diverged graph and make its "
+                "positions finite on the step it is flagged, so the frozen graph "
+                "stays a finite input to the model until the segment boundary "
+                "retires it. False leaves the flagged state untouched."
+            ),
+        ),
+    ] = False
     weight_sync_frequency: Annotated[
         int,
         Field(
@@ -805,6 +848,13 @@ class OnPolicyConfig(OnPolicySettings):
     narrow. Generation ends when the last trajectory finishes, and the
     remaining training steps draw on the frames already in the buffer.
 
+    A thermostatted propagator needs the same lifecycle for a different
+    reason: its trajectories never end, so the initial batch is the only set
+    of structures the run ever propagates. ``max_trajectory_steps`` retires a
+    trajectory after that many propagator steps, stored once like a converged
+    one, and backfills its place from the initial structures, so the run
+    rotates through the whole source. It works alone or beside ``fmax``.
+
     Parameters
     ----------
     dynamics : BaseDynamics
@@ -850,8 +900,8 @@ class OnPolicyConfig(OnPolicySettings):
     ValueError
         If a setting is out of range, if both ``fmax`` and
         ``convergence_hook`` are set, if ``convergence_hook`` cannot manage
-        the lifecycle, if ``initial_structures`` recycles while no criterion is
-        set, if a criterion is paired with a
+        the lifecycle, if ``initial_structures`` recycles while neither a
+        criterion nor ``max_trajectory_steps`` is set, if a lifecycle is paired with a
         :class:`~nvalchemi.distributed.DomainParallel` propagator or a
         multi-sub-stage :class:`~nvalchemi.dynamics.FusedStage`, if
         ``initial_structures`` is neither a source nor a dataset, if the
@@ -1138,6 +1188,22 @@ class OnPolicyConfig(OnPolicySettings):
             )
         return self._convergence_criterion
 
+    @property
+    def manages_lifecycle(self) -> bool:
+        """Whether the segment loop retires and backfills trajectories.
+
+        Returns
+        -------
+        bool
+            ``True`` when a convergence criterion (``fmax`` or
+            ``convergence_hook``) or a ``max_trajectory_steps`` lifetime is
+            set; ``False`` for a run that propagates its initial batch for
+            the whole run.
+        """
+        return self.convergence_criterion is not None or (
+            self.max_trajectory_steps is not None
+        )
+
     @model_validator(mode="before")
     @classmethod
     def _coerce_initial_structures(cls, data: Any) -> Any:
@@ -1210,15 +1276,16 @@ class OnPolicyConfig(OnPolicySettings):
     @model_validator(mode="after")
     def _validate_lifecycle_shape(self) -> OnPolicyConfig:
         """Reject a lifecycle the structures or the propagator cannot carry."""
-        managed = self.fmax is not None or self.convergence_hook is not None
+        managed = self.manages_lifecycle
         if getattr(self.initial_structures, "recycle", False) and not managed:
             raise ValueError(
                 "The initial-structures source sets recycle=True; got "
-                f"fmax={self.fmax!r} and "
-                f"convergence_hook={self.convergence_hook!r}. Recycling wraps "
-                "the backfill to the front of the rows, and only a run managing "
-                "a trajectory lifecycle ever backfills. Pass fmax or a "
-                "convergence_hook, or drop recycle."
+                f"fmax={self.fmax!r}, "
+                f"convergence_hook={self.convergence_hook!r}, and "
+                f"max_trajectory_steps={self.max_trajectory_steps!r}. Recycling "
+                "wraps the backfill to the front of the rows, and only a run "
+                "managing a trajectory lifecycle ever backfills. Pass fmax, a "
+                "convergence_hook, or max_trajectory_steps, or drop recycle."
             )
         if not managed:
             return self
@@ -1227,10 +1294,12 @@ class OnPolicyConfig(OnPolicySettings):
                 "A DomainParallel propagator cannot carry a trajectory lifecycle: "
                 "its step dispatches no ON_GRADUATE stage, so no converged frame "
                 f"would ever be captured; got dynamics={self.dynamics!r} with "
-                f"fmax={self.fmax!r} and convergence_hook={self.convergence_hook!r}. "
-                "Pass the dynamics it wraps, or drop fmax and convergence_hook."
+                f"fmax={self.fmax!r}, convergence_hook={self.convergence_hook!r}, "
+                f"and max_trajectory_steps={self.max_trajectory_steps!r}. Pass "
+                "the dynamics it wraps, or drop the lifecycle settings."
             )
-        _check_sole_migrator(self.dynamics, self.convergence_criterion)
+        if self.convergence_criterion is not None:
+            _check_sole_migrator(self.dynamics, self.convergence_criterion)
         return self
 
     @model_validator(mode="after")

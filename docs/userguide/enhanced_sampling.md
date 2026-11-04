@@ -945,6 +945,8 @@ class, and bias set, and `restore()` refuses a mismatch; but that proves the
 They are mutually exclusive: `warm_start()` after `restore()` raises, because
 replaying history the restored state already contains would corrupt it.
 
+(replica-exchange)=
+
 ## Replica exchange
 
 A ladder of thermodynamic states, all advanced as one batch, with periodic
@@ -1027,6 +1029,8 @@ understand raises rather than ignoring it.
 additionally transforms its chain: `Q` scales with `kT` and `eta_dot` with
 `1/sqrt(kT)`, which leaves the chain kinetic energy invariant — injecting
 thermostat energy on a swap is exactly what breaks detailed balance.
+
+(acceptance)=
 
 ### Acceptance
 

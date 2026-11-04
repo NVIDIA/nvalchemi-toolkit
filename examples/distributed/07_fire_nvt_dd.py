@@ -18,7 +18,7 @@
 
 A two-stage streaming pipeline — FIRE relaxation then NVT Langevin MD — where
 **each stage is itself domain-decomposed** across a group of GPUs. This is the
-2-D generalization of :ref:`01_distributed_pipeline`: that example maps one rank
+2-D generalization of :doc:`01_distributed_pipeline`: that example maps one rank
 per stage; here each stage is a whole **domain sub-mesh** cooperating on one large
 system, and the two stages form the pipeline dimension.
 
@@ -114,9 +114,12 @@ _DOCS_BUILD = os.environ.get("NVALCHEMI_SPHINX_BUILD") == "1"
 _DISTRIBUTED_ENV = "RANK" in os.environ and "WORLD_SIZE" in os.environ
 
 # Reuse the SiO2 supercell builder shared across the distributed examples.
-sys.path.insert(
-    0, str(Path(__file__).resolve().parents[2] / "benchmark" / "distributed")
+# Sphinx-Gallery does not define ``__file__``; it runs each example from the
+# example's own directory, so fall back to the working directory there.
+_EXAMPLE_DIR = (
+    Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
 )
+sys.path.insert(0, str(_EXAMPLE_DIR.parents[1] / "benchmark" / "distributed"))
 from _benchmark_common import build_sio2_supercell  # noqa: E402
 
 
@@ -204,6 +207,7 @@ def make_step_trace_hook(
 
 
 def main() -> None:
+    """Run the FIRE to NVT pipeline over a domain sub-mesh."""
     parser = argparse.ArgumentParser(
         description="FIRE → NVT as a 2-D-parallel (pipeline × domain) pipeline."
     )

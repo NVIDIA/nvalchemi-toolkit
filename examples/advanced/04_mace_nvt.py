@@ -63,12 +63,9 @@ import os
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics import NVTLangevin
+from nvalchemi.dynamics import KB_EV, NVTLangevin
 from nvalchemi.dynamics.base import DynamicsStage
-
-# KB_EV and kinetic_energy_per_graph are internal helpers used by the built-in
-# integrators.  A stable public re-export may be added in a future release.
-from nvalchemi.dynamics.hooks._utils import KB_EV, kinetic_energy_per_graph
+from nvalchemi.dynamics.hooks import kinetic_energy_per_graph
 from nvalchemi.hooks import NeighborListHook
 
 logging.basicConfig(level=logging.INFO)
