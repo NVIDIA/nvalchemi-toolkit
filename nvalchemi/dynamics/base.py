@@ -1374,8 +1374,9 @@ class _CommunicationMixin:
 
         Uses ``send_buffer.put`` to copy samples where *mask* is ``True``
         into the pre-allocated send buffer, then trims the active batch
-        to a new tight :class:`~nvalchemi.data.Batch` without the
-        graduated samples (or *None* if all were graduated).
+        to a new tight :class:`~nvalchemi.data.Batch` without the copied
+        samples (or *None* if none remain). Selected samples that do not
+        fit the buffer stay in the active batch.
 
         Parameters
         ----------
@@ -1391,8 +1392,9 @@ class _CommunicationMixin:
         RuntimeError
             If ``active_batch`` or ``send_buffer`` is ``None``.
         ValueError
-            If the send buffer cannot copy every selected graph. The active
-            batch is left unchanged, and the transfer must not proceed.
+            If the send buffer is empty and copies none of the selected
+            graphs, because a selected graph is larger than the buffer. The
+            active batch is left unchanged.
         """
         if self.active_batch is None:
             raise RuntimeError("No active batch to extract from.")
@@ -1407,12 +1409,19 @@ class _CommunicationMixin:
         self.send_buffer.put(previous_batch, mask=mask, copied_mask=copied_mask)
         # put already updates host-side occupancy. Reuse it for validation.
         num_copied = self.send_buffer.num_graphs - n_before
-        if num_copied != num_requested:
+        if num_copied == 0 and n_before == 0 and num_requested > 0:
+            # put copies selected graphs in order, so an empty buffer takes
+            # none only when a graph exceeds its capacity on its own.
+            atoms = previous_batch.num_nodes_per_graph[mask]
+            edges = previous_batch.num_edges_per_graph
+            edges = edges[mask] if edges.numel() else torch.zeros_like(atoms)
+            cfg = self.buffer_config
             raise ValueError(
-                f"Send buffer copied {num_copied} of "
-                f"{num_requested} requested graphs. Increase BufferConfig "
-                "capacities to hold the largest outgoing batch; "
-                f"buffer_config={self.buffer_config}."
+                "Cannot send a graph larger than the empty send buffer: the "
+                f"selected graphs have up to {int(atoms.max())} atoms and up to "
+                f"{int(edges.max())} edges, but BufferConfig has "
+                f"num_nodes={cfg.num_nodes} and num_edges={cfg.num_edges}. "
+                "Increase these capacities."
             )
         remaining_indices = torch.where(~copied_mask)[0]
         self.active_batch = previous_batch.trim(copied_mask=copied_mask)
@@ -1708,7 +1717,9 @@ class _CommunicationMixin:
                 num_to_send = min(num_graduated, max(0, self._send_buffer_capacity))
                 if num_to_send:
                     self._populate_send_buffer(converged_indices[:num_to_send])
-                self._num_unsent_graduates = num_graduated - num_to_send
+                self._num_unsent_graduates = (
+                    num_graduated - self.send_buffer.num_graphs
+                )
             if self.is_final_stage:
                 self._remove_converged_final_stage(converged_indices)
         elif self.next_rank is not None:

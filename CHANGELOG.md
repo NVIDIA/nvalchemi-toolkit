@@ -21,6 +21,10 @@
 
 ### Fixed
 
+- `DistributedPipeline` sends that reach the send buffer's atom or edge
+  capacity send the graduates that fit and keep the rest for a later send.
+  Only a graph larger than the empty buffer raises `ValueError`, which gives
+  the largest selected atom and edge counts and the `BufferConfig` capacities.
 - Plain pipeline stages detect graphs finished by status-setting hooks and
   send them downstream or write them to final result sinks.
 - `HostMemory`, `GPUBuffer`, and `ZarrData` omit temporary neighbor data so

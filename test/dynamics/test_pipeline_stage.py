@@ -343,12 +343,9 @@ class TestBatchExtraction:
         # Removal keeps retained graphs' forces valid.
         assert stage._forces_primed is True
 
-    @pytest.mark.parametrize("limit", ["atoms", "edges"])
-    @pytest.mark.parametrize("selected", [[0, 1, 2], [0, 2], [1]])
-    def test_insufficient_capacity_raises_before_trim_or_send(
-        self, limit: str, selected: list[int], device: str
-    ) -> None:
-        """Incomplete copies fail without removing graphs or invalidating state."""
+    @staticmethod
+    def _ring_stage(cfg: BufferConfig, device: str) -> _CommunicationMixin:
+        """Return a sending stage holding three 8-atom, 8-edge ring graphs."""
         data = [
             AtomicData(
                 positions=torch.full((8, 3), float(i)),
@@ -360,12 +357,6 @@ class TestBatchExtraction:
             for i in range(3)
         ]
         batch = Batch.from_data_list(data, device=device)
-        capacity = 10 if len(selected) > 1 else 7
-        cfg = BufferConfig(
-            num_systems=4,
-            num_nodes=capacity if limit == "atoms" else 24,
-            num_edges=capacity if limit == "edges" else 24,
-        )
         stage = _CommunicationMixin(
             active_batch=batch,
             next_rank=1,
@@ -373,29 +364,60 @@ class TestBatchExtraction:
             device_type=device,
         )
         stage._ensure_buffers(batch)
+        return stage
+
+    @pytest.mark.parametrize("selected", [[0, 1, 2], [0, 2]])
+    def test_atom_capacity_partial_copy_keeps_rejected_graphs(
+        self, selected: list[int], device: str
+    ) -> None:
+        """Graphs beyond the atom capacity stay in the active batch, unsent."""
+        cfg = BufferConfig(num_systems=4, num_nodes=10, num_edges=24)
+        stage = self._ring_stage(cfg, device)
+        stage._forces_primed = True
+
+        with patch.object(Batch, "isend") as send:
+            stage._poststep_sync_buffers(torch.tensor(selected, device=device))
+            send.assert_called_once_with(dst=1)
+
+        assert stage.send_buffer.num_graphs == 1
+        assert stage.send_buffer.energy[:1].flatten().tolist() == [float(selected[0])]
+        kept = [float(i) for i in range(3) if i != selected[0]]
+        assert stage.active_batch.energy.flatten().tolist() == kept
+        assert stage._forces_primed
+
+    @pytest.mark.parametrize("limit", ["atoms", "edges"])
+    def test_graduate_larger_than_empty_buffer_raises(
+        self, limit: str, device: str
+    ) -> None:
+        """A graph that alone exceeds the empty buffer fails before any send."""
+        cfg = BufferConfig(
+            num_systems=4,
+            num_nodes=7 if limit == "atoms" else 24,
+            num_edges=7 if limit == "edges" else 24,
+        )
+        stage = self._ring_stage(cfg, device)
+        batch = stage.active_batch
         stage._admission_initialized = stage._forces_primed = True
-        indices = torch.tensor(selected, device=device)
+        indices = torch.tensor([1], device=device)
         stage._last_converged = indices
-        copied = 1 if len(selected) > 1 else 0
 
         with patch.object(Batch, "isend") as send:
             with pytest.raises(
-                ValueError, match=f"copied {copied} of {len(selected)} requested graphs"
+                ValueError, match="up to 8 atoms and up to 8 edges"
             ) as error:
                 stage._poststep_sync_buffers(indices)
             send.assert_not_called()
 
-        assert "Increase BufferConfig capacities" in str(error.value)
-        assert f"buffer_config={cfg}" in str(error.value)
+        assert f"num_nodes={cfg.num_nodes}" in str(error.value)
+        assert f"num_edges={cfg.num_edges}" in str(error.value)
         assert stage.active_batch is batch
-        assert batch.num_graphs == 3
         assert batch.energy.flatten().tolist() == [0.0, 1.0, 2.0]
-        assert stage.send_buffer.num_graphs == copied
+        assert stage.send_buffer.num_graphs == 0
         assert stage._admission_initialized and stage._forces_primed
         assert stage._last_converged is indices
 
-    def test_full_buffer_raises_without_removing_source(self) -> None:
-        """An occupied buffer must not cause an uncopied graph to be removed."""
+    def test_full_buffer_keeps_uncopied_graph(self) -> None:
+        """A graph that does not fit an occupied buffer stays for a later send."""
         batch = _make_batch_with_system(num_graphs=1)
         stage = _CommunicationMixin(active_batch=batch, device_type="cpu")
         stage.send_buffer = Batch.empty(
@@ -406,14 +428,13 @@ class TestBatchExtraction:
         )
         mask = torch.ones(1, dtype=torch.bool)
         stage.send_buffer.put(batch, mask)
-        stage._admission_initialized = stage._forces_primed = True
+        stage._forces_primed = True
 
-        with pytest.raises(ValueError, match="copied 0 of 1 requested graphs"):
-            stage._batch_to_buffer(mask)
+        stage._batch_to_buffer(mask)
 
-        assert stage.active_batch is batch
+        torch.testing.assert_close(stage.active_batch.positions, batch.positions)
         assert stage.send_buffer.num_graphs == 1
-        assert stage._admission_initialized and stage._forces_primed
+        assert stage._forces_primed
 
     def test_extract_no_active_batch_raises(self) -> None:
         """Verify RuntimeError when no active batch exists."""

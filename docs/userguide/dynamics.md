@@ -357,10 +357,11 @@ When the upstream stage has more converged samples than `num_systems` allows in 
 single transfer, the excess stays in the active batch as a no-op until the next
 step --- this is the back-pressure mechanism described below.
 
-Atom and edge capacities must accommodate all graphs selected for a transfer.
-If the buffer cannot copy every selected graph, the pipeline raises `ValueError`
-before removing graphs from the active batch or sending the buffer. Increase the
-relevant `BufferConfig` capacities before rerunning.
+Converged samples that do not fit the remaining atom or edge capacity stay in the
+active batch the same way. A graph larger than the empty buffer can never be sent,
+so the pipeline raises `ValueError` before removing graphs from the active batch or
+sending the buffer. The message gives the largest atom and edge counts among the
+selected graphs and the `BufferConfig` capacities to increase.
 
 ```{important}
 Every pair of communicating stages **must** share an identical
