@@ -20,6 +20,10 @@ neighbor list wiring via ModelConfig; LJ fallback for CI.
 velocity-rescaling thermostat; the pre_update/post_update contract;
 _init_state for stateful integrators.
 
+**06 — Ewald Electrostatics**: Long-range electrostatics with Ewald
+summation on a rock-salt crystal, checked against the analytical Madelung
+energy.
+
 **07 — Composable Model Composition**: Combining LJ + Ewald models with
 the ``+`` operator; PipelineModelWrapper for dependent pipelines.
 
@@ -34,25 +38,29 @@ molecules via task selection on ``UMAWrapper.from_checkpoint``.
 training stack; Zarr dataloading, scheduled Huber losses, EMA, checkpointing,
 validation, and distributed launch patterns.
 
-**11 — Umbrella Sampling**: Batched umbrella sampling with
+**11 — Batched NEB**: Batched nudged elastic band with AIMNet2-rxn; IDPP
+initial paths, then a two-stage climbing-image NEB over several reactions
+at once.
+
+**12 — Umbrella Sampling**: Batched umbrella sampling with
 ``EnhancedSampling``; per-window centers selected by
 ``thermodynamic_state_id``, composing a restraint with a wall, and reading
 per-bias diagnostics for WHAM/MBAR.
 
-**12 — Replica Exchange**: Temperature REMD over a geometric ladder; the
+**13 — Replica Exchange**: Temperature REMD over a geometric ladder; the
 even/odd pair schedule, Metropolis acceptance, per-pair acceptance rates for
 ladder tuning, and confirming the integrator target follows the assignment.
 
-**13 — Metadynamics**: Multiple-walker well-tempered metadynamics along a
+**14 — Metadynamics**: Multiple-walker well-tempered metadynamics along a
 pair-distance CV; shared hill history across walkers, storage-policy choice,
 the well-tempered height decay, and free-energy reconstruction.
 
-**14 — RMSD Metadynamics**: xTB-style structure exploration with no
+**15 — RMSD Metadynamics**: xTB-style structure exploration with no
 collective variable; optimal-alignment RMSD over retained references, FIFO
 retention, and an unbiased control run to separate exploration from thermal
 scatter.
 
-**15 — Adaptive Biasing Force**: Measuring and cancelling the mean force
+**16 — Adaptive Biasing Force**: Measuring and cancelling the mean force
 along a pair distance; the metric correction demonstrated against an analytic
 answer, sample thresholds and force ramps, and why a force-only bias cannot
 join a replica-exchange ladder.
