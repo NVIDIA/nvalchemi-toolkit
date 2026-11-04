@@ -44,7 +44,7 @@ For install options, refer to the install guide below.
 - {doc}`Serialization & Reproducibility <serialization>`
 - {doc}`Hooks: Observe & Modify <hooks>`
 - {doc}`Reporting: Summaries and Dashboards <reporting>`
-- [Dynamics: Optimization and MD](dynamics)
+- {doc}`Dynamics: Optimization and MD <dynamics>`
 - {doc}`Enhanced Sampling: Biases and Free Energy <enhanced_sampling>`
 - {doc}`Generative Models <generative>`
 

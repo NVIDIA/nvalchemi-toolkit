@@ -461,7 +461,8 @@ duplicating that construction here, read `NEB.build_engine()` in
 `nvalchemi/dynamics/mep/neb.py`. It is the reference
 implementation for a two-substage, `status`-gated `FusedStage` with
 `ClimbingImageSelectionHook(status_code=...)` scoped to the climbing stage.
-With `mode="after_regular"` it sets `reprime_on_entry={1}`, so a path entering
+With `mode="after_regular"` it creates the climbing optimizer with
+`reprime_on_entry=True`, so a path entering
 the climbing stage skips one optimizer update while the shared model evaluation
 and the climbing sub-stage's `AFTER_COMPUTE` hooks refresh its forces. If you
 build the engine yourself, register the path hooks on the `FusedStage` and

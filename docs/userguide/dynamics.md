@@ -51,6 +51,16 @@ admission is an event rather than a recurring step stage, it ignores a hook's
 `frequency`; for a multi-stage hook, the frequency still applies at its other
 stages.
 
+After initial force priming, inflight refill in `BaseDynamics` and `FusedStage`
+lets existing graphs continue updating normally. Newly added graphs skip both
+integrator updates for one iteration while the regular model evaluation computes
+their initial forces.
+This avoids an extra whole-batch model evaluation. Newly added graphs begin
+integrator updates on the following step. In `FusedStage`, their stage step
+counters do not advance during the iteration that computes their initial forces.
+If no graphs remain before a refill, the refilled batch is primed as a fresh
+batch instead.
+
 Each step then proceeds through these stages in order:
 
 1. **BEFORE_STEP** hooks fire.
@@ -241,6 +251,37 @@ with pipeline:
     pipeline.run()
 ```
 
+Dynamics default to `reprime_on_entry=False`: received graphs use the
+upstream stage's forces for their first update when they carry every model output
+the receiving dynamics needs. Graphs missing any of those outputs are primed
+locally, as with `True`: they skip one update while the stage's next model
+evaluation supplies them. This assumes the stages use compatible models and force
+modifications. To refresh forces under the receiving stage's model and hooks
+before updating, opt in explicitly on the receiving stage's dynamics:
+
+```python
+coarse = FIRE2(model=fast_model, buffer_config=buffer_cfg, ...)
+fine = FIRE2(model=accurate_model, buffer_config=buffer_cfg, ..., reprime_on_entry=True)
+pipeline = coarse | fine
+```
+
+With this option, received graphs skip one update while the stage's next regular
+model evaluation gives them forces. Residents keep their forces and keep updating,
+so graphs arriving at different steps add no extra model evaluations. Sending,
+final-stage removal, and sampler refill do not refresh residents' forces.
+
+With either setting, initial sampler batches are primed locally. When received
+graphs need local forces, an empty or unprimed receiving stage primes the whole
+batch instead of skipping their update.
+
+Inside a `FusedStage`, the flag works the same way for sub-stage transitions. Set
+it on a sub-stage's dynamics, and graphs whose status changes into that sub-stage
+skip one update while their forces are refreshed.
+
+A `DomainParallel` stage reads the flag from the dynamics it wraps. It holds one
+system at a time, so a received system that needs local forces is primed as a
+whole before its first update.
+
 By default, `setup()` (called automatically by the context manager) sorts stages by
 rank and wires `prior_rank` / `next_rank` between adjacent stages as a simple linear
 chain. For more sophisticated topologies --- such as multiple independent
@@ -279,7 +320,7 @@ data a single transfer can carry:
 |-------|------------------|
 | `num_systems` | Maximum number of graphs (structures) per transfer. Determines throughput per step --- higher values move more data but consume more GPU memory. |
 | `num_nodes` | Total atom capacity across all graphs in the buffer. Must be large enough for the worst-case combination of systems. For example, transferring up to 4 structures of at most 50 atoms each requires `num_nodes=200`. |
-| `num_edges` | Total edge capacity. Set to **0** when the downstream model recomputes edges via its neighbor list (the common case). Only set a non-zero value if pre-computed edge attributes must be transferred. |
+| `num_edges` | Total edge capacity. Set to **0** when the downstream model recomputes edges via its neighbor list (the common case). Edges are omitted from transport, and arriving graphs have no edges until the neighbor-list hook rebuilds them. Only set a non-zero value if pre-computed edge attributes must be transferred. |
 
 ```python
 from nvalchemi.dynamics.base import BufferConfig

@@ -207,6 +207,7 @@ def test_mace_source_options_are_passed_to_wrapper(
             "checkpoint": "small-0b",
             "device": torch.device("cpu"),
             "compile_model": False,
+            "train": True,
             "atomic_energies": {1: -1.0, 8: -2.0},
             "atomic_energies_path": None,
         }

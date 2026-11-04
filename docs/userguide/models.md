@@ -34,7 +34,7 @@ potentials:
 | Wrapper class | Underlying model | Notes |
 |---|---|---|
 | {py:class}`~nvalchemi.models.demo.DemoModelWrapper` | {py:class}`~nvalchemi.models.demo.DemoModel` | Non-invariant demo; useful for testing and tutorials |
-| {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` | {py:class}`~aimnet.calculators.AIMNet2Calculator` | Requires the `aimnet2` optional dependency |
+| {py:class}`~nvalchemi.models.aimnet2.AIMNet2Wrapper` | {py:class}`~aimnet.calculators.AIMNet2Calculator` | Requires the `aimnet` optional dependency |
 | {py:class}`~nvalchemi.models.mace.MACEWrapper` | Any MACE variant | Requires the `mace` optional dependency with a CUDA extra, such as `cu13` or `cu12` |
 | {py:class}`~nvalchemi.models.uma.UMAWrapper` | fairchem-core UMA (`MLIPPredictUnit`) | Requires `uma` with a CUDA extra; conflicts with `mace` (incompatible `e3nn` pins) |
 
@@ -81,6 +81,7 @@ model = MACEWrapper.from_checkpoint(
     device=torch.device("cuda"),
     dtype=torch.float32,
     enable_cueq=True,
+    train=True,
 )
 
 ema = EMAHook(model_key="main", decay=0.999)

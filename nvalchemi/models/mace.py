@@ -526,6 +526,15 @@ class MACEWrapper(nn.Module, BaseModelMixin):
     model : nn.Module
         An instantiated MACE model.  Any subclass of ``mace.modules.MACE``
         is accepted.
+    reconstruction_spec : BaseSpec | None, optional
+        Factory spec used to rebuild this wrapper from a strategy checkpoint.
+    train : bool, optional
+        ``False`` (default) freezes all weights and puts the wrapper in eval
+        mode for inference; this is lossless for autograd forces, which
+        differentiate with respect to positions only.  ``True`` leaves the
+        model's ``requires_grad`` flags as given and puts the wrapper in train
+        mode, so the weights stay exposed for training and fine-tuning.  This is
+        independent of ``torch.compile``.
 
     Attributes
     ----------
@@ -542,6 +551,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         model: nn.Module,
         *,
         reconstruction_spec: "BaseSpec | None" = None,
+        train: bool = False,
     ) -> None:
         super().__init__()
         self.model = model
@@ -588,6 +598,18 @@ class MACEWrapper(nn.Module, BaseModelMixin):
                 half_list=False,
             ),
         )
+
+        # Inference (train=False): freeze all weights. Conservative forces come
+        # from autograd with respect to positions, so this is lossless, and it
+        # keeps a compiled backward (which differentiates every input that
+        # requires grad) from also computing weight gradients nothing consumes.
+        # Training (train=True): leave requires_grad as the model has it so the
+        # weights stay exposed.
+        self._train = train
+        if not train:
+            for param in model.parameters():
+                param.requires_grad_(False)
+        self.train(train)
 
     def checkpoint_spec(self) -> "BaseSpec | None":
         """Return the factory spec used to reconstruct this wrapper, if known.
@@ -1018,6 +1040,7 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         compile_model: bool = False,
         atomic_energies: Mapping[int | str, float] | None = None,
         atomic_energies_path: Path | str | None = None,
+        train: bool = False,
         **compile_kwargs: Any,
     ) -> "MACEWrapper":
         """Load a MACE model from a checkpoint and return a :class:`MACEWrapper`.
@@ -1031,8 +1054,10 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         1. **Load** — ``torch.load`` the checkpoint to the specified device.
         2. **dtype** — cast model weights to the requested dtype.
         3. **cuEq** — convert to cuEquivariance format for GPU speedup.
-        4. **compile** — ``torch.compile``; freezes parameters and sets eval
-           mode.  The model is **inference-only** after this step.
+        4. **compile** — ``torch.compile`` (if ``compile_model=True``).
+
+        Weights are frozen and the wrapper is put in eval mode unless
+        ``train=True``; this is independent of ``compile_model``.
 
         For best GPU throughput, use ``device=torch.device("cuda")``,
         ``enable_cueq=True``, ``dtype=torch.float32``, and
@@ -1059,12 +1084,16 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         dtype : torch.dtype | None, optional
             If set, cast model weights to this dtype before cuEq conversion.
         compile_model : bool, optional
-            Apply ``torch.compile``.  Sets eval mode and freezes parameters;
-            the model is **inference-only** after this step.
+            Apply ``torch.compile``.  Independent of ``train``.
         atomic_energies : Mapping[int | str, float] | None, optional
             Per-element E0 overrides keyed by atomic number.
         atomic_energies_path : Path | str | None, optional
             JSON file containing per-element E0 overrides keyed by atomic number.
+        train : bool, optional
+            If ``False`` (default), freeze all weights and use eval mode for
+            inference; lossless for autograd forces.  If ``True``, keep the
+            checkpoint's ``requires_grad`` flags and use train mode so the
+            weights can be trained or fine-tuned.
         **compile_kwargs
             Forwarded to ``torch.compile``.
 
@@ -1134,15 +1163,12 @@ class MACEWrapper(nn.Module, BaseModelMixin):
         if atomic_energy_overrides is not None:
             _apply_atomic_energies(model, atomic_energy_overrides)
 
-        # Step 3: torch.compile the model for single-process inference —
-        # inference-only after this point.
+        # Step 3: torch.compile the model. Whether the weights stay trainable
+        # is decided by ``train`` in the wrapper, not by compilation.
         if compile_model:
             # Apply the e3nn compile-compat shim before tracing. (It is also
             # applied idempotently in __init__, but compile runs first here.)
             _patch_e3nn_irrep_len_for_compile()
-            model.eval()
-            for param in model.parameters():
-                param.requires_grad = False
             model = torch.compile(model, **compile_kwargs)
 
         from nvalchemi.training._spec import create_model_spec
@@ -1153,13 +1179,12 @@ class MACEWrapper(nn.Module, BaseModelMixin):
             enable_cueq=enable_cueq,
             dtype=dtype,
             compile_model=compile_model,
+            train=train,
             atomic_energies=atomic_energies,
             atomic_energies_path=atomic_energies_path,
             **compile_kwargs,
         )
-        wrapper = cls(model, reconstruction_spec=checkpoint_spec)
-        wrapper.eval()
-        return wrapper
+        return cls(model, reconstruction_spec=checkpoint_spec, train=train)
 
     # ------------------------------------------------------------------
     # Export

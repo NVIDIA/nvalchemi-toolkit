@@ -318,7 +318,9 @@ def _loader(
 #    from nvalchemi.models.mace import MACEWrapper
 #
 #    mace_model = ScaleShiftMACE(...)
-#    model = MACEWrapper(mace_model.to(device=device, dtype=torch.float32))
+#    model = MACEWrapper(
+#        mace_model.to(device=device, dtype=torch.float32), train=True
+#    )
 #    model.model_config.active_outputs = {"energy", "forces", "stress"}
 #
 # The runnable script reads architecture hyperparameters from Hydra and builds
@@ -901,7 +903,7 @@ if __name__ == "__main__":
 # The sharp transition near step 54,400 marks the stage-two loss-weight schedule
 # configured by ``training.loss.stage_two.start_step``.
 #
-# .. image:: ../_static/vanilla_mace_validation_metrics_260701.png
+# .. image:: /../examples/_static/vanilla_mace_validation_metrics_260701.png
 #    :align: center
 #    :width: 70%
 #

@@ -19,17 +19,30 @@ workflows from one GPU to multi-GPU systems.
 - **Batched GPU simulation**: run many MD or geometry relaxation jobs in one
   model pass; inflight batching keeps the GPU occupied as systems finish.
 - **Bring your own model**: use MACE, AIMNet2 or UMA, or wrap another MLIP with
-  `BaseModelMixin`; add Ewald/PME electrostatics or DFT-D3(BJ) dispersion.
-- **Training and fine-tuning**: combine energy, force and stress objectives
+  `BaseModelMixin`; compute energies, forces and stress, plus local Hessians
+  and Hessian-vector products for supported models; add Ewald/PME
+  electrostatics or DFT-D3(BJ) dispersion.
+- **Training, fine-tuning and distillation**: combine energy, force and stress objectives
   with validation, restartable checkpoints, exponential moving averages and
-  distributed data-parallel training.
+  distributed data-parallel training; adapt models with LoRA or distill them
+  into compact students.
+- **Generative workflows**: use a model-agnostic API for batched structure
+  generation, optional conditioning and hooks; compose generators with
+  relaxation or MD.
+- **Molecular crystal structure prediction (CSP) primitives**: generate random
+  rigid-molecule packings, expand crystal symmetry, and compare structures
+  for de-duplication.
+- **Energy landscape exploration**: find minimum-energy paths with batched
+  regular or climbing-image NEB; explore configurations with umbrella sampling,
+  metadynamics, adaptive biasing force and replica exchange.
 - **Multi-GPU scaling**: split one large atomic system across GPUs with spatial
   domain decomposition.
 - **Data at scale**: use GPU-resident `AtomicData` and `Batch`, Zarr storage,
   balanced dataset mixing, transforms and CUDA-stream prefetching.
 - **Composable dynamics and hooks**: create custom integrators, chain simulation
-  stages with `+` or `|`, and attach logging, safety, sampling, profiling or
-  convergence logic at nine points per step.
+  stages with `+` or `|`, compile fused steps, and attach logging, safety,
+  sampling, profiling or convergence logic throughout each step and on system
+  admission or graduation.
 - **Agent-ready guidance**: task-specific skills and `AGENTS.md` teach coding
   agents the toolkit APIs and repository conventions.
 
@@ -38,9 +51,16 @@ for GPU-optimized neighbor lists and interaction kernels via NVIDIA `warp-lang`.
 
 ### Using with AI coding agents
 
-  **Skills** — task-specific API guides under .claude/skills/. Claude Code discovers them automatically when working inside a clone; for other platforms (e.g. Cursor, OpenCode), or to use them outside this repository, copy the folder contents into your project's or home skills directory.
+  **Skills** — task-specific API guides under .claude/skills/. Claude Code discovers
+  them automatically when working inside a clone; for other platforms (e.g. Cursor,
+  OpenCode), or to use them outside this repository, copy the folder contents into your
+  project's or home skills directory.
 
-  **AGENTS.md** — repository-wide guidance (setup, conventions, gotchas). Agents that follow the AGENTS.md convention (e.g. Codex, Cursor, OpenCode) load it natively. Claude Code auto-loads CLAUDE.md instead: to get the same guidance there, add a CLAUDE.md to your clone containing the single line @AGENTS.md (an import), or symlink it (ln -s AGENTS.md CLAUDE.md).
+  **AGENTS.md** — repository-wide guidance (setup, conventions, gotchas). Agents that
+  follow the AGENTS.md convention (e.g. Codex, Cursor, OpenCode) load it natively.
+  Claude Code auto-loads CLAUDE.md instead: to get the same guidance there, add a
+  CLAUDE.md to your clone containing the single line @AGENTS.md (an import), or symlink
+  it (ln -s AGENTS.md CLAUDE.md).
 
 ### Example Snippets
 
@@ -293,22 +313,14 @@ detailed setup instructions.
 
 Features planned for upcoming releases:
 
-- **Generative models**: model-agnostic abstraction of generative models for
-  the ALCHEMI Toolkit simulation pipeline
-- **Crystal structure prediction (CSP) primitives**: composable, batched
-  building blocks for molecular CSP workflows
-- **Enhanced sampling**: GPU-resident collective variables and biasing methods
-- **Model distillation**: pipeline for distilling large, accurate potentials
-  into compact models for fast production inference
-- **LoRA adapters**: parameter-efficient fine-tuning that maintains many
-  specialized variants of one base potential without duplicating its weights
-- **Hessians and phonons**: analytical second derivatives through automatic
-  differentiation for vibrational and thermodynamic property prediction
-- **Domain decomposition optimization**: continued performance improvement of
-  spatial domain decomposition
-- **Kernel improvements** at the
-  [`nvalchemi-toolkit-ops`](https://github.com/NVIDIA/nvalchemi-toolkit-ops)
-  level
+- **In-flight NEB batching**: admit new reaction paths as completed paths
+  leave the batch
+- **Multipole electrostatics**: support multipole-aware potentials, including
+  MACE-POLAR, in Toolkit workflows
+- **Domain decomposition performance**: improve overlap of computation and
+  communication across GPUs
+- **OPES enhanced sampling**: add the on-the-fly probability enhanced sampling
+  method
 
 ## Contributions & Disclaimers
 
