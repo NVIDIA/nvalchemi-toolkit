@@ -275,5 +275,5 @@ final_systems = batch_to_atoms_list(batch_fused)
 write(OUTPUT_DIR / "cu111_co_final.xyz", final_systems)
 print(f"Wrote {len(final_systems)} final structures -> {OUTPUT_DIR}/cu111_co_final.xyz")
 
-print(f"\nAll output written to {OUTPUT_DIR.resolve()}/")
+print(f"\nAll output written to {OUTPUT_DIR}/")
 print("  Visualize with: ase gui 03_ase_integration_output/cu111_co_initial.xyz")
