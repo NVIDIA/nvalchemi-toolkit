@@ -117,13 +117,25 @@ def _parse_numpy_section(docstring, section="Attributes"):
     return result
 
 
+# A dotted name not preceded by a quote, word character, or dot, so quoted
+# Literal values keep their text.
+_QUALIFIED_NAME = re.compile(
+    r"(?<![\w.'\"])(?:[A-Za-z_][A-Za-z0-9_]*\.)+([A-Za-z_][A-Za-z0-9_]*)"
+)
+
+
 def _format_annotation(annotation) -> str:
-    """Return a readable type string; ``str(bool)`` gives ``<class 'bool'>``."""
+    """Return a short type string for a table cell.
+
+    ``str(bool)`` gives ``<class 'bool'>`` and ``str(X | None)`` spells out the
+    full module path of ``X``; both make the type column too wide to read.
+    """
     if isinstance(annotation, str):
+        # Source text from a dataclass annotation: already as the author wrote it.
         return annotation
     if isinstance(annotation, type):
         return annotation.__qualname__
-    return str(annotation).replace("typing.", "")
+    return _QUALIFIED_NAME.sub(r"\1", str(annotation))
 
 
 def _extract_fields(cls):
