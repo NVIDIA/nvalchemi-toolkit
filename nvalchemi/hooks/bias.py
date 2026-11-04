@@ -18,7 +18,7 @@ Biased potential hooks for enhanced sampling workflows.
 Provides :class:`BiasedPotentialHook`, which adds external bias
 potentials to the forces and energy computed by the ML model.
 
-.. deprecated::
+.. deprecated:: 0.3.0
 
     :class:`BiasedPotentialHook` is superseded by
     :mod:`nvalchemi.enhanced_sampling`, whose ``EnhancedSampling`` runner
@@ -50,7 +50,7 @@ __all__ = ["BiasedPotentialHook"]
 class BiasedPotentialHook:
     """Add an external bias potential to forces and energy after the forward pass.
 
-    .. deprecated::
+    .. deprecated:: 0.3.0
 
         Superseded by :mod:`nvalchemi.enhanced_sampling`.  Constructing this
         hook emits a :class:`DeprecationWarning`.  It remains functional so

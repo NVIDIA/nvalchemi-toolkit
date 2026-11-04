@@ -137,7 +137,7 @@ final: Batch = Batch.from_data_list(
     device=device,
 )
 
-print(f"Loaded {len(reaction_ids)} paths from {endpoints_path}")
+print(f"Loaded {len(reaction_ids)} paths from {endpoints_path.name}")
 print(f"Reaction IDs: {reaction_ids}")
 print(f"Initial batch: {initial.num_graphs} graphs, {initial.num_nodes} atoms")
 
@@ -274,8 +274,7 @@ class AIMNet2rxnWrapper(nn.Module, BaseModelMixin):
         return OrderedDict(energy=energy, forces=output["forces"])
 
 
-# Use the compile path for the model to accelerate the neural-network forward calculations.
-model = AIMNet2rxnWrapper(device, compile_model=True).eval()
+model = AIMNet2rxnWrapper(device).eval()
 
 # %%
 # Run the NEB
@@ -388,7 +387,7 @@ final_diagnostics = log_rows[-len(reaction_ids) :]
 converged_paths = sum(float(row["status"]) == 2 for row in final_diagnostics)
 maximum_fmax = max(float(row["fmax"]) for row in final_diagnostics)
 print(
-    f"\nDiagnostics: {NEB_LOG.resolve()} "
+    f"\nDiagnostics: {NEB_LOG} "
     f"({converged_paths}/{len(reaction_ids)} paths converged, "
     f"max fmax={maximum_fmax:.4f} eV/angstrom)"
 )
@@ -636,7 +635,7 @@ try:
     fig.savefig(PROFILE_PLOT, dpi=150)
     print(
         f"Saved energy profile comparison (display capped at "
-        f"{ENERGY_PLOT_MAX_EV:g} eV) to {PROFILE_PLOT.resolve()}"
+        f"{ENERGY_PLOT_MAX_EV:g} eV) to {PROFILE_PLOT}"
     )
     plt.show()
 except ImportError:
