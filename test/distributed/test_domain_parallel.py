@@ -428,6 +428,7 @@ class TestPrimeForces:
         batch = _make_batch()
         batch.status = torch.tensor([[dp.exit_status]])
         dp.sampler = MagicMock()
+        dp.sampler.assemble_samples = Batch.from_data_list
         dp.sampler.max_atoms = dp.sampler.max_edges = dp.sampler.max_batch_size = None
         dp.sampler.request_replacements_budget.return_value = batch.to_data_list()
         dp._forces_primed = True
