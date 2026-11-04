@@ -994,10 +994,17 @@ class TestStateSyncInflight:
         expected_alpha = dyn.alpha_start
         assert abs(float(dyn._state.alpha[-1]) - expected_alpha) < 1e-6
 
-    def test_refill_resets_force_priming_for_optimizer(self):
-        """A BaseDynamics optimizer fully primes its reconstructed batch."""
+    @pytest.mark.parametrize("optimizer", ["FIRE", "FIRE2", "LBFGS"])
+    def test_refill_primes_new_graph_without_updating_optimizer_state(self, optimizer):
+        """Refilled graphs retain initial positions and optimizer state while priming."""
+        from nvalchemi.dynamics.optimizers import FIRE, FIRE2, LBFGS
+
         replacement = _make_atomic_data(4, seed=66)
-        dyn, _ = self._make_dynamics_with_sampler(replacements=[replacement])
+        optimizer_class = {"FIRE": FIRE, "FIRE2": FIRE2, "LBFGS": LBFGS}[optimizer]
+        kwargs = {} if optimizer == "LBFGS" else {"dt": 0.1}
+        dyn = optimizer_class(
+            model=_make_model(), sampler=_MockSampler([replacement]), **kwargs
+        )
         batch = self._make_status_batch(2)
         dyn.step(batch)
 
@@ -1005,11 +1012,24 @@ class TestStateSyncInflight:
         result = dyn.refill_check(batch, exit_status=1)
 
         assert result is not None
-        assert getattr(result, "reprime_pending", None) is None
-        assert dyn._forces_primed is False
+        assert result.reprime_pending.view(-1).tolist() == [False, True]
+        assert dyn._forces_primed is True
+        resident_positions = result.positions[:4].clone()
+        new_positions = result.positions[4:].clone()
+        new_state = dyn._state.index_select(torch.tensor([1]))
         with patch.object(dyn, "_prime_forces", wraps=dyn._prime_forces) as prime:
             dyn.step(result)
-        assert prime.call_count == 1
+        assert prime.call_count == 0
+        assert not torch.equal(result.positions[:4], resident_positions)
+        torch.testing.assert_close(result.positions[4:], new_positions)
+        state_after = dyn._state.index_select(torch.tensor([1]))
+        for level, storage in new_state._storage.groups.items():
+            for key, value in storage.items():
+                torch.testing.assert_close(
+                    state_after._storage.groups[level][key], value
+                )
+        assert not result.reprime_pending.any()
+        assert torch.isfinite(result.forces).all()
 
     def test_full_graduation_clears_state(self):
         """When all systems graduate and no replacements, _state is deleted."""
@@ -1077,6 +1097,9 @@ class TestFusedStageStateSyncInflight:
         assert fire._state.num_graphs == M
         assert lang._state.num_graphs == M
 
+        resident_alpha = fire._state.alpha[1:].clone()
+        resident_positive_steps = fire._state.n_steps_positive[1:].clone()
+
         # Graduate system 0 (status must reach fused.exit_status=2 to be ejected).
         batch.status[0] = fused.exit_status
         result = fused.refill_check(batch, exit_status=fused.exit_status)
@@ -1086,6 +1109,18 @@ class TestFusedStageStateSyncInflight:
         assert result.num_graphs == M
         assert fire._state.num_graphs == M
         assert lang._state.num_graphs == M
+
+        # Refill preserves existing graphs' optimizer state and initializes the replacement.
+        torch.testing.assert_close(fire._state.alpha[:-1], resident_alpha)
+        torch.testing.assert_close(
+            fire._state.n_steps_positive[:-1], resident_positive_steps
+        )
+        assert fire._state.alpha[-1].item() == pytest.approx(fire.alpha_start)
+        assert fire._state.n_steps_positive[-1].item() == 0
+        assert result.reprime_pending.view(-1).tolist() == [False, False, False, True]
+        fused.step(result)
+        assert fire._state.n_steps_positive[-1].item() == 0
+        assert not result.reprime_pending.any()
 
     def test_sub_stages_shrink_when_system_graduates_no_replacement(self):
         """With no replacement, both sub-stage _state tensors shrink."""

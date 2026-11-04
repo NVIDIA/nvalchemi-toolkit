@@ -84,9 +84,12 @@ _DISTRIBUTED_ENV = "RANK" in os.environ and "WORLD_SIZE" in os.environ
 # periodic test system across the distributed examples. The shared helper lives
 # under ``benchmark/distributed`` (repo_root/benchmark/distributed), so add THAT
 # to the path, not the example's own directory.
-sys.path.insert(
-    0, str(Path(__file__).resolve().parents[2] / "benchmark" / "distributed")
+# Sphinx-Gallery does not define ``__file__``; it runs each example from the
+# example's own directory, so fall back to the working directory there.
+_EXAMPLE_DIR = (
+    Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
 )
+sys.path.insert(0, str(_EXAMPLE_DIR.parents[1] / "benchmark" / "distributed"))
 from _benchmark_common import build_sio2_supercell  # noqa: E402
 
 # ----------------------------------------------------------------------
@@ -97,6 +100,7 @@ from _benchmark_common import build_sio2_supercell  # noqa: E402
 def build_initial_batch(
     repeats: tuple[int, int, int], dtype: torch.dtype, device: torch.device
 ) -> Batch:
+    """Build the SiO2 supercell batch on rank 0."""
     pos, numbers, masses, cell, velocities = build_sio2_supercell(
         repeats=repeats, dtype=dtype, seed=0
     )
@@ -153,6 +157,7 @@ def write_trajectory_xyz(sink: HostMemory, path: Path) -> int:
 
 
 def main() -> None:
+    """Run MACE NVT Langevin dynamics under DomainParallel."""
     parser = argparse.ArgumentParser(
         description="MACE NVT Langevin under DomainParallel."
     )

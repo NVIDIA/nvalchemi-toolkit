@@ -55,8 +55,7 @@ import os
 import torch
 
 from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics import NVTLangevin
-from nvalchemi.dynamics.hooks._utils import KB_EV
+from nvalchemi.dynamics import KB_EV, NVTLangevin
 from nvalchemi.enhanced_sampling import (
     EnhancedSampling,
     ReplicaExchange,
@@ -64,7 +63,8 @@ from nvalchemi.enhanced_sampling import (
 )
 from nvalchemi.models.lj import LennardJonesModelWrapper
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+# force=True: an earlier gallery example may have configured logging already.
+logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
 logger = logging.getLogger(__name__)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"

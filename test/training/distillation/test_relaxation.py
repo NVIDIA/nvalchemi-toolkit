@@ -41,6 +41,7 @@ from nvalchemi.dynamics.sampler import SizeAwareSampler
 from nvalchemi.dynamics.sinks import HostMemory
 from nvalchemi.hooks import DynamicsContext
 from nvalchemi.models.base import BaseModelMixin
+from nvalchemi.models.demo import DemoModel, DemoModelWrapper
 from nvalchemi.training import (
     EnergyMSELoss,
     ForceMSELoss,
@@ -66,7 +67,9 @@ from test.training.distillation.conftest import (
     _build_initial_dataset,
     _build_lj_teacher,
     _build_propagator_batch,
+    _build_propagator_system,
     _build_reference_dataset,
+    _DirectForceTeacher,
     _ListSource,
 )
 
@@ -178,6 +181,34 @@ def _make_sized_dataset(sizes: list[int]) -> InMemoryDataset:
                 atomic_masses=torch.ones(size),
                 energy=torch.zeros(1, 1),
                 forces=torch.zeros(size, 3),
+            )
+        )
+    return InMemoryDataset(in_memory_batch=Batch.from_data_list(data_list))
+
+
+def _make_edged_dataset(sizes: list[int]) -> InMemoryDataset:
+    """Return structures of *sizes* atoms, each carrying its complete graph as edges.
+
+    A row of ``n`` atoms stores ``n * (n - 1)`` directed edges, so edge budgets
+    see counts the source metadata and the live batch agree on.
+    """
+    data_list = []
+    for index, size in enumerate(sizes):
+        generator = torch.Generator().manual_seed(700 + index)
+        rows, cols = torch.meshgrid(
+            torch.arange(size), torch.arange(size), indexing="ij"
+        )
+        off_diagonal = rows != cols
+        data_list.append(
+            AtomicData(
+                positions=torch.randn(size, 3, generator=generator),
+                atomic_numbers=torch.full((size,), _INITIAL_ELEMENT, dtype=torch.long),
+                atomic_masses=torch.ones(size),
+                energy=torch.zeros(1, 1),
+                forces=torch.zeros(size, 3),
+                neighbor_list=torch.stack(
+                    [rows[off_diagonal], cols[off_diagonal]], dim=1
+                ),
             )
         )
     return InMemoryDataset(in_memory_batch=Batch.from_data_list(data_list))
@@ -1447,6 +1478,332 @@ class TestRelaxationDivergence:
             strategy.run()
 
 
+class _InfOnce:
+    """Overwrite one system's forces with inf on one step only, after the model."""
+
+    frequency = 1
+    stage = DynamicsStage.AFTER_COMPUTE
+
+    def __init__(self, system: int, at_step: int) -> None:
+        """Diverge *system* on propagator step *at_step*."""
+        self.system = system
+        self.at_step = at_step
+
+    def __call__(self, ctx: Any, stage: Any) -> None:  # noqa: ARG002
+        """Poison the forces of the scripted system on its step."""
+        if ctx.step_count != self.at_step:
+            return
+        batch = ctx.batch
+        graphs = batch.system_id.view(-1)[: batch.num_graphs] == self.system
+        batch.forces[graphs[batch.batch_idx.long()]] = float("inf")
+
+
+class _ModelInputProbe:
+    """Record, per step and system, whether the positions the model sees are finite.
+
+    Keyed by the propagator step, because the force priming ahead of the
+    first step dispatches ``BEFORE_COMPUTE`` once more than the steps do.
+    """
+
+    frequency = 1
+    stage = DynamicsStage.BEFORE_COMPUTE
+
+    def __init__(self) -> None:
+        """Start with an empty trace."""
+        self.finite: dict[int, dict[int, bool]] = {}
+
+    def __call__(self, ctx: Any, stage: Any) -> None:  # noqa: ARG002
+        """Record one flag per system of the frame about to be evaluated."""
+        batch = ctx.batch
+        systems = batch.system_id.view(-1)[: batch.num_graphs].tolist()
+        rows = batch.batch_idx.long()
+        self.finite[ctx.step_count] = {
+            system: bool(torch.isfinite(batch.positions[rows == row]).all())
+            for row, system in enumerate(systems)
+        }
+
+
+class _BlowUpOnce:
+    """Send two atoms of one system to infinity on one step, after the model.
+
+    Positions as well as forces go non-finite, the state a real blow-up
+    leaves: zeroing the positions would stack those atoms on the origin.
+    """
+
+    frequency = 1
+    stage = DynamicsStage.AFTER_COMPUTE
+
+    def __init__(self, system: int, at_step: int) -> None:
+        """Diverge *system* on propagator step *at_step*."""
+        self.system = system
+        self.at_step = at_step
+
+    def __call__(self, ctx: Any, stage: Any) -> None:  # noqa: ARG002
+        """Poison two atoms' positions and every force of the system on its step."""
+        if ctx.step_count != self.at_step:
+            return
+        batch = ctx.batch
+        graphs = batch.system_id.view(-1)[: batch.num_graphs] == self.system
+        rows = torch.where(graphs[batch.batch_idx.long()])[0]
+        batch.forces[rows] = float("inf")
+        batch.positions[rows[:2]] = float("inf")
+
+
+class _PositionsProbe:
+    """Record, per step and system, the positions the model is about to see."""
+
+    frequency = 1
+    stage = DynamicsStage.BEFORE_COMPUTE
+
+    def __init__(self) -> None:
+        """Start with an empty trace."""
+        self.positions: dict[int, dict[int, torch.Tensor]] = {}
+
+    def __call__(self, ctx: Any, stage: Any) -> None:  # noqa: ARG002
+        """Copy each system's positions of the frame about to be evaluated."""
+        batch = ctx.batch
+        systems = batch.system_id.view(-1)[: batch.num_graphs].tolist()
+        rows = batch.batch_idx.long()
+        self.positions[ctx.step_count] = {
+            system: batch.positions[rows == row].detach().clone()
+            for row, system in enumerate(systems)
+        }
+
+
+class _MotionProbe:
+    """Record, per step and system, the largest speed and force the step left."""
+
+    frequency = 1
+    stage = DynamicsStage.AFTER_STEP
+
+    def __init__(self) -> None:
+        """Start with an empty trace."""
+        self.speed: list[dict[int, float]] = []
+        self.force: list[dict[int, float]] = []
+        self.finite: list[dict[int, bool]] = []
+
+    def __call__(self, ctx: Any, stage: Any) -> None:  # noqa: ARG002
+        """Append the per-system extrema of the frame the step just left."""
+        batch = ctx.batch
+        systems = batch.system_id.view(-1)[: batch.num_graphs].tolist()
+        rows = batch.batch_idx.long()
+        self.speed.append(
+            {
+                system: float(batch.velocities[rows == row].norm(dim=-1).max())
+                for row, system in enumerate(systems)
+            }
+        )
+        self.force.append(
+            {
+                system: float(batch.forces[rows == row].norm(dim=-1).max())
+                for row, system in enumerate(systems)
+            }
+        )
+        self.finite.append(
+            {
+                system: bool(torch.isfinite(batch.positions[rows == row]).all())
+                for row, system in enumerate(systems)
+            }
+        )
+
+
+class TestDivergenceQuarantine:
+    """``quarantine_diverged`` keeps a frozen graph a finite input until the boundary.
+
+    The propagator steps the whole batch and restores the frozen graphs only
+    afterwards, so a graph frozen with infinite forces keeps a non-finite
+    geometry in front of the model for the rest of the segment. NVE over
+    three structures, eight-step lifetime, four-step segments; system 0 is
+    poisoned once on step 2.
+    """
+
+    def _run(
+        self, quarantine: bool
+    ) -> tuple[
+        DistillationStrategy,
+        _CompositionProbe,
+        _StatusProbe,
+        _ModelInputProbe,
+        _MotionProbe,
+    ]:
+        """Run the diverging MD with the quarantine on or off."""
+        student = _build_demo_model()
+        strategy = _make_relaxation_strategy(
+            student=student,
+            structures=InitialStructures(
+                _build_initial_dataset(n_systems=3), recycle=True
+            ),
+            num_steps=6,
+            generation_steps=4,
+            config_overrides={
+                "dynamics": NVE(student, dt=0.1),
+                "max_trajectory_steps": 8,
+                "quarantine_diverged": quarantine,
+            },
+        )
+        opening = _CompositionProbe()
+        status = _StatusProbe()
+        seen = _ModelInputProbe()
+        motion = _MotionProbe()
+        dynamics = strategy.on_policy.dynamics
+        dynamics.register_hook(_InfOnce(0, 2))
+        for probe in (opening, status, seen, motion):
+            dynamics.register_hook(probe)
+        with pytest.warns(UserWarning, match="1 of 3 generated trajectories diverged"):
+            strategy.run()
+        return strategy, opening, status, seen, motion
+
+    def test_the_default_is_off(self) -> None:
+        """Neither the settings nor the hook quarantine unless asked."""
+        assert OnPolicyConfig.model_fields["quarantine_diverged"].default is False
+        assert _DivergenceHook().quarantine is False
+
+    def test_without_quarantine_the_frozen_graph_reaches_the_model_non_finite(
+        self,
+    ) -> None:
+        """Off, the model sees the diverged graph's non-finite positions until the boundary."""
+        strategy, opening, status, seen, motion = self._run(quarantine=False)
+
+        assert status.statuses[2] == [0, 0, 0]
+        assert status.statuses[3] == [1, 0, 0]
+        assert seen.finite[2][0] is True
+        assert seen.finite[3][0] is False
+        assert motion.speed[3][0] == float("inf")
+        assert opening.systems[4] == [1, 2, 3]
+        assert len(strategy.replay_buffer) == 3 + 3 + 2 + 2 + 12 + 12
+
+    def test_the_quarantined_graph_stays_finite_and_still_for_the_model(self) -> None:
+        """On, the graph is frozen the same way, but at rest on finite positions."""
+        _, _, status, seen, motion = self._run(quarantine=True)
+
+        assert status.statuses[2] == [0, 0, 0]
+        assert status.statuses[3] == [1, 0, 0]
+        assert seen.finite[3][0] is True
+        assert all(all(row.values()) for row in seen.finite.values())
+        assert motion.speed[3][0] == 0.0
+        assert motion.force[3][0] == 0.0
+        assert motion.finite[3][0] is True
+        assert motion.speed[3][1] > 0.0
+
+    def test_the_quarantined_graph_is_retired_and_never_stored(self) -> None:
+        """The boundary retires it like any diverged graph; nothing it produced is stored."""
+        strategy, opening, _, _, _ = self._run(quarantine=True)
+
+        frames = strategy.replay_buffer.dataset.in_memory_batch
+        assert opening.systems[4] == [1, 2, 3]
+        assert len(strategy.replay_buffer) == 3 + 3 + 2 + 2 + 12 + 12
+        assert bool(torch.isfinite(frames.positions).all())
+        assert bool(torch.isfinite(frames.teacher_forces).all())
+        assert bool((frames.velocities.norm(dim=-1) > 0).any())
+
+    def test_the_quarantined_graph_returns_to_its_last_finite_positions(self) -> None:
+        """Every atom goes back to where it was before the divergence, not to one point.
+
+        Two atoms of system 0 are sent to infinity on step 2; zeroing them
+        would stack them on the origin. The hook keeps each graph's last
+        finite frame (the positions it left step 1 with), so from step 3 on
+        the model sees that frame, finite and with every atom distinct.
+        """
+        student = _build_demo_model()
+        strategy = _make_relaxation_strategy(
+            student=student,
+            structures=InitialStructures(
+                _build_initial_dataset(n_systems=3), recycle=True
+            ),
+            num_steps=6,
+            generation_steps=4,
+            config_overrides={
+                "dynamics": NVE(student, dt=0.1),
+                "max_trajectory_steps": 8,
+                "quarantine_diverged": True,
+            },
+        )
+        seen = _PositionsProbe()
+        dynamics = strategy.on_policy.dynamics
+        dynamics.register_hook(_BlowUpOnce(0, 2))
+        dynamics.register_hook(seen)
+        with pytest.warns(UserWarning, match="1 of 3 generated trajectories diverged"):
+            strategy.run()
+
+        restored = seen.positions[3][0]
+        assert bool(torch.isfinite(restored).all())
+        assert torch.equal(restored, seen.positions[1][0])
+        assert float(torch.pdist(restored).min()) > 0.0
+
+
+class TestDivergenceOnTheLifetimeStep:
+    """A graph that diverges on the step its lifetime ends is still quarantined.
+
+    The divergence hook runs ahead of the age hook, so its verdict is taken
+    while the graph still counts as moving. In the other order the age would
+    freeze the graph first, the divergence hook would find nothing moving to
+    sanitize, and the graph would carry its non-finite velocities in front of
+    the model until the segment boundary. NVE over three structures, six-step
+    lifetime, four-step segments; system 0 is poisoned once on step 5, the
+    step the lifetime freezes all three.
+    """
+
+    def _run(
+        self,
+    ) -> tuple[
+        DistillationStrategy,
+        _CompositionProbe,
+        _StatusProbe,
+        _ModelInputProbe,
+        _MotionProbe,
+    ]:
+        """Run the diverging MD with the quarantine on."""
+        student = _build_demo_model()
+        strategy = _make_relaxation_strategy(
+            student=student,
+            structures=InitialStructures(
+                _build_initial_dataset(n_systems=3), recycle=True
+            ),
+            num_steps=6,
+            generation_steps=4,
+            config_overrides={
+                "dynamics": NVE(student, dt=0.1),
+                "max_trajectory_steps": 6,
+                "quarantine_diverged": True,
+            },
+        )
+        opening = _CompositionProbe()
+        status = _StatusProbe()
+        seen = _ModelInputProbe()
+        motion = _MotionProbe()
+        dynamics = strategy.on_policy.dynamics
+        dynamics.register_hook(_InfOnce(0, 5))
+        for probe in (opening, status, seen, motion):
+            dynamics.register_hook(probe)
+        with pytest.warns(UserWarning, match="1 of 3 generated trajectories diverged"):
+            strategy.run()
+        return strategy, opening, status, seen, motion
+
+    def test_the_graph_is_sanitized_on_the_step_it_ages_out(self) -> None:
+        """Frozen by both on step 5, it is at rest on finite positions from step 6 on."""
+        _, _, status, seen, motion = self._run()
+
+        assert status.statuses[5] == [0, 0, 0]
+        assert status.statuses[6] == [1, 1, 1]
+        assert motion.speed[5][0] == float("inf")
+        assert motion.speed[6][0] == 0.0
+        assert motion.finite[6][0] is True
+        assert seen.finite[6][0] is True
+        assert seen.finite[7][0] is True
+        assert all(all(row.values()) for row in seen.finite.values())
+
+    def test_the_graph_is_retired_and_never_stored(self) -> None:
+        """Its final frame goes to neither route; the other two are stored once."""
+        strategy, opening, _, _, _ = self._run()
+
+        frames = strategy.replay_buffer.dataset.in_memory_batch
+        assert opening.systems[8] == [3, 4, 5]
+        assert len(strategy.replay_buffer) == 3 * 5 + 2 + 12
+        assert bool(torch.isfinite(frames.positions).all())
+        assert bool(torch.isfinite(frames.velocities).all())
+        assert bool(torch.isfinite(frames.teacher_forces).all())
+
+
 class TestDivergenceVerdictDevice:
     def test_the_verdict_is_recorded_on_the_batch_device(self) -> None:
         """The record the other routes read lives where the batch does."""
@@ -1900,3 +2257,371 @@ class TestRelaxationEndToEnd:
 
         assert probe.systems == [[0, 1], [2, 3]]
         assert strategy.step_count == 4
+
+
+class _CompositionProbe:
+    """Record which systems open every step, and how many, for any propagator."""
+
+    frequency = 1
+    stage = DynamicsStage.BEFORE_STEP
+
+    def __init__(self) -> None:
+        """Start with an empty trace."""
+        self.systems: list[list[int]] = []
+        self.graph_counts: list[int] = []
+
+    def __call__(self, ctx: Any, stage: Any) -> None:  # noqa: ARG002
+        """Append the batch composition."""
+        self.systems.append(ctx.batch.system_id.view(-1).tolist())
+        self.graph_counts.append(ctx.batch.num_graphs)
+
+
+class TestTrajectoryLifetime:
+    """``max_trajectory_steps`` retires a thermostatted trajectory the way convergence does."""
+
+    def _run_md(
+        self, max_trajectory_steps: int | None, *, num_steps: int = 6, **kwargs: Any
+    ) -> tuple[DistillationStrategy, _CompositionProbe, _StatusProbe]:
+        """Run NVE over three recyclable structures, four propagator steps a segment."""
+        student = _build_demo_model()
+        strategy = _make_relaxation_strategy(
+            student=student,
+            structures=InitialStructures(
+                _build_initial_dataset(n_systems=3),
+                recycle=max_trajectory_steps is not None,
+            ),
+            num_steps=num_steps,
+            generation_steps=4,
+            config_overrides={
+                "dynamics": NVE(student, dt=0.1),
+                "max_trajectory_steps": max_trajectory_steps,
+            },
+            **kwargs,
+        )
+        opening = _CompositionProbe()
+        status = _StatusProbe()
+        strategy.on_policy.dynamics.register_hook(opening)
+        strategy.on_policy.dynamics.register_hook(status)
+        strategy.run()
+        return strategy, opening, status
+
+    def test_the_default_propagates_the_initial_batch_for_the_whole_run(self) -> None:
+        """Unset, nothing graduates: the same three structures open every step."""
+        strategy, opening, status = self._run_md(None)
+
+        assert strategy.on_policy.manages_lifecycle is False
+        assert opening.systems == [[0, 1, 2]] * 12
+        assert status.statuses[-1] == [0, 0, 0]
+        assert strategy.on_policy.initial_structures.next_row == 3
+
+    def test_a_trajectory_is_retired_and_backfilled_at_its_lifetime(self) -> None:
+        """At a lifetime of one segment, every segment opens on three fresh structures."""
+        strategy, opening, status = self._run_md(4)
+
+        assert opening.systems[0] == [0, 1, 2]
+        assert opening.systems[4] == [3, 4, 5]
+        assert opening.systems[8] == [6, 7, 8]
+        assert all(count == 3 for count in opening.graph_counts)
+        assert status.statuses[4] == [0, 0, 0]
+        assert strategy.on_policy.initial_structures.next_row == 3
+        assert strategy.on_policy.initial_structures.wraps == 3
+
+    def test_the_age_carries_across_a_segment_boundary(self) -> None:
+        """A lifetime longer than a segment freezes mid-segment and retires at its end.
+
+        The probe is registered ahead of the lifecycle's hooks, so it reads the
+        frozen status from the step after the sixth on.
+        """
+        _, opening, status = self._run_md(6)
+
+        assert opening.systems[4] == [0, 1, 2]
+        assert status.statuses[5] == [0, 0, 0]
+        assert status.statuses[6] == [1, 1, 1]
+        assert status.statuses[7] == [1, 1, 1]
+        assert opening.systems[8] == [3, 4, 5]
+        assert status.statuses[8] == [0, 0, 0]
+
+    def test_the_final_frame_of_a_retired_trajectory_is_stored_once(self) -> None:
+        """The path route stores the moving steps and the converged route the last one."""
+        strategy, _, _ = self._run_md(4)
+
+        frames = strategy.replay_buffer.dataset.in_memory_batch
+        assert len(strategy.replay_buffer) == 3 * 4 * 3
+        assert bool(torch.isfinite(frames.teacher_forces).all())
+
+    def test_the_lifetime_works_beside_a_convergence_criterion(self) -> None:
+        """A relaxation keeps its criterion and also retires what never converges."""
+        strategy = _make_relaxation_strategy(
+            fmax=1e-9,
+            structures=InitialStructures(
+                _build_initial_dataset(n_systems=3), recycle=True
+            ),
+            num_steps=4,
+            generation_steps=4,
+            config_overrides={"max_trajectory_steps": 4},
+        )
+        opening = _CompositionProbe()
+        strategy.on_policy.dynamics.register_hook(opening)
+
+        strategy.run()
+
+        assert strategy.on_policy.convergence_criterion is not None
+        assert opening.systems[0] == [0, 1, 2]
+        assert opening.systems[4] == [3, 4, 5]
+
+    def test_recycling_is_accepted_with_a_lifetime_alone(self) -> None:
+        """The lifetime manages a lifecycle, which is what recycling needs."""
+        student = _build_demo_model()
+        strategy = _make_relaxation_strategy(
+            student=student,
+            structures=InitialStructures(
+                _build_initial_dataset(n_systems=3), recycle=True
+            ),
+            config_overrides={
+                "dynamics": NVE(student, dt=0.1),
+                "max_trajectory_steps": 8,
+            },
+        )
+
+        assert strategy.on_policy.manages_lifecycle is True
+        assert strategy.on_policy.settings.max_trajectory_steps == 8
+
+    def test_the_backfill_serves_the_pool_in_order_without_skipping(self) -> None:
+        """A row that does not fit the freed room waits for the next boundary.
+
+        Three two-atom structures fill the six-atom budget. When they retire,
+        the five-atom row takes the room and the two-atom row behind it does
+        not fit beside it; a skipping scan would pass over it, and every row
+        after it, before the segment ends. The lifetime draw stops on it
+        instead and serves it at the next boundary, where the room is the
+        whole budget again rather than the five atoms that retired, so the
+        batch grows back to three structures.
+        """
+        structures = InitialStructures(
+            _make_sized_dataset([2, 2, 2, 5, 2, 2]), max_atoms=6, recycle=True
+        )
+        strategy = _make_relaxation_strategy(
+            num_steps=6,
+            generation_steps=2,
+            structures=structures,
+            config_overrides={"max_trajectory_steps": 2},
+        )
+        probe = _StateProbe()
+        strategy.on_policy.dynamics.register_hook(probe)
+
+        strategy.run()
+
+        assert probe.systems[0] == [0, 1, 2]
+        assert probe.systems[2] == [3]
+        assert probe.systems[4] == [4, 5, 6]
+        assert probe.node_counts[::2] == [6, 5, 6]
+        assert (structures.next_row, structures.wraps) == (3, 1)
+
+    def test_a_seed_larger_than_the_whole_budget_is_skipped(self) -> None:
+        """A seven-atom row under a six-atom budget never parks the backfill.
+
+        Rows 0-2 open the run; the seven-atom row 3 can never fit, so the
+        first backfill passes over it and serves row 4, then wraps to the
+        front, and the run keeps rotating instead of draining to replay-only
+        training.
+        """
+        dataset = _make_sized_dataset([2, 2, 2, 7, 2])
+        rows = [
+            _positions(dataset.in_memory_batch, index) for index in range(len(dataset))
+        ]
+        structures = InitialStructures(dataset, max_atoms=6, recycle=True)
+        strategy = _make_relaxation_strategy(
+            num_steps=6,
+            generation_steps=2,
+            structures=structures,
+            config_overrides={"max_trajectory_steps": 2},
+        )
+        probe = _StateProbe()
+        strategy.on_policy.dynamics.register_hook(probe)
+
+        with pytest.warns(UserWarning, match="row 3 holds 7 atoms"):
+            strategy.run()
+
+        served = [
+            [rows.index(probe.first_positions[system]) for system in systems]
+            for systems in probe.systems[::2]
+        ]
+        assert served == [[0, 1, 2], [4, 0, 1], [2, 4, 0]]
+        assert probe.node_counts[::2] == [6, 6, 6]
+        assert structures.oversized_rows == frozenset({3})
+
+    def _run_staggered(
+        self,
+        dataset: InMemoryDataset | None = None,
+        *,
+        num_steps: int = 8,
+        **budget: int,
+    ) -> _StateProbe:
+        """Seven two-atom rows, lifetime 4, two-step segments; system 0 diverges on step 1.
+
+        Row 0 retires at the first boundary (age 2), rows 1 and 2 at the
+        second (age 4) while the row that replaced 0 lives on at age 2, and so
+        forth: every boundary from the second on retires some graphs and keeps
+        others of a different age.
+        """
+        structures = InitialStructures(
+            _make_sized_dataset([2] * 7) if dataset is None else dataset,
+            recycle=True,
+            **budget,
+        )
+        strategy = _make_relaxation_strategy(
+            num_steps=num_steps,
+            generation_steps=2,
+            structures=structures,
+            config_overrides={"max_trajectory_steps": 4, "quarantine_diverged": True},
+        )
+        probe = _StateProbe()
+        strategy.on_policy.dynamics.register_hook(_InfOnce(0, 1))
+        strategy.on_policy.dynamics.register_hook(probe)
+        with pytest.warns(UserWarning, match="1 of 3 generated trajectories diverged"):
+            strategy.run()
+        return probe
+
+    def test_survivors_keep_their_ages_when_one_row_retires_early(self) -> None:
+        """Under an atom budget each graph retires at its own age, not the batch's."""
+        probe = self._run_staggered(max_atoms=6)
+
+        assert probe.systems[0] == [0, 1, 2]
+        assert probe.systems[2] == [1, 2, 3]
+        assert probe.systems[4] == [3, 4, 5]
+        assert probe.systems[6] == [4, 5, 6]
+        assert probe.node_counts[::2] == [6, 6, 6, 6]
+
+    def test_the_batch_size_budget_frees_room_for_the_retired_rows_only(self) -> None:
+        """``max_batch_size`` room is the slots the retirees left, survivors kept."""
+        probe = self._run_staggered(max_batch_size=3)
+
+        assert probe.systems[0] == [0, 1, 2]
+        assert probe.systems[2] == [1, 2, 3]
+        assert probe.systems[4] == [3, 4, 5]
+        assert probe.systems[6] == [4, 5, 6]
+        assert probe.graph_counts[::2] == [3, 3, 3, 3]
+
+    def test_the_edge_budget_frees_room_for_the_retired_rows_only(self) -> None:
+        """``max_edges`` room is the budget less the survivors' stored edges."""
+        probe = self._run_staggered(_make_edged_dataset([2] * 7), max_edges=6)
+
+        assert probe.systems[0] == [0, 1, 2]
+        assert probe.systems[2] == [1, 2, 3]
+        assert probe.systems[4] == [3, 4, 5]
+        assert probe.systems[6] == [4, 5, 6]
+
+    def test_a_row_the_atom_room_admits_but_the_edge_room_refuses_waits(self) -> None:
+        """A three-atom row (six edges) fits two freed atoms' worth of room only by edges.
+
+        Under ``max_edges=6`` and no atom cap, row 0's retirement frees two
+        edges; row 3 carries six, so the first backfill stops on it and the
+        batch runs with two graphs. The second boundary retires rows 1 and 2,
+        frees the whole budget, and row 3 enters alone. It lives to the fourth
+        boundary, where the two-atom rows behind it and the recycled first row
+        fill the budget again (every draw stamps a fresh system id).
+        """
+        probe = self._run_staggered(
+            _make_edged_dataset([2, 2, 2, 3, 2, 2]), num_steps=10, max_edges=6
+        )
+
+        assert probe.systems[0] == [0, 1, 2]
+        assert probe.systems[2] == [1, 2]
+        assert probe.systems[4] == [3]
+        assert probe.systems[6] == [3]
+        assert probe.systems[8] == [4, 5, 6]
+        assert probe.node_counts[::2] == [6, 4, 3, 3, 6]
+
+    def test_an_oversized_row_is_read_once(self) -> None:
+        """After its first pass a known oversized row costs no metadata read."""
+        dataset = _make_sized_dataset([2, 2, 2, 7, 2])
+        structures = InitialStructures(dataset, max_atoms=6, recycle=True)
+        strategy = _make_relaxation_strategy(
+            num_steps=6,
+            generation_steps=2,
+            structures=structures,
+            config_overrides={"max_trajectory_steps": 2},
+        )
+
+        with (
+            patch.object(dataset, "get_metadata", wraps=dataset.get_metadata) as spy,
+            pytest.warns(UserWarning, match="row 3 holds 7 atoms"),
+        ):
+            strategy.run()
+
+        # Once by the initial stopping draw, once by the first lifetime scan that
+        # records it; the two later passes over the pool skip it without a read.
+        looked_up = [call.args[0] for call in spy.call_args_list]
+        assert looked_up.count(3) == 2
+        assert structures.wraps >= 2
+
+    def test_a_non_positive_lifetime_is_rejected(self) -> None:
+        """Zero would retire every trajectory before its first step."""
+        with pytest.raises(ValidationError, match="max_trajectory_steps"):
+            _make_relaxation_strategy(config_overrides={"max_trajectory_steps": 0})
+
+
+class _CellGradTeacher(_DirectForceTeacher):
+    """Teacher that enables gradients on ``cell``, as a stress head does."""
+
+    def forward(self, data: AtomicData | Batch, **kwargs: Any) -> Any:
+        """Turn on ``cell.requires_grad`` in place, then label."""
+        data.cell.requires_grad_(True)
+        return super().forward(data, **kwargs)
+
+
+class _CellEnergyStudent(DemoModelWrapper):
+    """Student whose energy depends on ``cell``, so its backward reaches it."""
+
+    def forward(self, data: AtomicData | Batch, **kwargs: Any) -> Any:
+        """Add a zero-weighted cell term to the demo energy."""
+        output = super().forward(data, **kwargs)
+        output["energy"] = output["energy"] + 0.0 * data.cell.sum(dim=(-2, -1)).view(
+            -1, 1
+        )
+        return output
+
+
+def _make_celled_dataset(n_systems: int = 3) -> InMemoryDataset:
+    """Return initial structures carrying a cell, as a periodic store does."""
+    systems = []
+    for index in range(n_systems):
+        system = _build_propagator_system(_INITIAL_ELEMENT, 500 + index)
+        system.cell = 10.0 * torch.eye(3).unsqueeze(0)
+        system.pbc = torch.zeros(1, 3, dtype=torch.bool)
+        systems.append(system)
+    return InMemoryDataset(in_memory_batch=Batch.from_data_list(systems))
+
+
+class TestRetiredFramesStayDetached:
+    """A retired frame enters the replay buffer without an autograd graph."""
+
+    def test_training_after_an_evicting_retirement_backpropagates(self) -> None:
+        """A teacher that enables ``cell`` gradients must not chain the buffer's frames.
+
+        The lifetime retires every trajectory at the first boundary, the tiny
+        buffer evicts on the same write, and two training steps follow, each
+        backpropagating through ``cell``.
+        """
+        torch.manual_seed(0)
+        student = _CellEnergyStudent(DemoModel(num_atom_types=20, hidden_dim=8))
+        teacher = _CellGradTeacher(_build_direct_force_teacher(seed=2).model)
+        strategy = _make_relaxation_strategy(
+            student=student,
+            teacher=teacher,
+            structures=InitialStructures(_make_celled_dataset(), recycle=True),
+            num_steps=4,
+            training_steps_per_segment=2,
+            generation_steps=2,
+            config_overrides={
+                "dynamics": NVE(student, dt=0.1),
+                "max_trajectory_steps": 2,
+                "replay_capacity": 3,
+            },
+        )
+
+        strategy.run()
+
+        frames = strategy.replay_buffer.dataset.in_memory_batch
+        assert frames.cell.requires_grad is False
+        assert frames.cell.grad_fn is None

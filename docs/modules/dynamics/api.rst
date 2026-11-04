@@ -49,6 +49,35 @@ Constants
 
    KB_EV
 
+Integrators
+-----------
+
+The algorithms are described in :ref:`dynamics-methods`.
+
+.. autosummary::
+   :toctree: _generated
+   :nosignatures:
+
+   NVE
+   NVTLangevin
+   NVTNoseHoover
+   NPT
+   NPH
+
+Optimizers
+----------
+
+``FIRE`` and ``FIREVariableCell`` are deprecated; see :ref:`dynamics-methods`.
+
+.. autosummary::
+   :toctree: _generated
+   :nosignatures:
+
+   FIRE2
+   FIRE2VariableCell
+   LBFGS
+   LBFGSVariableCell
+
 Hooks
 -----
 

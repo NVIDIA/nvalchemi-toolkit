@@ -221,6 +221,9 @@ sphinx_gallery_conf = {
     "thumbnail_size": (250, 250),
     "min_reported_time": 0,
     "capture_repr": ("_repr_html_", "__repr__"),
+    # Copy example inputs (such as Hydra configs) next to the generated pages
+    # so ``:download:`` links in the examples resolve.
+    "copyfile_regex": r".*\.yaml$",
 }
 
 # mapping for other packages
