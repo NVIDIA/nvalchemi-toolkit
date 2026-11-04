@@ -2706,6 +2706,37 @@ class TestHessianBatchLifecycle:
             torch.testing.assert_close(left.get_data(index).hessian, value)
 
 
+class TestBatchFromDataListAddedProperties:
+    """Fields attached with ``add_node_property`` and friends must survive batching."""
+
+    def test_added_node_property_is_kept(self):
+        datas = []
+        for n in (2, 3):
+            data = _atomic_data_with_edges_and_system(num_nodes=n, num_edges=4)
+            data.add_node_property("tag", torch.arange(n, dtype=torch.float32))
+            datas.append(data)
+
+        batch = Batch.from_data_list(datas)
+
+        assert hasattr(batch, "tag")
+        assert torch.equal(batch.tag, torch.tensor([0.0, 1.0, 0.0, 1.0, 2.0]))
+        for i, n in enumerate((2, 3)):
+            assert torch.equal(
+                batch.to_data_list()[i].tag, torch.arange(n, dtype=torch.float32)
+            )
+
+    def test_added_system_property_is_kept(self):
+        datas = []
+        for value in (1.5, 2.5):
+            data = _atomic_data_with_edges_and_system(num_nodes=2, num_edges=4)
+            data.add_system_property("temperature", torch.tensor([[value]]))
+            datas.append(data)
+
+        batch = Batch.from_data_list(datas)
+
+        assert torch.equal(batch.temperature, torch.tensor([[1.5], [2.5]]))
+
+
 class TestBatchRoundTripAddedKeys:
     """Test that keys added to a Batch (e.g. by MD code) are correctly stored in
     AtomicData when converting back via to_data_list() / get_data().

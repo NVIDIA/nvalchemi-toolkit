@@ -543,6 +543,8 @@
 
 ### Fixed
 
+- Keep fields attached with `AtomicData.add_node_property` (and the edge and
+  system variants) in `Batch.from_data_list`, which silently dropped them.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain

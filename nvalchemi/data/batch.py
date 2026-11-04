@@ -1213,9 +1213,20 @@ class Batch(DataMixin):
         # that break collective issue ordering in DD.
         def _iter_samples() -> Iterator[tuple[Iterator[tuple[str, Tensor]], int, int]]:
             for data in data_list:
+                dumped = data.model_dump(exclude_none=True)
+                # Fields attached with ``add_node_property`` and friends are not
+                # pydantic fields, so ``model_dump`` omits them. Append them
+                # (sorted, for a rank-independent order) so they are batched too.
+                added = sorted(
+                    (data.__node_keys__ | data.__edge_keys__ | data.__system_keys__)
+                    - dumped.keys()
+                )
                 pairs = (
                     (key, value)
-                    for key, value in data.model_dump(exclude_none=True).items()
+                    for key, value in (
+                        *dumped.items(),
+                        *((key, getattr(data, key, None)) for key in added),
+                    )
                     if key not in excluded and isinstance(value, Tensor)
                 )
                 yield pairs, data.num_nodes, data.num_edges
