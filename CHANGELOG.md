@@ -587,6 +587,10 @@
 - Generic model specs record a constructor argument that shares its name with an
   inherited method (such as `train` on an `nn.Module`) from the private
   attribute that stores it, instead of the bound method.
+- Validate a tensor `atom_categories` as a tensor first, instead of trying
+  `list[AtomCategory]` element by element. This removes one `Tensor.item()`
+  (a device sync on CUDA) per atom from `AtomicData` construction,
+  `AtomicData.to` and `Batch.get_data` / `Batch.to_data_list`.
 - `NeighborListHook` capped the cell list of a single system at 8192 cells,
   the toolkit-ops default for batches. toolkit-ops supports up to 524288
   cells for a single system, and its method selection assumes that cap.
