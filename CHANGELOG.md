@@ -1,13 +1,13 @@
 # Changelog
 
-### Added
+## Added
 
 - Single-device in-flight NEB batching via `NEB.run(sampler=..., sinks=...)`
   with `SizeAwareSampler(by_group=True)`. The updated
   `examples/advanced/11_batched_neb.py` demonstrates path refilling and
   compares energy barriers with the static run.
 
-### Fixed
+## Fixed
 
 - `Batch.append()` and `concatenate()` discard unused buffer rows unless
   `strip_padding=False`. `HostMemory.write()` trims padding before copying to CPU.
