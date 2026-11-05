@@ -6,6 +6,10 @@
   with `SizeAwareSampler(by_group=True)`. The updated
   `examples/advanced/11_batched_neb.py` demonstrates path refilling and
   compares energy barriers with the static run.
+- `SizeAwareSampler(field_defaults=...)` fills missing node, edge, or system
+  fields on loaded samples so optional fields survive packing. Samples are
+  now modified in place when loaded, including grouped samples, which are no
+  longer cloned.
 
 ## Fixed
 

@@ -1367,6 +1367,43 @@ class TestNEBwithIDPP:
 class TestNEBStreaming:
     """Whole-path refill preserves resident state and completes every path once."""
 
+    @pytest.mark.parametrize("masked_first", [False, True])
+    def test_mixed_fixed_masks_survive_initial_and_replacement_packing(
+        self, device: str, masked_first: bool
+    ) -> None:
+        """Mixed paths keep their constraints through initial packing and refill."""
+        dataset = _BandDataset([(3, 2)] * 4, device)
+        masked_ids = {0, 2} if masked_first else {1, 3}
+        for identity, path in enumerate(dataset.paths):
+            if identity not in masked_ids:
+                del path["neb_fixed_node_mask"]
+        sampler = SizeAwareSampler(dataset, by_group=True, max_batch_size=2)
+        sink = HostMemory(100)
+        strategy = NEB(
+            model=_HarmonicModel().to(device).eval(),
+            fmax=1e-12,
+            climbing=ClimbingImageConfig(max_regular_steps=2, max_climbing_steps=2),
+            optimizer_kwargs={"device_type": device},
+            refill_frequency=1,
+        )
+        assert strategy.run(sampler=sampler, sinks=[sink]) is None
+        result = sink.read()
+        assert sampler.exhausted
+        assert result.group_id.unique().tolist() == [0, 1, 2, 3]
+        for identity, source in enumerate(dataset.paths):
+            path = result.index_select(result.group_id.view(-1) == identity)
+            source = source.to(path.device)
+            # Atom 0 in the interior image is user-fixed only on masked paths.
+            assert bool(path.neb_fixed_node_mask[2]) == (identity in masked_ids)
+            if identity in masked_ids:
+                torch.testing.assert_close(
+                    path.positions[source.neb_fixed_node_mask],
+                    source.positions[source.neb_fixed_node_mask],
+                )
+            else:
+                assert not torch.allclose(path.positions[2], source.positions[2])
+                assert not source.neb_fixed_node_mask.any()
+
     @pytest.mark.parametrize("mode", ["engine", "compiled", "stream"])
     def test_stream_processes_each_path_once(self, device: str, mode: str) -> None:
         """Unequal paths keep identities, constraints, and independent stage budgets."""
@@ -1410,8 +1447,8 @@ class TestNEBStreaming:
         assert torch.all(result.status == 2)
         assert torch.all(result.n_steps_counter_0 <= 2)
         assert torch.all(result.n_steps_counter_1 <= 2)
-        # Check that each path keeps its image count and fixed endpoints, and
-        # that runtime bookkeeping is not written back to the dataset.
+        # Check that each path keeps its image count and fixed endpoints. Source
+        # paths receive IDs but keep their geometry and lack runtime step state.
         for group, identity in enumerate(ids):
             path = result.index_select(result.group_idx == group)
             assert path.num_graphs == sizes[identity][0]
@@ -1420,7 +1457,9 @@ class TestNEBStreaming:
                 path.positions[path.neb_fixed_node_mask],
                 source.positions[path.neb_fixed_node_mask],
             )
-            for key in ("status", "system_id", "group_id", "n_steps_counter_0"):
+            torch.testing.assert_close(path.system_id, source.system_id)
+            assert source.group_id.eq(identity).all()
+            for key in ("status", "n_steps_counter_0"):
                 assert key not in dataset.paths[identity]
 
     @pytest.mark.parametrize("optimizer", [FIRE2, LBFGS])

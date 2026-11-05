@@ -23,14 +23,19 @@ from __future__ import annotations
 
 import random
 from collections import deque
-from collections.abc import Callable, Iterator
-from typing import Any
+from collections.abc import Callable, Iterator, Mapping
+from typing import Any, TypeAlias
 
 import torch
 from torch.utils.data import Sampler
 
 from nvalchemi.data.atomic_data import AtomicData
-from nvalchemi.data.batch import Batch
+from nvalchemi.data.batch import _LEVEL_ALIASES, Batch
+from nvalchemi.data.level_storage import effective_dtype
+
+FieldDefault: TypeAlias = tuple[
+    str, bool | int | float | Callable[[int, torch.device], torch.Tensor]
+]
 
 
 class SizeAwareSampler(Sampler[int]):
@@ -46,6 +51,11 @@ class SizeAwareSampler(Sampler[int]):
     with user-specified ``max_atoms`` — the more restrictive constraint wins.
     The GPU memory heuristic is **best-effort** and **conservative**; users
     who need tighter control should set ``max_atoms`` explicitly.
+
+    Samples are modified in place when loaded. The sampler stamps
+    ``system_id`` on every sample, ``group_id`` on grouped samples, and any
+    ``field_defaults``. Dataset items that are cached therefore keep these
+    fields.
 
     Parameters
     ----------
@@ -78,6 +88,13 @@ class SizeAwareSampler(Sampler[int]):
         Sample complete single-group batches instead of individual graphs. Each
         item returns ``(batch, metadata)`` with exactly one group.
         ``max_batch_size`` counts groups. Default False.
+    field_defaults : mapping, optional
+        Map missing fields to ``(level, scalar_or_callable)`` for node, edge,
+        or system levels. A scalar value is expanded to the sample's size.
+        For other shapes or dtypes, pass a callable that takes
+        ``(num_rows, device)`` and returns a tensor. Defaults are added in
+        place; existing values are preserved.
+        Grouped node and edge defaults require existing tensors at that level.
 
     Attributes
     ----------
@@ -86,6 +103,9 @@ class SizeAwareSampler(Sampler[int]):
         ``device``. Samples are AtomicData graphs by default or single-group
         Batch objects when ``by_group=True``. Group labels are rebased across
         samples in grouped mode.
+    field_defaults : dict
+        Optional-field defaults applied when loading samples. Consumers
+        can register defaults before the first sample is loaded.
 
     Raises
     ------
@@ -116,6 +136,7 @@ class SizeAwareSampler(Sampler[int]):
         max_gpu_memory_fraction: float = 0.8,
         *,
         by_group: bool = False,
+        field_defaults: Mapping[str, FieldDefault] | None = None,
     ) -> None:
         """Initialize the size-aware sampler.
 
@@ -148,6 +169,13 @@ class SizeAwareSampler(Sampler[int]):
             Sample complete single-group batches instead of AtomicData graphs.
             Metadata contains total atom and edge counts across each group.
             ``max_batch_size`` counts groups. Default False.
+        field_defaults : mapping, optional
+            Sample defaults mapping field names to ``(level, value)``.
+            Scalars are expanded on the sample device. Callables accept
+            ``(num_rows, device)`` and return a tensor with the desired shape
+            and dtype. Only missing node, edge, and system fields are added.
+            Grouped node and edge defaults require existing tensors at that
+            level. Default is no defaults.
 
         Raises
         ------
@@ -187,6 +215,7 @@ class SizeAwareSampler(Sampler[int]):
         self._max_edges = max_edges
         self._max_batch_size = max_batch_size
         self.by_group = by_group
+        self.field_defaults: dict[str, FieldDefault] = dict(field_defaults or {})
         self._load_sample = self._load_group if by_group else self._load_graph
         self.assemble_samples: Callable[..., Batch] = (
             self._assemble_groups if by_group else Batch.from_data_list
@@ -287,6 +316,7 @@ class SizeAwareSampler(Sampler[int]):
     def _load_graph(self, index: int) -> AtomicData:
         """Load and identify one ordinary graph."""
         data, _ = self._dataset[index]
+        self._apply_field_defaults(data)
         data.add_system_property(
             "system_id",
             torch.tensor(
@@ -303,8 +333,7 @@ class SizeAwareSampler(Sampler[int]):
             raise TypeError("Grouped dataset items must be Batch objects")
         if "group_idx" not in data or data.group_layout.num_groups != 1:
             raise ValueError("Grouped dataset items must contain exactly one group")
-        # Dataset items may be cached. Identity stamping must not mutate them.
-        data = data.clone()
+        self._apply_field_defaults(data)
         data.add_key(
             "group_id",
             [torch.tensor([[index]], dtype=torch.long, device=data.device)]
@@ -325,6 +354,54 @@ class SizeAwareSampler(Sampler[int]):
         )
         self._next_system_id += data.num_graphs
         return data
+
+    def _apply_field_defaults(self, data: AtomicData | Batch) -> None:
+        """Add missing optional built-in fields to a sample before packing."""
+        for key, (level, default) in self.field_defaults.items():
+            if getattr(data, key, None) is not None:
+                continue
+            level_name = _LEVEL_ALIASES.get(level)
+            if level_name is None:
+                raise ValueError(
+                    f"Unknown field default level '{level}'; "
+                    f"expected one of {sorted(_LEVEL_ALIASES)}"
+                )
+            # Active counts exclude any spare buffer capacity.
+            counts = {
+                "atoms": data.num_nodes,
+                "edges": data.num_edges,
+                "system": data.num_graphs if isinstance(data, Batch) else 1,
+            }
+            num_rows = counts[level_name]
+            if isinstance(data, Batch) and num_rows == 0:
+                raise ValueError(
+                    f"Field defaults require existing tensors at level '{level}'"
+                )
+            if callable(default):
+                values = default(num_rows, data.device)
+            else:
+                # System fields are stored as (num_graphs, 1) payloads.
+                shape = (num_rows, 1) if level_name == "system" else (num_rows,)
+                # A field already declared on a batch keeps its declared dtype.
+                dtype = None
+                if isinstance(data, Batch):
+                    declared = effective_dtype(data.get_level_schema().dtypes.get(key))
+                    dtype = declared if isinstance(declared, torch.dtype) else None
+                values = torch.full(shape, default, dtype=dtype, device=data.device)
+            if isinstance(data, Batch):
+                schema = data.get_level_schema()
+                schema.set(key, level_name, dtype=values.dtype)
+                data.extend_level_schema(schema)
+                data[key] = values
+                if data.keys is not None:
+                    data.keys.setdefault(level_name, set()).add(key)
+            else:
+                add_property = {
+                    "atoms": data.add_node_property,
+                    "edges": data.add_edge_property,
+                    "system": data.add_system_property,
+                }[level_name]
+                add_property(key, values)
 
     @staticmethod
     def _assemble_groups(samples: list[Batch], device: torch.device | str) -> Batch:
@@ -485,12 +562,7 @@ class SizeAwareSampler(Sampler[int]):
                 # Check if candidate fits in the slot
                 if cand_atoms <= num_atoms and cand_edges <= num_edges:
                     # Found a match, load and mark consumed
-                    data, _ = self._dataset[idx]
-                    data.add_system_property(
-                        "system_id",
-                        torch.tensor([[self._next_system_id]], dtype=torch.long),
-                    )
-                    self._next_system_id += 1
+                    data = self._load_graph(idx)
                     self._consumed.add(idx)
                     return data
 
@@ -679,16 +751,12 @@ class SizeAwareSampler(Sampler[int]):
 
             # ONE item() per slot — unavoidable to index into the Python dataset
             chosen_idx = int(candidates[0, 0].item())
+            data = self._load_graph(chosen_idx)
             available[chosen_idx] = False
             self._consumed_mask[chosen_idx] = True
             # Sync CPU _consumed set for exhausted() and __len__ correctness
             self._consumed.add(chosen_idx)
 
-            data, _ = self._dataset[chosen_idx]
-            data.add_system_property(
-                "system_id", torch.tensor([[self._next_system_id]], dtype=torch.long)
-            )
-            self._next_system_id += 1
             results.append(data)
 
         return results

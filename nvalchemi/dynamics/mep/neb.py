@@ -672,6 +672,9 @@ class NEB(DynamicsStrategy):
             *self._build_path_hooks(climbing_status=climbing_status),
             *self.build_hooks(),
         ]
+        if sampler is not None:
+            # Normalize optional constraints before grouped packing can drop them.
+            sampler.field_defaults.setdefault("neb_fixed_node_mask", ("node", False))
         return FusedStage(
             sub_stages=stages,
             n_steps=self.n_steps,

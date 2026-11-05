@@ -546,8 +546,19 @@ stays unconsumed, and the sampler considers other candidates. With
 
 `group_idx` gives dense local group labels in the assembled batch. `group_id`
 identifies the original dataset item, and `system_id` identifies each image
-uniquely within the sampler. Sampling preserves the dataset's source batches.
+uniquely within the sampler. Loading adds these IDs to the dataset item in
+place. Assembly copies its data before simulation updates.
 The default `by_group=False` samples individual `AtomicData` graphs.
+
+For optional fields on graph or grouped inputs, `field_defaults` maps each
+field name to `(level, value)`, for example `{"fixed_mask": ("node", False)}`.
+A scalar value is expanded to the sample's size. For other shapes or dtypes,
+use a callable accepting `(num_rows, device)` and returning a tensor, such as
+`lambda n, dev: torch.zeros(n, 3, device=dev)`. Defaults support only built-in
+node, edge, and system levels, and grouped node and edge defaults require
+existing tensors at that level. Missing fields are added in place while
+loading, and supplied fields stay unchanged. Register defaults before loading
+any samples.
 
 For grouped replacement, use `request_replacements_budget()`. The singular
 `request_replacement()` and vectorized `request_replacements()` methods support
