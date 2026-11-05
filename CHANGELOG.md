@@ -644,9 +644,6 @@
   retired on-policy frame carrying the flag, so an evicting buffer write
   chained the resident frames to one graph node and the second training step
   failed with "backward through the graph a second time".
-- Plain `DistributedPipeline` stages reset the status of received samples.
-  Samples sent by a `FusedStage` kept its `exit_status`, so the receiving
-  stage treated them as finished and never stepped them.
 
 ### Deprecated
 
