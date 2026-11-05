@@ -1183,6 +1183,38 @@ class TestFieldDefaults:
             assert source.energy is not None
             assert source.system_id is not None
 
+    def test_grouped_default_categories(self, device: str) -> None:
+        """Grouped defaults use public field categories, including in saved data."""
+        dataset = MockGroupedDataset([(3, 2, 1)])
+        dataset.groups = [group.to(device) for group in dataset.groups]
+        sampler = SizeAwareSampler(
+            dataset,
+            by_group=True,
+            max_batch_size=1,
+            field_defaults={
+                "charges": ("node", 0.0),
+                "shifts": ("edge", lambda n, dev: torch.zeros(n, 3, device=dev)),
+                "energy": ("system", 0.0),
+            },
+        )
+
+        batch = sampler.build_initial_batch()
+        assert "charges" in batch.keys["node"]
+        assert "shifts" in batch.keys["edge"]
+        assert "energy" in batch.keys["system"]
+        assert {"node", "edge", "system"} <= set(batch.keys)
+        # Pre-existing keys are preserved alongside the defaults.
+        assert "positions" in batch.keys["node"]
+
+        saved = batch.model_dump()
+        assert "charges" in saved["keys"]["node"]
+        assert "shifts" in saved["keys"]["edge"]
+        assert "energy" in saved["keys"]["system"]
+        assert {"node", "edge", "system"} <= set(saved["keys"])
+        assert saved["charges"].shape == (6,)
+        assert saved["shifts"].shape == (3, 3)
+        assert saved["energy"].shape == (3, 1)
+
     def test_scalar_system_default_uses_system_payload_shape(self) -> None:
         """Scalar system defaults are (num_graphs, 1) in graph and grouped modes."""
         graph_sampler = SizeAwareSampler(

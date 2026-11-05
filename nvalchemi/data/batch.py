@@ -79,6 +79,8 @@ _LEVEL_ALIASES = {
     "edges": "edges",
     "system": "system",
 }
+# Level names used by ``Batch.keys``, keyed by schema level name.
+_KEYS_LEVELS = {"atoms": "node", "edges": "edge", "system": "system"}
 _UNDETACHABLE_LEVELS = frozenset({"atoms", "system"})
 """Levels whose storage the batch needs for its atom and graph counts."""
 _INT32_MAX = torch.iinfo(torch.int32).max
@@ -3494,11 +3496,7 @@ class Batch(DataMixin):
             self._install_level_schema(schema)
 
             if self.keys is not None:
-                legacy_level = {
-                    "atoms": "node",
-                    "edges": "edge",
-                    "system": "system",
-                }.get(group_name)
+                legacy_level = _KEYS_LEVELS.get(group_name)
                 if legacy_level is not None:
                     self.keys[legacy_level].add(key)
             return
@@ -3574,11 +3572,7 @@ class Batch(DataMixin):
         self._install_level_schema(schema)
 
         if self.keys is not None:
-            legacy_level = {
-                "atoms": "node",
-                "edges": "edge",
-                "system": "system",
-            }.get(group_name)
+            legacy_level = _KEYS_LEVELS.get(group_name)
             if legacy_level is not None:
                 self.keys[legacy_level].add(key)
 

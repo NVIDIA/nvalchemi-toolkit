@@ -30,7 +30,7 @@ import torch
 from torch.utils.data import Sampler
 
 from nvalchemi.data.atomic_data import AtomicData
-from nvalchemi.data.batch import _LEVEL_ALIASES, Batch
+from nvalchemi.data.batch import _KEYS_LEVELS, _LEVEL_ALIASES, Batch
 from nvalchemi.data.level_storage import effective_dtype
 
 FieldDefault: TypeAlias = tuple[
@@ -394,7 +394,7 @@ class SizeAwareSampler(Sampler[int]):
                 data.extend_level_schema(schema)
                 data[key] = values
                 if data.keys is not None:
-                    data.keys.setdefault(level_name, set()).add(key)
+                    data.keys.setdefault(_KEYS_LEVELS[level_name], set()).add(key)
             else:
                 add_property = {
                     "atoms": data.add_node_property,
