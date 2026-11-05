@@ -114,6 +114,20 @@ def _is_neighbor(
     return j in neighbor_matrix[i, :n].tolist()
 
 
+def _sorted_pairs(batch: Batch) -> torch.Tensor:
+    """Return each atom's ``(neighbor, shift)`` pairs as sorted integer keys.
+
+    Padding slots get the largest key, so rows compare equal regardless of
+    the order the neighbors were written in.
+    """
+    neighbors = batch.neighbor_matrix.long()
+    # Image indices are small, so each fits in 4 bits after the offset.
+    sx, sy, sz = (batch.neighbor_matrix_shifts.long() + 8).unbind(-1)
+    keys = ((neighbors * 16 + sx) * 16 + sy) * 16 + sz
+    keys = keys.masked_fill(neighbors >= batch.num_nodes, torch.iinfo(torch.long).max)
+    return keys.sort(dim=1).values
+
+
 # ===========================================================================
 # TestNeighborListHookProtocol
 # ===========================================================================
@@ -839,6 +853,49 @@ class TestSkinCheck:
         cell = batch.cell.squeeze(0)
         edge = batch.positions[1] - batch.positions[0] + shift.to(cell.dtype) @ cell
         assert torch.linalg.vector_norm(edge) < hook.config.cutoff
+
+    @pytest.mark.parametrize("method", ["naive", "cell_list", "batch_cluster_tile"])
+    def test_partial_rebuild_matches_full_build(self, device: str, method: str):
+        """A rebuild of only some systems gives the same list as a full build.
+
+        System 0 is displaced by more than ``skin / 2`` and system 1 is not,
+        so the second call rebuilds system 0 only and keeps system 1.
+        """
+        if method == "batch_cluster_tile" and device == "cpu":
+            pytest.skip("batch_cluster_tile is CUDA-only")
+        gen = torch.Generator().manual_seed(0)
+        box, n_atoms, n_graphs = 12.0, 128, 3
+        data_list = [
+            AtomicData(
+                positions=torch.rand(n_atoms, 3, generator=gen) * box,
+                atomic_numbers=torch.ones(n_atoms, dtype=torch.long),
+                cell=torch.eye(3).unsqueeze(0) * box,
+                pbc=torch.tensor([[True, True, True]]),
+            )
+            for _ in range(n_graphs)
+        ]
+        batch = Batch.from_data_list(data_list).to(device)
+        hook = NeighborListHook(
+            _cfg(), skin=0.5, method=method, stage=DynamicsStage.BEFORE_COMPUTE
+        )
+        hook(_ctx(batch), _STAGE)
+
+        batch.positions[:n_atoms] += 0.3 * (
+            torch.rand(n_atoms, 3, generator=gen).to(device) - 0.5
+        )
+        batch.positions[0] += 0.4  # > skin / 2: system 0 must be rebuilt
+        hook(_ctx(batch), _STAGE)
+        assert hook._rebuild_flags.tolist() == [True] + [False] * (n_graphs - 1)
+        partial = _sorted_pairs(batch), batch.num_neighbors.clone()
+
+        fresh = NeighborListHook(
+            _cfg(), skin=0.5, method=method, stage=DynamicsStage.BEFORE_COMPUTE
+        )
+        fresh(_ctx(batch), _STAGE)
+        full = _sorted_pairs(batch), batch.num_neighbors
+
+        torch.testing.assert_close(partial[1], full[1])
+        torch.testing.assert_close(partial[0], full[0])
 
 
 # ===========================================================================

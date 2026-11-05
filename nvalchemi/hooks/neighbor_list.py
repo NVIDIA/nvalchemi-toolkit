@@ -81,10 +81,12 @@ except ImportError:
 try:
     from nvalchemiops.torch.neighbors.batch_cluster_tile import (
         allocate_batch_cluster_tile_list,
+        estimate_batch_cluster_tile_segments,
         estimate_batch_max_tiles_per_group,
     )
 except ImportError:
     allocate_batch_cluster_tile_list = None
+    estimate_batch_cluster_tile_segments = None
     estimate_batch_max_tiles_per_group = None
 
 try:
@@ -578,6 +580,7 @@ class NeighborListHook:
         if base_method.endswith("cluster_tile"):
             if (
                 allocate_batch_cluster_tile_list is None
+                or estimate_batch_cluster_tile_segments is None
                 or estimate_batch_max_tiles_per_group is None
                 or cell is None
             ):
@@ -612,8 +615,14 @@ class NeighborListHook:
                 dtype=dtype,
                 max_tiles_per_group=max_tiles_per_group,
             )
+            _, tile_offsets, _, _ = estimate_batch_cluster_tile_segments(
+                batch_ptr, 0, max_tiles_per_group=max_tiles_per_group
+            )
+            tile_counts = torch.zeros(B, dtype=torch.int32, device=device)
             self._buf_nl_kwargs = {
                 "max_tiles_per_group": max_tiles_per_group,
+                "tile_offsets": tile_offsets,
+                "tile_counts": tile_counts,
                 "sorted_atom_index": sorted_atom_index,
                 "sort_inv": sort_inv,
                 "sorted_pos_x": sorted_pos_x,

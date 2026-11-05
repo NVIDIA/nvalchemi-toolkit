@@ -587,6 +587,10 @@
 - Generic model specs record a constructor argument that shares its name with an
   inherited method (such as `train` on an `nn.Module`) from the private
   attribute that stores it, instead of the bound method.
+- `NeighborListHook` with `skin > 0` crashed on the first step when
+  `batch_cluster_tile` was used, which the method selector picks by default
+  for batched float32 full lists. The per-system tile state that
+  toolkit-ops needs for partial rebuilds is now allocated.
 - Validate a tensor `atom_categories` as a tensor first, instead of trying
   `list[AtomCategory]` element by element. This removes one `Tensor.item()`
   (a device sync on CUDA) per atom from `AtomicData` construction,
