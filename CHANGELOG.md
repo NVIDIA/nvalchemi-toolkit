@@ -649,6 +649,13 @@
   retired on-policy frame carrying the flag, so an evicting buffer write
   chained the resident frames to one graph node and the second training step
   failed with "backward through the graph a second time".
+- `NeighborListHook` also runs at `DynamicsStage.ON_ADMISSION` and re-derives
+  its neighbor width, buffers, and skin reference for the admitted systems. An
+  inflight refill or pipeline receive that kept the atom and graph counts left
+  them sized for the old systems, so MATRIX models silently lost neighbors
+  and computed wrong energies and forces. A change in graph count alone now
+  re-derives them too, and multi-source pipeline neighbor hooks reset every
+  source.
 
 ### Deprecated
 
