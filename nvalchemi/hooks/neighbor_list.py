@@ -60,7 +60,11 @@ from __future__ import annotations
 from enum import Enum
 
 import torch
-from nvalchemiops.neighbors.base_dispatch import neighbor_list_strategy_run_args
+from nvalchemiops.neighbors.base_dispatch import (
+    DEFAULT_BATCH_MAX_NBINS,
+    DEFAULT_SINGLE_MAX_NBINS,
+    neighbor_list_strategy_run_args,
+)
 from nvalchemiops.neighbors.neighbor_utils import estimate_max_neighbors
 from nvalchemiops.torch.neighbors import neighbor_list, suggest_neighbor_list_method
 from nvalchemiops.torch.neighbors.rebuild_detection import (
@@ -77,10 +81,12 @@ except ImportError:
 try:
     from nvalchemiops.torch.neighbors.batch_cluster_tile import (
         allocate_batch_cluster_tile_list,
+        estimate_batch_cluster_tile_segments,
         estimate_batch_max_tiles_per_group,
     )
 except ImportError:
     allocate_batch_cluster_tile_list = None
+    estimate_batch_cluster_tile_segments = None
     estimate_batch_max_tiles_per_group = None
 
 try:
@@ -574,6 +580,7 @@ class NeighborListHook:
         if base_method.endswith("cluster_tile"):
             if (
                 allocate_batch_cluster_tile_list is None
+                or estimate_batch_cluster_tile_segments is None
                 or estimate_batch_max_tiles_per_group is None
                 or cell is None
             ):
@@ -608,8 +615,14 @@ class NeighborListHook:
                 dtype=dtype,
                 max_tiles_per_group=max_tiles_per_group,
             )
+            _, tile_offsets, _, _ = estimate_batch_cluster_tile_segments(
+                batch_ptr, 0, max_tiles_per_group=max_tiles_per_group
+            )
+            tile_counts = torch.zeros(B, dtype=torch.int32, device=device)
             self._buf_nl_kwargs = {
                 "max_tiles_per_group": max_tiles_per_group,
+                "tile_offsets": tile_offsets,
+                "tile_counts": tile_counts,
                 "sorted_atom_index": sorted_atom_index,
                 "sort_inv": sort_inv,
                 "sorted_pos_x": sorted_pos_x,
@@ -650,8 +663,14 @@ class NeighborListHook:
                 alloc_cell = torch.diag_embed(cell_lengths)
                 alloc_pbc = torch.zeros(B, 3, dtype=torch.bool, device=device)
 
+            # Use the same per-system cell cap as the method selector, which
+            # assumes the single-system cap for B == 1.
+            max_nbins = DEFAULT_SINGLE_MAX_NBINS if B == 1 else DEFAULT_BATCH_MAX_NBINS
             max_total_cells, neighbor_search_radius = estimate_batch_cell_list_sizes(
-                alloc_cell, alloc_pbc, self.config.cutoff + self.skin
+                alloc_cell,
+                alloc_pbc,
+                self.config.cutoff + self.skin,
+                max_nbins=max_nbins,
             )
             (
                 cells_per_dimension,
