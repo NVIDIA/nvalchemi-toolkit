@@ -587,6 +587,12 @@
 - Generic model specs record a constructor argument that shares its name with an
   inherited method (such as `train` on an `nn.Module`) from the private
   attribute that stores it, instead of the bound method.
+- `NeighborListHook` capped the cell list of a single system at 8192 cells,
+  the toolkit-ops default for batches. toolkit-ops supports up to 524288
+  cells for a single system, and its method selection assumes that cap.
+  Large single systems were therefore given a coarse grid, which made
+  neighbor-list builds considerably slower. The single-system cap is now used
+  when the hook builds a cell list for one system.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain
