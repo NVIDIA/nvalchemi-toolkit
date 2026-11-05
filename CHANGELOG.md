@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add the `nvalchemi-toolkit` agent skill under `skills/nvalchemi-toolkit/`: one
+  `SKILL.md` that scopes a request and routes to six task notes (data, models,
+  dynamics and optimization, training, generative workflows, and composition
+  and extension). It replaces the 14 skills under `.claude/skills/`, which are
+  removed from the repository.
+
+### Fixed
+
+- The fine-tuning guide now passes `--checkpoint-index` to
+  `nvalchemi-training spec resume`, the flag the CLI accepts.
+
 ## 0.3.0
 
 ### Added
