@@ -39,6 +39,20 @@ from nvalchemi.data.datapipes.backends.zarr import (
     ZarrWriteConfig,
 )
 
+#: Neighbor-list arrays a sink does not store. They are rebuilt by
+#: ``NeighborListHook`` each step, their indices refer to the batch they were
+#: built for, and their column count changes between adaptive rebuilds, so
+#: stored systems could not be concatenated into one batch again.
+NEIGHBOR_KEYS: frozenset[str] = frozenset(
+    {
+        "neighbor_matrix",
+        "num_neighbors",
+        "neighbor_matrix_shifts",
+        "neighbor_list",
+        "neighbor_list_shifts",
+    }
+)
+
 
 class DataSink(ABC):
     """
@@ -554,7 +568,9 @@ class HostMemory(DataSink):
         Store a batch of atomic data on CPU.
 
         Decomposes the batch into individual AtomicData objects,
-        moves them to CPU, and appends to internal storage.
+        moves them to CPU, and appends to internal storage. Neighbor-list
+        arrays (:data:`NEIGHBOR_KEYS`) are not stored; the caller's batch is
+        left unchanged.
 
         Parameters
         ----------
@@ -577,6 +593,7 @@ class HostMemory(DataSink):
             return
 
         # Apply mask to select samples
+        indices = None
         if mask is not None:
             mask = mask.to(device=batch.device, dtype=torch.bool)
             if mask.shape[0] != num_total:
@@ -588,8 +605,13 @@ class HostMemory(DataSink):
                 return
             if num_selected < num_total:
                 indices = torch.nonzero(mask, as_tuple=True)[0]
-                _ = batch.batch_ptr  # trigger lazy init for SegmentedLevelStorage
-                batch = batch.index_select(indices)
+        if indices is None and any(
+            getattr(batch, key, None) is not None for key in NEIGHBOR_KEYS
+        ):
+            indices = torch.arange(num_total, device=batch.device)
+        if indices is not None:
+            _ = batch.batch_ptr  # trigger lazy init for SegmentedLevelStorage
+            batch = batch.index_select(indices, drop=NEIGHBOR_KEYS)
 
         data_list = batch.to_data_list()
         if len(self._data_list) + len(data_list) > self._capacity:

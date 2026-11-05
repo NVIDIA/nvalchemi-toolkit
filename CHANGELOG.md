@@ -569,6 +569,11 @@
 
 ### Fixed
 
+- `HostMemory.write` no longer stores neighbor-list arrays (`neighbor_matrix`,
+  `num_neighbors`, `neighbor_matrix_shifts`, `neighbor_list`,
+  `neighbor_list_shifts`), so `read()` no longer fails when systems written from
+  different batches had matrices of different widths. `SnapshotHook` shares the
+  same `NEIGHBOR_KEYS` set.
 - `Batch.put` now copies selected graphs from sources larger than the buffer's
   remaining graph capacity and marks the indices of copied source graphs in
   `copied_mask`. A source that is itself a pre-allocated buffer no longer
