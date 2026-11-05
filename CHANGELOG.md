@@ -601,6 +601,11 @@
   Large single systems were therefore given a coarse grid, which made
   neighbor-list builds considerably slower. The single-system cap is now used
   when the hook builds a cell list for one system.
+- `NVTNoseHoover`, `NPT`, and `NPH` now size the thermostat and barostat state
+  of systems admitted mid-run (inflight refill or pipeline receive) from each
+  system's own atom count, as for the first batch, instead of the batch
+  average. Arrivals far from the average size were thermostatted to the wrong
+  temperature and given the wrong barostat mass.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
   convert stress to the configured base precision, and preserve dynamic
   compilation when graph padding is inactive. Cell-less OMol inputs remain

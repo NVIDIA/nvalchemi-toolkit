@@ -2395,7 +2395,8 @@ class BaseDynamics(HookRegistryMixin, _CommunicationMixin):
         n : int
             Number of new systems to create state for.
         template_batch : Batch
-            The updated active batch; provides device and dtype.
+            The updated active batch, ending with the *n* arrivals; provides
+            device and dtype.
 
         Returns
         -------
