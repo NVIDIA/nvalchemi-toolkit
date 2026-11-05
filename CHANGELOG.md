@@ -587,6 +587,20 @@
 - Generic model specs record a constructor argument that shares its name with an
   inherited method (such as `train` on an `nn.Module`) from the private
   attribute that stores it, instead of the bound method.
+- `NeighborListHook` with `skin > 0` crashed on the first step when
+  `batch_cluster_tile` was used, which the method selector picks by default
+  for batched float32 full lists. The per-system tile state that
+  toolkit-ops needs for partial rebuilds is now allocated.
+- Validate a tensor `atom_categories` as a tensor first, instead of trying
+  `list[AtomCategory]` element by element. This removes one `Tensor.item()`
+  (a device sync on CUDA) per atom from `AtomicData` construction,
+  `AtomicData.to` and `Batch.get_data` / `Batch.to_data_list`.
+- `NeighborListHook` capped the cell list of a single system at 8192 cells,
+  the toolkit-ops default for batches. toolkit-ops supports up to 524288
+  cells for a single system, and its method selection assumes that cap.
+  Large single systems were therefore given a coarse grid, which made
+  neighbor-list builds considerably slower. The single-system cap is now used
+  when the hook builds a cell list for one system.
 - Keep fields attached with `AtomicData.add_node_property` (and the edge and
   system variants) in `Batch.from_data_list`, which silently dropped them.
 - Enable periodic stress outputs for `UMAWrapper` with `task_name="omol"`,
