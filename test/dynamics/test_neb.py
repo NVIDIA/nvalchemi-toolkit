@@ -257,6 +257,11 @@ class TestNEBConfiguration:
         with pytest.raises(ValueError, match=message):
             NEB.from_spec_dict(spec, model=strategy.model)
 
+    def test_rejects_neb_managed_reprime_on_entry(self) -> None:
+        """NEB sets reprime_on_entry on its climbing optimizer itself."""
+        with pytest.raises(ValueError, match="NEB-managed keys: reprime_on_entry"):
+            NEB(model=_model(), optimizer_kwargs={"reprime_on_entry": True})
+
     def test_custom_spring_round_trips_constructor_spec(self) -> None:
         """A custom spring keeps its constructor state and refresh policy."""
         spring = _EnergyScaledSpring(base=0.2, scale=0.05)
@@ -694,7 +699,7 @@ class TestNEBConfiguration:
         assert engine.by_group is True
         assert engine.device_type == device
         assert engine.n_steps == 17
-        assert engine.reprime_on_entry == frozenset()
+        assert engine._reprime_status_codes == frozenset()
         assert len(engine.sub_stages) == 1
         stage = engine.sub_stages[0][1]
         assert stage.by_group is True
@@ -727,7 +732,7 @@ class TestNEBConfiguration:
         assert engine.device_type == device
         assert len(engine.sub_stages) == 2
         assert engine.n_steps == 500
-        assert engine.reprime_on_entry == frozenset({1})
+        assert engine._reprime_status_codes == frozenset({1})
         regular = engine.sub_stages[0][1]
         climbing = engine.sub_stages[1][1]
         assert regular.n_steps == 11

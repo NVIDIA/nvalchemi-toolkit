@@ -176,9 +176,10 @@ strategy metadata; they do not work with component-only checkpoints.
 ## Bring Your Own Model Or Foreign Checkpoint
 
 Prefer native wrapper constructors for supported pretrained models, for example
-`MACEWrapper.from_checkpoint(..., compile_model=False)`, because they preserve
-reconstruction metadata for later strategy checkpoints. `compile_model=True` is
-inference-only for MACE and freezes parameters.
+`MACEWrapper.from_checkpoint(..., compile_model=False, train=True)`, because they
+preserve reconstruction metadata for later strategy checkpoints. `train` defaults
+to `False`, which freezes the weights; pass `train=True` for full-model
+fine-tuning. Compiled fine-tuning is not covered.
 
 For arbitrary PyTorch checkpoints:
 

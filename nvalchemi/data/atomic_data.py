@@ -233,10 +233,12 @@ class AtomicData(BaseModel, DataMixin):
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None
 
+    # Validate as a tensor first to avoid one ``.item()`` call per atom.
     atom_categories: Annotated[
-        list[t.AtomCategory] | t.AtomCategories | None,
+        t.AtomCategories | list[t.AtomCategory] | None,
         Field(
-            description="Atom categorical index, based on _typing.AtomCategory Enum [n_nodes]"
+            description="Atom categorical index, based on _typing.AtomCategory Enum [n_nodes]",
+            union_mode="left_to_right",
         ),
         PlainSerializer(_tensor_serialization, when_used="json"),
     ] = None

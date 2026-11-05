@@ -379,6 +379,21 @@ class _DivergenceHook:
     at the boundary. :meth:`reset` clears the record once a refill has
     changed the batch's rows.
 
+    A frozen graph still goes through the propagator's step: the integrator
+    moves the whole batch and the model evaluates it, and only afterwards are
+    the frozen graphs' positions, velocities, and cell restored from a
+    snapshot taken before the step. A graph frozen with non-finite forces or
+    velocities therefore keeps presenting a non-finite or runaway geometry to
+    the model on every remaining step of the segment, which a model's
+    neighbor-list builder may not survive. With ``quarantine`` set, the hook
+    sanitizes a graph on the step it flags it: velocities and forces are
+    zeroed and positions made finite. The hook runs at ``AFTER_STEP``, after
+    that step's restore, and the graph is inactive on every later step, so
+    each later snapshot and restore carries the sanitized positions and
+    velocities, the zero velocity moves nothing, and the masked output
+    publication keeps the zeroed forces. The sanitized frame is still
+    recorded as diverged and never captured.
+
     Parameters
     ----------
     divergence : Callable[[Batch], Bool[torch.Tensor, "G"]], optional
@@ -386,6 +401,10 @@ class _DivergenceHook:
         is moved onto the batch's device before it is recorded, so a predicate
         that judges on the host is accepted for a frame on an accelerator.
         Default :func:`nonfinite_divergence`.
+    quarantine : bool, optional
+        Sanitize each graph's state on the step it is flagged: velocities and
+        forces zeroed, positions restored to the graph's last finite frame.
+        Default ``False`` leaves the flagged state as it is.
 
     Raises
     ------
@@ -398,10 +417,17 @@ class _DivergenceHook:
     frequency = 1
     stage = DynamicsStage.AFTER_STEP
 
-    def __init__(self, divergence: _DivergencePredicate = nonfinite_divergence) -> None:
+    def __init__(
+        self,
+        divergence: _DivergencePredicate = nonfinite_divergence,
+        *,
+        quarantine: bool = False,
+    ) -> None:
         """Freeze the graphs *divergence* flags, starting with none recorded."""
         self.divergence = divergence
+        self.quarantine = quarantine
         self._diverged: Bool[torch.Tensor, "G"] | None = None
+        self._last_finite: torch.Tensor | None = None
 
     @property
     def diverged(self) -> Bool[torch.Tensor, "G"] | None:
@@ -411,6 +437,7 @@ class _DivergenceHook:
     def reset(self) -> None:
         """Forget which graphs diverged, after a refill changed the batch."""
         self._diverged = None
+        self._last_finite = None
 
     def _flags(self, batch: Batch) -> Bool[torch.Tensor, "G"]:
         """Evaluate the predicate on *batch* and return its one-boolean-per-graph verdict on the batch's device."""
@@ -437,12 +464,126 @@ class _DivergenceHook:
         if moving is None:
             return
         flags = self._flags(ctx.batch)
+        if self.quarantine:
+            self._remember_finite(ctx.batch, flags)
         if self._diverged is None or self._diverged.numel() != flags.numel():
             self._diverged = torch.zeros_like(flags)
         self._diverged |= flags
+        frozen = flags & moving
         status = ctx.batch.status
         column = status.view(-1) if status.dim() == 2 else status
-        column[: ctx.batch.num_graphs].masked_fill_(flags & moving, exit_status)
+        column[: ctx.batch.num_graphs].masked_fill_(frozen, exit_status)
+        if self.quarantine:
+            self._sanitize(ctx.batch, frozen)
+
+    def _remember_finite(self, batch: Batch, flags: Bool[torch.Tensor, "G"]) -> None:
+        """Keep the positions of every unflagged graph as its last finite frame.
+
+        Rows of graphs the predicate flags keep the snapshot they had, so a
+        graph that diverges is restored to the step before its divergence
+        instead of collapsing onto one point. A batch whose shape changed (a
+        refill without :meth:`reset`) starts a fresh snapshot.
+        """
+        positions = batch.positions.detach()
+        if self._last_finite is None or self._last_finite.shape != positions.shape:
+            self._last_finite = positions.clone()
+            return
+        nodes = flags[batch.batch_idx.long()]
+        keep = nodes.view(nodes.shape[0], *([1] * (positions.dim() - 1)))
+        self._last_finite = torch.where(keep, self._last_finite, positions)
+
+    def _sanitize(self, batch: Batch, graphs: Bool[torch.Tensor, "G"]) -> None:
+        """Zero the velocities and forces of *graphs* and restore finite positions.
+
+        Positions come from the last finite snapshot when one exists; any
+        value still non-finite (a graph flagged on the very first step) is
+        zeroed as a last resort.
+        """
+        nodes = graphs[batch.batch_idx.long()]
+        with torch.no_grad():
+            for key in ("velocities", "forces"):
+                tensor = getattr(batch, key, None)
+                if tensor is None:
+                    continue
+                mask = nodes.view(nodes.shape[0], *([1] * (tensor.dim() - 1)))
+                tensor.masked_fill_(mask, 0.0)
+            positions = batch.positions
+            mask = nodes.view(nodes.shape[0], *([1] * (positions.dim() - 1)))
+            source = (
+                self._last_finite
+                if self._last_finite is not None
+                and self._last_finite.shape == positions.shape
+                else positions
+            )
+            finite = torch.nan_to_num(source, nan=0.0, posinf=0.0, neginf=0.0)
+            torch.where(mask, finite, positions, out=positions)
+
+
+class _TrajectoryAgeHook:
+    """Count each trajectory's propagator steps and retire it at a lifetime.
+
+    A thermostatted trajectory never converges, so without a lifetime the
+    structures of the initial batch are the only ones the run ever
+    propagates, and the teacher labels new geometries of the same molecules
+    for the whole run. This hook gives every trajectory a maximum age in
+    propagator steps. A graph that reaches it is frozen at the propagator's
+    ``exit_status`` on that step, which the propagator reports at
+    ``ON_GRADUATE``, where the converged-frame hook stores its final frame.
+    The segment boundary then retires and backfills it exactly like a
+    converged graph.
+
+    The age is kept per graph, in batch order, and follows the batch through
+    a backfill: :meth:`retain` keeps the survivors' ages and starts the fresh
+    rows at zero. A graph is aged on every step it was active in, so a graph
+    frozen earlier, by a criterion or by divergence, stops aging.
+
+    Parameters
+    ----------
+    max_steps : int
+        Propagator steps a trajectory lives for before it is retired.
+    """
+
+    frequency = 1
+    stage = DynamicsStage.AFTER_STEP
+
+    def __init__(self, max_steps: int) -> None:
+        """Retire every trajectory once it has been propagated *max_steps* times."""
+        self.max_steps = max_steps
+        self._age: torch.Tensor | None = None
+
+    @property
+    def age(self) -> torch.Tensor | None:
+        """Steps each graph of the live batch has been propagated, or ``None`` before the first."""
+        return self._age
+
+    def retain(self, survivors: torch.Tensor, fresh: int) -> None:
+        """Keep the *survivors*' ages, in their new order, and age the *fresh* rows from zero."""
+        if self._age is None:
+            return
+        kept = self._age[survivors.to(self._age.device)]
+        self._age = torch.cat(
+            [kept, torch.zeros(fresh, dtype=kept.dtype, device=kept.device)]
+        )
+
+    def __call__(self, ctx: DynamicsContext, stage: Enum) -> None:  # noqa: ARG002
+        """Age the graphs that stepped and freeze the ones that reached the lifetime."""
+        exit_status = getattr(ctx.workflow, "exit_status", None)
+        if exit_status is None:
+            return
+        batch = ctx.batch
+        moving = BaseDynamics.active_graph_mask(batch, exit_status)
+        if moving is None:
+            return
+        stepped = moving if ctx.active_graph_mask is None else ctx.active_graph_mask
+        if self._age is None or self._age.numel() != batch.num_graphs:
+            self._age = torch.zeros(
+                batch.num_graphs, dtype=torch.long, device=batch.device
+            )
+        self._age += stepped.to(self._age.device).long()
+        expired = (self._age >= self.max_steps).to(batch.device) & moving
+        status = batch.status
+        column = status.view(-1) if status.dim() == 2 else status
+        column[: batch.num_graphs].masked_fill_(expired, exit_status)
 
 
 class _ConvergedFrameHook(ConvergedSnapshotHook):

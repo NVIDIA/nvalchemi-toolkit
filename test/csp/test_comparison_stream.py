@@ -1418,10 +1418,17 @@ def test_summary_retrieval_contains_every_raw_three_screen_match() -> None:
     assert result.multiplicities.tolist() == expected[2]
 
 
-def test_fp32_cutoff_padding_agrees_with_public_scores_and_stream() -> None:
+@pytest.mark.parametrize("ulps_below_cutoff", [-2, -1, 0, 1, 2, 3])
+def test_fp32_cutoff_padding_agrees_with_public_scores_and_stream(
+    ulps_below_cutoff: int,
+) -> None:
     cutoff = 2.37486376976615
-    cutoff_fp32 = torch.tensor(cutoff, dtype=torch.float32)
-    distance = torch.nextafter(cutoff_fp32, torch.tensor(0.0, dtype=torch.float32))
+    # fp32 log rounding at the cutoff edge differs across CPU kernels, so sweep
+    # the edge and check agreement instead of a fixed score.
+    distance = torch.tensor(cutoff, dtype=torch.float32)
+    toward = torch.tensor(0.0 if ulps_below_cutoff > 0 else float("inf"))
+    for _ in range(abs(ulps_below_cutoff)):
+        distance = torch.nextafter(distance, toward)
     batch = Batch.from_data_list(
         [
             AtomicData(
@@ -1439,6 +1446,9 @@ def test_fp32_cutoff_padding_agrees_with_public_scores_and_stream() -> None:
     )
     atom_types = torch.ones(batch.num_nodes, dtype=torch.int32)
     pair = torch.tensor([[0, 1]], dtype=torch.int32)
+    accepted_endpoint = torch.nextafter(
+        torch.tensor(0.0, dtype=torch.float32), torch.tensor(float("inf"))
+    )
     for types, typed_neighbors in (
         (None, False),
         (atom_types, False),
@@ -1451,9 +1461,12 @@ def test_fp32_cutoff_padding_agrees_with_public_scores_and_stream() -> None:
             typed_neighbors=typed_neighbors,
             device="cpu",
         )
-        assert index.score_pairs(pair).tolist() == [0.0]
-        assert index.find_matches(threshold=0.0, pair_indices=pair).tolist() == [[0, 1]]
+        scored_match = bool((index.score_pairs(pair) <= accepted_endpoint).item())
+        found = index.find_matches(threshold=0.0, pair_indices=pair).tolist()
+        assert (found == [[0, 1]]) == scored_match
 
+    expected = _direct_greedy(batch, atom_types, [0, 1], cutoff, 0.0)
+    assert expected == _public_score_greedy(batch, atom_types, [0, 1], cutoff, 0.0)
     result = deduplicate_stream(
         2,
         _typed_loader(batch, atom_types),
@@ -1462,15 +1475,53 @@ def test_fp32_cutoff_padding_agrees_with_public_scores_and_stream() -> None:
         threshold=0.0,
         input_batch_size=1,
     )
-    assert result.retained_indices.tolist() == [0]
-    assert result.representative_indices.tolist() == [0, 0]
-    assert result.multiplicities.tolist() == [2]
+    assert result.retained_indices.tolist() == expected[0]
+    assert result.representative_indices.tolist() == expected[1]
+    assert result.multiplicities.tolist() == expected[2]
 
 
-def test_grouped_old_shortlist_keeps_near_cutoff_match() -> None:
+@pytest.mark.parametrize(("offset", "merged"), [(0.5, True), (-0.5, False)])
+def test_neighbor_visibility_far_from_cutoff(offset: float, merged: bool) -> None:
     cutoff = 2.37486376976615
-    cutoff_fp32 = torch.tensor(cutoff, dtype=torch.float32)
-    distance = torch.nextafter(cutoff_fp32, torch.tensor(0.0, dtype=torch.float32))
+    batch = Batch.from_data_list(
+        [
+            AtomicData(
+                positions=torch.tensor([[0.0, 0.0, 0.0]], dtype=torch.float32),
+                atomic_numbers=torch.ones(1, dtype=torch.int64),
+            ),
+            AtomicData(
+                positions=torch.tensor(
+                    [[0.0, 0.0, 0.0], [cutoff + offset, 0.0, 0.0]],
+                    dtype=torch.float32,
+                ),
+                atomic_numbers=torch.ones(2, dtype=torch.int64),
+            ),
+        ]
+    )
+    atom_types = torch.ones(batch.num_nodes, dtype=torch.int32)
+    result = deduplicate_stream(
+        2,
+        _typed_loader(batch, atom_types),
+        type_vocabulary=[1],
+        cutoff=cutoff,
+        threshold=0.0,
+        input_batch_size=1,
+    )
+    # A neighbor beyond the cutoff is invisible; one well inside is distinct.
+    assert (result.retained_indices.tolist() == [0]) is merged
+
+
+@pytest.mark.parametrize("ulps_below_cutoff", [-2, -1, 0, 1, 2, 3])
+def test_grouped_old_shortlist_agrees_with_exact_greedy_near_cutoff(
+    ulps_below_cutoff: int,
+) -> None:
+    cutoff = 2.37486376976615
+    # fp32 log rounding at the cutoff edge differs across CPU kernels, so sweep
+    # the edge and compare with the exact greedy result instead of fixed indices.
+    distance = torch.tensor(cutoff, dtype=torch.float32)
+    toward = torch.tensor(0.0 if ulps_below_cutoff > 0 else float("inf"))
+    for _ in range(abs(ulps_below_cutoff)):
+        distance = torch.nextafter(distance, toward)
     batch = Batch.from_data_list(
         [
             AtomicData(
@@ -1495,6 +1546,7 @@ def test_grouped_old_shortlist_keeps_near_cutoff_match() -> None:
     )
     types = torch.tensor([1, 2, 1, 1, 1, 1], dtype=torch.int32)
 
+    expected = _direct_greedy(batch, types, [0, 1, 2, 3], cutoff, 0.0)
     result = deduplicate_stream(
         4,
         _typed_loader(batch, types),
@@ -1505,9 +1557,9 @@ def test_grouped_old_shortlist_keeps_near_cutoff_match() -> None:
         pair_block_size=2,
     )
 
-    assert result.retained_indices.tolist() == [0, 1]
-    assert result.representative_indices.tolist() == [0, 1, 0, 0]
-    assert result.multiplicities.tolist() == [3, 1]
+    assert result.retained_indices.tolist() == expected[0]
+    assert result.representative_indices.tolist() == expected[1]
+    assert result.multiplicities.tolist() == expected[2]
 
 
 @pytest.mark.parametrize("cutoff", [2.37486376976615, 1.9440808525179338])
